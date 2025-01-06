@@ -30,7 +30,7 @@ class nest::gui::chrome (
 
           $chromium_flags = @("EOT"/$)
             [[ \$XDG_SESSION_TYPE == 'x11' ]] &&
-                CHROMIUM_FLAGS="\${CHROMIUM_FLAGS} --force-device-scale-factor=${nest::gui_scaling_factor} --enable-use-zoom-for-dsf"
+                CHROMIUM_FLAGS="\${CHROMIUM_FLAGS} --force-device-scale-factor=${nest::text_scaling_factor} --enable-use-zoom-for-dsf"
             CHROMIUM_FLAGS="\${CHROMIUM_FLAGS} --${gpu_compositing_flag}"
             CHROMIUM_FLAGS="\${CHROMIUM_FLAGS} --${gpu_rasterization_flag}"
             CHROMIUM_FLAGS="\${CHROMIUM_FLAGS} --enable-oop-rasterization"
@@ -65,6 +65,7 @@ class nest::gui::chrome (
         $chrome_wrapper = @("WRAPPER")
           #!/bin/bash
           exec /opt/google/chrome/google-chrome \
+              --force-device-scale-factor=${nest::text_scaling_factor} \
               --${gpu_compositing_flag} \
               --${gpu_rasterization_flag} \
               --ignore-gpu-blocklist \
