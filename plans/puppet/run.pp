@@ -2,7 +2,7 @@
 #
 # @param targets A list of targets to run Puppet on
 # @param build Toggle additional build functionality in the Puppet run
-plan nest::run_puppet (
+plan nest::puppet::run (
   TargetSpec $targets,
   Optional[Enum['kernel']] $build               = undef,
   Boolean                  $skip_module_rebuild = false,
