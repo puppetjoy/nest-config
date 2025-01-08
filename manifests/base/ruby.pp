@@ -10,9 +10,10 @@ class nest::base::ruby {
     owner   => 'root',
     group   => 'root',
     content => @(WRAPPER),
-      #!/bin/bash
-      [[ $1 == _*_ ]] && shift
-      exec /usr/bin/bundle.real "$@"
+      #!/usr/bin/env ruby
+      args = ARGV
+      args.shift if args[0] =~ /^_.*_/
+      exec('/usr/bin/bundle.real', *args)
       | WRAPPER
   }
 }
