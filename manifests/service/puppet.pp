@@ -67,6 +67,7 @@ class nest::service::puppet (
     pod     => 'puppet',
     image   => 'registry.gitlab.james.tl/nest/forks/container-puppetserver:8.7.0',
     env     => [
+      'PUPPETSERVER_ENVIRONMENT_TIMEOUT=0',
       'PUPPETSERVER_HOSTNAME=puppet',
       'DNS_ALT_NAMES=puppet.nest',
       'CA_ALLOW_SUBJECT_ALT_NAMES=true',
