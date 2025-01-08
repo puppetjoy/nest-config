@@ -30,6 +30,7 @@ describe 'nest' do
     'nest::base::portage',
     'nest::base::puppet',
     'nest::base::qemu',
+    'nest::base::ruby',
     'nest::base::scripts',
     'nest::base::ssh',
     'nest::base::sudo',
