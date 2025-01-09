@@ -11,6 +11,7 @@
 
 exec podman run --rm -it -e TERM \
     -v "${PWD}:/module" \
+    -v pdk-empty:/module/.resource_types:ro \
     -v /etc/eyaml:/etc/eyaml:ro \
     nest/tools/pdk \
     pdk "$@"
