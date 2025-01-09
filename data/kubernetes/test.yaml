@@ -36,7 +36,7 @@ resources:
               affinity: *affinity
               containers:
                 - name: nest
-                  image: 'registry.gitlab.james.tl/nest/config'
+                  image: 'registry.gitlab.james.tl/nest/config/main'
                   imagePullPolicy: Always
                   command:
                     - bolt

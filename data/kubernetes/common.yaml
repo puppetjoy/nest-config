@@ -29,7 +29,7 @@ resources:
             spec:
               containers:
                 - name: nest
-                  image: 'registry.gitlab.james.tl/nest/config'
+                  image: 'registry.gitlab.james.tl/nest/config/main'
                   imagePullPolicy: Always
                   command:
                     - bolt
@@ -159,7 +159,7 @@ patches:
           path: '/spec/template/spec/initContainers/-'
           value:
             name: nest-init
-            image: 'registry.gitlab.james.tl/nest/config'
+            image: 'registry.gitlab.james.tl/nest/config/main'
             imagePullPolicy: Always
             command:
               - bolt
