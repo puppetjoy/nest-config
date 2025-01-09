@@ -5,11 +5,9 @@ nest::classes:
 
 nest::dtb_file: 'allwinner/sun50i-a64-pine64-lts.dtb'
 nest::fscache: false
+nest::kexec: true # buggy reset
 nest::soc: 'sun50i_a64'
 nest::uboot_defconfig: 'pine64-lts_defconfig'
-
-# Workaround unstable eMMC boot
-nest::kexec: true
 
 nest::kernel_cmdline:
   - 'console=ttyS0,115200n8'
