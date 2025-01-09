@@ -1,4 +1,4 @@
-class nest::node::eagle_console {
+class nest::host::eagle_console {
   include nest::tool::arduino
 
   # Avoid using UART on this node

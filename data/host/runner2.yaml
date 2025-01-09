@@ -1,6 +1,6 @@
 ---
 nest::classes:
-  - 'nest::node::runner2'
+  - 'nest::host::runner2'
 
 # Enable USB-C device mode
 nest::dtb_overlay: |

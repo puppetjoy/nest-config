@@ -1,4 +1,4 @@
-class nest::node::falcon {
+class nest::host::falcon {
   nest::lib::toolchain {
     [
       'aarch64-unknown-linux-gnu',

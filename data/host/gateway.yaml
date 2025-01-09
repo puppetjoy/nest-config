@@ -1,6 +1,6 @@
 ---
 nest::classes:
-  - 'nest::node::gateway'
+  - 'nest::host::gateway'
   - 'nest::service::gateway'
   - 'nest::service::reverse_proxy'
 

@@ -1,4 +1,4 @@
-class nest::node::runner2 {
+class nest::host::runner2 {
   class { 'nest::service::dnsmasq':
     interfaces => ['usb0'],
   }

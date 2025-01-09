@@ -1,5 +1,5 @@
 ---
 nest::classes:
-  - 'nest::node::eagle_console'
+  - 'nest::host::eagle_console'
 
 nest::vpn_client: false

@@ -112,7 +112,7 @@ nest::hosts:
     ip: '172.22.1.12'
 
 nest::host_records:
-  # Non-DHCP nodes
+  # Non-DHCP hosts
   falcon.nest: '172.22.4.2'
   kestrel.nest: '172.22.4.3'
 

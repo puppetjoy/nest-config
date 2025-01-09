@@ -44,7 +44,7 @@ These projects provide pipeline automation and container registries for the OS b
 * [**Stage 0**](https://gitlab.james.tl/nest/stage0): Updated Gentoo Stage 3 images containing Puppet
 * [**Stage 1**](https://gitlab.james.tl/nest/stage1): Basic images intended for containers
 * [**Stage 2**](https://gitlab.james.tl/nest/stage2): Platform-specific images with kernels
-* [**Stage 3**](https://gitlab.james.tl/nest/stage3): Complete images for specific nodes
+* [**Stage 3**](https://gitlab.james.tl/nest/stage3): Complete images for specific hosts
 
 They use data and plans from this project.
 

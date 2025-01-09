@@ -1,4 +1,4 @@
-class nest::node::hawk {
+class nest::host::hawk {
   firewalld_direct_chain { 'LIBVIRT_FWX':
     inet_protocol => ipv4,
     table         => filter,

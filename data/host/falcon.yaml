@@ -1,6 +1,6 @@
 ---
 nest::classes:
-  - 'nest::node::falcon'
+  - 'nest::host::falcon'
   - 'nest::service::barrier'
   - 'nest::service::gitlab'
   - 'nest::service::gitlab_runner'

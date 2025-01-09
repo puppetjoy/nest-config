@@ -1,7 +1,7 @@
 # Snapshot and migrate ROOT to encrypted dataset
 #
 # @param targets Hosts to encrypt
-# @param keylocation Key URI (e.g. 'file:///...') on the node or 'prompt'
+# @param keylocation Key URI (e.g. 'file:///...') on the host or 'prompt'
 plan nest::zfs::encrypt_rpool (
   TargetSpec $targets,
   String     $keylocation = 'prompt',

@@ -1,4 +1,4 @@
-# @summary Build complete images for specific nodes
+# @summary Build complete images for specific hosts
 #
 # Use bin/build script to run this plan!
 #

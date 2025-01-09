@@ -1,6 +1,6 @@
 ---
 nest::classes:
-  - 'nest::node::hawk'
+  - 'nest::host::hawk'
   - 'nest::service::barrier'
   - 'nest::service::gateway'
   - 'nest::service::gitlab'

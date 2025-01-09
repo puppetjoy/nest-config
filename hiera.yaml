@@ -32,10 +32,10 @@ hierarchy:
       - "kubernetes/common.yaml"
 
   # Relating to specific instances
-  - name: 'Nodes'
+  - name: 'Hosts'
     paths:
-      - "private/node/%{trusted.certname}.yaml"
-      - "node/%{trusted.certname}.yaml"
+      - "private/host/%{trusted.certname}.yaml"
+      - "host/%{trusted.certname}.yaml"
   - name: 'Clusters'
     paths:
       - "private/cluster/%{trusted.extensions.pp_cluster}.yaml"

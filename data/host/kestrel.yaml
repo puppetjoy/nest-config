@@ -1,6 +1,6 @@
 ---
 nest::classes:
-  - 'nest::node::kestrel'
+  - 'nest::host::kestrel'
   - 'nest::service::gitlab_runner'
   - 'nest::tool::qemu'
 
