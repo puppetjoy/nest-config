@@ -4,7 +4,7 @@
 #
 # @param container Build container name
 # @param platform Build for this platform
-# @param role Build this role
+# @param variant Build this variant
 # @param build Build the image
 # @param cpu Build for this CPU architecture
 # @param deploy Deploy the image
@@ -21,7 +21,7 @@
 plan nest::build::stage2 (
   String            $container,
   String            $platform,
-  String            $role,
+  String            $variant,
   Boolean           $build                 = true,
   String            $cpu                   = $platform,
   Boolean           $deploy                = false,
@@ -39,9 +39,9 @@ plan nest::build::stage2 (
   $target = Target.new(name => $container, uri => "podman://${container}")
 
   if $cpu == $platform {
-    $profile = "${cpu}/${role}"
+    $profile = "${cpu}/${variant}"
   } else {
-    $profile = "${cpu}/${platform}/${role}"
+    $profile = "${cpu}/${platform}/${variant}"
   }
 
   if $deploy {
@@ -63,9 +63,9 @@ plan nest::build::stage2 (
 
   if $init {
     if $refresh {
-      $from_image = "nest/stage2/${role}:${platform}"
+      $from_image = "nest/stage2/${variant}:${platform}"
     } else {
-      $from_image = "nest/stage1/${role}/debug:${cpu}"
+      $from_image = "nest/stage1/${variant}/debug:${cpu}"
     }
 
     run_command("podman rm -f ${container}", 'localhost', 'Stop and remove existing build container')
@@ -116,7 +116,7 @@ plan nest::build::stage2 (
   }
 
   if $deploy {
-    $image = "${registry}/nest/stage2/${role}:${platform}"
+    $image = "${registry}/nest/stage2/${variant}:${platform}"
     run_command("podman commit --change CMD=/bin/zsh ${container} ${image}", 'localhost', 'Commit build container')
 
     unless $registry == 'localhost' {

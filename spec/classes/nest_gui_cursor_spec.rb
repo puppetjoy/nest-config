@@ -8,7 +8,7 @@ describe 'nest::gui::cursor' do
     when %r{^gentoo-}
       context 'on Gentoo' do
         let(:facts) do
-          facts.merge({ profile: { role: 'workstation' } })
+          facts.merge({ profile: { variant: 'workstation' } })
         end
 
         it { is_expected.to contain_file('/usr/share/icons/breeze_cursors').that_requires('Class[nest::gui::plasma]') }

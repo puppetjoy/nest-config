@@ -5,7 +5,7 @@
 # @param container Build container name
 # @param hostname Hostname of the image
 # @param platform Build for this platform
-# @param role Build using this role
+# @param variant Build using this variant
 # @param build Build the image
 # @param deploy Deploy the image
 # @param emerge_default_opts Override default emerge options (e.g. --jobs=4)
@@ -21,7 +21,7 @@ plan nest::build::stage3 (
   String            $container,
   String            $hostname,
   String            $platform,
-  String            $role,
+  String            $variant,
   Boolean           $build                 = true,
   Optional[String]  $cluster               = undef,
   Boolean           $deploy                = false,
@@ -58,7 +58,7 @@ plan nest::build::stage3 (
       --volume=/nest:/nest \
       ${ssh_auth_sock_volume} \
       ${qemu_user_targets.map |$arch| { "--volume=/usr/bin/qemu-${arch}:/usr/bin/qemu-${arch}:ro" }.join(' ')} \
-      "nest/stage2/${role}:${platform}" \
+      "nest/stage2/${variant}:${platform}" \
       sleep infinity
       | CREATE
 

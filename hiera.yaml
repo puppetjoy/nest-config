@@ -58,8 +58,8 @@ hierarchy:
     paths:
       - "private/build/%{facts.os.family}/%{facts.build}/%{facts.build}.yaml"
       - "build/%{facts.os.family}/%{facts.build}/%{facts.build}.yaml"
-      - "private/build/%{facts.os.family}/%{facts.build}/%{facts.profile.role}.yaml"
-      - "build/%{facts.os.family}/%{facts.build}/%{facts.profile.role}.yaml"
+      - "private/build/%{facts.os.family}/%{facts.build}/%{facts.profile.variant}.yaml"
+      - "build/%{facts.os.family}/%{facts.build}/%{facts.profile.variant}.yaml"
       - "private/build/%{facts.os.family}/%{facts.build}/stage3.yaml"
       - "build/%{facts.os.family}/%{facts.build}/stage3.yaml"
       - "private/build/%{facts.os.family}/%{facts.build}/stage2.yaml"

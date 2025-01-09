@@ -115,9 +115,9 @@ describe 'nest' do
 
         it_should_and_should_not_contain_classes(stage1 + stage2 + stage3, windows + workstation)
 
-        context 'and role => workstation' do # rubocop:disable RSpec/EmptyExampleGroup
+        context 'and variant => workstation' do # rubocop:disable RSpec/EmptyExampleGroup
           let(:facts) do
-            facts.merge({ profile: { role: 'workstation' } })
+            facts.merge({ profile: { variant: 'workstation' } })
           end
 
           it_should_and_should_not_contain_classes(workstation)
@@ -138,9 +138,9 @@ describe 'nest' do
 
           it_should_and_should_not_contain_classes(stage1, stage2 + stage3 + windows + workstation)
 
-          context 'and role => workstation' do # rubocop:disable RSpec/EmptyExampleGroup
+          context 'and variant => workstation' do # rubocop:disable RSpec/EmptyExampleGroup
             let(:facts) do
-              facts.merge({ build: 'stage1', profile: { role: 'workstation' } })
+              facts.merge({ build: 'stage1', profile: { variant: 'workstation' } })
             end
 
             it_should_and_should_not_contain_classes(workstation)
@@ -154,9 +154,9 @@ describe 'nest' do
 
           it_should_and_should_not_contain_classes(stage1 + stage2, stage3 + windows + workstation)
 
-          context 'and role => workstation' do # rubocop:disable RSpec/EmptyExampleGroup
+          context 'and variant => workstation' do # rubocop:disable RSpec/EmptyExampleGroup
             let(:facts) do
-              facts.merge({ build: 'stage2', profile: { role: 'workstation' } })
+              facts.merge({ build: 'stage2', profile: { variant: 'workstation' } })
             end
 
             it_should_and_should_not_contain_classes(workstation)
@@ -174,9 +174,9 @@ describe 'nest' do
 
           it_behaves_like 'stage3'
 
-          context 'and role => workstation' do # rubocop:disable RSpec/EmptyExampleGroup
+          context 'and variant => workstation' do # rubocop:disable RSpec/EmptyExampleGroup
             let(:facts) do
-              facts.merge({ build: 'stage3', profile: { role: 'workstation' } })
+              facts.merge({ build: 'stage3', profile: { variant: 'workstation' } })
             end
 
             it_should_and_should_not_contain_classes(workstation)
@@ -201,7 +201,7 @@ describe 'nest' do
 
         context 'building chromium' do # rubocop:disable RSpec/EmptyExampleGroup
           let(:facts) do
-            facts.merge({ build: 'chromium', profile: { role: 'workstation' } })
+            facts.merge({ build: 'chromium', profile: { variant: 'workstation' } })
           end
 
           it_should_and_should_not_contain_classes(stage1 + workstation, stage2 + stage3 + windows)

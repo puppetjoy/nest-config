@@ -8,7 +8,7 @@ describe 'nest::gui::input' do
     when %r{^gentoo-}
       context 'on Gentoo' do
         let(:facts) do
-          facts.merge({ profile: { role: 'workstation' } })
+          facts.merge({ profile: { variant: 'workstation' } })
         end
 
         it { is_expected.to contain_file('/etc/libinput').that_requires('Class[nest::gui::xorg]') }

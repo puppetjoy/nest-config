@@ -4,7 +4,7 @@
 #
 # @param container Build container name
 # @param cpu Build for this CPU architecture
-# @param role Build for this Nest role
+# @param variant Build for this Nest variant
 # @param build Build the image
 # @param deploy Deploy the image
 # @param emerge_default_opts Override default emerge options (e.g. --jobs=4)
@@ -20,7 +20,7 @@
 plan nest::build::stage1 (
   String            $container,
   String            $cpu,
-  String            $role,
+  String            $variant,
   Boolean           $build                 = true,
   Boolean           $deploy                = false,
   Optional[String]  $emerge_default_opts   = undef,
@@ -57,8 +57,8 @@ plan nest::build::stage1 (
 
   if $init {
     if $refresh {
-      $from_image       = "nest/stage1/${role}:${cpu}"
-      $from_image_debug = "nest/stage1/${role}/debug:${cpu}"
+      $from_image       = "nest/stage1/${variant}:${cpu}"
+      $from_image_debug = "nest/stage1/${variant}/debug:${cpu}"
     } else {
       $from_image       = "nest/stage0:${cpu}"
       $from_image_debug = "nest/stage0/debug:${cpu}"
@@ -100,7 +100,7 @@ plan nest::build::stage1 (
 
     # Profile controls Portage and Puppet configurations
     run_command('eix-sync -aq', $target, 'Sync Portage repos')
-    run_command("eselect profile set nest:${cpu}/${role}", $target, 'Set profile')
+    run_command("eselect profile set nest:${cpu}/${variant}", $target, 'Set profile')
 
     # Set up the build environment
     $target.apply_prep
@@ -117,7 +117,7 @@ plan nest::build::stage1 (
     run_command('emerge --info', $target, 'Show Portage configuration')
 
     # Resolve circular dependencies
-    if $role == 'workstation' and !$refresh {
+    if $variant == 'workstation' and !$refresh {
       run_command('emerge --oneshot --verbose media-libs/harfbuzz media-libs/freetype media-libs/mesa', $target, 'Resolve media circular dependencies', _env_vars => {
         'USE' => '-cairo -harfbuzz -truetype -vaapi',
       })
@@ -137,11 +137,11 @@ plan nest::build::stage1 (
   }
 
   if $deploy {
-    $image = "${registry}/nest/stage1/${role}:${cpu}"
+    $image = "${registry}/nest/stage1/${variant}:${cpu}"
     run_command("podman commit --change CMD=/bin/zsh ${container} ${image}", 'localhost', 'Commit build container')
 
     $debug_container = "${container}-debug"
-    $debug_image = "${registry}/nest/stage1/${role}/debug:${cpu}"
+    $debug_image = "${registry}/nest/stage1/${variant}/debug:${cpu}"
     run_command("podman run --name=${debug_container} --volume=${debug_volume}:/usr/lib/.debug:ro ${image} cp -a /usr/lib/.debug/. /usr/lib/debug", 'localhost', 'Copy debug symbols')
     run_command("podman commit --change CMD=/bin/zsh ${debug_container} ${debug_image}", 'localhost', 'Commit debug container')
     run_command("podman rm ${debug_container}", 'localhost', 'Remove debug container')

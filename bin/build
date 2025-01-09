@@ -24,13 +24,13 @@ case $build in
         ;;
     stage1)
         cpu=${name%-*}
-        role=${name##*-}
-        extra_args=("cpu=${cpu}" "role=${role}")
+        variant=${name##*-}
+        extra_args=("cpu=${cpu}" "variant=${variant}")
         ;;
     stage2)
         platform=${name%-*}
-        role=${name##*-}
-        extra_args=("platform=${platform}" "role=${role}")
+        variant=${name##*-}
+        extra_args=("platform=${platform}" "variant=${variant}")
         ;;
     stage3)
         branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null) # ok to be empty

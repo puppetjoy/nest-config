@@ -15,7 +15,7 @@ hierarchy:
   - name: 'Builds'
     paths:
       - "build/%{facts.os.family}/%{facts.build}/%{facts.build}.yaml"
-      - "build/%{facts.os.family}/%{facts.build}/%{facts.profile.role}.yaml"
+      - "build/%{facts.os.family}/%{facts.build}/%{facts.profile.variant}.yaml"
       - "build/%{facts.os.family}/%{facts.build}/stage3.yaml"
       - "build/%{facts.os.family}/%{facts.build}/stage2.yaml"
       - "build/%{facts.os.family}/%{facts.build}/stage1.yaml"

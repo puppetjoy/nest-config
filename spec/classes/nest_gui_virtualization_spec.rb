@@ -8,7 +8,7 @@ describe 'nest::gui::virtualization' do
     when %r{^gentoo-}
       context 'on Gentoo' do
         let(:facts) do
-          facts.merge({ profile: { role: 'workstation' } })
+          facts.merge({ profile: { variant: 'workstation' } })
         end
 
         it { is_expected.to contain_package('app-emulation/virt-viewer').that_requires('Class[nest::base::zfs]') }

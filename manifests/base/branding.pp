@@ -1,10 +1,10 @@
 class nest::base::branding {
   tag 'profile'
 
-  $variant = $facts['profile']['role'] ? {
+  $variant = $facts['profile']['variant'] ? {
     'server'      => 'Server',
     'workstation' => 'Workstation',
-    default       => fail("Unhandled role ${facts['profile']['role']}"),
+    default       => fail("Unhandled variant ${facts['profile']['variant']}"),
   }
 
   $image_id = $facts['build'] ? {
@@ -14,7 +14,7 @@ class nest::base::branding {
 
   $os_release_content = epp('nest/branding/os-release.epp', {
     variant    => $variant,
-    variant_id => $facts['profile']['role'],
+    variant_id => $facts['profile']['variant'],
     build_id   => pick_default($facts['ci_job_id'], $facts['release']['build_id']),
     image_id   => $image_id,
   })
