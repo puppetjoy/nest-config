@@ -13,6 +13,7 @@ steps:
       message: "Reboot triggered by Bolt\r\n"
       reboot_delay: 60 # must be >= 60 and % 60 = 0 to display message and avoid being killed by systemd
       disconnect_wait: 30
+      reconnect_timeout: 600 # 10 minutes
       retry_interval: 5
     run_as: root
     targets: $targets

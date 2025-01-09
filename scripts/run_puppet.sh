@@ -6,5 +6,5 @@
 #
 
 systemctl -q is-active puppet-run.timer && systemctl stop puppet-run
-puppet agent --test || [ $? -eq 2 ]
+puppet agent --test $PUPPET_EXTRA_ARGS || [ $? -eq 2 ]
 exit $?

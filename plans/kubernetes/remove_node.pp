@@ -7,32 +7,27 @@ plan nest::kubernetes::remove_node (
   TargetSpec $targets,
   Boolean    $drain = true,
 ) {
-  $nodes = get_targets($targets).reduce({}) |$memo, $node| {
-    $get_node_cmd = "kubectl get node ${node.name}"
-    $result = run_command($get_node_cmd, 'localhost', "Check if ${node.name} is a cluster member", {
+  $members = get_targets($targets).reduce([]) |$memo, $node| {
+    $result = run_command("kubectl get node ${node.name}", 'localhost', "Check if ${node.name} is a cluster member", {
       _catch_errors => true,
     })
 
-    $memo + { $node => $result.ok }
+    if $result.ok {
+      $memo << $node
+    } else {
+      $memo
+    }
   }
 
   if $drain {
-    $nodes.each |$node, $member| {
-      if $member {
-        $kubectl_drain_cmd = "kubectl drain ${node.name} --delete-emptydir-data --force --ignore-daemonsets"
-        run_command($kubectl_drain_cmd, 'localhost', 'Drain node')
-      }
-    }
+    run_plan('nest::kubernetes::drain_node', $members, _description => 'Drain nodes')
   }
 
   run_command('kubeadm reset --force', $targets, 'Reset node', {
     _run_as => 'root',
   })
 
-  $nodes.each |$node, $member| {
-    if $member {
-      $kubectl_delete_node_cmd = "kubectl delete node ${node.name}"
-      run_command($kubectl_delete_node_cmd, 'localhost', 'Delete node from cluster')
-    }
+  $members.each |$node| {
+    run_command("kubectl delete node ${node.name}", 'localhost', "Delete node ${node.name} from the cluster")
   }
 }
