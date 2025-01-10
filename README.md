@@ -14,22 +14,22 @@ This module defines three main stages to progressively build server and workstat
 
 ### Supported Platforms
 
-| ISA    | CPU        | Platform                  |
-|--------|------------|---------------------------|
-| x86-64 | Haswell    | Generic                   |
-|        |            | Live ISO/USB              |
-|        |            | VMware                    |
-| ARM    | Cortex-A8  | [BeagleBone Black](https://beagleboard.org/black)    |
-| ARM64  | Cortex-A53 | [Pine64](https://www.pine64.org/)                    |
-|        |            | [Radxa Zero](https://wiki.radxa.com/Zero)            |
-|        |            | [Raspberry Pi 3](https://www.raspberrypi.com/products/raspberry-pi-3-model-b/) |
-|        |            | [SOPine](https://www.pine64.org/sopine/)             |
-|        | Cortex-A72 | [Pinebook Pro](https://www.pine64.org/pinebook-pro/) |
-|        |            | [Raspberry Pi 4](https://www.raspberrypi.com/products/raspberry-pi-4-model-b/) |
-|        |            | [Rock 4](https://wiki.radxa.com/Rock4)               |
-|        |            | [Rock 5](https://wiki.radxa.com/Rock5)               |
-|        |            | [RockPro64](https://www.pine64.org/rockpro64/)       |
-| RISC-V | [XuanTie C920](https://www.xrvm.com/product/xuantie/4224888731980599296) | [Milk-V Pioneer](https://milkv.io/pioneer) |
+| ISA    | CPU                                                                      | Platform                                                                       |
+|--------|--------------------------------------------------------------------------|--------------------------------------------------------------------------------|
+| x86-64 | [Haswell](https://en.wikipedia.org/wiki/Haswell_(microarchitecture))     | Generic                                                                        |
+|        |                                                                          | Live ISO/USB                                                                   |
+|        |                                                                          | VMware                                                                         |
+| ARM    | [Cortex-A8](https://en.wikipedia.org/wiki/ARM_Cortex-A8)                 | [BeagleBone Black](https://beagleboard.org/black)                              |
+| ARM64  | [Cortex-A53](https://en.wikipedia.org/wiki/ARM_Cortex-A53)               | [Pine64](https://www.pine64.org/)                                              |
+|        |                                                                          | [Radxa Zero](https://wiki.radxa.com/Zero)                                      |
+|        |                                                                          | [Raspberry Pi 3](https://www.raspberrypi.com/products/raspberry-pi-3-model-b/) |
+|        |                                                                          | [SOPine](https://www.pine64.org/sopine/)                                       |
+|        | [Cortex-A72](https://en.wikipedia.org/wiki/ARM_Cortex-A72)               | [Pinebook Pro](https://www.pine64.org/pinebook-pro/)                           |
+|        |                                                                          | [Raspberry Pi 4](https://www.raspberrypi.com/products/raspberry-pi-4-model-b/) |
+|        |                                                                          | [Rock 4](https://wiki.radxa.com/Rock4)                                         |
+|        |                                                                          | [Rock 5](https://wiki.radxa.com/Rock5)                                         |
+|        |                                                                          | [RockPro64](https://www.pine64.org/rockpro64/)                                 |
+| RISC-V | [XuanTie C920](https://www.xrvm.com/product/xuantie/4224888731980599296) | [Milk-V Pioneer](https://milkv.io/pioneer)                                     |
 
 Additionally, the module has comprehensive Kubernetes support.
 
