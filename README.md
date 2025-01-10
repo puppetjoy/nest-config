@@ -16,7 +16,7 @@ This module defines three main stages to progressively build server and workstat
 
 | ISA    | CPU                                                                      | Platform                                                                       |
 |--------|--------------------------------------------------------------------------|--------------------------------------------------------------------------------|
-| x86-64 | [Haswell](https://en.wikipedia.org/wiki/Haswell_(microarchitecture))     | Generic                                                                        |
+| x86-64 | [Haswell](https://en.wikipedia.org/wiki/Haswell_(microarchitecture))     | Intel PC                                                                       |
 |        |                                                                          | Live ISO/USB                                                                   |
 |        |                                                                          | VMware                                                                         |
 | ARM    | [Cortex-A8](https://en.wikipedia.org/wiki/ARM_Cortex-A8)                 | [BeagleBone Black](https://beagleboard.org/black)                              |
