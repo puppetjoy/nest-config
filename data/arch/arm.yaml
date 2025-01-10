@@ -5,7 +5,8 @@ nest::kernel_config:
   CONFIG_VMSPLIT_2G: y
   CONFIG_VMSPLIT_3G: n
 
-  # KVM support removed from 32-bit ARM
+  # Unsupported
+  CONFIG_PREEMPT_DYNAMIC: null
   CONFIG_VIRTUALIZATION: null
 
 # Let ZFS access more of the kernel virtual address space made available by the

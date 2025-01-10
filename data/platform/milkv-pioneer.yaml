@@ -17,12 +17,6 @@ nest::kernel_cmdline:
   - 'zfs.zvol_use_blk_mq=1'
 
 nest::kernel_config:
-  # Tuning
-  CONFIG_HZ_PERIODIC: n
-  CONFIG_NO_HZ_IDLE: y
-  CONFIG_PREEMPT_NONE: n
-  CONFIG_PREEMPT_VOLUNTARY: y
-
   # Device drivers
   CONFIG_AQTION: m
   CONFIG_DRM_AMDGPU: m

@@ -15,7 +15,7 @@ class nest::base::kernel {
   }
 
   if $nest::bootloader == 'systemd' {
-    nest::lib::kconfig { 'CONFIG_EFI_STUB':
+    nest::lib::kconfig { ['CONFIG_EFI', 'CONFIG_EFI_STUB']:
       value => y,
     }
   }

@@ -224,11 +224,11 @@ nest::kernel_config:
   CONFIG_LOCALVERSION_AUTO: n
   CONFIG_IKCONFIG: y
   CONFIG_IKCONFIG_PROC: y
+  CONFIG_GCC_PLUGINS: n  # work with distcc
 
-  # Support distcc
-  CONFIG_GCC_PLUGINS: n
-
-  # Kernel
+  # Tuning
+  CONFIG_HZ_PERIODIC: n
+  CONFIG_NO_HZ_IDLE: y
   CONFIG_PREEMPT_DYNAMIC: y
 
   # Networking
