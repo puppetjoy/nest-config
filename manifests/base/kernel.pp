@@ -20,68 +20,6 @@ class nest::base::kernel {
     }
   }
 
-  # Workaround https://sourceware.org/bugzilla/show_bug.cgi?id=26256
-  if $nest::kernel_tag =~ /^(raspberrypi|radxa)\// {
-    $lld_override = "LD=${facts['llvm_ld']}"
-
-    file { '/etc/portage/env/lld.conf':
-      mode    => '0644',
-      owner   => 'root',
-      group   => 'root',
-      content => "${lld_override}\nEXTRA_EMAKE=\"${lld_override}\"\n",
-    }
-
-    Package_env <| title == 'sys-fs/zfs-kmod' |> {
-      env +> 'lld.conf',
-    }
-  } else {
-    $lld_override = ''
-  }
-
-  case $nest::kernel_tag {
-    /^radxa\//: {
-      # Required for mkimage(1)
-      nest::lib::package { 'dev-embedded/u-boot-tools':
-        ensure => installed,
-        before => Nest::Lib::Build['kernel'],
-      }
-
-      # Ignore warning on newer GCC
-      $cflags = [
-        '-Wno-address',
-        '-Wno-array-compare',
-        '-Wno-dangling-pointer',
-        '-Wno-enum-int-mismatch',
-        '-Wno-implicit-fallthrough',
-        '-Wno-implicit-function-declaration',
-        '-Wno-int-in-bool-context',
-        '-Wno-stringop-overread',
-        '-Wno-tautological-compare',
-      ]
-      $cflags_override = "KCFLAGS=\"${cflags.join(' ')}\""
-
-      file { '/etc/portage/env/kcflags.conf':
-        mode    => '0644',
-        owner   => 'root',
-        group   => 'root',
-        content => "${cflags_override}\n",
-      }
-
-      Package_env <| title == 'sys-fs/zfs-kmod' |> {
-        env +> 'kcflags.conf',
-      }
-    }
-
-    /^sophgo\//: {
-      # Hide known warnings from Xe backport effort
-      $cflags_override = 'KCFLAGS="-Wno-discarded-qualifiers -Wno-address"'
-    }
-
-    default: {
-      $cflags_override = ''
-    }
-  }
-
   nest::lib::package { 'sys-devel/bc':
     ensure => installed,
     before => Nest::Lib::Build['kernel'],
@@ -93,7 +31,7 @@ class nest::base::kernel {
   }
   ~>
   nest::lib::build { 'kernel':
-    args      => "LOCALVERSION= ${lld_override} ${cflags_override} olddefconfig all modules_install",
+    args      => 'LOCALVERSION= olddefconfig all modules_install',
     defconfig => $nest::kernel_defconfig,
     dir       => '/usr/src/linux',
     makeargs  => "ARCH=${arch}",
