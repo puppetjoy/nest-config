@@ -10,7 +10,7 @@ nest::fscache: false
 nest::kernel_defconfig: 'bcm2711_defconfig'
 nest::puppet: false
 nest::swap_alt_win: true
-nest::uboot_defconfig: 'rpi_arm64_defconfig'
+nest::uboot_defconfig: 'rpi_3_32b_defconfig'
 nest::wifi: true
 nest::wifi_power_save: false
 

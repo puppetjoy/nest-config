@@ -20,9 +20,9 @@ This module defines three main stages to progressively build server and workstat
 |        |                                                                          | Live ISO/USB                                                                   |
 |        |                                                                          | VMware                                                                         |
 | ARM    | [Cortex-A8](https://en.wikipedia.org/wiki/ARM_Cortex-A8)                 | [BeagleBone Black](https://beagleboard.org/black)                              |
+|        |                                                                          | [Raspberry Pi 3](https://www.raspberrypi.com/products/raspberry-pi-3-model-b/) |
 | ARM64  | [Cortex-A53](https://en.wikipedia.org/wiki/ARM_Cortex-A53)               | [Pine64](https://www.pine64.org/)                                              |
 |        |                                                                          | [Radxa Zero](https://wiki.radxa.com/Zero)                                      |
-|        |                                                                          | [Raspberry Pi 3](https://www.raspberrypi.com/products/raspberry-pi-3-model-b/) |
 |        |                                                                          | [SOPine](https://www.pine64.org/sopine/)                                       |
 |        | [Cortex-A72](https://en.wikipedia.org/wiki/ARM_Cortex-A72)               | [Pinebook Pro](https://www.pine64.org/pinebook-pro/)                           |
 |        |                                                                          | [Raspberry Pi 4](https://www.raspberrypi.com/products/raspberry-pi-4-model-b/) |
