@@ -21,7 +21,7 @@ steps:
       chart: 'projectcalico/tigera-operator'
       namespace: 'tigera-operator'
       repo_url: 'https://docs.tigera.io/calico/charts'
-      version: '3.29.0'
+      version: '3.29.1'
       wait: true
       deploy: $calico
 
@@ -41,7 +41,7 @@ steps:
       chart: 'metallb/metallb'
       namespace: 'metallb-system'
       repo_url: 'https://metallb.github.io/metallb'
-      version: '0.14.8'
+      version: '0.14.9'
       wait: true
       deploy: $metallb
 
