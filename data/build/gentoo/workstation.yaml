@@ -23,6 +23,7 @@ nest::classes:
   - 'nest::service::bluetooth'
   - 'nest::tool::bolt'
   - 'nest::tool::pdk'
+  - 'nest::tool::qemu'
 
 nest::package_keywords:
   # I always want the latest of these

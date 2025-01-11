@@ -103,6 +103,7 @@ describe 'nest' do
     'nest::service::bluetooth',
     'nest::tool::bolt',
     'nest::tool::pdk',
+    'nest::tool::qemu',
   ]
 
   on_supported_os.each do |os, facts|

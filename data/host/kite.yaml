@@ -1,7 +1,6 @@
 ---
 nest::classes:
   - 'nest::service::gitlab_runner'
-  - 'nest::tool::qemu'
 
 nest::dtb_file: 'broadcom/bcm2711-rpi-400.dtb'
 nest::fscache: true
