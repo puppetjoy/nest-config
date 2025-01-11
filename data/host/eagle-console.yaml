@@ -1,5 +1,7 @@
 ---
 nest::classes:
   - 'nest::host::eagle_console'
+  - 'nest::tool::arduino'
 
+nest::tool::arduino::cli_source: 'https://downloads.arduino.cc/arduino-cli/arduino-cli_latest_Linux_ARMv7.tar.gz'
 nest::vpn_client: false

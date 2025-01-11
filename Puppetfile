@@ -22,6 +22,7 @@ mod 'nest', :git => 'git@gitlab.james.tl:nest/config.git', :branch => :control_b
 mod 'private', :git => 'git@gitlab.james.tl:nest/private.git', :branch => 'main'
 
 # Required by nest
+mod 'puppet-archive', '7.1.0'
 mod 'puppet-dnsquery', '5.0.1'
 mod 'puppet-augeasproviders_sysctl', '3.1.0'
 mod 'puppetlabs-apache', '12.2.0'

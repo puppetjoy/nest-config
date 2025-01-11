@@ -1,6 +1,4 @@
 class nest::host::eagle_console {
-  include nest::tool::arduino
-
   # Avoid using UART on this node
   file_line {
     default:
