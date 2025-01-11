@@ -2,6 +2,7 @@ class nest::host::falcon {
   nest::lib::toolchain {
     [
       'aarch64-unknown-linux-gnu',
+      'armv6j-unknown-linux-gnueabihf',
       'armv7a-unknown-linux-gnueabihf',
       'riscv64-unknown-linux-gnu',
     ]:
