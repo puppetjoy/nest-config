@@ -1,7 +1,19 @@
 ---
+nest::classes:
+  - 'nest::service::gitlab_runner'
+  - 'nest::tool::qemu'
+
 nest::dtb_file: 'broadcom/bcm2711-rpi-400.dtb'
 nest::fscache: true
 nest::monitor_layout: ['HDMI-A-1@0', 'HDMI-A-2@2560']
 nest::primary_monitor: 'HDMI-A-1'
 nest::text_scaling_factor: 1.1
 nest::vpn_client: false
+
+nest::service::gitlab_runner::host: 'gitlab.james.tl'
+nest::service::gitlab_runner::instances:
+  builder:
+    limit: 1
+    bolt: true
+    podman: true
+    qemu: true
