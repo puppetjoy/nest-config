@@ -1,0 +1,7 @@
+---
+nest::classes:
+  - 'nest::firmware::opensbi'
+  - 'nest::firmware::uboot'
+
+nest::dtb_file: 'starfive/jh7110-milkv-mars.dtb'
+nest::uboot_defconfig: 'starfive_visionfive2_defconfig'

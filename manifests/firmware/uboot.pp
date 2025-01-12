@@ -14,10 +14,9 @@ class nest::firmware::uboot {
   }
 
   $env_is_in_spi_flash = $facts['profile']['platform'] ? {
-    'milkv-pioneer' => undef, # setting not available
-    'radxazero'     => undef, # setting not available
-    /^raspberrypi/  => undef, # setting not available
-    default         => n,
+    'radxazero'    => undef, # setting not available
+    /^raspberrypi/ => undef, # setting not available
+    default        => n,
   }
 
   nest::lib::kconfig {
@@ -50,6 +49,11 @@ class nest::firmware::uboot {
   }
 
   case $facts['profile']['platform'] {
+    'milkv-mars': {
+      # See: https://docs.u-boot.org/en/latest/board/starfive/milk-v_mars.html
+      $build_options = 'OPENSBI=../opensbi/build/platform/generic/firmware/fw_dynamic.bin'
+    }
+
     /^(pinebookpro|rockpro64|rock4|rock5)$/: {
       $build_options = $facts['profile']['platform'] ? {
         'rock5' => "BL31=../rkbin/bin/rk35/rk3588_bl31_v1.47.elf \
@@ -77,12 +81,21 @@ class nest::firmware::uboot {
     }
   }
 
-  if $build_options =~ /arm-trusted-firmware/ {
-    Class['nest::firmware::arm']
-    ~> Nest::Lib::Build['uboot']
-  } elsif $build_options =~ /rkbin/ {
-    Class['nest::firmware::rockchip']
-    ~> Nest::Lib::Build['uboot']
+  case $build_options {
+    /arm-trusted-firmware/: {
+      Class['nest::firmware::arm']
+      ~> Nest::Lib::Build['uboot']
+    }
+
+    /opensbi/: {
+      Class['nest::firmware::opensbi']
+      ~> Nest::Lib::Build['uboot']
+    }
+
+    /rkbin/: {
+      Class['nest::firmware::rockchip']
+      ~> Nest::Lib::Build['uboot']
+    }
   }
 
   nest::lib::package { 'dev-lang/swig':
