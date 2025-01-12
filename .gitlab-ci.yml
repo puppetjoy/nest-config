@@ -53,11 +53,11 @@ stages:
   variables:
     CPU: 'cortex-a53'
 
-'Build rv64gc':
+'Build sifive-u74':
   extends: .template
   tags: ['riscv64']
   variables:
-    CPU: 'rv64gc'
+    CPU: 'sifive-u74'
 
 'Deploy environment':
   stage: 'Deploy'
@@ -75,5 +75,5 @@ stages:
     - 'podman manifest create "$IMAGE"'
     - 'podman manifest add "$IMAGE" "${CI_REGISTRY}/${IMAGE}:haswell"'
     - 'podman manifest add "$IMAGE" "${CI_REGISTRY}/${IMAGE}:cortex-a53"'
-    - 'podman manifest add "$IMAGE" "${CI_REGISTRY}/${IMAGE}:rv64gc"'
+    - 'podman manifest add "$IMAGE" "${CI_REGISTRY}/${IMAGE}:sifive-u74"'
     - 'podman manifest push --all "$IMAGE" "${CI_REGISTRY}/${IMAGE}"'
