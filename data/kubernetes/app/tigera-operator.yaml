@@ -1,6 +1,5 @@
 ---
 resources:
-  registry_auths: {}
   backup: {}
 
 values:
@@ -9,3 +8,5 @@ values:
       ipPools:
         - cidr: 192.168.0.0/16
           encapsulation: None
+    imagePullSecrets:
+      - name: "%{nest::kubernetes::service}-registry-auths"
