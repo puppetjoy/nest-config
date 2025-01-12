@@ -24,6 +24,12 @@ class nest::base::dracut {
     }
   }
 
+  # Prefer fast zstd except on low memory arm devices
+  $compress = $facts['profile']['architecture'] ? {
+    'arm'   => 'gzip',
+    default => 'zstd',
+  }
+
   if $facts['profile']['platform'] == 'live' {
     $base_config_content = @(EOT)
       add_dracutmodules+=" dmsquash-live "
@@ -38,7 +44,8 @@ class nest::base::dracut {
   } elsif $facts['build'] and $facts['build'] != 'kernel' {
     $base_config_content = ''
   } else {
-    $base_config_content = @(EOT)
+    $base_config_content = @("EOT")
+      compress="${compress}"
       force="yes"
       hostonly="yes"
       | EOT
