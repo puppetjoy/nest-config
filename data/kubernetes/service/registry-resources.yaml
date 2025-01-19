@@ -1,0 +1,26 @@
+---
+include:
+  - 'nest::service::registry'
+
+bucket_storage_class: ceph-bucket
+
+resources:
+  bucket:
+    apiVersion: objectbucket.io/v1alpha1
+    kind: ObjectBucketClaim
+    metadata:
+      name: registry-bucket
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      generateBucketName: registry
+      storageClassName: "%{lookup('bucket_storage_class')}"
+
+  ui-secret:
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: registry-ui
+      namespace: "%{nest::kubernetes::namespace}"
+    data:
+      SECRET_KEY_BASE: "%{nest::service::registry::ui_secret}"
+      TOKEN_AUTH_PASSWORD: "%{nest::service::registry::admin_password_base64}"

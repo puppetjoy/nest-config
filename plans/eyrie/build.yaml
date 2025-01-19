@@ -59,3 +59,8 @@ steps:
 
   - description: 'Deploy Ceph'
     plan: nest::kubernetes::deploy_ceph
+
+  - description: 'Deploy registry'
+    plan: nest::kubernetes::deploy_registry
+    parameters:
+      resources: true

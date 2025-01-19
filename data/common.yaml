@@ -34,6 +34,10 @@ lookup_options:
     merge: 'hash'
   nest::service::puppet::r10k_deploy_key:
     convert_to: 'Sensitive'
+  nest::service::registry::admin_password:
+    convert_to: 'Sensitive'
+  nest::service::registry::deploy_password:
+    convert_to: 'Sensitive'
   nest::service::streamux::password:
     convert_to: 'Sensitive'
   nest::service::wordpress::sites:
@@ -60,6 +64,8 @@ nest::cnames:
   grafana.eyrie: 'ingress.eyrie'
   kubernetes.eyrie: 'ingress.eyrie'
   portfolio.eyrie: 'ingress.eyrie'
+  registry.eyrie: 'ingress.eyrie'
+  registry-auth.eyrie: 'ingress.eyrie'
   thestaticvoid.eyrie: 'ingress.eyrie'
 
   # Test kubernetes services
@@ -68,6 +74,8 @@ nest::cnames:
   grafana-test.eyrie: 'ingress-test.eyrie'
   kubernetes-test.eyrie: 'ingress-test.eyrie'
   portfolio-test.eyrie: 'ingress-test.eyrie'
+  registry-test.eyrie: 'ingress-test.eyrie'
+  registry-auth-test.eyrie: 'ingress-test.eyrie'
   thestaticvoid-test.eyrie: 'ingress-test.eyrie'
 
   # Legacy services

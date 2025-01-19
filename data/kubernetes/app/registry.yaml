@@ -1,0 +1,168 @@
+---
+include:
+  - 'nest::service::registry'
+
+service_name: "%{nest::kubernetes::service}"
+auth_service_name: "%{nest::kubernetes::service}-auth"
+cert_issuer: eyrie-ca
+cert_issuer_kind: ClusterIssuer
+ingress_class: nginx
+token_issuer: 'Eyrie auth server'
+token_service: 'Container registry'
+
+resources:
+  backup: {}
+  restore: {}
+
+  certs:
+    apiVersion: cert-manager.io/v1
+    kind: Certificate
+    metadata:
+      name: "%{nest::kubernetes::service}-certs"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      secretName: "%{nest::kubernetes::service}-certs"
+      issuerRef:
+        name: "%{lookup('cert_issuer')}"
+        kind: "%{lookup('cert_issuer_kind')}"
+      dnsNames:
+        - "%{nest::kubernetes::fqdn}"
+        - "%{lookup('auth_service_name')}.eyrie"
+
+  auth-ingress:
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: "%{nest::kubernetes::service}-auth"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      ingressClassName: "%{lookup('ingress_class')}"
+      rules:
+        - host: "%{lookup('auth_service_name')}.eyrie"
+          http:
+            paths:
+              - path: /
+                pathType: Prefix
+                backend:
+                  service:
+                    name: "%{nest::kubernetes::service}-auth"
+                    port:
+                      number: 5001
+      tls:
+        - hosts:
+            - "%{lookup('auth_service_name')}.eyrie"
+          secretName: "%{nest::kubernetes::service}-certs"
+
+values:
+  auth:
+    enabled: true
+    config:
+      acl:
+        # Keep it simple
+        - match: { account: 'admin' }
+          actions: ['*']
+          comment: 'Admins can do anything'
+        - match: { account: '' }
+          actions: ['pull']
+          comment: 'Anonymous users can pull'
+      token:
+        issuer: "%{lookup('token_issuer')}"
+        certificate: /certs/tls.crt
+        key: /certs/tls.key
+        rootcertbundle: /certs/ca.crt
+        realm: "https://%{lookup('auth_service_name')}.eyrie/auth"
+        service: "%{lookup('token_service')}"
+      users:
+        admin:
+          password: "%{nest::service::registry::admin_password_hash}"
+        '': {} # Allow anonymous access
+    extraVolumes: &extraVolumes
+      - name: registry-certs
+        secret:
+          secretName: "%{nest::kubernetes::service}-certs"
+    extraVolumeMounts: &extraVolumeMounts
+      - name: registry-certs
+        mountPath: /certs
+        readOnly: true
+  config:
+    http:
+      secret: "%{nest::service::registry::http_secret}"
+    storage:
+      s3:
+        accesskey: "%{nest::service::registry::bucket_config.AWS_ACCESS_KEY_ID}"
+        secretkey: "%{nest::service::registry::bucket_config.AWS_SECRET_ACCESS_KEY}"
+        region: not-important # Required parameter, but not used in current Ceph configuration
+        regionendpoint: "%{nest::service::registry::bucket_config.BUCKET_HOST}"
+        bucket: "%{nest::service::registry::bucket_config.BUCKET_NAME}"
+        secure: false
+      delete:
+        enabled: true
+  extraVolumes: *extraVolumes
+  extraVolumeMounts: *extraVolumeMounts
+  gc:
+    enabled: true
+  ingress:
+    enabled: true
+    annotations:
+      nginx.ingress.kubernetes.io/proxy-body-size: '0'  # Allow large uploads
+    hosts:
+      - host: "%{nest::kubernetes::fqdn}"
+    tls:
+      - secretName: "%{nest::kubernetes::service}-certs"
+        hosts:
+          - "%{nest::kubernetes::fqdn}"
+  ui:
+    enabled: true
+
+patches:
+  10-deployment-env:
+    - patch:
+        # See: https://github.com/klausmeyer/docker-registry-browser/blob/master/docs/README.md
+        - op: add
+          path: '/spec/template/spec/containers/1/env/-'
+          value:
+            name: ENABLE_DELETE_IMAGES
+            value: 'true'
+        # For communication with the auth server
+        - op: add
+          path: '/spec/template/spec/containers/1/env/-'
+          value:
+            name: NO_SSL_VERIFICATION
+            value: 'true'
+        # Password set in registry-resources.yaml...
+        - op: add
+          path: '/spec/template/spec/containers/1/env/-'
+          value:
+            name: TOKEN_AUTH_USER
+            value: 'admin'
+        # ...and passed to the container here
+        - op: add
+          path: '/spec/template/spec/containers/1/envFrom'
+          value:
+            - secretRef:
+                name: "%{nest::kubernetes::service}-ui"
+      target:
+        group: apps
+        version: v1
+        kind: Deployment
+        name: "%{nest::kubernetes::service}"
+
+  10-garbage-collect-ttl:
+    patch:
+      apiVersion: batch/v1
+      kind: CronJob
+      metadata:
+        name: "%{nest::kubernetes::service}-garbage-collect"
+      spec:
+        jobTemplate:
+          spec:
+            ttlSecondsAfterFinished: 172800  # 2 days
+
+  10-ingress-class:
+    patch:
+      apiVersion: networking.k8s.io/v1
+      kind: Ingress
+      metadata:
+        name: "%{nest::kubernetes::service}"
+      spec:
+        ingressClassName: "%{lookup('ingress_class')}"

@@ -48,6 +48,8 @@ resources:
     apiVersion: networking.k8s.io/v1
     kind: Ingress
     metadata:
+      annotations:
+        nginx.ingress.kubernetes.io/proxy-body-size: '0'  # Allow large uploads
       name: "%{lookup('service_name')}-objectstore"
       namespace: "%{nest::kubernetes::namespace}"
     spec:

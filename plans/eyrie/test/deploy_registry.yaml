@@ -1,0 +1,38 @@
+---
+description: 'Deploy test container registry'
+
+parameters:
+  deploy:
+    description: 'Run or skip the deployment'
+    type: Boolean
+    default: true
+
+  resources:
+    description: 'Deploy resources'
+    type: Boolean
+    default: false
+
+  registry:
+    description: 'Deploy registry'
+    type: Boolean
+    default: true
+
+steps:
+  - description: 'Deploy resources'
+    plan: nest::kubernetes::deploy
+    parameters:
+      namespace: 'test'
+      service: 'registry-resources'
+      app: 'scratch'
+      deploy: $deploy and $resources
+      wait: true
+
+  - description: 'Deploy registry'
+    plan: nest::kubernetes::deploy
+    parameters:
+      namespace: 'test'
+      service: 'registry'
+      chart: 'mya/registry'
+      repo_url: 'https://mya.sh'
+      version: '22.4.11'
+      deploy: $deploy and $registry
