@@ -2,6 +2,7 @@ class nest::service::gitlab (
   String            $external_name,
   Optional[String]  $registry_external_name = undef,
   Boolean           $https                  = false,
+  String            $image                  = 'gitlab/gitlab-ce',
   Stdlib::Port      $ssh_port               = 22,
   Stdlib::Port      $web_port               = 80,
   Stdlib::Port      $registry_port          = 5050,
@@ -68,7 +69,7 @@ class nest::service::gitlab (
   }
   ->
   nest::lib::container { 'gitlab':
-    image   => 'nest/forks/gitlab',
+    image   => $image,
     cap_add => ['SYS_CHROOT'],
     env     => ["GITLAB_OMNIBUS_CONFIG=from_file('/omnibus_config.rb')"],
     publish => $publish,
