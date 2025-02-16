@@ -12,6 +12,7 @@ plan nest::build::manifest (
   String            $image,
   Array[String]     $image_tags,
   Boolean           $deploy                = false,
+  Boolean           $mirror                = false,
   String            $registry              = lookup('nest::build::registry', default_value => 'localhost'),
   Optional[String]  $registry_username     = lookup('nest::build::registry_username', default_value => undef),
   Optional[String]  $registry_password     = lookup('nest::build::registry_password', default_value => undef),
@@ -50,6 +51,16 @@ plan nest::build::manifest (
   if $deploy {
     unless $registry == 'localhost' {
       run_command("podman manifest push --all ${image_real}:${tag} ${registry}/${image_real}:${tag}", 'localhost', "Push ${image_real}:${tag} manifest")
+    }
+
+    if $mirror {
+      $eyrie_registry_password = lookup('nest::service::registry::admin_password')
+      ['registry.eyrie', 'registry-test.eyrie'].each |$r| {
+        run_command("podman login --username=admin --password-stdin ${r} <<< \$registry_password", 'localhost', "Login to ${registry}", '_env_vars' => {
+          'registry_password' => $eyrie_registry_password.unwrap,
+        })
+        run_command("podman manifest push --all ${image_real}:${tag} ${r}/${image_real}:${tag}", 'localhost', "Push ${image_real}:${tag} manifest to ${r}")
+      }
     }
   }
 }

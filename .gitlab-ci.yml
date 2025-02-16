@@ -71,9 +71,13 @@ stages:
     IMAGE: "${CI_PROJECT_PATH}/${CI_COMMIT_BRANCH}"
   script:
     - 'podman login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY" <<< $CI_REGISTRY_PASSWORD'
+    - 'podman login -u admin --password-stdin registry.eyrie <<< $EYRIE_REGISTRY_PASSWORD'
+    - 'podman login -u admin --password-stdin registry-test.eyrie <<< $EYRIE_REGISTRY_PASSWORD'
     - 'podman manifest exists "$IMAGE" && podman manifest rm "$IMAGE"'
     - 'podman manifest create "$IMAGE"'
     - 'podman manifest add "$IMAGE" "${CI_REGISTRY}/${IMAGE}:haswell"'
     - 'podman manifest add "$IMAGE" "${CI_REGISTRY}/${IMAGE}:cortex-a53"'
     - 'podman manifest add "$IMAGE" "${CI_REGISTRY}/${IMAGE}:sifive-u74"'
     - 'podman manifest push --all "$IMAGE" "${CI_REGISTRY}/${IMAGE}"'
+    - 'podman manifest push --all "$IMAGE" "registry.eyrie/${IMAGE}"'
+    - 'podman manifest push --all "$IMAGE" "registry-test.eyrie/${IMAGE}"'
