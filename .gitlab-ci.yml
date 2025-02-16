@@ -21,16 +21,14 @@ stages:
 
 .template:
   stage: 'Build'
-  variables:
-    SSH_PRIVATE_KEY: "$NEST_CI_DEPLOY_KEY"
   script:
     - 'mkdir empty'
     - 'podman login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY" <<< $CI_REGISTRY_PASSWORD'
     - 'podman build
         --build-arg=BRANCH="$CI_COMMIT_BRANCH"
         --build-arg=REPOSITORY="$CI_REPOSITORY_URL"
-        --build-arg=SSH_PRIVATE_KEY
         --file=Containerfile
+        --secret=id=ssh_private_key,src=<(echo "$NEST_CI_DEPLOY_KEY")
         --squash
         --tag="${CI_REGISTRY_IMAGE}/${CI_COMMIT_BRANCH}:${CPU}"
         empty'
