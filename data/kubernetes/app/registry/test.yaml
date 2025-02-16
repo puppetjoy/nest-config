@@ -4,25 +4,4 @@ auth_service_name: "%{nest::kubernetes::service}-auth-%{nest::kubernetes::namesp
 cert_issuer: "eyrie-ca-%{nest::kubernetes::namespace}"
 cert_issuer_kind: Issuer
 ingress_class: "nginx-%{nest::kubernetes::namespace}"
-node_role: workstation
 token_issuer: 'Eyrie test auth server'
-
-.affinity: &affinity
-  nodeAffinity:
-    requiredDuringSchedulingIgnoredDuringExecution:
-      nodeSelectorTerms:
-        - matchExpressions:
-          - key: "node-role.kubernetes.io/%{lookup('node_role')}"
-            operator: Exists
-
-.tolerations: &tolerations
-  - key: "node-role.kubernetes.io/%{lookup('node_role')}"
-    operator: Exists
-    effect: NoSchedule
-
-values:
-  affinity: *affinity
-  tolerations: *tolerations
-  auth:
-    affinity: *affinity
-    tolerations: *tolerations

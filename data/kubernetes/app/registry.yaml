@@ -6,9 +6,23 @@ service_name: "%{nest::kubernetes::service}"
 auth_service_name: "%{nest::kubernetes::service}-auth"
 cert_issuer: eyrie-ca
 cert_issuer_kind: ClusterIssuer
-ingress_class: nginx
+ingress_class: nginx-workstation
+node_role: workstation
 token_issuer: 'Eyrie auth server'
 token_service: 'Container registry'
+
+.affinity: &affinity
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+          - key: "node-role.kubernetes.io/%{lookup('node_role')}"
+            operator: Exists
+
+.tolerations: &tolerations
+  - key: "node-role.kubernetes.io/%{lookup('node_role')}"
+    operator: Exists
+    effect: NoSchedule
 
 resources:
   backup: {}
@@ -54,8 +68,12 @@ resources:
           secretName: "%{nest::kubernetes::service}-certs"
 
 values:
+  affinity: *affinity
+  tolerations: *tolerations
   auth:
     enabled: true
+    affinity: *affinity
+    tolerations: *tolerations
     config:
       acl:
         # Keep it simple

@@ -64,8 +64,8 @@ nest::cnames:
   grafana.eyrie: 'ingress.eyrie'
   kubernetes.eyrie: 'ingress.eyrie'
   portfolio.eyrie: 'ingress.eyrie'
-  registry.eyrie: 'ingress.eyrie'
-  registry-auth.eyrie: 'ingress.eyrie'
+  registry.eyrie: 'ingress-workstations.eyrie'
+  registry-auth.eyrie: 'ingress-workstations.eyrie'
   thestaticvoid.eyrie: 'ingress.eyrie'
 
   # Test kubernetes services

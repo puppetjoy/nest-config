@@ -287,7 +287,7 @@ patches:
           value: 8080
         - op: add
           path: '/spec/gateway/placement'
-          value: *placement
+          value: *hdd_osd_placement
         - op: remove
           path: '/spec/gateway/resources'
         - op: replace
