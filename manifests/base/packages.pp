@@ -5,7 +5,6 @@ class nest::base::packages {
         'app-admin/eclean-kernel',
         'app-admin/helm',
         'app-admin/sysstat',
-        'app-containers/skopeo',
         'app-editors/vim',
         'app-misc/jq',
         'app-misc/tmux',
