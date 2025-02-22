@@ -1,5 +1,6 @@
 ---
 node_role: workstation
+registry: 'registry-test.eyrie'
 
 .affinity: &affinity
   nodeAffinity:
@@ -36,7 +37,7 @@ resources:
               affinity: *affinity
               containers:
                 - name: nest
-                  image: 'registry.gitlab.james.tl/nest/config/main'
+                  image: "%{lookup('registry')}/nest/config/main"
                   imagePullPolicy: Always
                   command:
                     - bolt

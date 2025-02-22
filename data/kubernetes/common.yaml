@@ -1,4 +1,6 @@
 ---
+registry: 'registry.eyrie'
+
 include:
   - 'nest::kubernetes'
 
@@ -29,7 +31,7 @@ resources:
             spec:
               containers:
                 - name: nest
-                  image: 'registry.gitlab.james.tl/nest/config/main'
+                  image: "%{lookup('registry')}/nest/config/main"
                   imagePullPolicy: Always
                   command:
                     - bolt
@@ -83,7 +85,7 @@ patches:
           path: '/spec/template/spec/containers/-'
           value:
             name: nest
-            image: 'registry.gitlab.james.tl/nest/stage1/server'
+            image: "%{lookup('registry')}/nest/stage1/server"
             command: ['/usr/bin/sshd', '-D', '-e']
             securityContext:
               capabilities:
@@ -159,7 +161,7 @@ patches:
           path: '/spec/template/spec/initContainers/-'
           value:
             name: nest-init
-            image: 'registry.gitlab.james.tl/nest/config/main'
+            image: "%{lookup('registry')}/nest/config/main"
             imagePullPolicy: Always
             command:
               - bolt
