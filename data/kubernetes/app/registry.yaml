@@ -8,6 +8,7 @@ cert_issuer: eyrie-ca
 cert_issuer_kind: ClusterIssuer
 ingress_class: nginx-workstation
 node_role: workstation
+token_expiration: &token_expiration 1440 # 24 hours
 token_issuer: 'Eyrie auth server'
 token_service: 'Container registry'
 
@@ -42,6 +43,18 @@ resources:
       dnsNames:
         - "%{nest::kubernetes::fqdn}"
         - "%{lookup('auth_service_name')}.eyrie"
+
+  session-store-config:
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: "%{nest::kubernetes::service}-session-store-config"
+      namespace: "%{nest::kubernetes::namespace}"
+    data:
+      session_store.rb: |
+        Rails.application.config.session_store :cookie_store,
+          key: '_docker_registry_browser_session',
+          expire_after: %{lookup('token_expiration')}.minutes
 
   auth-ingress:
     apiVersion: networking.k8s.io/v1
@@ -84,6 +97,7 @@ values:
           actions: ['pull']
           comment: 'Anonymous users can pull'
       token:
+        expiration: *token_expiration
         issuer: "%{lookup('token_issuer')}"
         certificate: /certs/tls.crt
         key: /certs/tls.key
@@ -159,6 +173,18 @@ patches:
           value:
             - secretRef:
                 name: "%{nest::kubernetes::service}-ui"
+        - op: add
+          path: '/spec/template/spec/containers/1/volumeMounts'
+          value:
+            - name: session-store-config-volume
+              mountPath: /app/config/initializers/session_store.rb
+              subPath: session_store.rb
+        - op: add
+          path: '/spec/template/spec/volumes/-'
+          value:
+            name: session-store-config-volume
+            configMap:
+              name: "%{nest::kubernetes::service}-session-store-config"
       target:
         group: apps
         version: v1
