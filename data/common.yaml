@@ -24,20 +24,24 @@ lookup_options:
     merge: 'unique'
   nest::ssh_private_keys:
     merge: 'hash'
+  nest::service::gitlab::ssh_private_key:
+    convert_to: 'Sensitive'
   nest::service::gitlab_runner::instances:
     merge: 'deep'
+  nest::service::kubernetes::bolt_private_key:
+    convert_to: 'Sensitive'
   nest::service::mysql::root_password:
     convert_to: 'Sensitive'
   nest::service::puppet::puppetboard_secret_key:
     convert_to: 'Sensitive'
-  nest::service::reverse_proxy::hosts:
-    merge: 'hash'
   nest::service::puppet::r10k_deploy_key:
     convert_to: 'Sensitive'
   nest::service::registry::admin_password:
     convert_to: 'Sensitive'
   nest::service::registry::deploy_password:
     convert_to: 'Sensitive'
+  nest::service::reverse_proxy::hosts:
+    merge: 'hash'
   nest::service::streamux::password:
     convert_to: 'Sensitive'
   nest::service::wordpress::sites:

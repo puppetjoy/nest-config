@@ -34,7 +34,7 @@ values:
         secretName: "%{nest::kubernetes::service}-certs"
     shell:
       hostKeys:
-        secret: "%{nest::kubernetes::service}-secrets-gitlab-shell-host-keys"
+        secret: "%{nest::kubernetes::service}-resources-gitlab-shell-host-keys"
     storageClass: data-crypt
   certmanager:
     installCRDs: false

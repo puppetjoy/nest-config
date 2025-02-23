@@ -1,4 +1,5 @@
 class nest::service::kubernetes (
+  Sensitive $bolt_private_key,
   Boolean $control_plane = false,
 ) {
   include nest
@@ -191,7 +192,7 @@ class nest::service::kubernetes (
   file { '/root/.ssh/id_ed25519_eyrie':
     mode      => '0600',
     owner     => 'root',
-    content   => $nest::ssh_private_keys['eyrie'],
+    content   => $bolt_private_key,
     show_diff => false,
     require   => Class['nest::base::users'],
   }

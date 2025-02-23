@@ -110,62 +110,66 @@ class nest (
     $concurrency = $cpus
   } elsif $isolate_smt {
     $concurrency = $facts['processors']['count'] / 2
-  } else {
+  } elsif $facts['processors'] and $facts['processors']['count'] {
     $concurrency = $facts['processors']['count']
+  } else {
+    $concurrency = 1
   }
 
   # Resource defaults
-  case $facts['os']['family'] {
-    'Gentoo': {
-      Firewalld_zone {
-        interfaces       => [],
-        sources          => [],
-        masquerade       => false,
-        purge_rich_rules => true,
-        purge_services   => true,
-        purge_ports      => true,
-      }
-
-      # MariaDB defaults
-      Mysql::Db {
-        charset => 'utf8mb3',
-        collate => 'utf8mb3_general_ci',
-      }
-
-      Service {
-        provider => 'systemd',
-      }
-
-      Sysctl {
-        target  => '/etc/sysctl.d/nest.conf',
-        require => File['/etc/sysctl.d'],
-      }
-
-      # Effectively disable resources that can't be managed in containers
-      if $facts['is_container'] {
-        Service <||> {
-          ensure => undef,
+  if $facts['os'] {
+    case $facts['os']['family'] {
+      'Gentoo': {
+        Firewalld_zone {
+          interfaces       => [],
+          sources          => [],
+          masquerade       => false,
+          purge_rich_rules => true,
+          purge_services   => true,
+          purge_ports      => true,
         }
 
-        Sysctl <||> {
-          apply => false,
+        # MariaDB defaults
+        Mysql::Db {
+          charset => 'utf8mb3',
+          collate => 'utf8mb3_general_ci',
         }
 
-        Systemd::Daemon_reload <||> {
-          enable => false,
+        Service {
+          provider => 'systemd',
+        }
+
+        Sysctl {
+          target  => '/etc/sysctl.d/nest.conf',
+          require => File['/etc/sysctl.d'],
+        }
+
+        # Effectively disable resources that can't be managed in containers
+        if $facts['is_container'] {
+          Service <||> {
+            ensure => undef,
+          }
+
+          Sysctl <||> {
+            apply => false,
+          }
+
+          Systemd::Daemon_reload <||> {
+            enable => false,
+          }
         }
       }
-    }
 
-    'windows': {
-      Concat {
-        # The default is usually 0644, but Windows keeps changing it to 0674, so
-        # just accept what it does.
-        mode => '0674',
-      }
+      'windows': {
+        Concat {
+          # The default is usually 0644, but Windows keeps changing it to 0674, so
+          # just accept what it does.
+          mode => '0674',
+        }
 
-      Package {
-        provider => 'chocolatey',
+        Package {
+          provider => 'chocolatey',
+        }
       }
     }
   }

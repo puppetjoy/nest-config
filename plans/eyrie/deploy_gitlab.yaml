@@ -12,8 +12,8 @@ parameters:
     type: String
     default: 'gitlab'
 
-  secrets:
-    description: 'Deploy secrets'
+  resources:
+    description: 'Deploy resources'
     type: Boolean
     default: true
 
@@ -38,15 +38,13 @@ parameters:
     default: ''
 
 steps:
-  # This is a separate deployment because the gitlab chart looks for Secrets as
-  # part of a helm install hook. Our secrets need to exist first.
-  - description: 'Deploy secrets'
+  - description: 'Deploy resources'
     plan: nest::kubernetes::deploy
     parameters:
       namespace: $namespace
-      service: "${service}-secrets"
-      app: 'gitlab-secrets'
-      deploy: $deploy and $secrets
+      service: "${service}-resources"
+      app: 'gitlab-resources'
+      deploy: $deploy and $resources
       wait: $render_to == ''
       render_to: $render_to
 

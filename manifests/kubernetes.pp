@@ -22,12 +22,4 @@ class nest::kubernetes {
     },
   })
   $registry_auths_base64 = base64('encode', $registry_auths)
-
-  $ssh_private_keys = lookup('nest::ssh_private_keys')
-  $ssh_private_key = pick_default($ssh_private_keys[$service], $ssh_private_keys[$app])
-  if $ssh_private_key {
-    $ssh_private_key_base64 = base64('encode', $ssh_private_key)
-  } else {
-    $ssh_private_key_base64 = undef
-  }
 }
