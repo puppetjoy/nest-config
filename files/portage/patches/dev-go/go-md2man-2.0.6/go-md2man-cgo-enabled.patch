@@ -1,0 +1,12 @@
+diff -ur go-md2man-2.0.6.orig/Makefile go-md2man-2.0.6/Makefile
+--- go-md2man-2.0.6.orig/Makefile	2025-03-17 21:40:10.198113564 -0400
++++ go-md2man-2.0.6/Makefile	2025-03-17 21:40:16.690126265 -0400
+@@ -42,7 +42,7 @@
+ 
+ bin/go-md2man: go.mod go.sum md2man/* *.go
+ 	@mkdir -p bin
+-	CGO_ENABLED=0 go build $(BUILD_FLAGS) -o $@
++	CGO_ENABLED=1 go build $(BUILD_FLAGS) -o $@
+ 
+ .PHONY: mod
+ mod:
