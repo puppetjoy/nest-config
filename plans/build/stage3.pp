@@ -49,11 +49,11 @@ plan nest::build::stage3 (
 
     $podman_create_cmd = @("CREATE"/L)
       podman create \
+      --init \
       --hostname=${hostname} \
       --name=${container} \
       --no-hosts \
       --pull=always \
-      --stop-signal=SIGKILL \
       --volume=/falcon:/falcon \
       --volume=/nest:/nest \
       ${ssh_auth_sock_volume} \

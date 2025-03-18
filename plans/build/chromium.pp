@@ -28,9 +28,9 @@ plan nest::build::chromium (
 
     $podman_create_cmd = @("CREATE"/L)
       podman create \
+      --init \
       --name=${container} \
       --pull=always \
-      --stop-signal=SIGKILL \
       --volume=/nest:/nest \
       ${qemu_user_targets.map |$arch| { "--volume=/usr/bin/qemu-${arch}:/usr/bin/qemu-${arch}:ro" }.join(' ')} \
       --volume=${build_volume}:/var/tmp/portage \
