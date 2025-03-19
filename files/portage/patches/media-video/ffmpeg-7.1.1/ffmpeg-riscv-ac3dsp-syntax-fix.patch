@@ -1,0 +1,13 @@
+diff -ur ffmpeg-7.1.1.orig/libavcodec/riscv/ac3dsp_init.c ffmpeg-7.1.1/libavcodec/riscv/ac3dsp_init.c
+--- ffmpeg-7.1.1.orig/libavcodec/riscv/ac3dsp_init.c	2025-03-19 10:52:00.144828122 -0400
++++ ffmpeg-7.1.1/libavcodec/riscv/ac3dsp_init.c	2025-03-19 10:52:33.034252269 -0400
+@@ -65,8 +65,8 @@
+                 c->sum_square_butterfly_int32 =
+                     ff_sum_square_butterfly_int32_rvv;
+ #  endif
+-# endif
+         }
+     }
++# endif
+ #endif
+ }
