@@ -5,3 +5,4 @@ nest::classes:
 
 nest::dtb_file: 'starfive/jh7110-milkv-mars.dtb'
 nest::uboot_defconfig: 'starfive_visionfive2_defconfig'
+nest::uboot_tag: 'u-boot/v2025.01'
