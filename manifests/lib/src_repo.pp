@@ -4,11 +4,12 @@ define nest::lib::src_repo (
 ) {
   if $facts['build'] {
     vcsrepo { $name:
-      ensure   => latest,
-      provider => git,
-      source   => $url,
-      revision => $ref,
-      before   => File[$name],
+      ensure     => latest,
+      provider   => git,
+      source     => $url,
+      revision   => $ref,
+      submodules => false,
+      before     => File[$name],
     }
   }
 
