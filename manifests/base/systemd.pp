@@ -101,6 +101,7 @@ class nest::base::systemd {
 
       [
         '/etc/systemd/system/init.scope.d',
+        '/etc/systemd/system/kubepods.slice.d',
         '/etc/systemd/system/machine.slice.d',
         '/etc/systemd/system/system.slice.d',
         '/etc/systemd/system/user.slice.d',
@@ -113,6 +114,7 @@ class nest::base::systemd {
       ;
 
       [
+        '/etc/systemd/system/kubepods.slice.d/10-allowed-cpus.conf',
         '/etc/systemd/system/machine.slice.d/10-allowed-cpus.conf',
         '/etc/systemd/system/system.slice.d/10-allowed-cpus.conf',
         '/etc/systemd/system/user.slice.d/10-allowed-cpus.conf',
@@ -123,6 +125,7 @@ class nest::base::systemd {
   } else {
     file { [
       '/etc/systemd/system/init.scope.d',
+      '/etc/systemd/system/kubepods.slice.d',
       '/etc/systemd/system/machine.slice.d',
       '/etc/systemd/system/system.slice.d',
       '/etc/systemd/system/user.slice.d',
