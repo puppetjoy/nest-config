@@ -61,6 +61,9 @@ nest::package_keywords:
   gui-apps/foot-terminfo: {}
   media-libs/fcft: {}
 
+  # For mesa
+  dev-util/mesa_clc: {}
+
   # For pipewire
   media-libs/roc-toolkit:
     version: '~0.3.0'
