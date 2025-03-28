@@ -97,6 +97,7 @@ describe 'nest' do
     'nest::gui::sway',
     'nest::gui::terminals',
     'nest::gui::virtualization',
+    'nest::gui::vscode',
     'nest::gui::xmonad',
     'nest::gui::xorg',
     'nest::gui::zoom',
