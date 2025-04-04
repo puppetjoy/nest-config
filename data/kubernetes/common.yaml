@@ -22,6 +22,7 @@ resources:
       name: "%{nest::kubernetes::service}-backup"
       namespace: "%{nest::kubernetes::namespace}"
     spec:
+      concurrencyPolicy: Forbid
       schedule: "%{nest::kubernetes::cron_job_offset} */3 * * *"
       timeZone: 'America/New_York'
       jobTemplate:
