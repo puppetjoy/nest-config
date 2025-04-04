@@ -11,11 +11,6 @@ class nest::gui::chrome (
         default                        => 'enable-gpu-compositing',
       }
 
-      $gpu_rasterization_flag = $facts['virtual'] ? {
-        'vmware' => 'disable-gpu-rasterization',
-        default  => 'enable-gpu-rasterization',
-      }
-
       if $chromium {
         unless $facts['build'] == 'stage1' {
           nest::lib::package { 'www-client/chromium':
@@ -32,7 +27,6 @@ class nest::gui::chrome (
             [[ \$XDG_SESSION_TYPE == 'x11' ]] &&
                 CHROMIUM_FLAGS="\${CHROMIUM_FLAGS} --force-device-scale-factor=${nest::text_scaling_factor} --enable-use-zoom-for-dsf"
             CHROMIUM_FLAGS="\${CHROMIUM_FLAGS} --${gpu_compositing_flag}"
-            CHROMIUM_FLAGS="\${CHROMIUM_FLAGS} --${gpu_rasterization_flag}"
             CHROMIUM_FLAGS="\${CHROMIUM_FLAGS} --enable-oop-rasterization"
             CHROMIUM_FLAGS="\${CHROMIUM_FLAGS} --ignore-gpu-blocklist"
 
@@ -40,7 +34,7 @@ class nest::gui::chrome (
             # See: https://bugs.chromium.org/p/chromium/issues/detail?id=998903
             # See: https://wiki.archlinux.org/title/chromium#Dark_mode
             # See: https://bugs.chromium.org/p/chromium/issues/detail?id=1406625
-            CHROMIUM_FLAGS="\${CHROMIUM_FLAGS} --force-dark-mode --enable-features=WebUIDarkMode,WindowsScrollingPersonality"
+            CHROMIUM_FLAGS="\${CHROMIUM_FLAGS} --force-dark-mode --enable-features=WebUIDarkMode"
 
             # For Sync and other Google services
             # See: https://www.gentoo.org/support/news-items/2021-08-11-oauth2-creds-chromium.html
@@ -67,9 +61,8 @@ class nest::gui::chrome (
           exec /opt/google/chrome/google-chrome \
               --force-device-scale-factor=${nest::text_scaling_factor} \
               --${gpu_compositing_flag} \
-              --${gpu_rasterization_flag} \
               --ignore-gpu-blocklist \
-              --enable-features=WebUIDarkMode,WindowsScrollingPersonality \
+              --enable-features=WebUIDarkMode \
               --force-dark-mode \
               --simulate-outdated-no-au='Tue, 31 Dec 2099 23:59:59 GMT' \
               "$@"

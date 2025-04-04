@@ -4,6 +4,7 @@ class nest::gui::vscode {
       #!/bin/bash
       exec /opt/vscode/bin/code \
           --force-device-scale-factor=${nest::text_scaling_factor} \
+          --ignore-gpu-blocklist \
           "$@"
       | WRAPPER
 
@@ -11,11 +12,18 @@ class nest::gui::vscode {
       ensure => installed,
     }
     ->
-    file { '/usr/bin/code':
-      mode    => '0755',
-      owner   => 'root',
-      group   => 'root',
-      content => $code_wrapper,
+    file {
+      '/usr/bin/code':
+        mode    => '0755',
+        owner   => 'root',
+        group   => 'root',
+        content => $code_wrapper,
+      ;
+
+      '/usr/bin/vscode':
+        ensure => link,
+        target => '/usr/bin/code',
+      ;
     }
   }
 }
