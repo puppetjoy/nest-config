@@ -19,7 +19,7 @@ class nest::service::bluetooth {
       ::nest::lib::systemd_reload { 'bluetooth': }
       ->
       service { 'btattach':
-        enable  => true,
+        enable => true,
       }
     }
   }

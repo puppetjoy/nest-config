@@ -25,7 +25,7 @@ class nest::gui::terminals {
         'gui-apps/foot',
         'x11-terms/alacritty',
       ]:
-        ensure  => installed,
+        ensure => installed,
       }
 
       nest::lib::package { [

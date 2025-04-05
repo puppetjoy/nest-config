@@ -28,7 +28,7 @@ define nest::lib::container (
       }
 
       file { "/etc/systemd/system/container-${name}.service":
-        ensure  => absent,
+        ensure => absent,
       }
       ~>
       nest::lib::systemd_reload { "container-${name}":

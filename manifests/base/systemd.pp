@@ -5,7 +5,7 @@ class nest::base::systemd {
   # Complicated, I know, but it leads to cleaner code overall (without
   # dependencies on the systemd class everywhere).
   file { '/etc/systemd':
-    ensure  => directory,
+    ensure => directory,
   }
 
   # Corresponds with `require` in site.pp

@@ -104,7 +104,7 @@ class nest::gui::sway {
     ;
 
     '/etc/sway/config.d':
-      ensure  => directory,
+      ensure => directory,
     ;
 
     '/etc/sway/config.d/10-cursor':
@@ -121,7 +121,7 @@ class nest::gui::sway {
 
     # XXX cleanup
     '/etc/sway/config.d/10-xwayland':
-      ensure  => absent,
+      ensure => absent,
     ;
   }
 }

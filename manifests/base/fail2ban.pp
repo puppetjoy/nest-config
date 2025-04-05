@@ -41,7 +41,7 @@ class nest::base::fail2ban {
     }
     ->
     nest::lib::package { 'net-analyzer/fail2ban':
-      ensure  => absent,
+      ensure => absent,
     }
   }
 }

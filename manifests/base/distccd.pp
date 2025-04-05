@@ -1,6 +1,6 @@
 class nest::base::distccd {
   file { '/etc/systemd/system/distccd.service.d/00gentoo.conf':
-    ensure  => absent,
+    ensure => absent,
   }
 
   file { '/etc/systemd/system/distccd.service.d/10-allowed-servers.conf':
