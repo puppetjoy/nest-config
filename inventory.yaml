@@ -11,189 +11,189 @@ config:
 features:
   - puppet-agent
 
-groups:
-  - name: 'gentoo'
-    groups:
-    - name: 'servers'
-      targets:
-        - _plugin: puppetdb
-          query: "inventory[certname] { facts.osfamily = 'Gentoo' and facts.profile.variant = 'server' and certname != 'builder' }"
-          target_mapping:
-            name: certname
-            uri: facts.fqdn
-    - name: 'workstations'
-      targets:
-        - _plugin: puppetdb
-          query: "inventory[certname] { facts.osfamily = 'Gentoo' and facts.profile.variant = 'workstation' and certname != 'builder' }"
-          target_mapping:
-            name: certname
-            uri: facts.fqdn
+# groups:
+#   - name: 'gentoo'
+#     groups:
+#     - name: 'servers'
+#       targets:
+#         - _plugin: puppetdb
+#           query: "inventory[certname] { facts.osfamily = 'Gentoo' and facts.profile.variant = 'server' and certname != 'builder' }"
+#           target_mapping:
+#             name: certname
+#             uri: facts.fqdn
+#     - name: 'workstations'
+#       targets:
+#         - _plugin: puppetdb
+#           query: "inventory[certname] { facts.osfamily = 'Gentoo' and facts.profile.variant = 'workstation' and certname != 'builder' }"
+#           target_mapping:
+#             name: certname
+#             uri: facts.fqdn
 
-  - name: 'amd64'
-    groups:
-    - name: 'haswell'
-      groups:
-      - name: 'haswell-servers'
-        targets:
-          - _plugin: puppetdb
-            query: "inventory[certname] { facts.osfamily = 'Gentoo' and facts.profile.platform = 'haswell' and facts.profile.variant = 'server' and certname != 'builder' }"
-            target_mapping:
-              name: certname
-              uri: facts.fqdn
-      - name: 'haswell-workstations'
-        targets:
-          - _plugin: puppetdb
-            query: "inventory[certname] { facts.osfamily = 'Gentoo' and facts.profile.platform = 'haswell' and facts.profile.variant = 'workstation' and certname != 'builder' }"
-            target_mapping:
-              name: certname
-              uri: facts.fqdn
-    - name: 'amd64-servers'
-      targets:
-        - _plugin: puppetdb
-          query: "inventory[certname] { facts.osfamily = 'Gentoo' and facts.profile.architecture = 'amd64' and facts.profile.variant = 'server' and certname != 'builder' }"
-          target_mapping:
-            name: certname
-            uri: facts.fqdn
-    - name: 'amd64-workstations'
-      targets:
-        - _plugin: puppetdb
-          query: "inventory[certname] { facts.osfamily = 'Gentoo' and facts.profile.architecture = 'amd64' and facts.profile.variant = 'workstation' and certname != 'builder' }"
-          target_mapping:
-            name: certname
-            uri: facts.fqdn
+#   - name: 'amd64'
+#     groups:
+#     - name: 'haswell'
+#       groups:
+#       - name: 'haswell-servers'
+#         targets:
+#           - _plugin: puppetdb
+#             query: "inventory[certname] { facts.osfamily = 'Gentoo' and facts.profile.platform = 'haswell' and facts.profile.variant = 'server' and certname != 'builder' }"
+#             target_mapping:
+#               name: certname
+#               uri: facts.fqdn
+#       - name: 'haswell-workstations'
+#         targets:
+#           - _plugin: puppetdb
+#             query: "inventory[certname] { facts.osfamily = 'Gentoo' and facts.profile.platform = 'haswell' and facts.profile.variant = 'workstation' and certname != 'builder' }"
+#             target_mapping:
+#               name: certname
+#               uri: facts.fqdn
+#     - name: 'amd64-servers'
+#       targets:
+#         - _plugin: puppetdb
+#           query: "inventory[certname] { facts.osfamily = 'Gentoo' and facts.profile.architecture = 'amd64' and facts.profile.variant = 'server' and certname != 'builder' }"
+#           target_mapping:
+#             name: certname
+#             uri: facts.fqdn
+#     - name: 'amd64-workstations'
+#       targets:
+#         - _plugin: puppetdb
+#           query: "inventory[certname] { facts.osfamily = 'Gentoo' and facts.profile.architecture = 'amd64' and facts.profile.variant = 'workstation' and certname != 'builder' }"
+#           target_mapping:
+#             name: certname
+#             uri: facts.fqdn
 
-  - name: 'arm64'
-    groups:
-    - name: 'pinebookpro'
-      groups:
-      - name: 'pinebookpro-servers'
-        targets:
-          - _plugin: puppetdb
-            query: "inventory[certname] { facts.osfamily = 'Gentoo' and facts.profile.platform = 'pinebookpro' and facts.profile.variant = 'server' and certname != 'builder' }"
-            target_mapping:
-              name: certname
-              uri: facts.fqdn
-      - name: 'pinebookpro-workstations'
-        targets:
-          - _plugin: puppetdb
-            query: "inventory[certname] { facts.osfamily = 'Gentoo' and facts.profile.platform = 'pinebookpro' and facts.profile.variant = 'workstation' and certname != 'builder' }"
-            target_mapping:
-              name: certname
-              uri: facts.fqdn
-    - name: 'raspberrypi4'
-      groups:
-      - name: 'raspberrypi4-servers'
-        targets:
-          - _plugin: puppetdb
-            query: "inventory[certname] { facts.osfamily = 'Gentoo' and facts.profile.platform = 'raspberrypi4' and facts.profile.variant = 'server' and certname != 'builder' }"
-            target_mapping:
-              name: certname
-              uri: facts.fqdn
-      - name: 'raspberrypi4-workstations'
-        targets:
-          - _plugin: puppetdb
-            query: "inventory[certname] { facts.osfamily = 'Gentoo' and facts.profile.platform = 'raspberrypi4' and facts.profile.variant = 'workstation' and certname != 'builder' }"
-            target_mapping:
-              name: certname
-              uri: facts.fqdn
-    - name: 'sopine'
-      groups:
-      - name: 'sopine-servers'
-        targets:
-          - _plugin: puppetdb
-            query: "inventory[certname] { facts.osfamily = 'Gentoo' and facts.profile.platform = 'sopine' and facts.profile.variant = 'server' and certname != 'builder' }"
-            target_mapping:
-              name: certname
-              uri: facts.fqdn
-    - name: 'arm64-servers'
-      targets:
-        - _plugin: puppetdb
-          query: "inventory[certname] { facts.osfamily = 'Gentoo' and facts.profile.architecture = 'arm64' and facts.profile.variant = 'server' and certname != 'builder' }"
-          target_mapping:
-            name: certname
-            uri: facts.fqdn
-    - name: 'arm64-workstations'
-      targets:
-        - _plugin: puppetdb
-          query: "inventory[certname] { facts.osfamily = 'Gentoo' and facts.profile.architecture = 'arm64' and facts.profile.variant = 'workstation' and certname != 'builder' }"
-          target_mapping:
-            name: certname
-            uri: facts.fqdn
+#   - name: 'arm64'
+#     groups:
+#     - name: 'pinebookpro'
+#       groups:
+#       - name: 'pinebookpro-servers'
+#         targets:
+#           - _plugin: puppetdb
+#             query: "inventory[certname] { facts.osfamily = 'Gentoo' and facts.profile.platform = 'pinebookpro' and facts.profile.variant = 'server' and certname != 'builder' }"
+#             target_mapping:
+#               name: certname
+#               uri: facts.fqdn
+#       - name: 'pinebookpro-workstations'
+#         targets:
+#           - _plugin: puppetdb
+#             query: "inventory[certname] { facts.osfamily = 'Gentoo' and facts.profile.platform = 'pinebookpro' and facts.profile.variant = 'workstation' and certname != 'builder' }"
+#             target_mapping:
+#               name: certname
+#               uri: facts.fqdn
+#     - name: 'raspberrypi4'
+#       groups:
+#       - name: 'raspberrypi4-servers'
+#         targets:
+#           - _plugin: puppetdb
+#             query: "inventory[certname] { facts.osfamily = 'Gentoo' and facts.profile.platform = 'raspberrypi4' and facts.profile.variant = 'server' and certname != 'builder' }"
+#             target_mapping:
+#               name: certname
+#               uri: facts.fqdn
+#       - name: 'raspberrypi4-workstations'
+#         targets:
+#           - _plugin: puppetdb
+#             query: "inventory[certname] { facts.osfamily = 'Gentoo' and facts.profile.platform = 'raspberrypi4' and facts.profile.variant = 'workstation' and certname != 'builder' }"
+#             target_mapping:
+#               name: certname
+#               uri: facts.fqdn
+#     - name: 'sopine'
+#       groups:
+#       - name: 'sopine-servers'
+#         targets:
+#           - _plugin: puppetdb
+#             query: "inventory[certname] { facts.osfamily = 'Gentoo' and facts.profile.platform = 'sopine' and facts.profile.variant = 'server' and certname != 'builder' }"
+#             target_mapping:
+#               name: certname
+#               uri: facts.fqdn
+#     - name: 'arm64-servers'
+#       targets:
+#         - _plugin: puppetdb
+#           query: "inventory[certname] { facts.osfamily = 'Gentoo' and facts.profile.architecture = 'arm64' and facts.profile.variant = 'server' and certname != 'builder' }"
+#           target_mapping:
+#             name: certname
+#             uri: facts.fqdn
+#     - name: 'arm64-workstations'
+#       targets:
+#         - _plugin: puppetdb
+#           query: "inventory[certname] { facts.osfamily = 'Gentoo' and facts.profile.architecture = 'arm64' and facts.profile.variant = 'workstation' and certname != 'builder' }"
+#           target_mapping:
+#             name: certname
+#             uri: facts.fqdn
 
-  - name: 'arm'
-    groups:
-    - name: 'beagleboneblack'
-      groups:
-      - name: 'beagleboneblack-servers'
-        targets:
-          - _plugin: puppetdb
-            query: "inventory[certname] { facts.osfamily = 'Gentoo' and facts.profile.platform = 'beagleboneblack' and facts.profile.variant = 'server' and certname != 'builder' }"
-            target_mapping:
-              name: certname
-              uri: facts.fqdn
-    - name: 'arm-servers'
-      targets:
-        - _plugin: puppetdb
-          query: "inventory[certname] { facts.osfamily = 'Gentoo' and facts.profile.architecture = 'arm' and facts.profile.variant = 'server' and certname != 'builder' }"
-          target_mapping:
-            name: certname
-            uri: facts.fqdn
+#   - name: 'arm'
+#     groups:
+#     - name: 'beagleboneblack'
+#       groups:
+#       - name: 'beagleboneblack-servers'
+#         targets:
+#           - _plugin: puppetdb
+#             query: "inventory[certname] { facts.osfamily = 'Gentoo' and facts.profile.platform = 'beagleboneblack' and facts.profile.variant = 'server' and certname != 'builder' }"
+#             target_mapping:
+#               name: certname
+#               uri: facts.fqdn
+#     - name: 'arm-servers'
+#       targets:
+#         - _plugin: puppetdb
+#           query: "inventory[certname] { facts.osfamily = 'Gentoo' and facts.profile.architecture = 'arm' and facts.profile.variant = 'server' and certname != 'builder' }"
+#           target_mapping:
+#             name: certname
+#             uri: facts.fqdn
 
-  - name: 'eyrie'
-    groups:
-      - name: 'eyrie-control-plane'
-        targets:
-          - _plugin: puppetdb
-            query: "inventory[certname] { certname ~ '^control\\d+' }"
-            target_mapping:
-              name: certname
-              uri: facts.fqdn
-      - name: 'eyrie-workers'
-        targets:
-          - _plugin: puppetdb
-            query: "inventory[certname] { certname ~ '^eagle(t\\d+|$)' }"
-            target_mapping:
-              name: certname
-              uri: facts.fqdn
-      - name: 'eyrie-storage'
-        targets:
-          - _plugin: puppetdb
-            query: "inventory[certname] { certname ~ '^storage\\d+' }"
-            target_mapping:
-              name: certname
-              uri: facts.fqdn
-      - name: 'eyrie-monitor'
-        targets:
-          - _plugin: puppetdb
-            query: "inventory[certname] { certname ~ '^monitor\\d+' }"
-            target_mapping:
-              name: certname
-              uri: facts.fqdn
-      - name: 'eyrie-workstations'
-        targets:
-          - _plugin: puppetdb
-            query: "nodes { inventory { facts.profile.variant = 'workstation' } and resources { type = 'Class' and title = 'Nest::Service::Kubernetes' } }"
-            target_mapping:
-              name: certname
-              uri: facts.fqdn
+#   - name: 'eyrie'
+#     groups:
+#       - name: 'eyrie-control-plane'
+#         targets:
+#           - _plugin: puppetdb
+#             query: "inventory[certname] { certname ~ '^control\\d+' }"
+#             target_mapping:
+#               name: certname
+#               uri: facts.fqdn
+#       - name: 'eyrie-workers'
+#         targets:
+#           - _plugin: puppetdb
+#             query: "inventory[certname] { certname ~ '^eagle(t\\d+|$)' }"
+#             target_mapping:
+#               name: certname
+#               uri: facts.fqdn
+#       - name: 'eyrie-storage'
+#         targets:
+#           - _plugin: puppetdb
+#             query: "inventory[certname] { certname ~ '^storage\\d+' }"
+#             target_mapping:
+#               name: certname
+#               uri: facts.fqdn
+#       - name: 'eyrie-monitor'
+#         targets:
+#           - _plugin: puppetdb
+#             query: "inventory[certname] { certname ~ '^monitor\\d+' }"
+#             target_mapping:
+#               name: certname
+#               uri: facts.fqdn
+#       - name: 'eyrie-workstations'
+#         targets:
+#           - _plugin: puppetdb
+#             query: "nodes { inventory { facts.profile.variant = 'workstation' } and resources { type = 'Class' and title = 'Nest::Service::Kubernetes' } }"
+#             target_mapping:
+#               name: certname
+#               uri: facts.fqdn
 
-  - name: 'puppet-server'
-    targets:
-      - _plugin: puppetdb
-        query: "resources[certname] { type = 'Class' and title = 'Nest::Service::Puppet' limit 1 }"
-        target_mapping:
-          name: certname
-          uri: facts.fqdn
+#   - name: 'puppet-server'
+#     targets:
+#       - _plugin: puppetdb
+#         query: "resources[certname] { type = 'Class' and title = 'Nest::Service::Puppet' limit 1 }"
+#         target_mapping:
+#           name: certname
+#           uri: facts.fqdn
 
-  - name: 'windows'
-    targets:
-      - _plugin: puppetdb
-        query: "inventory[certname] { facts.osfamily = 'windows' }"
-        target_mapping:
-          name: certname
-          uri: facts.fqdn
+#   - name: 'windows'
+#     targets:
+#       - _plugin: puppetdb
+#         query: "inventory[certname] { facts.osfamily = 'windows' }"
+#         target_mapping:
+#           name: certname
+#           uri: facts.fqdn
 
-  - name: 'kubernetes'
-    targets:
-      - _plugin: task
-        task: nest::get_kubernetes_services
+#   - name: 'kubernetes'
+#     targets:
+#       - _plugin: task
+#         task: nest::get_kubernetes_services
