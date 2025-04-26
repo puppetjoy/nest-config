@@ -21,4 +21,14 @@ class nest::gui::plasma {
   ]:
     ensure => installed,
   }
+
+  # Plasma 6 no longer ships /etc/xdg/menus/applications.menu
+  # It's now prefixed and called /etc/xdg/menus/plasma-applications.menu
+  file { '/etc/environment.d/10-plasma.conf':
+    ensure  => file,
+    mode    => '0644',
+    owner   => 'root',
+    group   => 'root',
+    content => "XDG_MENU_PREFIX=plasma-\n",
+  }
 }
