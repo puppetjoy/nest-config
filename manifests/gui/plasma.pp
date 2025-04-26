@@ -5,7 +5,7 @@ class nest::gui::plasma {
   }
 
   # Don't build support for online services
-  nest::lib::package { 'kde-apps/spectacle':
+  nest::lib::package { 'kde-plasma/spectacle':
     ensure => installed,
     use    => '-kipi',
   }
