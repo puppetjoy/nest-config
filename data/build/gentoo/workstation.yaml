@@ -1,7 +1,6 @@
 ---
 nest::classes:
   - 'nest::gui::bitwarden'
-  - 'nest::gui::chrome'
   - 'nest::gui::cups'
   - 'nest::gui::cursor'
   - 'nest::gui::dunst'

@@ -8,7 +8,6 @@ nest::classes:
 
 nest::dvorak: true
 nest::gui_scaling_factor: 2.0
-nest::gui::chrome::chromium: false
 
 # Protect containers and virtual machines
 nest::reset_filter_rules:

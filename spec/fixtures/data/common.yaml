@@ -1,10 +1,6 @@
 ---
 nest::eyaml_public_key: 'fake-public-key'
 
-nest::gui::chrome::google_api_key: 'fake-google-api-key'
-nest::gui::chrome::google_oauth_id: 'fake-google-oauth-id'
-nest::gui::chrome::google_oauth_secret: 'fake-google-oauth-secret'
-
 nest::tool::bolt::ca: 'fake-ca'
 nest::tool::bolt::cert: 'fake-cert'
 nest::tool::bolt::key: 'fake-key'

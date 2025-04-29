@@ -72,7 +72,6 @@ describe 'nest' do
     'nest::base::syslog',
     'nest::base::users',
     'nest::base::vmware',
-    'nest::gui::chrome',
     'nest::gui::firefox',
     'nest::gui::fonts',
     'nest::gui::terminals',
@@ -81,7 +80,6 @@ describe 'nest' do
 
   workstation = [
     'nest::gui::bitwarden',
-    'nest::gui::chrome',
     'nest::gui::cups',
     'nest::gui::cursor',
     'nest::gui::dunst',
