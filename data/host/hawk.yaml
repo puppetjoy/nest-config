@@ -6,7 +6,6 @@
 #   - 'nest::service::gitlab'
 #   - 'nest::service::libvirt'
 
-nest::bootloader: systemd # override vmware platform
 nest::dvorak: true
 nest::gui_scaling_factor: 2.0
 
