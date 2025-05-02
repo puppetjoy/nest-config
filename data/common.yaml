@@ -228,7 +228,7 @@ nest::package_keywords:
 
 nest::arm_firmware_tag: 'arm/v2.12.0'
 nest::uboot_tag: 'u-boot/v2024.10'
-nest::kernel_tag: 'stable/v6.12.7'
+nest::kernel_tag: 'stable/v6.12.26'
 
 nest::kernel_config:
   # Preferences
