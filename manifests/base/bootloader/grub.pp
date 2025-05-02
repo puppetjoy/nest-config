@@ -2,8 +2,13 @@ class nest::base::bootloader::grub {
   tag 'boot'
   tag 'kernel'
 
+  $grub_use = $facts['profile']['architecture'] ? {
+    'amd64' => ['grub_platforms_efi-64', 'grub_platforms_pc', 'libzfs', 'truetype'],
+    default => ['grub_platforms_efi-64', 'libzfs', 'truetype'],
+  }
+
   nest::lib::package_use { 'sys-boot/grub':
-    use => ['grub_platforms_efi-64', 'grub_platforms_pc', 'libzfs', 'truetype'],
+    use => $grub_use,
   }
 
   if $facts['mountpoints']['/boot'] or ($facts['profile']['platform'] == 'live' and $facts['is_container'] and !$facts['build']) {
