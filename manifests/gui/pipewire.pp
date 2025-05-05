@@ -37,7 +37,7 @@ class nest::gui::pipewire {
 
   # Fix stuttering audio in VMware
   # See: https://gitlab.freedesktop.org/pipewire/pipewire/-/issues/469
-  if $facts['profile']['platform'] == 'vmware' {
+  if $facts['profile']['platform'] and $facts['profile']['platform'] =~ /^vmware/ {
     file {
       default:
         mode    => '0644',
@@ -58,9 +58,8 @@ class nest::gui::pipewire {
     ->
     file_line { 'pipewire-default-clock-rate':
       path  => '/etc/pipewire/pipewire.conf',
-      after => '^\s*vm\.overrides\s*=\s*{',
-      line  => '        default.clock.rate        = 44100',
-      match => '^\s*default\.clock\.rate\s*=',
+      line  => '    default.clock.rate           = 44100',
+      match => '^\s*#?default\.clock\.rate\s*=',
     }
   }
 }
