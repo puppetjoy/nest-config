@@ -5,7 +5,7 @@ cert_issuer: eyrie-ca
 cert_issuer_kind: ClusterIssuer
 ingress_class: nginx
 node_role: monitor
-storage_retention_size: 2GB
+storage_retention_size: 1536MB
 storage_class: data-crypt
 volume_size: 10Gi
 
