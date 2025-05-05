@@ -9,19 +9,20 @@ class nest::gui::policykit {
 
   file {
     default:
-      owner => 'polkitd',
-      group => 'root',
+      owner => 'root',
+      group => 'polkitd',
     ;
 
     '/etc/polkit-1':
       ensure => directory,
       mode   => '0755',
       owner  => 'root',
+      group  => 'root',
     ;
 
     '/etc/polkit-1/rules.d':
       ensure => directory,
-      mode   => '0700',
+      mode   => '0750',
     ;
 
     '/etc/polkit-1/rules.d/10-admin.rules':
