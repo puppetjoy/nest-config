@@ -74,6 +74,7 @@ class nest::gui::xorg {
         'x11-apps/xlogo',
         'x11-apps/xmodmap',
         'x11-apps/xrandr',
+        'x11-apps/xsetroot',
         'x11-apps/xwininfo',
         'x11-misc/xdotool',
       ]:
