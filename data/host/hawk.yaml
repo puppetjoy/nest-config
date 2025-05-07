@@ -1,10 +1,10 @@
 ---
-# nest::classes:
+nest::classes:
 #   - 'nest::host::hawk'
-#   - 'nest::service::barrier'
+  - 'nest::service::barrier'
 #   - 'nest::service::gateway'
 #   - 'nest::service::gitlab'
-#   - 'nest::service::libvirt'
+  - 'nest::service::libvirt'
 
 nest::dvorak: true
 nest::gui_scaling_factor: 2.0
