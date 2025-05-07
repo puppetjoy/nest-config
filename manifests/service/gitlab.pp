@@ -77,15 +77,18 @@ class nest::service::gitlab (
     }
     ->
     nest::lib::container { 'gitlab':
-      image   => $image,
-      cap_add => ['SYS_CHROOT'],
-      env     => ["GITLAB_OMNIBUS_CONFIG=from_file('/omnibus_config.rb')"],
-      publish => $publish,
-      volumes => [
+      image      => $image,
+      arch       => 'amd64', # all there is
+      cap_add    => ['SYS_CHROOT'],
+      env        => ["GITLAB_OMNIBUS_CONFIG=from_file('/omnibus_config.rb')"],
+      publish    => $publish,
+      privileged => $facts['profile']['architecture'] != 'amd64',
+      volumes    => [
         '/srv/gitlab/gitlab.rb:/omnibus_config.rb:ro',
         '/srv/gitlab/config:/etc/gitlab',
         '/srv/gitlab/logs:/var/log/gitlab',
         '/srv/gitlab/data:/var/opt/gitlab',
+        '/usr/bin/qemu-x86_64:/usr/bin/qemu-x86_64:ro',
       ],
     }
 
