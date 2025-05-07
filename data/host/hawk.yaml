@@ -1,68 +1,58 @@
 ---
 nest::classes:
-#   - 'nest::host::hawk'
+  - 'nest::host::hawk'
   - 'nest::service::barrier'
-#   - 'nest::service::gateway'
+  - 'nest::service::gateway'
 #   - 'nest::service::gitlab'
   - 'nest::service::libvirt'
+  - 'nest::tool::vagrant'
 
 nest::dvorak: true
 nest::gui_scaling_factor: 2.0
 
-# # Protect containers and virtual machines
-# nest::reset_filter_rules:
-#   - 'P /etc/cni/**'
-#   - 'P /etc/libvirt/**'
-#   - 'P /var/lib/cni/**'
-#   - 'P /var/lib/libvirt/**'
+# Protect containers and virtual machines
+nest::reset_filter_rules:
+  - 'P /etc/cni/**'
+  - 'P /etc/libvirt/**'
+  - 'P /var/lib/cni/**'
+  - 'P /var/lib/libvirt/**'
 
 # nest::service::gitlab::external_name: 'gitlab.localhost'
 # nest::service::gitlab::image: 'gitlab/gitlab-ce:17.10.1-ce.0'
 # nest::service::gitlab::ssh_port: 2222
 # nest::service::gitlab::gmail_password: ~
 
-# nest::hosts:
-#   gitlab.puppet:
-#     ip: '10.81.40.1'
-#   pe.puppet:
-#     ip: '10.81.40.10'
-#     host_aliases:
-#       - 'puppet.james.tl'
-#   pam.puppet:
-#     ip: '10.81.40.11'
-#     host_aliases:
-#       - 'cd4pe.puppet'
-#       - 'comply.puppet'
-#   client.puppet:
-#     ip: '10.81.40.12'
-#   elclient.puppet:
-#     ip: '10.81.40.13'
-#   cd4pe5.puppet:
-#     ip: '10.81.40.14'
-#   osp.acmeinc:
-#     ip: '192.168.100.10'
-#   client.acmeinc:
-#     ip: '192.168.100.11'
+nest::hosts:
+  # gitlab.puppet:
+  #   ip: '10.81.40.1'
+  pe.puppet:
+    ip: '10.81.40.10'
+  cd.puppet:
+    ip: '10.81.40.11'
+  client.puppet:
+    ip: '10.81.40.12'
+  elclient.puppet:
+    ip: '10.81.40.13'
 
-# nest::service::gateway::port_forwards:
-#   puppet-external:
-#     loopback: false
-#     port: 8140
-#     proto: tcp
-#     to_addr: '10.81.40.10'
-#     to_port: 8140
-#     zone: 'external'
-#   puppet-home:
-#     loopback: false
-#     port: 8140
-#     proto: tcp
-#     to_addr: '10.81.40.10'
-#     to_port: 8140
-#     zone: 'home'
-#   puppet-internal:
-#     loopback: false
-#     port: 8140
-#     proto: tcp
-#     to_addr: '10.81.40.10'
-#     to_port: 8140
-#     zone: 'internal'
+nest::service::gateway::port_forwards:
+  puppet-external:
+    loopback: false
+    port: 8140
+    proto: tcp
+    to_addr: '10.81.40.10'
+    to_port: 8140
+    zone: 'external'
+  puppet-home:
+    loopback: false
+    port: 8140
+    proto: tcp
+    to_addr: '10.81.40.10'
+    to_port: 8140
+    zone: 'home'
+  puppet-internal:
+    loopback: false
+    port: 8140
+    proto: tcp
+    to_addr: '10.81.40.10'
+    to_port: 8140
+    zone: 'internal'

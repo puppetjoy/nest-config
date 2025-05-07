@@ -100,11 +100,8 @@ class nest::service::libvirt {
     }
   }
 
-  # Install and use Vagrant libvirt provider as a container
+  # XXX Cleanup
   file { '/usr/local/bin/vagrant':
-    mode   => '0755',
-    owner  => 'root',
-    group  => 'root',
-    source => 'puppet:///modules/nest/scripts/vagrant.sh',
+    ensure => absent,
   }
 }
