@@ -3,7 +3,7 @@ nest::classes:
   - 'nest::host::hawk'
   - 'nest::service::barrier'
   - 'nest::service::gateway'
-  - 'nest::service::gitlab'
+#   - 'nest::service::gitlab'
   - 'nest::service::libvirt'
   - 'nest::tool::vagrant'
 
@@ -17,14 +17,14 @@ nest::reset_filter_rules:
   - 'P /var/lib/cni/**'
   - 'P /var/lib/libvirt/**'
 
-nest::service::gitlab::external_name: 'gitlab.localhost'
-nest::service::gitlab::image: 'gitlab/gitlab-ce:17.10.1-ce.0'
-nest::service::gitlab::ssh_port: 2222
-nest::service::gitlab::gmail_password: ~
+# nest::service::gitlab::external_name: 'gitlab.localhost'
+# nest::service::gitlab::image: 'gitlab/gitlab-ce:17.10.1-ce.0'
+# nest::service::gitlab::ssh_port: 2222
+# nest::service::gitlab::gmail_password: ~
 
 nest::hosts:
-  gitlab.puppet:
-    ip: '10.81.40.1'
+  # gitlab.puppet:
+  #   ip: '10.81.40.1'
   pe.puppet:
     ip: '10.81.40.10'
   cd.puppet:

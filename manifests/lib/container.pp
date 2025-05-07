@@ -1,6 +1,5 @@
 define nest::lib::container (
   String              $image,
-  Optional[String]    $arch       = undef,
   Array[String]       $cap_add    = [],
   Array[String]       $command    = [],
   Optional[String]    $dns        = undef,
@@ -10,7 +9,6 @@ define nest::lib::container (
   Optional[String]    $network    = undef,
   Optional[String]    $pod        = undef,
   Array[String]       $publish    = [],
-  Boolean             $privileged = false,
   Array[String]       $tmpfs      = [],
   Array[String]       $volumes    = [],
 ) {
@@ -82,11 +80,6 @@ define nest::lib::container (
         }
       }
 
-      $arch_args = $arch ? {
-        undef   => [],
-        default => ["--arch=${arch}"],
-      }
-
       $dns_args = $dns ? {
         undef   => [],
         default => ["--dns=${dns}"],
@@ -111,11 +104,6 @@ define nest::lib::container (
         default => ["--pod=${pod}"],
       }
 
-      $privileged_args = $privileged ? {
-        true    => ['--privileged'],
-        default => [],
-      }
-
       $cap_add_args = $cap_add.map |$e| {
         "--cap-add=${e}"
       }
@@ -135,7 +123,6 @@ define nest::lib::container (
       $podman_create_cmd = [
         '/usr/bin/podman', 'container', 'create',
         '--replace',
-        $arch_args,
         $cap_add_args,
         $dns_args,
         $entrypoint_args,
@@ -143,7 +130,6 @@ define nest::lib::container (
         $network_args,
         $pod_args,
         $publish_args,
-        $privileged_args,
         $tmpfs_args,
         $volumes_args,
         "--label=nest.podman.version=${facts['podman_version']}",
