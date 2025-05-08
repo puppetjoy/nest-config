@@ -1,0 +1,11 @@
+diff -ur firefox-138.0.1.orig/media/libyuv/libyuv/libyuv.gyp firefox-138.0.1/media/libyuv/libyuv/libyuv.gyp
+--- firefox-138.0.1.orig/media/libyuv/libyuv/libyuv.gyp	2025-05-06 23:40:40.971505397 -0400
++++ firefox-138.0.1/media/libyuv/libyuv/libyuv.gyp	2025-05-07 20:00:42.174315775 -0400
+@@ -132,6 +132,7 @@
+         }],
+       ], #conditions
+       'defines': [
++        'LIBYUV_DISABLE_RVV',
+         'LIBYUV_DISABLE_SME',
+         # Enable the following 3 macros to turn off assembly for specified CPU.
+         # 'LIBYUV_DISABLE_X86',
