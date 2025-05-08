@@ -13,7 +13,7 @@ class nest::base::bootloader::uroot {
   nest::lib::build { 'uroot':
     dir     => '/usr/src/u-root',
     command => [
-      'go build',
+      'CGO_ENABLED=0 go build',
       './u-root -uinitcmd="boot -remove= -reuse=" -o initramfs.cpio core boot',
     ],
   }
