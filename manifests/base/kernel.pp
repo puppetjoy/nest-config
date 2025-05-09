@@ -34,6 +34,7 @@ class nest::base::kernel {
     args      => 'LOCALVERSION= olddefconfig all modules_install',
     defconfig => $nest::kernel_defconfig,
     dir       => '/usr/src/linux',
+    llvm      => $nest::kernel_llvm,
     makeargs  => "ARCH=${arch}",
     notify    => Class['nest::base::dracut'], # in case module-rebuild is noop
   }

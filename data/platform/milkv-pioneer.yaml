@@ -7,6 +7,7 @@ nest::classes:
 nest::bootloader: u-root
 nest::dtb_file: 'sophgo/mango-milkv-pioneer.dtb'
 nest::kernel_defconfig: 'sophgo_mango_normal_defconfig'
+nest::kernel_llvm: true
 nest::kernel_tag: 'sophgo/v6.6.68'
 nest::opensbi_branch: 'sophgo/sg2042-dev-nest'
 nest::soc: 'sg2042'

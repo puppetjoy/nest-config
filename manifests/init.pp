@@ -43,6 +43,7 @@ class nest (
   Hash[String, Nest::Kconfig]       $kernel_config       = {},
   Array[String]                     $kernel_cmdline      = [],
   String                            $kernel_defconfig    = 'defconfig',
+  Boolean                           $kernel_llvm         = false,
   Boolean                           $kexec               = false,
   String                            $opensbi_branch      = 'riscv-software-src/master',
   Array[String]                     $reset_filter_rules  = [],

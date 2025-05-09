@@ -4,14 +4,29 @@ define nest::lib::build (
   Optional[String]                         $defconfig = undef,
   String                                   $dir       = $name,
   Boolean                                  $distcc    = true,
+  Boolean                                  $llvm      = false,
   String                                   $makeargs  = '', # lint:ignore:params_empty_string_assignment
 ) {
+  if $llvm {
+    $base_path = "${dirname($facts['llvm_clang'])}:/usr/bin:/bin"
+    $makeargs_real = "LLVM=1 ${makeargs}"
+  } else {
+    $base_path = '/usr/bin:/bin'
+    $makeargs_real = $makeargs
+  }
+
+  if $distcc {
+    $path = "/usr/lib/distcc/bin:${base_path}"
+  } else {
+    $path = $base_path
+  }
+
   if $command {
     $command_joined = [$command].flatten.join(' && ')
     $build_command  = "(${command_joined})"
   } else {
     include 'nest::base::portage'
-    $build_command = "make ${nest::base::portage::makeopts} ${makeargs} ${args}"
+    $build_command = "make ${nest::base::portage::makeopts} ${makeargs_real} ${args}"
   }
 
   if $defconfig {
@@ -28,26 +43,22 @@ define nest::lib::build (
     }
     ->
     exec { "${name}-defconfig":
-      command => "/usr/bin/make ${makeargs} ${defconfig}",
+      command => "/usr/bin/make ${makeargs_real} ${defconfig}",
       cwd     => $dir,
       creates => "${dir}/.config",
+      path    => $path,
       notify  => Exec["${name}-build"],
     }
     ->
     Nest::Lib::Kconfig <| config == "${dir}/.config" |>
     ~>
     exec { "${name}-olddefconfig":
-      command     => "/usr/bin/make ${makeargs} olddefconfig",
+      command     => "/usr/bin/make ${makeargs_real} olddefconfig",
       cwd         => $dir,
       refreshonly => true,
+      path        => $path,
       notify      => Exec["${name}-build"],
     }
-  }
-
-  if $distcc {
-    $path = '/usr/lib/distcc/bin:/usr/bin:/bin'
-  } else {
-    $path = '/usr/bin:/bin'
   }
 
   $build_script = @("SCRIPT")
