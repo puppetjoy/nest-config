@@ -99,9 +99,4 @@ class nest::service::libvirt {
       zone   => 'libvirt',
     }
   }
-
-  # XXX Cleanup
-  file { '/usr/local/bin/vagrant':
-    ensure => absent,
-  }
 }

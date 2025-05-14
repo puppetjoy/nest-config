@@ -1,4 +1,29 @@
 class nest::host::hawk {
+  package_accept_keywords { [
+    'app-emulation/vagrant',
+    'dev-cpp/abseil-cpp',
+    'dev-libs/protobuf',
+    'dev-ruby/google-protobuf',
+    'dev-ruby/googleapis-common-protos-types',
+    'dev-ruby/grpc',
+    'dev-ruby/hashicorp-checkpoint',
+    'dev-ruby/ipaddr',
+    'dev-ruby/jwt',
+    'dev-ruby/oauth2',
+    'dev-ruby/pairing_heap',
+    'dev-ruby/rgl',
+    'dev-ruby/snaky_hash',
+    'dev-ruby/stream',
+    'dev-ruby/vagrant_cloud',
+    'dev-ruby/version_gem',
+  ]:
+    tag => 'profile',
+  }
+  ->
+  nest::lib::package { 'app-emulation/vagrant':
+    ensure => installed,
+  }
+
   firewalld_direct_chain { 'LIBVIRT_FWX':
     inet_protocol => ipv4,
     table         => filter,
