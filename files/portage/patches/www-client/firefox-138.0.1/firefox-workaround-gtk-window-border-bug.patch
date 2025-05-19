@@ -1,0 +1,99 @@
+
+diff --git a/widget/gtk/nsWindow.cpp b/widget/gtk/nsWindow.cpp
+--- a/widget/gtk/nsWindow.cpp
++++ b/widget/gtk/nsWindow.cpp
+@@ -4,16 +4,17 @@
+ /* This Source Code Form is subject to the terms of the Mozilla Public
+  * License, v. 2.0. If a copy of the MPL was not distributed with this
+  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+ 
+ #include "nsWindow.h"
+ 
+ #include <algorithm>
+ #include <cstdint>
++#include <X11/Xlib.h>
+ #include <dlfcn.h>
+ #include <gdk/gdkkeysyms.h>
+ #include <wchar.h>
+ 
+ #include "VsyncSource.h"
+ #include "gfx2DGlue.h"
+ #include "gfxContext.h"
+ #include "gfxImageSurface.h"
+@@ -3238,39 +3239,67 @@ LayoutDeviceIntMargin nsWindow::NormalSi
+   }
+   // TODO(emilio): When not using CSD decorations or not in the normal
+   // sizemode, we can't know the size of the titlebar and window borders before
+   // being shown. In order to return consistent results, we return a zero
+   // margin here.
+   return {};
+ }
+ 
++#ifdef MOZ_X11
++LayoutDeviceIntCoord GetXWindowBorder(GdkWindow* aWin) {
++  Display* display = GDK_DISPLAY_XDISPLAY(gdk_window_get_display(aWin));
++  auto xid = gdk_x11_window_get_xid(aWin);
++  Window root;
++  int wx, wy;
++  unsigned ww, wh, wb = 0, wd;
++  XGetGeometry(display, xid, &root, &wx, &wy, &ww, &wh, &wb, &wd);
++  return wb;
++}
++#endif
++
+ void nsWindow::RecomputeBounds(MayChangeCsdMargin aMayChangeCsdMargin) {
+   const bool mayChangeCsdMargin =
+       aMayChangeCsdMargin == MayChangeCsdMargin::Yes;
+   LOG("RecomputeBounds(%d)", mayChangeCsdMargin);
+   mPendingBoundsChange = false;
+   mPendingBoundsChangeMayChangeCsdMargin = false;
+ 
+   auto* toplevel = GetToplevelGdkWindow();
+   if (!toplevel || mIsDestroyed) {
+     return;
+   }
+ 
+   auto GetFrameBounds = [&](GdkWindow* aWin) {
+     GdkRectangle b{0};
+     gdk_window_get_frame_extents(aWin, &b);
+-    // Workaround for https://gitlab.gnome.org/GNOME/gtk/-/merge_requests/4820
+-    // Bug 1775017 Gtk < 3.24.35 returns scaled values for
+-    // override redirected window on X11.
+-    if (!gtk_check_version(3, 24, 35) && GdkIsX11Display() &&
++#ifdef MOZ_X11
++    const bool isX11 = GdkIsX11Display();
++    if (isX11 && !gtk_check_version(3, 24, 35) &&
+         gdk_window_get_window_type(aWin) == GDK_WINDOW_TEMP) {
++      // Workaround for https://gitlab.gnome.org/GNOME/gtk/-/merge_requests/4820
++      // Bug 1775017 Gtk < 3.24.35 returns scaled values for
++      // override redirected window on X11.
+       return LayoutDeviceIntRect(b.x, b.y, b.width, b.height);
+     }
+-    return GdkRectToDevicePixels(b);
++#endif
++    auto result = GdkRectToDevicePixels(b);
++#ifdef MOZ_X11
++    if (isX11) {
++      if (auto border = GetXWindowBorder(aWin)) {
++        // Workaround for
++        // https://gitlab.gnome.org/GNOME/gtk/-/merge_requests/8423
++        // Bug 1958174 Gtk doesn't account for window border sizes on X11.
++        // TODO(emilio): Add GTK version check once that is merged.
++        result.width += 2 * border;
++        result.height += 2 * border;
++      }
++    }
++#endif
++    return result;
+   };
+ 
+   auto GetBounds = [&](GdkWindow* aWin) {
+     GdkRectangle b{0};
+     if (IsTopLevelWidget() && GdkIsX11Display() && aWin == toplevel) {
+       // We want the up-to-date size from the X server, not the last configure
+       // event size, to avoid spurious resizes on e.g. sizemode changes.
+       gdk_window_get_geometry(aWin, nullptr, nullptr, &b.width, &b.height);
+
+
+
+
