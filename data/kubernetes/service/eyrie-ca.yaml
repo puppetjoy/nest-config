@@ -13,6 +13,8 @@ resources:
     spec:
       isCA: true
       commonName: "%{lookup('common_name')}"
+      duration: 87600h    # 10 years (10 x 365 x 24)
+      renewBefore: 720h   # Renew 30 days before expiry
       secretName: "%{lookup('service_name')}-certs"
       privateKey:
         algorithm: ECDSA
