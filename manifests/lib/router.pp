@@ -8,6 +8,8 @@ class nest::lib::router {
     dhcp-range=172.22.4.100,172.22.4.254
     dhcp-option=option:router,172.22.4.1
     dhcp-option=option:classless-static-route,0.0.0.0/0,172.22.4.1,172.22.0.0/24,172.22.4.2
+    local=/nest/
+    local=/eyrie/
     server=172.22.4.1
     | EOT
 
