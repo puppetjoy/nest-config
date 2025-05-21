@@ -18,6 +18,8 @@ nest::kernel_cmdline:
   - 'zfs.zvol_use_blk_mq=1'
 
 nest::kernel_config:
+  CONFIG_GCC_PLUGINS: null # using LLVM
+
   # Device drivers
   CONFIG_AQTION: m
   CONFIG_DRM_AMDGPU: m
