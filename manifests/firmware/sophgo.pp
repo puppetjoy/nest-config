@@ -35,14 +35,11 @@ class nest::firmware::sophgo {
       $uboot_ensure    = absent
       $uboot_source    = undef
       $uroot_ensure    = present
-      $uroot_image     = $nest::base::bootloader::kernel_image
+      $uroot_image     = '/usr/src/u-root-linux/arch/riscv/boot/Image'
       $uroot_source    = '/usr/src/u-root/initramfs.cpio'
 
       Class['nest::base::bootloader::uroot']
-      -> File['/boot/riscv64/initrd.img']
-
-      Class['nest::base::kernel']
-      -> File['/boot/riscv64/riscv64_Image']
+      -> File['/boot/riscv64/initrd.img', '/boot/riscv64/riscv64_Image']
     }
 
     default: {
