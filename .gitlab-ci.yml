@@ -51,7 +51,7 @@ stages:
   variables:
     CPU: 'cortex-a53'
 
-.'Build sifive-u74':
+'Build sifive-u74':
   extends: .template
   tags: ['riscv64']
   variables:
@@ -75,7 +75,7 @@ stages:
     - 'podman manifest create "$IMAGE"'
     - 'podman manifest add "$IMAGE" "${CI_REGISTRY}/${IMAGE}:haswell"'
     - 'podman manifest add "$IMAGE" "${CI_REGISTRY}/${IMAGE}:cortex-a53"'
-    # - 'podman manifest add "$IMAGE" "${CI_REGISTRY}/${IMAGE}:sifive-u74"'
+    - 'podman manifest add "$IMAGE" "${CI_REGISTRY}/${IMAGE}:sifive-u74"'
     - 'podman manifest push --all "$IMAGE" "${CI_REGISTRY}/${IMAGE}"'
     - 'podman manifest push --all "$IMAGE" "registry.eyrie/${IMAGE}"'
     - 'podman manifest push --all "$IMAGE" "registry-test.eyrie/${IMAGE}"'
