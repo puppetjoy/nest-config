@@ -1,0 +1,12 @@
+diff -ur libaom-3.12.1.orig/av1/av1.cmake libaom-3.12.1/av1/av1.cmake
+--- libaom-3.12.1.orig/av1/av1.cmake	2025-08-06 21:54:32.477784223 -0400
++++ libaom-3.12.1/av1/av1.cmake	2025-08-06 21:57:32.791402215 -0400
+@@ -827,7 +827,7 @@
+ 
+   if(HAVE_RVV)
+     if(AOM_AV1_COMMON_INTRIN_RVV)
+-      add_intrinsics_object_library("-march=rv64gcv" "rvv" "aom_av1_common"
++      add_intrinsics_object_library("-march=rv64gc" "rvv" "aom_av1_common"
+                                     "AOM_AV1_COMMON_INTRIN_RVV")
+     endif()
+   endif()
