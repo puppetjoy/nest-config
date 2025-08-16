@@ -1,0 +1,19 @@
+diff -ur node-v24.2.0.orig/deps/v8/src/codegen/riscv/macro-assembler-riscv.h node-v24.2.0/deps/v8/src/codegen/riscv/macro-assembler-riscv.h
+--- node-v24.2.0.orig/deps/v8/src/codegen/riscv/macro-assembler-riscv.h	2025-08-16 15:24:32.391769262 -0400
++++ node-v24.2.0/deps/v8/src/codegen/riscv/macro-assembler-riscv.h	2025-08-16 15:24:53.098810087 -0400
+@@ -406,7 +406,6 @@
+     push_helper(rs...);
+   }
+ 
+-  template <>
+   void push_helper(Register r) {
+     StoreWord(r, MemOperand(sp, 0));
+   }
+@@ -554,7 +553,6 @@
+     LoadWord(r, MemOperand(sp, sizeof...(rs) * kSystemPointerSize));
+   }
+ 
+-  template <>
+   void pop_helper(Register r) {
+     LoadWord(r, MemOperand(sp, 0));
+   }
