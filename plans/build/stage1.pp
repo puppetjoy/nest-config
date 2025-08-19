@@ -83,6 +83,7 @@ plan nest::build::stage1 (
       podman create \
       --init \
       --name=${container} \
+      --pids-limit=0 \
       --pull=always \
       --volume=/nest:/nest \
       ${qemu_user_targets.map |$arch| { "--volume=/usr/bin/qemu-${arch}:/usr/bin/qemu-${arch}:ro" }.join(' ')} \
