@@ -128,7 +128,6 @@ plan nest::build::stage1 (
     }
 
     # Make the system consistent with the profile
-    run_command('emerge --deep --newuse --update --verbose --with-bdeps=y --binpkg-changed-deps=n @world', $target, 'Install packages', _catch_errors => true)
     run_command('emerge --deep --newuse --update --verbose --with-bdeps=y --binpkg-changed-deps=n @world', $target, 'Install packages')
     run_command('emerge --depclean', $target, 'Remove unused packages')
 
