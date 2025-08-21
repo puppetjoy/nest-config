@@ -1,7 +1,7 @@
-class nest::service::barrier (
+class nest::service::deskflow (
   Boolean $server = true,
 ) {
-  nest::lib::package { 'x11-misc/barrier':
+  nest::lib::package { 'gui-apps/deskflow':
     ensure => installed,
     use    => '-gui',
   }

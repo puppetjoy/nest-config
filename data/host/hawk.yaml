@@ -1,7 +1,7 @@
 ---
 nest::classes:
   - 'nest::host::hawk'
-  - 'nest::service::barrier'
+  - 'nest::service::deskflow'
   - 'nest::service::gateway'
   - 'nest::service::gitlab'
   - 'nest::service::libvirt'

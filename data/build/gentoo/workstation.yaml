@@ -44,7 +44,6 @@ nest::package_keywords:
   media-video/wireplumber: {}
   net-im/zoom: {}
   www-client/firefox: {}
-  x11-misc/barrier: {}
   x11-terms/alacritty: {}
 
   # For firefox
@@ -72,10 +71,6 @@ nest::package_keywords:
     version: '~3.0.0'
   dev-libs/spdlog:
     version: '~1.8.5'
-
-  # For barrier
-  dev-cpp/gulrak-filesystem:
-    version: '~1.5.10'
 
 nest::kernel_cmdline:
   - 'preempt=full' # prioritize interactivity

@@ -1,11 +1,11 @@
 ---
-nest::classes: ['nest::service::barrier']
+nest::classes: ['nest::service::deskflow']
 
 nest::autologin: xmonad
 nest::external_interfaces: ['enu1u4c2', 'wlan0']
 nest::vpn_client: false
 
-nest::service::barrier::server: false
+nest::service::deskflow::server: false
 
 # Allow Roc audio streaming from home
 firewalld::custom_services:
