@@ -42,12 +42,16 @@ class nest::base::dracut {
       ensure => installed,
     }
   } elsif $facts['build'] and $facts['build'] != 'kernel' {
-    $base_config_content = ''
+    $base_config_content = @("EOT")
+      compress="${compress}"
+      omit_dracutmodules+=" nfs "
+      | EOT
   } else {
     $base_config_content = @("EOT")
       compress="${compress}"
       force="yes"
       hostonly="yes"
+      omit_dracutmodules+=" nfs "
       | EOT
   }
 
