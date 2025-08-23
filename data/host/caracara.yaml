@@ -1,3 +1,4 @@
 ---
+nest::classes: ['nest::service::deskflow']
 nest::openvpn_servers: ['192.168.122.1']
 nest::text_scaling_factor: 1.1
