@@ -153,7 +153,7 @@ nest::nestfs_hostname: 'falcon.nest'
 nest::openvpn_servers:
   - 'falcon.nest'
   - 'falcon.home'
-  - 'nest.james.tl'
+  - 'nest-ext.james.tl'
 
 nest::ssh_host_keys:
   '*.nest,*.eyrie,*.cluster.local,*.james.tl,localhost': ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL8IV6XOFkcGWKuvfpbEixC7KPDKpfxPGGownlkEVWzw
