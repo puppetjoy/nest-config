@@ -1,0 +1,3 @@
+---
+nest::external_interfaces: ['usb0']
+nest::wifi: false
