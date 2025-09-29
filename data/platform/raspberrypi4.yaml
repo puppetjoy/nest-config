@@ -17,7 +17,7 @@ nest::package_keywords:
   # Still not fully open-source or mainlined...
   sys-boot/raspberrypi-firmware: {}
 
-nest::kernel_tag: 'raspberrypi/v6.6.67'
+nest::kernel_tag: 'raspberrypi/v6.12.49'
 
 nest::kernel_cmdline:
   - '8250.nr_uarts=1' # set in DT but not passed by u-boot/systemd-boot
@@ -39,8 +39,7 @@ nest::kernel_config:
   CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL: y
 
   # Rely on filesystem compression
-  CONFIG_MODULE_COMPRESS_NONE: y
-  CONFIG_MODULE_COMPRESS_XZ: n
+  CONFIG_MODULE_COMPRESS: n
 
 nest::uboot_config:
   # Fails with "Unknown partition table type 0"
