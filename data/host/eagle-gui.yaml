@@ -1,6 +1,7 @@
 nest::dtb_file: 'broadcom/bcm2711-rpi-400.dtb'
 nest::text_scaling_factor: 1.1
 nest::raspberrypi_config: |
-  # Enable 1080p on Raspberry Pi Monitor
+  # Enable audio and 1080p on Raspberry Pi Monitor
+  hdmi_drive=2
   hdmi_group=1
   hdmi_mode=16
