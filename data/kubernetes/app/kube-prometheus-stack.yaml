@@ -4,8 +4,8 @@ service_name: "%{nest::kubernetes::service}"
 cert_issuer: eyrie-ca
 cert_issuer_kind: ClusterIssuer
 ingress_class: nginx
-node_role: monitor
-storage_retention_size: 1536MB
+node_role: workstation
+storage_retention_size: 4GB
 storage_class: data-crypt
 volume_size: 10Gi
 
