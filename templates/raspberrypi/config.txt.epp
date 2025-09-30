@@ -4,6 +4,7 @@ dtoverlay=miniuart-bt
 enable_uart=1
 <% } -%>
 <% 'raspberrypi4' : { -%>
+arm_64bit=1
 dtoverlay=vc4-kms-v3d
 dtparam=pwr_led_trigger=actpwr
 enable_uart=1
