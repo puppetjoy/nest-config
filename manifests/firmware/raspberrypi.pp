@@ -6,10 +6,13 @@ class nest::firmware::raspberrypi {
     group => undef,
   }
 
-  nest::lib::package { 'sys-boot/raspberrypi-firmware':
-    ensure => installed,
+  if $facts['profile']['platform'] =~ /^raspberrypi[34]$/ {
+    nest::lib::package { 'sys-boot/raspberrypi-firmware':
+      ensure => installed,
+      before => File['/boot/config.txt'],
+    }
   }
-  ->
+
   file { '/boot/config.txt':
     content => epp('nest/raspberrypi/config.txt.epp'),
   }
