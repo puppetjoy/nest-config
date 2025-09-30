@@ -1,13 +1,14 @@
 ---
 nest::classes:
   - 'nest::firmware::raspberrypi'
-  - 'nest::firmware::uboot'
 
 nest::autologin: sway
+nest::bootloader: u-root
 nest::dtb_file: 'broadcom/bcm2712-rpi-5-b.dtb'
 nest::dvorak: true
 nest::fscache: false
 nest::kernel_defconfig: 'bcm2712_defconfig'
+nest::kernel_tag: 'raspberrypi/v6.12.49'
 nest::swap_alt_win: true
 nest::uboot_defconfig: 'rpi_arm64_defconfig'
 nest::wifi: true
@@ -17,13 +18,9 @@ nest::package_keywords:
   # Still not fully open-source or mainlined...
   sys-boot/raspberrypi-firmware: {}
 
-nest::kernel_tag: 'raspberrypi/v6.6.67'
-
 nest::kernel_cmdline:
-  - '8250.nr_uarts=1' # set in DT but not passed by u-boot/systemd-boot
   - 'console=ttyS0,115200n8'
   - 'console=tty0'
-  - 'noefi' # EFI services prevent full shutdown
 
 nest::kernel_config:
   # Device drivers ('y' for early boot)
@@ -39,15 +36,4 @@ nest::kernel_config:
   CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL: y
 
   # Rely on filesystem compression
-  CONFIG_MODULE_COMPRESS_NONE: y
-  CONFIG_MODULE_COMPRESS_XZ: n
-
-nest::uboot_config:
-  # Workaround logo hang
-  CONFIG_BOOTDELAY: -2
-
-  # Fails with "Unknown partition table type 0"
-  CONFIG_MMC_SDHCI_SDMA: n
-
-  # Let the main SOC UART be found instead of just the PL011 chip
-  CONFIG_SERIAL_PROBE_ALL: y
+  CONFIG_MODULE_COMPRESS: n

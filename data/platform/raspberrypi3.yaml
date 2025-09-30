@@ -7,6 +7,7 @@ nest::dtb_file: 'broadcom/bcm2710-rpi-3-b-plus.dtb'
 nest::dvorak: true
 nest::fscache: false
 nest::kernel_defconfig: 'bcm2711_defconfig'
+nest::kernel_tag: 'raspberrypi/v6.6.67'
 nest::puppet: false
 nest::uboot_defconfig: 'rpi_3_32b_defconfig'
 nest::wifi: true
@@ -15,8 +16,6 @@ nest::wifi_power_save: false
 nest::package_keywords:
   # Still not fully open-source or mainlined...
   sys-boot/raspberrypi-firmware: {}
-
-nest::kernel_tag: 'raspberrypi/v6.6.67'
 
 nest::kernel_cmdline:
   - '8250.nr_uarts=1' # set in DT but not passed by u-boot/systemd-boot

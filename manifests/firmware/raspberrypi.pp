@@ -1,8 +1,4 @@
 class nest::firmware::raspberrypi {
-  nest::lib::package { 'sys-boot/raspberrypi-firmware':
-    ensure => installed,
-  }
-
   # /boot is fat32
   File {
     mode  => undef,
@@ -10,13 +6,54 @@ class nest::firmware::raspberrypi {
     group => undef,
   }
 
-  file { '/boot/u-boot.bin':
-    source  => '/usr/src/u-boot/u-boot.bin',
-    require => Class['nest::firmware::uboot'],
+  nest::lib::package { 'sys-boot/raspberrypi-firmware':
+    ensure => installed,
   }
-
+  ->
   file { '/boot/config.txt':
     content => epp('nest/raspberrypi/config.txt.epp'),
-    require => Nest::Lib::Package['sys-boot/raspberrypi-firmware'],
+  }
+
+  case $nest::bootloader {
+    'systemd': {
+      $uboot_ensure = present
+      $uboot_source = '/usr/src/u-boot/u-boot.bin'
+      $uroot_ensure = absent
+      $uroot_image  = undef
+      $uroot_source = undef
+
+      Class['nest::firmware::uboot']
+      -> File['/boot/u-boot.bin']
+    }
+
+    'u-root': {
+      include nest::base::bootloader # safe for stage2
+
+      $uboot_ensure = absent
+      $uboot_source = undef
+      $uroot_ensure = present
+      $uroot_image  = '/usr/src/u-root-linux/arch/arm64/boot/Image'
+      $uroot_source = '/usr/src/u-root/initramfs.cpio'
+
+      Class['nest::base::bootloader::uroot']
+      -> File['/boot/initramfs8.img', '/boot/kernel8.img']
+    }
+  }
+
+  file {
+    '/boot/initramfs8.img':
+      ensure => $uroot_ensure,
+      source => $uroot_source,
+    ;
+
+    '/boot/kernel8.img':
+      ensure => $uroot_ensure,
+      source => $uroot_image,
+    ;
+
+    '/boot/u-boot.bin':
+      ensure => $uboot_ensure,
+      source => $uboot_source,
+    ;
   }
 }

@@ -46,7 +46,6 @@ class nest (
   Boolean                           $kernel_llvm         = false,
   Boolean                           $kexec               = false,
   String                            $opensbi_branch      = 'riscv-software-src/master',
-  Optional[String]                  $raspberrypi_config  = undef,
   Array[String]                     $reset_filter_rules  = [],
   String                            $rkbin_branch        = 'rockchip',
   Optional[String]                  $soc                 = undef,
