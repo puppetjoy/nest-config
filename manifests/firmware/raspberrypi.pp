@@ -30,7 +30,17 @@ class nest::firmware::raspberrypi {
     }
 
     'u-root': {
+      unless $facts['profile']['platform'] == 'raspberrypi5' {
+        fail('u-root bootloader is only supported on raspberrypi5')
+      }
+
       include nest::base::bootloader # safe for stage2
+
+      # u-root requires kexec
+      nest::lib::kconfig { 'CONFIG_KEXEC_FILE':
+        config => '/usr/src/u-root-linux/.config',
+        value  => 'y',
+      }
 
       $uboot_ensure = absent
       $uboot_source = undef
@@ -39,24 +49,28 @@ class nest::firmware::raspberrypi {
       $uroot_source = '/usr/src/u-root/initramfs.cpio'
 
       Class['nest::base::bootloader::uroot']
-      -> File['/boot/initramfs8.img', '/boot/kernel8.img']
+      -> File['/boot/kernel_2712.img', '/boot/u-root.img']
     }
   }
 
   file {
-    '/boot/initramfs8.img':
-      ensure => $uroot_ensure,
-      source => $uroot_source,
-    ;
-
-    '/boot/kernel8.img':
-      ensure => $uroot_ensure,
-      source => $uroot_image,
-    ;
-
     '/boot/u-boot.bin':
       ensure => $uboot_ensure,
       source => $uboot_source,
     ;
+
+    '/boot/kernel_2712.img':
+      ensure => $uroot_ensure,
+      source => $uroot_image,
+    ;
+
+    '/boot/u-root.img':
+      ensure => $uroot_ensure,
+      source => $uroot_source,
+    ;
+
+    '/boot/cmdline.txt':
+      ensure  => $uroot_ensure,
+      content => "${nest::kernel_cmdline.filter |$arg| { $arg =~ /^console=/ }.join(' ')} maxcpus=1\n",
   }
 }

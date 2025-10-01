@@ -21,6 +21,6 @@ dtparam=uart0_console
 kernel=u-boot.bin
 <% } -%>
 <% 'u-root': { -%>
-auto_initramfs=1
+initramfs u-root.img followkernel
 <% } -%>
 <% } -%>

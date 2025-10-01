@@ -6,6 +6,14 @@ class nest::base::bootloader::uroot {
     fail("'uroot_branch' is not set")
   }
 
+  $bootcmd = 'boot -remove= -reuse='
+  if $nest::uroot_delay {
+    $bootscript = "sleep ${nest::uroot_delay}; exec ${bootcmd}"
+    $uinitcmd = "gosh -c ${bootscript.shellquote}"
+  } else {
+    $uinitcmd = $bootcmd
+  }
+
   nest::lib::src_repo { '/usr/src/u-root':
     url => 'https://gitlab.james.tl/nest/forks/u-root.git',
     ref => $nest::uroot_branch,
@@ -15,7 +23,7 @@ class nest::base::bootloader::uroot {
     dir     => '/usr/src/u-root',
     command => [
       'CGO_ENABLED=0 go build',
-      './u-root -uinitcmd="boot -remove= -reuse=" -o initramfs.cpio core boot',
+      "./u-root -uinitcmd=${uinitcmd.shellquote} -o initramfs.cpio core boot",
     ],
   }
 

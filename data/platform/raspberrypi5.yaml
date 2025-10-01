@@ -10,12 +10,12 @@ nest::fscache: false
 nest::kernel_defconfig: 'bcm2712_defconfig'
 nest::kernel_tag: 'raspberrypi/v6.12.49'
 nest::swap_alt_win: true
-nest::uboot_defconfig: 'rpi_arm64_defconfig'
+nest::uroot_delay: 1
 nest::wifi: true
 nest::wifi_power_save: false
 
 nest::kernel_cmdline:
-  - 'console=ttyS0,115200n8'
+  - 'console=ttyAMA0,115200n8'
   - 'console=tty0'
 
 nest::kernel_config:
