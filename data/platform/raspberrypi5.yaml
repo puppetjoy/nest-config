@@ -15,6 +15,7 @@ nest::wifi: true
 nest::wifi_power_save: false
 
 nest::kernel_cmdline:
+  - '8250.nr_uarts=1' # set in DT but not passed by u-root (for bluetooth)
   - 'console=ttyAMA0,115200n8'
   - 'console=tty0'
 
