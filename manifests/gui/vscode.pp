@@ -3,9 +3,8 @@ class nest::gui::vscode {
     $code_wrapper = @("WRAPPER")
       #!/bin/bash
       exec /opt/vscode/bin/code \
-          --force-device-scale-factor=${nest::text_scaling_factor} \
+          --force-device-scale-factor=${nest::gui_scaling_factor} \
           --ignore-gpu-blocklist \
-          --ozone-platform=x11 \
           "$@"
       | WRAPPER
 
