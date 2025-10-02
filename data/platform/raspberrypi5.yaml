@@ -34,3 +34,6 @@ nest::kernel_config:
 
   # Rely on filesystem compression
   CONFIG_MODULE_COMPRESS: n
+
+  # For optimal v3d performance
+  CONFIG_TRANSPARENT_HUGEPAGE: y

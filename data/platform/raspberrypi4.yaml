@@ -41,6 +41,9 @@ nest::kernel_config:
   # Rely on filesystem compression
   CONFIG_MODULE_COMPRESS: n
 
+  # For optimal v3d performance
+  CONFIG_TRANSPARENT_HUGEPAGE: y
+
 nest::uboot_config:
   # Fails with "Unknown partition table type 0"
   CONFIG_MMC_SDHCI_SDMA: n
