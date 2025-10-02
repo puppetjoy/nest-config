@@ -11,7 +11,7 @@ enable_uart=1
 uart_2ndstage=1
 <% } -%>
 <% 'raspberrypi5' : { -%>
-dtoverlay=vc4-kms-v3d
+dtoverlay=vc4-kms-v3d,cma-512
 dtparam=pwr_led_trigger=actpwr
 dtparam=uart0_console
 <% } -%>
