@@ -63,7 +63,7 @@ class nest::base::packages {
         }
       }
 
-      if $facts['profile']['platform'] in ['haswell', 'milkv-pioneer', 'rock4', 'rock5'] {
+      if $facts['profile']['platform'] in ['haswell', 'milkv-pioneer', 'raspberrypi5', 'rock4', 'rock5'] {
         nest::lib::package { 'sys-apps/nvme-cli':
           ensure => installed,
         }
