@@ -47,7 +47,7 @@ plan nest::zfs::encrypt_rpool (
       "${current_fs}/src"   => '-o mountpoint=/usr/src -o compression=zstd',
       "${current_fs}/var"   => '-o mountpoint=/var',
       'home'                => '-o mountpoint=/home',
-      'home/james'          => '-o mountpoint=/home/james',
+      'home/joy'            => '-o mountpoint=/home/joy',
       'swap'                => '-o refreservation=none',
     }
 

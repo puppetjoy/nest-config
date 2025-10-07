@@ -112,12 +112,12 @@ class nest::service::streamux (
   #
   # Streamux
   #
-  vcsrepo { '/home/james/streamux':
+  vcsrepo { "/home/${nest::user}/streamux":
     ensure   => latest,
     provider => git,
-    source   => 'https://gitlab.james.tl/james/streamux.git',
+    source   => "https://gitlab.james.tl/${nest::user}/streamux.git",
     revision => 'main',
-    user     => 'james',
+    user     => $nest::user,
   }
 
   # For speedometer
@@ -126,7 +126,7 @@ class nest::service::streamux (
   }
 
   # For access to /dev/video0 hardware acceleration
-  User <| title == 'james' |> {
+  User <| title == $nest::user |> {
     groups +> 'video',
   }
 

@@ -18,11 +18,11 @@ class nest::base::eyaml {
         $eyaml_private_key = $nest::eyaml_private_key
 
         exec { 'make-eyaml-key-readable':
-          command => '/usr/sbin/setfacl -m user:james:r /etc/eyaml/keys/private_key.pkcs7.pem',
-          unless  => '/usr/sbin/getfacl /etc/eyaml/keys/private_key.pkcs7.pem | /bin/grep "^user:james:r--"',
+          command => "/usr/sbin/setfacl -m user:${nest::user}:r /etc/eyaml/keys/private_key.pkcs7.pem",
+          unless  => "/usr/sbin/getfacl /etc/eyaml/keys/private_key.pkcs7.pem | /bin/grep '^user:${nest::user}:r--'",
           require => [
             File['/etc/eyaml/keys/private_key.pkcs7.pem'],
-            User['james'],
+            User[$nest::user],
           ],
         }
       } else {
@@ -38,8 +38,8 @@ class nest::base::eyaml {
           'C:/tools/cygwin/bin/bash.exe', '-c',
           '/usr/bin/gem install hiera-eyaml'
         ),
-        environment => 'HOME=/home/james',
-        creates     => 'C:/tools/cygwin/home/james/bin/eyaml',
+        environment => "HOME=/home/${nest::user}",
+        creates     => "C:/tools/cygwin/home/${nest::user}/bin/eyaml",
         require     => Package['ruby'],
         before      => File[$conf_dir],
       }

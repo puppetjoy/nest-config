@@ -62,8 +62,8 @@ define nest::lib::virtual_host (
         port            => 80,
         add_listen      => false,
         docroot         => $docroot,
-        docroot_owner   => 'james',
-        docroot_group   => 'james',
+        docroot_owner   => $nest::user,
+        docroot_group   => $nest::user,
         redirect_status => 'permanent',
         redirect_dest   => "https://${servername}/",
       }
@@ -82,8 +82,8 @@ define nest::lib::virtual_host (
     ip            => $ip,
     add_listen    => false,
     docroot       => $docroot,
-    docroot_owner => 'james',
-    docroot_group => 'james',
+    docroot_owner => $nest::user,
+    docroot_group => $nest::user,
     *             => $vhost_params + $extra_params,
   }
 
@@ -95,8 +95,8 @@ define nest::lib::virtual_host (
       ip              => $ip,
       add_listen      => false,
       docroot         => $docroot,
-      docroot_owner   => 'james',
-      docroot_group   => 'james',
+      docroot_owner   => $nest::user,
+      docroot_group   => $nest::user,
       redirect_status => 'permanent',
       redirect_dest   => "${vhost_redirect_proto}://${servername}${vhost_redirect_port}/",
       *               => $vhost_params,

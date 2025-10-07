@@ -13,7 +13,7 @@ class nest::base::users {
       }
 
       group {
-        'james':
+        $nest::user:
           gid => '1000';
         'media':
           gid => '1001',
@@ -40,12 +40,12 @@ class nest::base::users {
           password => $nest::pw_hash,
         ;
 
-        'james':
+        $nest::user:
           uid      => '1000',
-          gid      => 'james',
+          gid      => $nest::user,
           groups   => ['wheel'],
-          home     => '/home/james',
-          comment  => 'James Lee',
+          home     => "/home/${nest::user}",
+          comment  => $nest::user_fullname,
           shell    => '/bin/zsh',
           password => $nest::pw_hash,
           require  => Nest::Lib::Package['app-shells/zsh'],
@@ -75,18 +75,18 @@ class nest::base::users {
           before => Vcsrepo['/root'],
         ;
 
-        '/home/james':
+        "/home/${nest::user}":
           ensure => directory,
           mode   => '0755',
-          owner  => 'james',
-          group  => 'james',
-          before => Vcsrepo['/home/james'],
+          owner  => $nest::user,
+          group  => $nest::user,
+          before => Vcsrepo["/home/${nest::user}"],
         ;
       }
 
       $homes = {
-        'root'  => '/root',
-        'james' => '/home/james',
+        'root'      => '/root',
+        $nest::user => "/home/${nest::user}",
       }
     }
 
@@ -96,15 +96,15 @@ class nest::base::users {
         provider => 'cygwin',
       }
 
-      windows_env { 'james-SHELL':
-        user     => 'james',
+      windows_env { "${nest::user}-SHELL":
+        user     => $nest::user,
         variable => 'SHELL',
         value    => '/bin/zsh',
         require  => Package['zsh'],
       }
 
       $homes = {
-        'james' => '/home/james',
+        $nest::user => "/home/${nest::user}",
       }
     }
   }
@@ -129,7 +129,7 @@ class nest::base::users {
     vcsrepo { $home_dir:
       ensure   => latest,
       provider => git,
-      source   => 'https://gitlab.james.tl/james/dotfiles.git',
+      source   => "https://gitlab.james.tl/${nest::user}/dotfiles.git",
       revision => 'main',
       user     => $exec_user,
     }

@@ -61,12 +61,12 @@ class nest::gui::terminals {
       # Link to dotfiles
       file {
         default:
-          owner => 'james';
-        'C:/Users/james/AppData/Roaming/alacritty':
+          owner => $nest::user;
+        "C:/Users/${nest::user}/AppData/Roaming/alacritty":
           ensure => directory;
-        'C:/Users/james/AppData/Roaming/alacritty/alacritty.toml':
+        "C:/Users/${nest::user}/AppData/Roaming/alacritty/alacritty.toml":
           ensure => link,
-          target => 'C:/tools/cygwin/home/james/.config/alacritty/alacritty.toml',
+          target => "C:/tools/cygwin/home/${nest::user}/.config/alacritty/alacritty.toml",
         ;
       }
     }

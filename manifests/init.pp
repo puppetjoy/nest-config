@@ -122,6 +122,14 @@ class nest (
   if $facts['os'] {
     case $facts['os']['family'] {
       'Gentoo': {
+        if $facts['mountpoints']['/home/james'] {
+          $user = 'james'
+          $user_fullname = 'James Lee'
+        } else {
+          $user = 'joy'
+          $user_fullname = 'Joyful Lee'
+        }
+
         Firewalld_zone {
           interfaces       => [],
           sources          => [],
@@ -163,6 +171,8 @@ class nest (
       }
 
       'windows': {
+        $user = 'james'
+
         Concat {
           # The default is usually 0644, but Windows keeps changing it to 0674, so
           # just accept what it does.

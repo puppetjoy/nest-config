@@ -19,9 +19,9 @@ class nest::base::git {
       # that `vcsrepo` manages.  This hack could be made more generic with a new
       # custom type derived from `vcsrepo`, but it's not worth the effort for
       # just my home directory.
-      $git_wrapper_content = @(END_GIT_WRAPPER)
+      $git_wrapper_content = @("END_GIT_WRAPPER")
         #!/bin/ruby
-        Process::Sys.setuid('james')
+        Process::Sys.setuid('${nest::user}')
         exec '/bin/git', *ARGV
         | END_GIT_WRAPPER
 

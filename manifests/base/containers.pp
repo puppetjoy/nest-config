@@ -56,7 +56,7 @@ class nest::base::containers {
     enable => true,
   }
 
-  $rootless_users = ['james']
+  $rootless_users = [$nest::user]
   $subuidgid_content = $rootless_users.map |$index, $user| {
     $subuidgid = 65536 * $index + 100000
     "${user}:${subuidgid}:65536\n"

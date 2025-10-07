@@ -69,16 +69,16 @@ class nest::gui::firefox {
 
       file {
         default:
-          owner => 'james',
+          owner => $nest::user,
         ;
 
-        'C:/Users/james/AppData/Roaming/Mozilla':
+        "C:/Users/${nest::user}/AppData/Roaming/Mozilla":
           ensure => directory,
         ;
 
-        'C:/Users/james/AppData/Roaming/Mozilla/Firefox':
+        "C:/Users/${nest::user}/AppData/Roaming/Mozilla/Firefox":
           ensure => link,
-          target => 'C:/tools/cygwin/home/james/.mozilla/firefox',
+          target => "C:/tools/cygwin/home/${nest::user}/.mozilla/firefox",
         ;
       }
     }

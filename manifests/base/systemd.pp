@@ -174,7 +174,7 @@ class nest::base::systemd {
 
   nest::lib::systemd_reload { 'systemd': }
 
-  # Keep james's systemd services (like tmux) running
+  # Keep user's systemd services (like tmux) running
   file {
     default:
       owner => 'root',
@@ -186,7 +186,7 @@ class nest::base::systemd {
       ensure => directory,
     ;
 
-    '/var/lib/systemd/linger/james':
+    "/var/lib/systemd/linger/${nest::user}":
       ensure => file,
     ;
   }
