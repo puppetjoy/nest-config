@@ -115,7 +115,7 @@ class nest::service::streamux (
   vcsrepo { "/home/${nest::user}/streamux":
     ensure   => latest,
     provider => git,
-    source   => "https://gitlab.james.tl/${nest::user}/streamux.git",
+    source   => 'https://gitlab.james.tl/joy/streamux.git',
     revision => 'main',
     user     => $nest::user,
   }

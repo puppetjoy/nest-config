@@ -4,12 +4,14 @@ class nest (
   Stdlib::Host        $nestfs_hostname,
   Array[Stdlib::Host] $openvpn_servers,
 
-  # Keys
+  # Keys and user configuration
   String               $eyaml_public_key,
   Optional[Sensitive]  $eyaml_private_key = undef,
   Optional[String]     $pw_hash           = undef,
   Hash[String, String] $ssh_host_keys     = {},
   Hash[String, String] $ssh_private_keys  = {},
+  String               $user              = 'joy',
+  String               $user_fullname     = 'Joyful Lee',
 
   # Service discovery configuration
   Hash[Stdlib::Fqdn, Stdlib::Fqdn]        $cnames       = {},
@@ -122,14 +124,6 @@ class nest (
   if $facts['os'] {
     case $facts['os']['family'] {
       'Gentoo': {
-        if $facts['mountpoints']['/home/james'] {
-          $user = 'james'
-          $user_fullname = 'James Lee'
-        } else {
-          $user = 'joy'
-          $user_fullname = 'Joyful Lee'
-        }
-
         Firewalld_zone {
           interfaces       => [],
           sources          => [],
@@ -171,8 +165,6 @@ class nest (
       }
 
       'windows': {
-        $user = 'joy'
-
         Concat {
           # The default is usually 0644, but Windows keeps changing it to 0674, so
           # just accept what it does.

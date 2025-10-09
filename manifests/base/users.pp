@@ -129,7 +129,7 @@ class nest::base::users {
     vcsrepo { $home_dir:
       ensure   => latest,
       provider => git,
-      source   => "https://gitlab.james.tl/${nest::user}/dotfiles.git",
+      source   => 'https://gitlab.james.tl/joy/dotfiles.git',
       revision => 'main',
       user     => $exec_user,
     }
