@@ -72,7 +72,7 @@ plan nest::kubernetes::init (
   })
 
   $kubeconfig_dest     = "/nest/home/kubeconfigs/${name}.conf"
-  $copy_kubeconfig_cmd = "cp /etc/kubernetes/admin.conf ${kubeconfig_dest} && chown james ${kubeconfig_dest}"
+  $copy_kubeconfig_cmd = "cp /etc/kubernetes/admin.conf ${kubeconfig_dest} && chown joy ${kubeconfig_dest}"
   run_command($copy_kubeconfig_cmd, $init_node, 'Copy kubeconfig to Nest home', {
     _run_as => 'root',
   })

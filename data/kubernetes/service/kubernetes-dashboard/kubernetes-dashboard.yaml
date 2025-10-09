@@ -7,31 +7,31 @@ resources:
     apiVersion: v1
     kind: ServiceAccount
     metadata:
-      name: james
+      name: joy
       namespace: "%{nest::kubernetes::namespace}"
 
   role:
     apiVersion: rbac.authorization.k8s.io/v1
     kind: ClusterRoleBinding
     metadata:
-      name: james-admin
+      name: joy-admin
     roleRef:
       apiGroup: rbac.authorization.k8s.io
       kind: ClusterRole
       name: cluster-admin
     subjects:
       - kind: ServiceAccount
-        name: james
+        name: joy
         namespace: "%{nest::kubernetes::namespace}"
 
   secret:
     apiVersion: v1
     kind: Secret
     metadata:
-      name: james-token
+      name: joy-token
       namespace: "%{nest::kubernetes::namespace}"
       annotations:
-        kubernetes.io/service-account.name: james
+        kubernetes.io/service-account.name: joy
     type: kubernetes.io/service-account-token
 
 values:
