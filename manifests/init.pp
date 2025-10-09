@@ -171,7 +171,7 @@ class nest (
       }
 
       'windows': {
-        $user = 'james'
+        $user = 'joy'
 
         Concat {
           # The default is usually 0644, but Windows keeps changing it to 0674, so
