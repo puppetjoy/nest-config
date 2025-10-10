@@ -112,8 +112,11 @@ plan nest::build::stage0 (
     # Rebuild the image with our profile
     run_command("eselect profile set nest:${cpu}/server", $target, 'Set profile')
     run_command('emerge --info', $target, 'Show Portage configuration')
-    run_command('emerge --emptytree --verbose @world', $target, 'Rebuild all packages')
-    run_command('perl-cleaner --all', $target, 'Run perl-cleaner')
+    if $from_image =~ /gentoo/ {
+      run_command('emerge --emptytree --verbose @world', $target, 'Rebuild all packages')
+    } else {
+      run_command('emerge --deep --newuse --update --verbose --with-bdeps=y @world', $target, 'Update packages')
+    }
     run_command('emerge --depclean', $target, 'Remove unused packages')
 
     run_command("podman stop ${container}", 'localhost', 'Stop build container')
