@@ -33,6 +33,7 @@ plan nest::build::stage0 (
   $debug_volume = "${container}-debug"
   $repos_volume = "${container}-repos" # cached between builds
   $target = Target.new(name => $container, uri => "podman://${container}")
+  $qemu_args = $qemu_user_targets.map |$arch| { "--volume=/usr/bin/qemu-${arch}:/usr/bin/qemu-${arch}:ro" }.join(' ')
 
   if $deploy {
     if $registry_username {
@@ -63,7 +64,7 @@ plan nest::build::stage0 (
       --name=${container} \
       --pull=always \
       --volume=/nest:/nest \
-      ${qemu_user_targets.map |$arch| { "--volume=/usr/bin/qemu-${arch}:/usr/bin/qemu-${arch}:ro" }.join(' ')} \
+      ${qemu_args} \
       --volume=${debug_volume}:/usr/lib/debug \
       --volume=${repos_volume}:/var/db/repos \
       ${from_image} \
@@ -128,7 +129,7 @@ plan nest::build::stage0 (
 
     $debug_container = "${container}-debug"
     $debug_image = "${registry}/nest/stage0/debug:${cpu}"
-    run_command("podman run --name=${debug_container} --volume=${debug_volume}:/usr/lib/.debug:ro ${image} cp -a /usr/lib/.debug/. /usr/lib/debug", 'localhost', 'Copy debug symbols')
+    run_command("podman run --name=${debug_container} --volume=${debug_volume}:/usr/lib/.debug:ro ${qemu_args} ${image} cp -a /usr/lib/.debug/. /usr/lib/debug", 'localhost', 'Copy debug symbols')
     run_command("podman commit --change CMD=/bin/bash ${debug_container} ${debug_image}", 'localhost', 'Commit debug container')
     run_command("podman rm ${debug_container}", 'localhost', 'Remove debug container')
 
