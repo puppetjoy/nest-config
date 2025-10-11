@@ -64,9 +64,9 @@ plan nest::build::stage0 (
       --name=${container} \
       --pull=always \
       --volume=/nest:/nest \
-      ${qemu_args} \
       --volume=${debug_volume}:/usr/lib/debug \
       --volume=${repos_volume}:/var/db/repos \
+      ${qemu_args} \
       ${from_image} \
       sleep infinity
       | CREATE
