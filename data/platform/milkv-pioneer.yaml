@@ -5,12 +5,16 @@ nest::classes:
   - 'nest::firmware::zsbl'
 
 nest::bootloader: u-root
-nest::dtb_file: 'sophgo/mango-milkv-pioneer.dtb'
-nest::kernel_defconfig: 'sophgo_mango_normal_defconfig'
-nest::kernel_llvm: true
-nest::kernel_tag: 'sophgo/v6.6.68'
+nest::dtb_file: 'sophgo/sg2042-milkv-pioneer.dtb'
+nest::kernel_tag: 'unicornx/v6.18.0-rc1'
 nest::opensbi_branch: 'sophgo/sg2042-dev-nest'
 nest::soc: 'sg2042'
+
+nest::package_keywords:
+  sys-fs/zfs:
+    accept_keywords: '**'
+  sys-fs/zfs-kmod:
+    accept_keywords: '**'
 
 nest::kernel_cmdline:
   - 'console=ttyS0,115200n8'
@@ -18,11 +22,23 @@ nest::kernel_cmdline:
   - 'zfs.zvol_use_blk_mq=1'
 
 nest::kernel_config:
-  CONFIG_GCC_PLUGINS: null # using LLVM
-
   # Device drivers
   CONFIG_AQTION: m
   CONFIG_DRM_AMDGPU: m
 
-  # Selects ZLIB_DEFLATE for ZFS
-  CONFIG_CRYPTO_DEFLATE: m
+  # Linux 6.18 compat
+  CONFIG_IP_NF_FILTER: null
+  CONFIG_IP_NF_TARGET_REJECT: null
+  CONFIG_IP_NF_NAT: null
+  CONFIG_IP_NF_TARGET_MASQUERADE: null
+  CONFIG_IP_NF_MANGLE: null
+  CONFIG_IP6_NF_FILTER: null
+  CONFIG_IP6_NF_TARGET_REJECT: null
+  CONFIG_IP6_NF_NAT: null
+  CONFIG_IP6_NF_TARGET_MASQUERADE: null
+  CONFIG_IP6_NF_MANGLE: null
+  CONFIG_IP_NF_MATCH_RPFILTER: null
+  CONFIG_IP_NF_TARGET_REDIRECT: null
+  CONFIG_IP_NF_RAW: null
+  CONFIG_NETFILTER_XT_TARGET_CHECKSUM: null
+  CONFIG_BRIDGE_EBT_T_NAT: null

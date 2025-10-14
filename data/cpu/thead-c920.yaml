@@ -1,5 +1,0 @@
----
-nest::kernel_config:
-  # Architecture options
-  CONFIG_ERRATA_THEAD_VECTOR: y
-  CONFIG_RISCV_ISA_V: y
