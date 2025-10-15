@@ -32,4 +32,3 @@ nest::classes:
   - 'nest::base::users'
   - 'nest::base::vmware'
   - 'nest::base::wifi'
-  - 'nest::base::zfs'

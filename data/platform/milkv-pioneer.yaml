@@ -9,12 +9,7 @@ nest::dtb_file: 'sophgo/sg2042-milkv-pioneer.dtb'
 nest::kernel_tag: 'unicornx/v6.18.0-rc1'
 nest::opensbi_branch: 'sophgo/sg2042-dev-nest'
 nest::soc: 'sg2042'
-
-nest::package_keywords:
-  sys-fs/zfs:
-    accept_keywords: '**'
-  sys-fs/zfs-kmod:
-    accept_keywords: '**'
+nest::zfs_fork: true
 
 nest::kernel_cmdline:
   - 'console=ttyS0,115200n8'

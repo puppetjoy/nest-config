@@ -6,3 +6,4 @@ nest::classes:
   - 'nest::base::fstab'
   - 'nest::base::kernel'
   - 'nest::base::plymouth'
+  - 'nest::base::zfs'

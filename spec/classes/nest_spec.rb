@@ -40,7 +40,6 @@ describe 'nest' do
     'nest::base::users',
     'nest::base::vmware',
     'nest::base::wifi',
-    'nest::base::zfs',
   ]
 
   stage2 = [
@@ -50,6 +49,7 @@ describe 'nest' do
     'nest::base::fstab',
     'nest::base::kernel',
     'nest::base::plymouth',
+    'nest::base::zfs',
   ]
 
   stage3 = [

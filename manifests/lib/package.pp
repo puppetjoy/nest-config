@@ -7,7 +7,7 @@ define nest::lib::package (
   Optional[Nest::UseFlags] $use     = undef,
   Boolean                  $world   = true,
 ) {
-  if !$binpkg {
+  if !$binpkg and $ensure != 'absent' {
     if defined(Package_env[$name]) {
       Package_env <| title == $name |> {
         env    +> 'no-buildpkg.conf',
