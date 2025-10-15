@@ -17,7 +17,7 @@ class nest::firmware::sophgo {
 
   case $nest::bootloader {
     'systemd': {
-      $conf_ini_kernel = "[kernel]\nname=u-boot.bin\n"
+      $conf_ini_kernel = "[kernel]\nname=u-boot.bin\n\n"
       $uboot_ensure    = present
       $uboot_source    = '/usr/src/u-boot/u-boot.bin'
       $uroot_ensure    = absent
@@ -50,6 +50,10 @@ class nest::firmware::sophgo {
   # See: https://github.com/sophgo/sophgo-doc/blob/main/SG2042/HowTo/Configuration%20Info%20in%20INI%20file.rst
   $conf_ini_content = @("INI")
     [sophgo-config]
+
+    [devicetree]
+    name=${nest::dtb_file.basename}
+
     ${conf_ini_kernel}[eof]
     | INI
 
