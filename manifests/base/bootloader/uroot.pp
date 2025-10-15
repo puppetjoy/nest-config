@@ -27,8 +27,18 @@ class nest::base::bootloader::uroot {
     ],
   }
 
-  # Build separate kernel image for u-root without custom config or modules to
-  # provide stable fallback to older kernels
+  # Build separate kernel image for u-root with basic config and no modules
+  # to provide stable fallback to older kernels
+  $nest::kernel_config.each |$setting, $value| {
+    if $value and $value =~ /^Y$/ { # == is case insensitive
+      nest::lib::kconfig { "u-root-${setting}":
+        config  => '/usr/src/u-root-linux/.config',
+        setting => $setting,
+        value   => $value,
+      }
+    }
+  }
+
   nest::lib::src_repo { '/usr/src/u-root-linux':
     url => 'https://gitlab.james.tl/nest/forks/linux.git',
     ref => $nest::kernel_tag,

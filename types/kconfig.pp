@@ -1,1 +1,1 @@
-type Nest::Kconfig = Variant[Enum['y', 'n', 'm'], Numeric, String, Undef]
+type Nest::Kconfig = Variant[Enum['Y', 'y', 'n', 'm'], Numeric, String, Undef]

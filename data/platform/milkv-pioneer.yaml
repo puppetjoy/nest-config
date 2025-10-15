@@ -17,6 +17,13 @@ nest::kernel_cmdline:
   - 'zfs.zvol_use_blk_mq=1'
 
 nest::kernel_config:
+  # System drivers ('Y' for inclusion in u-root kernel)
+  CONFIG_PCIE_SG2042_HOST: Y
+  CONFIG_PINCTRL_SOPHGO_SG2042: Y
+  CONFIG_SENSORS_SG2042_MCU: Y
+  CONFIG_PWM_SOPHGO_SG2042: Y
+  CONFIG_SOPHGO_SG2042_MSI: Y
+
   # Device drivers
   CONFIG_AQTION: m
   CONFIG_DRM_AMDGPU: m
