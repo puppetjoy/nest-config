@@ -20,6 +20,9 @@ nest::kernel_cmdline:
   - 'console=tty0'
 
 nest::kernel_config:
+  # System drivers ('Y' for inclusion in u-root kernel)
+  CONFIG_KEXEC_FILE: Y
+
   # Device drivers ('y' for early boot)
   CONFIG_DRM: y
   CONFIG_DRM_V3D: y

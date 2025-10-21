@@ -36,12 +36,6 @@ class nest::firmware::raspberrypi {
 
       include nest::base::bootloader # safe for stage2
 
-      # u-root requires kexec
-      nest::lib::kconfig { 'CONFIG_KEXEC_FILE':
-        config => '/usr/src/u-root-linux/.config',
-        value  => 'y',
-      }
-
       $uboot_ensure = absent
       $uboot_source = undef
       $uroot_ensure = present
