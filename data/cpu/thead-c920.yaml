@@ -1,0 +1,5 @@
+---
+nest::kernel_config:
+  # Architecture options
+  CONFIG_NUMA_BALANCING: y
+  CONFIG_ERRATA_THEAD_GHOSTWRITE: n # allow xtheadvector
