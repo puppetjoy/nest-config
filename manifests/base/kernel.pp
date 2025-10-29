@@ -35,7 +35,7 @@ class nest::base::kernel {
     defconfig => $nest::kernel_defconfig,
     dir       => '/usr/src/linux',
     llvm      => $nest::kernel_llvm,
-    makeargs  => "ARCH=${arch}",
+    makeargs  => "ARCH=${arch} DTC_FLAGS='-@'",
     notify    => Class['nest::base::dracut'], # in case module-rebuild is noop
   }
   ->
