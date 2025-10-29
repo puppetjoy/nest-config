@@ -8,6 +8,7 @@ nest::bootloader: u-root
 nest::dtb_file: 'sophgo/sg2042-milkv-pioneer.dtb'
 nest::kernel_defconfig: 'sophgo_mango_normal_defconfig'
 nest::kernel_tag: 'sophgo/v6.12.42'
+nest::opensbi_branch: 'sophgo/master'
 nest::soc: 'sg2042'
 
 nest::kernel_cmdline:
