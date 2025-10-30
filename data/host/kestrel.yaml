@@ -12,6 +12,16 @@ nest::swap_alt_win: true
 nest::text_scaling_factor: 1.1
 nest::vpn_client: false
 
+nest::dtb_overlay: |
+  / {
+      fragment@0 {
+          target-path = "/pwm-fan";
+          __overlay__ {
+              cooling-levels = <1 64 128 192 255>;
+          };
+      };
+  };
+
 nest::service::gitlab_runner::host: 'gitlab.james.tl'
 nest::service::gitlab_runner::instances:
   builder:
