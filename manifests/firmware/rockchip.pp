@@ -3,6 +3,6 @@ class nest::firmware::rockchip {
     ensure   => latest,
     provider => git,
     source   => 'https://gitlab.james.tl/nest/forks/rkbin.git',
-    revision => $nest::rkbin_branch,
+    revision => 'rockchip',
   }
 }
