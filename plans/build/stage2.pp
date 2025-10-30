@@ -106,7 +106,7 @@ plan nest::build::stage2 (
 
     # Make the system consistent with the profile
     run_command('emerge --info', $target, 'Show Portage configuration')
-    run_command('emerge --deep --exclude=sys-fs/zfs-kmod --newuse --update --verbose --with-bdeps=y @world', $target, 'Install packages')
+    run_command('emerge --deep --exclude=sys-fs/zfs --exclude=sys-fs/zfs-kmod --newuse --update --verbose --with-bdeps=y @world', $target, 'Install packages')
     run_command('emerge --depclean', $target, 'Remove unused packages')
 
     # Apply the main configuration
