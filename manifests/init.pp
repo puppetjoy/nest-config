@@ -55,7 +55,7 @@ class nest (
   Hash[String, Nest::Kconfig]       $uboot_config        = {},
   Optional[String]                  $uboot_defconfig     = undef,
   Optional[String]                  $uboot_tag           = undef,
-  String                            $uroot_branch        = 'u-root/main',
+  Optional[String]                  $uroot_tag           = undef,
   Optional[Integer]                 $uroot_delay         = undef,
   Enum['tcp', 'udp']                $vpn_transport       = udp,
   Boolean                           $wifi                = false,

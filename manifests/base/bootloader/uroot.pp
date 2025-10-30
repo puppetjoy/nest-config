@@ -2,8 +2,8 @@ class nest::base::bootloader::uroot {
   contain 'nest::base::bootloader::spec'
   include 'nest::base::kernel'
 
-  unless $nest::uroot_branch {
-    fail("'uroot_branch' is not set")
+  unless $nest::uroot_tag {
+    fail("'uroot_tag' is not set")
   }
 
   $bootcmd = 'boot -remove= -reuse='
@@ -16,7 +16,7 @@ class nest::base::bootloader::uroot {
 
   nest::lib::src_repo { '/usr/src/u-root':
     url => 'https://gitlab.james.tl/nest/forks/u-root.git',
-    ref => $nest::uroot_branch,
+    ref => $nest::uroot_tag,
   }
   ~>
   nest::lib::build { 'u-root':
