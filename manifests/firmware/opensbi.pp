@@ -1,6 +1,6 @@
 class nest::firmware::opensbi {
-  unless $nest::opensbi_branch {
-    fail("'opensbi_branch' is not set")
+  unless $nest::opensbi_tag {
+    fail("'opensbi_tag' is not set")
   }
 
   case $facts['profile']['platform'] {
@@ -16,7 +16,7 @@ class nest::firmware::opensbi {
 
   nest::lib::src_repo { '/usr/src/opensbi':
     url => 'https://gitlab.james.tl/nest/forks/opensbi.git',
-    ref => $nest::opensbi_branch,
+    ref => $nest::opensbi_tag,
   }
   ~>
   nest::lib::build { 'opensbi':

@@ -47,7 +47,7 @@ class nest (
   String                            $kernel_defconfig    = 'defconfig',
   Boolean                           $kernel_llvm         = false,
   Boolean                           $kexec               = false,
-  String                            $opensbi_branch      = 'riscv-software-src/master',
+  Optional[String]                  $opensbi_tag         = undef,
   Array[String]                     $reset_filter_rules  = [],
   Optional[String]                  $soc                 = undef,
   Optional[String]                  $srv_zpool           = $facts['rpool'],
