@@ -17,7 +17,7 @@ nest::dtb_overlay: |
       fragment@0 {
           target-path = "/pwm-fan";
           __overlay__ {
-              cooling-levels = <1 64 128 192 255>;
+              cooling-levels = <64 112 160 208 255>;
           };
       };
   };
