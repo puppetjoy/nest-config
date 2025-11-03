@@ -5,6 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
+ExecStart=/bin/sleep 5
 ExecStart=/usr/bin/resolvectl reset-server-features
 
 [Install]
