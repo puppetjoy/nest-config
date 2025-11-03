@@ -12,8 +12,8 @@ nest::opensbi_tag: 'sophgo/v1.7'
 nest::soc: 'sg2042'
 
 nest::kernel_cmdline:
-  - 'console=ttyS0,115200n8'
   - 'console=tty0'
+  - 'console=ttyS0,115200n8'
   - 'zfs.zvol_use_blk_mq=1'
 
 nest::kernel_config:
