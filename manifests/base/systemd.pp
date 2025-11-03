@@ -84,6 +84,20 @@ class nest::base::systemd {
     enable => true,
   }
 
+  # Reset DNSSEC after network comes online to work around race condition with systemd-networkd
+  file { '/etc/systemd/system/resolved-reset-features.service':
+    mode   => '0644',
+    owner  => 'root',
+    group  => 'root',
+    source => 'puppet:///modules/nest/systemd/resolved-reset-features.service',
+    notify => Nest::Lib::Systemd_reload['systemd'],
+  }
+  ->
+  service { 'resolved-reset-features.service':
+    enable  => true,
+    require => Nest::Lib::Systemd_reload['systemd'],
+  }
+
   file { '/etc/issue':
     content => "\nThis is \\n (\\s \\m \\r) \\t\n\n",
   }

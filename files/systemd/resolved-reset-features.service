@@ -1,0 +1,11 @@
+[Unit]
+Description=Reset systemd-resolved server features after network is online
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/resolvectl reset-server-features
+
+[Install]
+WantedBy=network-online.target
