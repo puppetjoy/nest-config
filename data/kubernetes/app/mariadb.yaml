@@ -11,7 +11,7 @@ resources:
 values:
   global:
   image:
-    tag: '11.4.4'
+    tag: 'latest'
   auth:
     database: "%{nest::kubernetes::parent_service}"
     username: "%{nest::kubernetes::parent_service}"

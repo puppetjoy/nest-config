@@ -12,7 +12,7 @@ db_storage_class: ceph-block
 
 values:
   image:
-    tag: '6.7.1'
+    tag: 'latest'
   wordpressPassword: 'wordpress' # throwaway
   allowEmptyPassword: false
   service:
@@ -44,7 +44,7 @@ values:
     periodSeconds: 60
   mariadb:
     image:
-      tag: '11.4.4'
+      tag: 'latest'
     auth:
       database: "%{nest::kubernetes::service}"
       username: "%{nest::kubernetes::service}"
