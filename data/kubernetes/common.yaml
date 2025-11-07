@@ -87,18 +87,16 @@ patches:
           value:
             name: nest
             image: "%{lookup('registry')}/nest/stage1/server"
-            command: ['/usr/bin/sshd', '-D', '-e', '-o', 'UsePAM=no']
+            command: ['/usr/bin/sshd', '-D', '-e']
             securityContext:
               capabilities:
                 add:
                   - SYS_CHROOT  # for sshd
                   - SYS_PTRACE
+                  - DAC_READ_SEARCH # for PAM
             volumeMounts:
               - name: nest
                 mountPath: '/nest'
-              - name: etc-shadow
-                mountPath: '/etc/shadow'
-                readOnly: true
               - name: ssh-host-key
                 mountPath: '/etc/ssh/ssh_host_ed25519_key'
                 readOnly: true
@@ -118,13 +116,6 @@ patches:
             hostPath:
               path: '/nest'
               type: Directory
-        - op: add
-          path: '/spec/template/spec/volumes/-'
-          value:
-            name: etc-shadow
-            hostPath:
-              path: '/etc/shadow'
-              type: File
         - op: add
           path: '/spec/template/spec/volumes/-'
           value:
