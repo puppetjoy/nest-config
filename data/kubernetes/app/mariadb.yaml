@@ -9,7 +9,6 @@ resources:
   backup: {}
 
 values:
-  global:
   image:
     tag: 'latest'
   auth:
