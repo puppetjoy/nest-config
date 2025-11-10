@@ -45,27 +45,36 @@ class nest::base::network {
     }
   }
 
-  $wait_for_any_online = @(WAIT)
-    [Service]
-    ExecStart=
-    ExecStart=/lib/systemd/systemd-networkd-wait-online --any
-    | WAIT
+  if $nest::wifi {
+    $wait_for_any_online = @(WAIT)
+      [Service]
+      ExecStart=
+      ExecStart=/lib/systemd/systemd-networkd-wait-online --any
+      | WAIT
 
-  file {
-    default:
-      mode  => '0644',
-      owner => 'root',
-      group => 'root',
-    ;
+    file {
+      default:
+        mode  => '0644',
+        owner => 'root',
+        group => 'root',
+      ;
 
-    '/etc/systemd/system/systemd-networkd-wait-online.service.d':
-      ensure => directory,
-    ;
+      '/etc/systemd/system/systemd-networkd-wait-online.service.d':
+        ensure => directory,
+      ;
 
-    '/etc/systemd/system/systemd-networkd-wait-online.service.d/10-wait-for-any.conf':
-      content => $wait_for_any_online,
-    ;
+      '/etc/systemd/system/systemd-networkd-wait-online.service.d/10-wait-for-any.conf':
+        content => $wait_for_any_online,
+      ;
+    }
+    ~>
+    nest::lib::systemd_reload { 'network': }
+  } else {
+    file { '/etc/systemd/system/systemd-networkd-wait-online.service.d':
+      ensure => absent,
+      force  => true,
+    }
+    ~>
+    nest::lib::systemd_reload { 'network': }
   }
-  ~>
-  nest::lib::systemd_reload { 'network': }
 }
