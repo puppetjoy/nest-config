@@ -90,6 +90,7 @@ define nest::lib::gitlab_runner (
     $bolt_args,
     $podman_args,
     $qemu_args,
+    '--request-concurrency', '2',
     '--url', "https://${host}/",
     '--token', $registration_token,
   ].flatten.shellquote
