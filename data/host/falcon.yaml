@@ -62,7 +62,7 @@ nest::reset_filter_rules:
 nest::service::gitlab::external_name: 'gitlab.james.tl'
 nest::service::gitlab::registry_external_name: 'registry.gitlab.james.tl'
 nest::service::gitlab::https: true
-nest::service::gitlab::image: 'gitlab/gitlab-ce:18.5.2-ce.0'
+nest::service::gitlab::image: 'registry.eyrie/nest/forks/gitlab:18.5.2-ce.0'
 nest::service::gitlab::web_port: 8000
 nest::service::gitlab::default_theme: 2
 
