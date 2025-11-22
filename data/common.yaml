@@ -107,7 +107,6 @@ nest::fixed_ips:
   control2: '172.22.4.8'
   control3: '172.22.4.9'
   eagle: '172.22.4.10'
-  eaglet0: '172.22.4.30'
   eaglet1: '172.22.4.11'
   eaglet2: '172.22.4.12'
   eaglet3: '172.22.4.13'
