@@ -18,7 +18,7 @@ steps:
     targets: $targets
 
   - description: 'Run Puppet with build=kernel'
-    plan: nest::run_puppet
+    plan: nest::puppet::run
     parameters:
       build: kernel
       skip_module_rebuild: $skip_module_rebuild
