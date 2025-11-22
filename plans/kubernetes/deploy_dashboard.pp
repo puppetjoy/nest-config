@@ -2,7 +2,7 @@
 #
 # @param version Helm chart version to install
 plan nest::kubernetes::deploy_dashboard (
-  String $version = '7.10.0',
+  String $version = '7.14.0',
 ) {
   run_plan('nest::kubernetes::deploy', {
     service   => 'kubernetes-dashboard',

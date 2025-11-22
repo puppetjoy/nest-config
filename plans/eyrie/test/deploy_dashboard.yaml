@@ -21,6 +21,6 @@ steps:
       chart: 'kubernetes-dashboard/kubernetes-dashboard'
       namespace: 'test'
       repo_url: 'https://kubernetes.github.io/dashboard/'
-      version: '7.10.0'
+      version: '7.14.0'
       deploy: $deploy
       render_to: $render_to
