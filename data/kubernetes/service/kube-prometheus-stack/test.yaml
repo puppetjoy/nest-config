@@ -1,0 +1,6 @@
+values:
+  # Let test instance manage CRD upgrades
+  crds:
+    upgradeJob:
+      enabled: true
+      forceConflicts: true

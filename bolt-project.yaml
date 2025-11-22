@@ -9,11 +9,11 @@ log:
     level: fatal
 
 modules:
-  - name: jtl-kubecm
-  # - name: kubecm
-  #   git: git@gitlab.james.tl:james/kubecm.git
-  #   ref: main
-  #   resolve: false
+  # - name: jtl-kubecm
+  - name: kubecm
+    git: git@gitlab.james.tl:joy/kubecm.git
+    ref: main
+    resolve: false
   - name: reboot
     git: git@gitlab.james.tl:nest/forks/puppet-reboot.git
     ref: main

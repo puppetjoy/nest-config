@@ -90,6 +90,8 @@ values:
       enabled: false
     affinity: *affinity
     tolerations: *tolerations
+    prometheusInstanceNamespaces: ["%{nest::kubernetes::namespace}"]
+    prometheusInstanceSelector: "app.kubernetes.io/instance=%{nest::kubernetes::service}"
   prometheus:
     prometheusSpec:
       affinity: *affinity
