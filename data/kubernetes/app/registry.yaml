@@ -154,6 +154,14 @@ values:
 patches:
   10-deployment-env:
     - patch:
+        # Disable traces export and debug logging
+        # See: https://distribution.github.io/distribution/about/configuration/#disable-traces-export
+        - op: replace
+          path: '/spec/template/spec/containers/0/args'
+          value:
+            - '-c'
+            - 'env -i OTEL_TRACES_EXPORTER=none REGISTRY_LOG_LEVEL=info /bin/registry serve /etc/docker/registry/config.yml'
+        # Configure UI container
         # See: https://github.com/klausmeyer/docker-registry-browser/blob/master/docs/README.md
         - op: add
           path: '/spec/template/spec/containers/1/env/-'
