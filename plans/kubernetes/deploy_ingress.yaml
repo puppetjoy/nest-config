@@ -2,8 +2,8 @@
 description: 'Configure ingress'
 
 parameters:
-  nginx:
-    description: 'Deploy ingress-nginx'
+  contour:
+    description: 'Deploy Contour'
     type: Boolean
     default: true
 
@@ -18,39 +18,38 @@ parameters:
     default: true
 
 steps:
-  - description: 'Install ingress-nginx'
+  - description: 'Deploy Contour'
     plan: 'nest::kubernetes::deploy'
     parameters:
-      service: 'ingress-nginx'
-      app: 'ingress-nginx'
-      chart: 'ingress-nginx/ingress-nginx'
-      namespace: 'ingress-nginx'
-      repo_url: 'https://kubernetes.github.io/ingress-nginx'
-      version: '4.11.3'
+      service: 'ingress'
+      app: 'contour'
+      chart: 'contour/contour'
+      namespace: 'projectcontour'
+      repo_url: 'https://projectcontour.github.io/helm-charts/'
+      version: '0.1.0'
       wait: true
-      deploy: $nginx
+      deploy: $contour
 
-  - description: 'Install ingress-nginx on workstations'
+  - description: 'Install Contour on workstations'
     plan: 'nest::kubernetes::deploy'
     parameters:
-      service: 'ingress-nginx-workstations'
-      app: 'ingress-nginx'
-      chart: 'ingress-nginx/ingress-nginx'
-      namespace: 'ingress-nginx'
-      repo_url: 'https://kubernetes.github.io/ingress-nginx'
-      version: '4.11.3'
+      service: 'ingress-workstations'
+      app: 'contour'
+      chart: 'contour/contour'
+      namespace: 'projectcontour'
+      repo_url: 'https://projectcontour.github.io/helm-charts/'
+      version: '0.1.0'
       wait: true
-      deploy: $nginx
+      deploy: $contour
 
   - description: 'Install cert-manager'
     plan: 'nest::kubernetes::deploy'
     parameters:
       service: 'cert-manager'
       app: 'cert-manager'
-      chart: 'jetstack/cert-manager'
+      chart: 'oci://quay.io/jetstack/charts/cert-manager'
       namespace: 'cert-manager'
-      repo_url: 'https://charts.jetstack.io'
-      version: '1.16.2'
+      version: '1.19.1'
       wait: true
       deploy: $certmanager
 

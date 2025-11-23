@@ -3,7 +3,7 @@ fullname: "%{nest::kubernetes::service}"
 service_name: "%{nest::kubernetes::service}"
 cert_issuer: eyrie-ca
 cert_issuer_kind: ClusterIssuer
-ingress_class: nginx
+ingress_class: contour
 node_role: workstation
 storage_retention_size: 4GB
 storage_class: data-crypt

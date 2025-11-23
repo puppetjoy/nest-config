@@ -1,5 +1,5 @@
 ---
-ingress_class: nginx
+ingress_class: contour
 ingress_issuer: eyrie-ca
 ingress_issuer_scope: cluster
 

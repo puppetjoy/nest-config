@@ -1,8 +1,0 @@
----
-service_name: ingress
-
-values:
-  controller:
-    ingressClassResource:
-      default: true
-    replicaCount: 2

@@ -1,0 +1,18 @@
+---
+class_name: contour
+
+resources:
+  registry_auths: {}
+  backup: {}
+
+values:
+  fullnameOverride: "%{nest::kubernetes::service}"
+  contour:
+    manageCRDs: false
+    ingressClass:
+      name: "%{lookup('class_name')}"
+      default: false
+  envoy:
+    service:
+      loadBalancerIP: "%{nest::kubernetes::load_balancer_ip}"
+

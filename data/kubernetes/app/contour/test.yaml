@@ -1,6 +1,5 @@
 ---
-service_name: ingress-workstations
-class_name: nginx-workstation
+class_name: "contour-%{nest::kubernetes::namespace}"
 node_role: workstation
 
 .affinity: &affinity
@@ -16,7 +15,14 @@ node_role: workstation
     operator: Exists
     effect: NoSchedule
 
+resources:
+  restore: {}
+
 values:
-  controller:
+  fullnameOverride: "%{nest::kubernetes::service}-test"
+  contour:
+    affinity: *affinity
+    tolerations: *tolerations
+  envoy:
     affinity: *affinity
     tolerations: *tolerations

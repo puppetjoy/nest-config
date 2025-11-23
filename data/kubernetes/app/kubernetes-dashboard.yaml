@@ -1,5 +1,5 @@
 ---
-ingress_class: "nginx-%{nest::kubernetes::namespace}"
+ingress_class: "contour-%{nest::kubernetes::namespace}"
 ingress_issuer: "eyrie-ca-%{nest::kubernetes::namespace}"
 ingress_issuer_scope: default
 
@@ -21,6 +21,7 @@ values:
       hosts:
         - "%{nest::kubernetes::fqdn}"
       ingressClassName: "%{lookup('ingress_class')}"
+      useDefaultAnnotations: false
       issuer:
         name: "%{lookup('ingress_issuer')}"
         scope: "%{lookup('ingress_issuer_scope')}"
@@ -35,3 +36,13 @@ patches:
         group: apps
         version: v1
         kind: Deployment
+
+  # Add service annotations for contour
+  10-service-annotations:
+    - patch:
+        - op: add
+          path: '/metadata/annotations/projectcontour.io~1upstream-protocol.tls'
+          value: '443'
+      target:
+        kind: Service
+        name: "%{nest::kubernetes::service}-kong-proxy"

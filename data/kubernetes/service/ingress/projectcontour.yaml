@@ -1,0 +1,9 @@
+
+---
+service_name: ingress
+
+values:
+  contour:
+    manageCRDs: true
+    ingressClass:
+      default: true

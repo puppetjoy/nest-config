@@ -9,8 +9,8 @@ hdd_volume_size: 256Gi
 service_name: "%{nest::kubernetes::service}"
 cert_issuer: eyrie-ca
 cert_issuer_kind: ClusterIssuer
-ingress_class: nginx
-objectstore_ingress_class: nginx-workstation
+ingress_class: contour
+objectstore_ingress_class: contour-workstation
 objectstore_fqdn: objectstore.eyrie
 
 .placement: &placement
@@ -48,8 +48,6 @@ resources:
     apiVersion: networking.k8s.io/v1
     kind: Ingress
     metadata:
-      annotations:
-        nginx.ingress.kubernetes.io/proxy-body-size: '0'  # Allow large uploads
       name: "%{lookup('service_name')}-objectstore"
       namespace: "%{nest::kubernetes::namespace}"
     spec:

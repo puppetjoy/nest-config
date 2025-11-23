@@ -2,7 +2,7 @@
 fullname: "%{nest::kubernetes::service}-%{nest::kubernetes::namespace}"
 cert_issuer: "eyrie-ca-%{nest::kubernetes::namespace}"
 cert_issuer_kind: Issuer
-ingress_class: "nginx-%{nest::kubernetes::namespace}"
+ingress_class: "contour-%{nest::kubernetes::namespace}"
 
 resources:
   restore: {}

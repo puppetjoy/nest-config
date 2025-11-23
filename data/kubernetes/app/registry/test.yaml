@@ -3,5 +3,5 @@ service_name: "%{nest::kubernetes::service}-%{nest::kubernetes::namespace}"
 auth_service_name: "%{nest::kubernetes::service}-auth-%{nest::kubernetes::namespace}"
 cert_issuer: "eyrie-ca-%{nest::kubernetes::namespace}"
 cert_issuer_kind: Issuer
-ingress_class: "nginx-%{nest::kubernetes::namespace}"
+ingress_class: "contour-%{nest::kubernetes::namespace}"
 token_issuer: 'Eyrie test auth server'

@@ -6,7 +6,7 @@ service_name: "%{nest::kubernetes::service}"
 auth_service_name: "%{nest::kubernetes::service}-auth"
 cert_issuer: eyrie-ca
 cert_issuer_kind: ClusterIssuer
-ingress_class: nginx-workstation
+ingress_class: contour-workstation
 node_role: workstation
 token_expiration: &token_expiration 1440 # 24 hours
 token_issuer: 'Eyrie auth server'
@@ -135,8 +135,6 @@ values:
     enabled: true
   ingress:
     enabled: true
-    annotations:
-      nginx.ingress.kubernetes.io/proxy-body-size: '0'  # Allow large uploads
     hosts:
       - host: "%{nest::kubernetes::fqdn}"
     tls:

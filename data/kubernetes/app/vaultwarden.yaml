@@ -5,7 +5,7 @@ include:
 service_name: "%{nest::kubernetes::service}"
 cert_issuer: eyrie-ca
 cert_issuer_kind: ClusterIssuer
-ingress_class: nginx
+ingress_class: contour
 storage_class: ceph-filesystem
 
 resources:
