@@ -81,10 +81,14 @@ resources:
           secretName: "%{nest::kubernetes::service}-certs"
 
 values:
+  image:
+    tag: '3.0.0'
   affinity: *affinity
   tolerations: *tolerations
   auth:
     enabled: true
+    image:
+      tag: '1.14.0'
     affinity: *affinity
     tolerations: *tolerations
     config:
@@ -97,6 +101,7 @@ values:
           actions: ['pull']
           comment: 'Anonymous users can pull'
       token:
+        disable_legacy_key_id: true
         expiration: *token_expiration
         issuer: "%{lookup('token_issuer')}"
         certificate: /certs/tls.crt
@@ -143,6 +148,8 @@ values:
           - "%{nest::kubernetes::fqdn}"
   ui:
     enabled: true
+    image:
+      tag: '1.8.5'
 
 patches:
   10-deployment-env:
