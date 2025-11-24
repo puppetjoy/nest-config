@@ -30,6 +30,8 @@ resources:
 
 values:
   cephClusterSpec:
+    cephVersion:
+      image: quay.io/ceph/ceph:v19.2.3
     dashboard:
       prometheusEndpoint: "http://ceph-monitoring-%{nest::kubernetes::namespace}-prometheus:9090"
     mon:

@@ -75,9 +75,7 @@ values:
 
   cephClusterSpec:
     cephVersion:
-      # Workaround known issue with 18.2.4 on ARM64
-      # See: https://github.com/rook/rook/issues/14502
-      image: quay.io/ceph/ceph:v18.2.2
+      image: quay.io/ceph/ceph:v19.2.3
 
     # Run on specified node_role
     placement:

@@ -1,13 +1,15 @@
 ---
+node_role: storage
+
 resources:
   registry_auths: {}
   backup: {}
 
 values:
   nodeSelector:
-    'node-role.kubernetes.io/storage': ''
+    "node-role.kubernetes.io/%{lookup('node_role')}": ''
   tolerations: &tolerations
-    - key: 'node-role.kubernetes.io/storage'
+    - key: "node-role.kubernetes.io/%{lookup('node_role')}"
       operator: Exists
       effect: NoSchedule
   csi:
@@ -20,7 +22,7 @@ values:
     csiNFSPluginResource: '[]'
 
     provisionerTolerations: *tolerations
-    provisionerNodeAffinity: node-role.kubernetes.io/storage
+    provisionerNodeAffinity: "node-role.kubernetes.io/%{lookup('node_role')}"
 
     # Allow Ceph on workstations
     pluginTolerations:
