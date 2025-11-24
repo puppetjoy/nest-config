@@ -7,7 +7,7 @@
 plan nest::kubernetes::generate_kube_vip_manifest (
   TargetSpec              $targets,
   Stdlib::IP::Address::V4 $vip,
-  String                  $version = 'v0.8.6',
+  String                  $version = 'v1.0.2',
 ) {
   parallelize(get_targets($targets)) |$t| {
     # XXX Generalize this
@@ -24,7 +24,6 @@ plan nest::kubernetes::generate_kube_vip_manifest (
       '--interface', 'lo',
       '--address', $vip,
       '--controlplane',
-      '--enableLoadBalancer',
       '--bgp',
       '--localAS', '65000',
       '--bgppeers', $bgp_peers.map |$p| { "${p}:65000::false" }.join(','),
