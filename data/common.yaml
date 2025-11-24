@@ -116,8 +116,6 @@ nest::fixed_ips:
   storage1: '172.22.4.17'
   storage2: '172.22.4.18'
   storage3: '172.22.4.19'
-  storage4: '172.22.4.20'
-  monitor1: '172.22.4.21'
 
 nest::hosts:
   unifi.home:
