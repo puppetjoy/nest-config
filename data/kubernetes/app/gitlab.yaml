@@ -60,6 +60,7 @@ values:
       service:
         annotations:
           'metallb.universe.tf/loadBalancerIPs': "%{nest::kubernetes::load_balancer_ip}"
+        externalTrafficPolicy: Cluster # XXX workaround kube-proxy nftables bug
   registry:
     ingress:
       tls:

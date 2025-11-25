@@ -56,6 +56,7 @@ steps:
       app: 'gitlab'
       chart: 'gitlab/gitlab'
       repo_url: 'https://charts.gitlab.io/'
+      version: '8.9.0'
       deploy: $deploy and $gitlab
       init: $init
       wait: $init

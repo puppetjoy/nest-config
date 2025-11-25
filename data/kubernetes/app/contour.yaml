@@ -14,5 +14,6 @@ values:
       default: false
   envoy:
     service:
+      externalTrafficPolicy: Cluster # XXX workaround kube-proxy nftables bug
       loadBalancerIP: "%{nest::kubernetes::load_balancer_ip}"
 
