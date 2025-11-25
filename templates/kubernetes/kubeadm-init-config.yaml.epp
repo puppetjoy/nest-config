@@ -40,13 +40,8 @@ runtimeRequestTimeout: 30m
 apiVersion: kubeproxy.config.k8s.io/v1alpha1
 kind: KubeProxyConfiguration
 
-# Use more effecient IPVS mode over iptables
-# See: https://github.com/kubernetes/kubernetes/blob/master/pkg/proxy/ipvs/README.md
-mode: ipvs
-
-# Exclude kube-vip IPVS load-balancing entries
-# See: https://kube-vip.io/docs/about/architecture/#known-issues
-ipvs:
-  excludeCIDRs: ['172.21.255.255/32']
+# Use more effecient nftables mode over iptables
+# See: https://kubernetes.io/blog/2025/02/28/nftables-kube-proxy/
+mode: nftables
 
 # vim:ft=yaml
