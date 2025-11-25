@@ -172,6 +172,9 @@ nest::package_keywords:
   net-firewall/firewalld: {}
   net-wireless/iwd: {}
   sys-apps/systemd: {}
+  sys-cluster/kubeadm: {}
+  sys-cluster/kubectl: {}
+  sys-cluster/kubelet: {}
   sys-kernel/dracut: {}
 
   # For distcc, match version deployed on riscv
