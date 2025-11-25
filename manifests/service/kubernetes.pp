@@ -163,15 +163,6 @@ class nest::service::kubernetes (
       action => accept,
     ;
 
-    # Allow pods to access cluster services
-    'pods-to-cluster':
-      source => '192.168.0.0/16',
-      dest   => '10.96.0.0/12';
-    'pods-to-lb':
-      source => '192.168.0.0/16',
-      dest   => '172.21.0.0/16',
-    ;
-
     # Allow internal networks
     'nest':
       source => '172.22.0.0/24';
