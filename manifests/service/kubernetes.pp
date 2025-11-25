@@ -71,35 +71,12 @@ class nest::service::kubernetes (
     ;
   }
 
-  # Allow forwarding and control access between networks used by Kubernetes
-  Firewalld_zone <| title == 'external' |> {
-    masquerade => true,
-    sources    +> [
-      '10.96.0.0/12',   # K8s service network
-      '192.168.0.0/16', # Calico pod network
-      '172.22.0.0/24',  # Nest VPN
-      "${facts['networking']['network']}/${facts['networking']['netmask']}", # Host pod network
-    ],
-    target     => 'default',
-  }
-
-  Firewalld_port {
-    zone => 'external',
-  }
-
-  Firewalld_service {
-    zone => 'external',
-  }
-
-  Firewalld_rich_rule {
-    zone => 'external',
+  # Allow full access from Calico pod network
+  Firewalld_zone <| title == 'internal' |> {
+    sources +> '192.168.0.0/16',
   }
 
   if $control_plane {
-    firewalld_service { 'kube-control-plane':
-      ensure => present,
-    }
-
     service { 'nfs-server':
       enable => true,
     }
@@ -107,11 +84,6 @@ class nest::service::kubernetes (
     service { 'zfs-share':
       enable  => true,
       require => Nest::Lib::Package['sys-fs/zfs'],
-    }
-
-    firewalld_service { 'nfs':
-      ensure => present,
-      zone   => 'external',
     }
 
     file {
@@ -129,46 +101,6 @@ class nest::service::kubernetes (
         content => "[Service]\nExecCondition=/usr/sbin/mountpoint -q /var/lib/etcd\n",
       ;
     }
-  } else {
-    firewalld_service { 'kubelet-worker':
-      ensure => present,
-    }
-  }
-
-  firewalld_service { 'kubelet':
-    ensure => present,
-  }
-
-  # Allow BGP for kube-vip
-  firewalld_service { 'bgp':
-    ensure => present,
-  }
-
-  # Allow cluster access to Calico
-  firewalld_custom_service { 'calico':
-    ensure => present,
-    ports  => [
-      { 'port' => 1790, 'protocol' => 'tcp' }, # BGP
-      { 'port' => 5473, 'protocol' => 'tcp' }, # Typha
-    ],
-  }
-  ->
-  firewalld_service { 'calico':
-    ensure => present,
-  }
-
-  firewalld_rich_rule {
-    default:
-      ensure => present,
-      action => accept,
-    ;
-
-    # Allow internal networks
-    'nest':
-      source => '172.22.0.0/24';
-    'eyrie':
-      source => '172.22.4.0/24',
-    ;
   }
 
   file { '/usr/local/bin/calicoctl':
