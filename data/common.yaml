@@ -149,8 +149,8 @@ nest::host_records:
 nest::nestfs_hostname: 'falcon.nest'
 
 nest::openvpn_servers:
-  - 'falcon.nest'
-  - 'falcon.home'
+  - 'kestrel.nest'
+  - 'kestrel.home'
   - 'nest-ext.james.tl'
 
 nest::ssh_host_keys:

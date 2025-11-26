@@ -17,7 +17,7 @@ class nest::service::sonarr {
   ->
   nest::lib::container { 'sonarr':
     image   => 'linuxserver/sonarr',
-    dns     => '172.22.4.2',
+    dns     => '172.22.4.3',
     env     => ['PUID=1001', 'PGID=1001', 'TZ=America/New_York'],
     publish => ['8989:8989'],
     volumes => [

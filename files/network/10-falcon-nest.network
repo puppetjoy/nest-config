@@ -4,5 +4,9 @@ Name=br0
 
 [Network]
 Address=172.22.4.2/24
-DNS=172.22.4.2
+DNS=172.22.4.3
 Domains=nest
+
+[Route]
+Destination=172.22.0.0/24
+Gateway=172.22.4.3

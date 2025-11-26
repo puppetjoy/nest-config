@@ -22,15 +22,14 @@ nest::text_scaling_factor: 1.1
 
 nest::bird_role: server
 nest::distcc_server: true
-nest::external_interfaces: ['br0', 'tun0'] # for dnsmasq
 nest::fileserver: true
 nest::fscache: false
 nest::isolate_smt: true
 nest::kexec: true
 nest::mta: postfix
 nest::public_ssh: true
-nest::router: true
 nest::srv_zpool: data/crypt
+nest::vpn_client: false
 
 nest::kernel_cmdline:
   - 'console=ttyS1,115200n8'

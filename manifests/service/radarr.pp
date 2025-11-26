@@ -17,7 +17,7 @@ class nest::service::radarr {
   ->
   nest::lib::container { 'radarr':
     image   => 'linuxserver/radarr',
-    dns     => '172.22.4.2',
+    dns     => '172.22.4.3',
     env     => ['PUID=1001', 'PGID=1001', 'TZ=America/New_York'],
     publish => ['7878:7878'],
     volumes => [

@@ -24,7 +24,7 @@ class nest::service::puppet (
   }
 
   nest::lib::pod { 'puppet':
-    dns     => '172.22.4.2',  # PuppetDB init checks for 'puppet' in DNS
+    dns     => '172.22.4.3',  # PuppetDB init checks for 'puppet' in DNS
     publish => [
       '8140:8140',  # Puppet Server
       '8080:8080',  # PuppetDB dashboard
