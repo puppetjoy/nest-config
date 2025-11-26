@@ -17,7 +17,7 @@ nest::service::gateway::port_forwards:
     dest: '45.77.109.122'
     port: 22
     proto: tcp
-    to_addr: '172.22.0.1'
+    to_addr: '172.22.4.2'
     to_port: 2222
   # streamlabs:
   #   dest: '45.77.109.122'
@@ -28,14 +28,14 @@ nest::service::gateway::port_forwards:
 
 nest::service::reverse_proxy::hosts:
   gitlab.james.tl:
-    destination: '172.22.0.1:8000'
+    destination: '172.22.4.2:8000'
     ip: ['45.77.109.122', '2001:19f0:1000:22c0::122']
     encoded_slashes: true
     timeout: 300
     websockets: true
 
   registry.gitlab.james.tl:
-    destination: '172.22.0.1:5050'
+    destination: '172.22.4.2:5050'
     ip: ['45.77.109.122', '2001:19f0:1000:22c0::122']
 
   requests.thesatelliteoflove.net:
