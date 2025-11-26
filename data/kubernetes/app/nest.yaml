@@ -31,6 +31,7 @@ resources:
         'james.tl/nest': 'stage1'
     spec:
       type: LoadBalancer
+      externalTrafficPolicy: Local
       selector:
         service: "%{nest::kubernetes::service}"
       ports: []
