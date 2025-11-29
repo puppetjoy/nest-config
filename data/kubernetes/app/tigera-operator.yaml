@@ -8,5 +8,6 @@ values:
       ipPools:
         - cidr: 192.168.0.0/16
           encapsulation: None
+      linuxDataplane: Nftables
     imagePullSecrets:
       - name: "%{nest::kubernetes::service}-registry-auths"
