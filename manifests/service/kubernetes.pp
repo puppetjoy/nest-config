@@ -51,7 +51,6 @@ class nest::service::kubernetes (
   # Install management tools
   nest::lib::package { [
     'app-containers/cri-tools',
-    'sys-cluster/ipvsadm',
     'sys-cluster/kubeadm',
   ]:
     ensure => installed,
