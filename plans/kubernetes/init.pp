@@ -41,8 +41,8 @@ plan nest::kubernetes::init (
   })
 
   $kubeadm_init_cmd = @(CMD/L)
-    kubeadm init --config=/root/kubeadm-config.yaml \
-    --ignore-preflight-errors=Swap,FileContent--proc-sys-net-bridge-bridge-nf-call-iptables \
+    kubeadm init \
+    --config=/root/kubeadm-config.yaml \
     --upload-certs
     | CMD
   run_command($kubeadm_init_cmd , $init_node, 'Initialize first control plane node', {

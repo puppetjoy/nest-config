@@ -1,15 +1,4 @@
 class nest::base::network {
-  # Bridging is a layer 2 activity
-  # See: https://wiki.libvirt.org/Net.bridge.bridge-nf-call_and_sysctl.conf.html
-  sysctl { [
-    'net.bridge.bridge-nf-call-arptables',
-    'net.bridge.bridge-nf-call-ip6tables',
-    'net.bridge.bridge-nf-call-iptables',
-  ]:
-    ensure => present,
-    value  => '0',
-  }
-
   file { '/etc/systemd/network':
     ensure       => directory,
     mode         => '0644',
@@ -76,5 +65,14 @@ class nest::base::network {
     }
     ~>
     nest::lib::systemd_reload { 'network': }
+  }
+
+  # XXX Cleanup; disabled nf bridge in kernel
+  sysctl { [
+    'net.bridge.bridge-nf-call-arptables',
+    'net.bridge.bridge-nf-call-ip6tables',
+    'net.bridge.bridge-nf-call-iptables',
+  ]:
+    ensure => absent,
   }
 }
