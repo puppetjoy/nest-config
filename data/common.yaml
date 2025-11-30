@@ -119,7 +119,7 @@ nest::fixed_ips:
 
 nest::hosts:
   unifi.home:
-    ip: '172.22.1.12'
+    ip: '172.22.1.2'
 
 nest::host_records:
   # Non-DHCP hosts
