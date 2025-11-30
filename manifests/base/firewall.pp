@@ -17,6 +17,13 @@ class nest::base::firewall {
         $external_interfaces = []
       }
 
+      # Disable iptables-legacy and use the nftables backend...
+      # firewalld and most tools use nftables natively; calico still calls iptables to clean up
+      exec { 'eselect-iptables-nft':
+        command => '/usr/bin/eselect iptables set xtables-nft-multi',
+        unless  => '/usr/bin/eselect iptables show | /bin/grep xtables-nft-multi',
+      }
+
       class { 'firewalld':
         default_zone => 'drop',
       }
