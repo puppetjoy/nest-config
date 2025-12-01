@@ -17,7 +17,7 @@ nest::reset_filter_rules:
   - 'P /var/lib/libvirt/**'
 
 nest::service::gitlab::external_name: 'gitlab.localhost'
-nest::service::gitlab::image: 'registry.eyrie/nest/forks/gitlab:18.5.2-ce.0'
+nest::service::gitlab::image: 'registry.eyrie/nest/forks/gitlab:18.6.1-ce.0'
 nest::service::gitlab::ssh_port: 2222
 # nest::service::gitlab::gmail_password: ~
 
