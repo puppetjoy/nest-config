@@ -140,6 +140,8 @@ values:
     enabled: true
   ingress:
     enabled: true
+    annotations:
+      projectcontour.io/response-timeout: infinity
     hosts:
       - host: "%{nest::kubernetes::fqdn}"
     tls:
