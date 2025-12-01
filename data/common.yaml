@@ -138,7 +138,6 @@ nest::host_records:
   # Prod services
   ingress.eyrie: '172.21.0.0'
   jump.eyrie: '172.21.0.1'
-  gitlab.eyrie: '172.21.0.2'
 
   # Test services
   ingress-test.eyrie: '172.21.1.0'
@@ -151,6 +150,7 @@ nest::host_records:
   ingress-workstations.eyrie: '172.21.2.0'
   objectstore.eyrie: '172.21.2.0'
   .objectstore.eyrie: '172.21.2.0'
+  gitlab.eyrie: '172.21.2.1'
 
 nest::nestfs_hostname: 'falcon.nest'
 
