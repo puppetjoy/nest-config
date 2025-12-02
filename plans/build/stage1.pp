@@ -129,6 +129,11 @@ plan nest::build::stage1 (
       })
     }
 
+    # XXX Cleanup
+    if $refresh {
+      run_command('emerge --depclean sys-fs/zfs', $target, 'Clean up ZFS before refresh', _catch_errors => true)
+    }
+
     # Make the system consistent with the profile
     run_command('emerge --deep --newuse --update --verbose --with-bdeps=y --binpkg-changed-deps=n @world', $target, 'Install packages')
     run_command('emerge --depclean', $target, 'Remove unused packages')
