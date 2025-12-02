@@ -15,6 +15,7 @@ class nest::base::packages {
         'net-analyzer/openbsd-netcat',
         'net-dns/bind-tools',
         'net-misc/iperf',
+        'net-misc/s3cmd',
         'net-misc/whois',
         'sys-apps/ethtool',
         'sys-apps/gptfdisk',
