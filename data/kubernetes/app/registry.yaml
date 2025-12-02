@@ -128,7 +128,6 @@ values:
       s3:
         accesskey: "%{nest::service::registry::bucket_config.AWS_ACCESS_KEY_ID}"
         secretkey: "%{nest::service::registry::bucket_config.AWS_SECRET_ACCESS_KEY}"
-        region: not-important # Required parameter, but not used in current Ceph configuration
         regionendpoint: "%{nest::service::registry::bucket_config.BUCKET_HOST}"
         bucket: "%{nest::service::registry::bucket_config.BUCKET_NAME}"
         secure: false
