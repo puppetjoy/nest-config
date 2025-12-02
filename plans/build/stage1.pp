@@ -131,7 +131,7 @@ plan nest::build::stage1 (
 
     # XXX Cleanup
     if $refresh {
-      run_command('emerge --depclean sys-fs/zfs', $target, 'Clean up ZFS before refresh', _catch_errors => true)
+      run_command('emerge --unmerge sys-fs/zfs', $target, 'Clean up ZFS before refresh', _catch_errors => true)
     }
 
     # Make the system consistent with the profile

@@ -1,9 +1,14 @@
 class nest::service::libvirt {
   include 'nest'
 
+  $use = $facts['build'] ? {
+    'stage1' => ['firewalld'],
+    default  => ['firewalld', 'zfs'],
+  }
+
   nest::lib::package { 'app-emulation/libvirt':
     ensure => installed,
-    use    => 'firewalld',
+    use    => $use,
   }
 
   file { '/etc/libvirt/libvirt-guests.conf':
