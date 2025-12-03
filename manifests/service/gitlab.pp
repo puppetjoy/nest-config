@@ -14,6 +14,60 @@ class nest::service::gitlab (
 ) inherits nest {
   if defined(Class['nest::kubernetes']) {
     $ssh_private_key_base64 = base64('encode', $ssh_private_key.unwrap)
+
+    if $nest::kubernetes::service == $nest::kubernetes::main_service {
+      $bucket_user = nest::kubernetes::bucket_user(lookup('ceph_object_store'), $nest::kubernetes::service, lookup('ceph_namespace'))
+
+      $artifacts_bucket_config   = nest::kubernetes::bucket_config("${nest::kubernetes::service}-artifacts")
+      $backups_bucket_config     = nest::kubernetes::bucket_config("${nest::kubernetes::service}-backups")
+      $backups_tmp_bucket_config = nest::kubernetes::bucket_config("${nest::kubernetes::service}-backups-tmp")
+      $lfs_bucket_config         = nest::kubernetes::bucket_config("${nest::kubernetes::service}-lfs")
+      $packages_bucket_config    = nest::kubernetes::bucket_config("${nest::kubernetes::service}-packages")
+      $registry_bucket_config    = nest::kubernetes::bucket_config("${nest::kubernetes::service}-registry")
+      $uploads_bucket_config     = nest::kubernetes::bucket_config("${nest::kubernetes::service}-uploads")
+
+      $endpoint = $bucket_user['Endpoint']
+      $host_base = $endpoint.regsubst('^https?://', '')
+
+      # Expects s3cmd config
+      # see: https://docs.gitlab.com/charts/backup-restore/#backups-to-s3
+      # example: https://docs.gitlab.com/charts/advanced/external-object-storage/#backups-storage-example
+      $backups_config = @("S3CFG")
+        [default]
+        access_key = ${bucket_user['AccessKey']}
+        secret_key = ${bucket_user['SecretKey']}
+        host_base = ${host_base}
+        host_bucket = %(bucket)s.${host_base}
+        use_https = False
+        | S3CFG
+
+      # Object Storage connection for GitLab Rails
+      # see: https://docs.gitlab.com/charts/charts/globals/#connection
+      # example: https://gitlab.com/gitlab-org/charts/gitlab/-/blob/master/examples/objectstorage/rails.s3.yaml
+      $object_store_connection = @("YAML")
+        provider: AWS
+        aws_access_key_id: ${bucket_user['AccessKey']}
+        aws_secret_access_key: ${bucket_user['SecretKey']}
+        endpoint: ${endpoint}
+        | YAML
+
+      # Registry object storage config
+      # see: https://docs.gitlab.com/charts/charts/registry/#storage
+      # example: https://gitlab.com/gitlab-org/charts/gitlab/-/blob/master/examples/objectstorage/registry.s3.yaml
+      $registry_config = @("YAML")
+        s3:
+          accesskey: ${bucket_user['AccessKey']}
+          secretkey: ${bucket_user['SecretKey']}
+          region: not-important
+          regionendpoint: ${endpoint}
+          bucket: ${registry_bucket_config['BUCKET_NAME']}
+          secure: false
+        | YAML
+
+      $backups_config_base64          = base64('encode', $backups_config)
+      $object_store_connection_base64 = base64('encode', $object_store_connection)
+      $registry_config_base64         = base64('encode', $registry_config)
+    }
   } else {
     if empty($external_name) {
       fail('The external name must be set for the GitLab service')

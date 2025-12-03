@@ -2,6 +2,10 @@
 include:
   - 'nest::service::gitlab'
 
+bucket_storage_class: ceph-bucket
+ceph_namespace: rook-ceph
+ceph_object_store: ceph-objectstore
+
 resources:
   registry_auths: {}
   backup: {}
@@ -13,7 +17,86 @@ resources:
     apiVersion: v1
     kind: Secret
     metadata:
-      name: "%{nest::kubernetes::service}-gitlab-shell-host-keys"
+      name: "%{nest::kubernetes::main_service}-shell-host-keys"
       namespace: "%{nest::kubernetes::namespace}"
     data:
       ssh_host_ed25519_key: "%{nest::service::gitlab::ssh_private_key_base64}"
+
+  object-store-user:
+    apiVersion: ceph.rook.io/v1
+    kind: CephObjectStoreUser
+    metadata:
+      name: "%{nest::kubernetes::main_service}"
+      namespace: "%{lookup('ceph_namespace')}"
+    spec:
+      store: "%{lookup('ceph_object_store')}"
+
+  artifacts-bucket:
+    apiVersion: objectbucket.io/v1alpha1
+    kind: ObjectBucketClaim
+    metadata:
+      name: "%{nest::kubernetes::main_service}-artifacts-bucket" # used for the configmap and secret
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      generateBucketName: "%{nest::kubernetes::main_service}-artifacts"
+      storageClassName: "%{lookup('bucket_storage_class')}"
+
+  backups-bucket:
+    apiVersion: objectbucket.io/v1alpha1
+    kind: ObjectBucketClaim
+    metadata:
+      name: "%{nest::kubernetes::main_service}-backups-bucket"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      generateBucketName: "%{nest::kubernetes::main_service}-backups"
+      storageClassName: "%{lookup('bucket_storage_class')}"
+
+  backups-tmp-bucket:
+    apiVersion: objectbucket.io/v1alpha1
+    kind: ObjectBucketClaim
+    metadata:
+      name: "%{nest::kubernetes::main_service}-backups-tmp-bucket"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      generateBucketName: "%{nest::kubernetes::main_service}-backups-tmp"
+      storageClassName: "%{lookup('bucket_storage_class')}"
+
+  lfs-bucket:
+    apiVersion: objectbucket.io/v1alpha1
+    kind: ObjectBucketClaim
+    metadata:
+      name: "%{nest::kubernetes::main_service}-lfs-bucket"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      generateBucketName: "%{nest::kubernetes::main_service}-lfs"
+      storageClassName: "%{lookup('bucket_storage_class')}"
+
+  packages-bucket:
+    apiVersion: objectbucket.io/v1alpha1
+    kind: ObjectBucketClaim
+    metadata:
+      name: "%{nest::kubernetes::main_service}-packages-bucket"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      generateBucketName: "%{nest::kubernetes::main_service}-packages"
+      storageClassName: "%{lookup('bucket_storage_class')}"
+
+  registry-bucket:
+    apiVersion: objectbucket.io/v1alpha1
+    kind: ObjectBucketClaim
+    metadata:
+      name: "%{nest::kubernetes::main_service}-registry-bucket"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      generateBucketName: "%{nest::kubernetes::main_service}-registry"
+      storageClassName: "%{lookup('bucket_storage_class')}"
+
+  uploads-bucket:
+    apiVersion: objectbucket.io/v1alpha1
+    kind: ObjectBucketClaim
+    metadata:
+      name: "%{nest::kubernetes::main_service}-uploads-bucket"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      generateBucketName: "%{nest::kubernetes::main_service}-uploads"
+      storageClassName: "%{lookup('bucket_storage_class')}"

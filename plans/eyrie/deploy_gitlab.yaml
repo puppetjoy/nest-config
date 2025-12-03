@@ -10,6 +10,7 @@ parameters:
   namespace:
     description: 'Kubernetes namespace'
     type: String
+    # default: 'default'
     default: 'gitlab'
 
   resources:
@@ -48,6 +49,21 @@ steps:
       wait: $render_to == ''
       render_to: $render_to
 
+  - description: 'Authorize buckets'
+    plan: nest::kubernetes::authorize_bucket_user
+    parameters:
+      namespace: $namespace
+      user: $service
+      bucket:
+        - "${service}-artifacts"
+        - "${service}-backups"
+        - "${service}-backups-tmp"
+        - "${service}-lfs"
+        - "${service}-packages"
+        - "${service}-registry"
+        - "${service}-uploads"
+      authorize: $deploy and $resources
+
   - description: 'Deploy the instance'
     plan: nest::kubernetes::deploy
     parameters:
@@ -56,7 +72,7 @@ steps:
       app: 'gitlab'
       chart: 'gitlab/gitlab'
       repo_url: 'https://charts.gitlab.io/'
-      version: '8.9.0'
+      version: '9.6.1' # https://docs.gitlab.com/charts/installation/version_mappings/
       deploy: $deploy and $gitlab
       init: $init
       wait: $init

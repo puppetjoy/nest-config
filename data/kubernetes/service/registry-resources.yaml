@@ -9,7 +9,7 @@ resources:
     apiVersion: objectbucket.io/v1alpha1
     kind: ObjectBucketClaim
     metadata:
-      name: registry-bucket
+      name: registry-bucket # used for the configmap and secret
       namespace: "%{nest::kubernetes::namespace}"
     spec:
       generateBucketName: registry

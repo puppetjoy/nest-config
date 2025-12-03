@@ -4,6 +4,12 @@ class nest::kubernetes {
   $namespace      = $kubecm::deploy::namespace
   $parent_service = $kubecm::deploy::parent
 
+  # For resources deployments, derive main service name
+  # (e.g., gitlab-resources -> gitlab)
+  $main_service = $service.regsubst('-resources$', '')
+
+  # Different from service--the user-facing name
+  # (e.g., service = gitlab, service_name = gitlab-test)
   $service_name = lookup('service_name', default_value => $service)
 
   if $service_name {

@@ -1,4 +1,9 @@
 ---
+include:
+  - 'nest::service::gitlab'
+
+ceph_namespace: rook-ceph
+ceph_object_store: ceph-objectstore
 node_role: workstation
 
 resources:
@@ -20,6 +25,33 @@ resources:
         - "%{nest::kubernetes::service}.eyrie"
         - "*.%{nest::kubernetes::service}.eyrie"
 
+  backups-storage-secret:
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: "%{nest::kubernetes::service}-backups-storage"
+      namespace: "%{nest::kubernetes::namespace}"
+    data:
+      config: "%{nest::service::gitlab::backups_config_base64}"
+
+  object-storage-secret:
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: "%{nest::kubernetes::service}-object-storage"
+      namespace: "%{nest::kubernetes::namespace}"
+    data:
+      connection: "%{nest::service::gitlab::object_store_connection_base64}"
+
+  registry-storage-secret:
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: "%{nest::kubernetes::service}-registry-storage"
+      namespace: "%{nest::kubernetes::namespace}"
+    data:
+      config: "%{nest::service::gitlab::registry_config_base64}"
+
 values:
   global:
     edition: ce
@@ -32,13 +64,35 @@ values:
       configureCertmanager: false
       tls:
         secretName: "%{nest::kubernetes::service}-certs"
+    minio:
+      enabled: false
+    appConfig:
+      artifacts:
+        bucket: "%{nest::service::gitlab::artifacts_bucket_config.BUCKET_NAME}"
+        connection:
+          secret: "%{nest::kubernetes::service}-object-storage"
+      backups:
+        bucket: "%{nest::service::gitlab::backups_bucket_config.BUCKET_NAME}"
+        tmpBucket: "%{nest::service::gitlab::backups_tmp_bucket_config.BUCKET_NAME}"
+      lfs:
+        bucket: "%{nest::service::gitlab::lfs_bucket_config.BUCKET_NAME}"
+        connection:
+          secret: "%{nest::kubernetes::service}-object-storage"
+      packages:
+        bucket: "%{nest::service::gitlab::packages_bucket_config.BUCKET_NAME}"
+        connection:
+          secret: "%{nest::kubernetes::service}-object-storage"
+      uploads:
+        bucket: "%{nest::service::gitlab::uploads_bucket_config.BUCKET_NAME}"
+        connection:
+          secret: "%{nest::kubernetes::service}-object-storage"
+    registry:
+      bucket: "%{nest::service::gitlab::registry_bucket_config.BUCKET_NAME}"
     shell:
       hostKeys:
-        secret: "%{nest::kubernetes::service}-resources-gitlab-shell-host-keys"
+        secret: "%{nest::kubernetes::service}-shell-host-keys"
     storageClass: data-crypt
-  certmanager:
-    installCRDs: false
-    install: false
+  installCertmanager: false
   prometheus:
     server:
       persistentVolume:
@@ -47,14 +101,13 @@ values:
     gitaly:
       persistence:
         storageClass: data-crypt
+    toolbox:
+      backups:
+        objectStorage:
+          config:
+            secret: "%{nest::kubernetes::service}-backups-storage"
   gitlab-runner:
     install: false
-  minio:
-    ingress:
-      tls:
-        secretName: "%{nest::kubernetes::service}-certs"
-    persistence:
-      storageClass: data-crypt
   nginx-ingress:
     controller:
       service:
@@ -64,6 +117,8 @@ values:
     ingress:
       tls:
         secretName: "%{nest::kubernetes::service}-certs"
+    storage:
+      secret: "%{nest::kubernetes::service}-registry-storage"
 
 patches:
   # Supposedly there are global values for this, but I can't get them to work
