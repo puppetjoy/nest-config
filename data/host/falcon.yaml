@@ -2,7 +2,7 @@
 nest::classes:
   - 'nest::host::falcon'
   - 'nest::service::deskflow'
-  - 'nest::service::gitlab'
+  # - 'nest::service::gitlab'
   - 'nest::service::gitlab_runner'
   - 'nest::service::kubernetes'
   - 'nest::service::libvirt'
