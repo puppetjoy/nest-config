@@ -6,6 +6,7 @@ ceph_namespace: rook-ceph
 ceph_object_store: ceph-objectstore
 external_name: "%{nest::kubernetes::fqdn}"
 node_role: workstation
+service_name: "%{nest::kubernetes::service}"
 
 resources:
   backup: {}

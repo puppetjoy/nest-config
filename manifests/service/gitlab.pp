@@ -67,6 +67,12 @@ class nest::service::gitlab (
       $backups_config_base64          = base64('encode', $backups_config)
       $object_store_connection_base64 = base64('encode', $object_store_connection)
       $registry_config_base64         = base64('encode', $registry_config)
+
+      if $gmail_password {
+        $gmail_password_base64 = base64('encode', $gmail_password)
+      } else {
+        $gmail_password_base64 = undef
+      }
     }
   } else {
     if empty($external_name) {

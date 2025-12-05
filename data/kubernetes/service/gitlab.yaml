@@ -1,2 +1,29 @@
 ---
 external_name: gitlab.james.tl
+
+resources:
+  smtp-password:
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: "%{nest::kubernetes::service}-smtp-password"
+      namespace: "%{nest::kubernetes::namespace}"
+    data:
+      password: "%{nest::service::gitlab::gmail_password_base64}"
+
+values:
+  global:
+    email:
+      display_name: 'GitLab'
+      from: "%{lookup('service_name')}@james.tl"
+      reply_to: 'noreply@james.tl'
+    smtp:
+      enabled: true
+      address: smtp-relay.gmail.com
+      port: 587
+      starttls_auto: true
+      tls: false
+      authentication: login
+      user_name: "%{nest::service::gitlab::gmail_username}"
+      password:
+        secret: "%{nest::kubernetes::service}-smtp-password"
