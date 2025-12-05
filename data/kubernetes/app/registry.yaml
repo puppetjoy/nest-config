@@ -3,7 +3,7 @@ include:
   - 'nest::service::registry'
 
 service_name: "%{nest::kubernetes::service}"
-auth_service_name: "%{nest::kubernetes::service}-auth"
+auth_service_name: "auth.%{nest::kubernetes::service}"
 cert_issuer: eyrie-ca
 cert_issuer_kind: ClusterIssuer
 ingress_class: contour-workstation

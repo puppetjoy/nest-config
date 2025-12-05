@@ -69,7 +69,7 @@ nest::cnames:
   kubernetes.eyrie: 'ingress.eyrie'
   portfolio.eyrie: 'ingress.eyrie'
   registry.eyrie: 'ingress-workstations.eyrie'
-  registry-auth.eyrie: 'ingress-workstations.eyrie'
+  auth.registry.eyrie: 'ingress-workstations.eyrie'
   thestaticvoid.eyrie: 'ingress.eyrie'
 
   # Test kubernetes services
@@ -79,7 +79,7 @@ nest::cnames:
   kubernetes-test.eyrie: 'ingress-test.eyrie'
   portfolio-test.eyrie: 'ingress-test.eyrie'
   registry-test.eyrie: 'ingress-test.eyrie'
-  registry-auth-test.eyrie: 'ingress-test.eyrie'
+  auth.registry-test.eyrie: 'ingress-test.eyrie'
   thestaticvoid-test.eyrie: 'ingress-test.eyrie'
 
   # Legacy services
