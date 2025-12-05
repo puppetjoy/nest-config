@@ -145,12 +145,14 @@ nest::host_records:
   .objectstore-test.eyrie: '172.21.1.0'
   jump-test.eyrie: '172.21.1.1'
   gitlab-test.eyrie: '172.21.1.2'
+  registry.gitlab-test.eyrie: '172.21.1.2'
 
   # Workstation services
   ingress-workstations.eyrie: '172.21.2.0'
   objectstore.eyrie: '172.21.2.0'
   .objectstore.eyrie: '172.21.2.0'
   gitlab.eyrie: '172.21.2.1'
+  registry.gitlab.eyrie: '172.21.2.1'
 
 nest::nestfs_hostname: 'falcon.nest'
 
