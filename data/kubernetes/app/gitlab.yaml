@@ -4,6 +4,7 @@ include:
 
 ceph_namespace: rook-ceph
 ceph_object_store: ceph-objectstore
+external_name: "%{nest::kubernetes::fqdn}"
 node_role: workstation
 
 resources:
@@ -56,10 +57,13 @@ values:
   global:
     edition: ce
     hosts:
-      domain: "%{nest::kubernetes::service}.eyrie"
+      domain: "%{nest::kubernetes::fqdn}"
       gitlab:
-        name: "%{nest::kubernetes::service}.eyrie"
-      ssh: "%{nest::kubernetes::service}.eyrie"
+        name: "%{lookup('external_name')}"
+        hostnameOverride: "%{nest::kubernetes::fqdn}"
+      registry:
+        name: "registry.%{lookup('external_name')}"
+      ssh: "%{lookup('external_name')}"
     ingress:
       configureCertmanager: false
       tls:
@@ -114,11 +118,14 @@ values:
         annotations:
           'metallb.universe.tf/loadBalancerIPs': "%{nest::kubernetes::load_balancer_ip}"
   registry:
+    hostname: "registry.%{nest::kubernetes::fqdn}"
     ingress:
       tls:
         secretName: "%{nest::kubernetes::service}-certs"
     storage:
       secret: "%{nest::kubernetes::service}-registry-storage"
+      redirect:
+        disable: true
 
 patches:
   # Supposedly there are global values for this, but I can't get them to work
@@ -161,3 +168,17 @@ patches:
         template:
           spec:
             enableServiceLinks: false
+
+  10-registry-ingress-override:
+    - patch:
+        - op: replace
+          path: /spec/rules/0/host
+          value: "registry.%{nest::kubernetes::fqdn}"
+        - op: replace
+          path: /spec/tls/0/hosts/0
+          value: "registry.%{nest::kubernetes::fqdn}"
+      target:
+        group: networking.k8s.io
+        version: v1
+        kind: Ingress
+        name: "%{nest::kubernetes::service}-registry"
