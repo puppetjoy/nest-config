@@ -8,7 +8,6 @@ external_name: "%{nest::kubernetes::fqdn}"
 node_role: workstation
 
 resources:
-  registry_auths: {}
   backup: {}
 
   certs:
@@ -110,6 +109,11 @@ values:
         objectStorage:
           config:
             secret: "%{nest::kubernetes::service}-backups-storage"
+    webservice:
+      image:
+        pullSecrets:
+          - name: "%{nest::kubernetes::service}-registry-auths"
+        repository: registry.eyrie/nest/forks/gitlab-webservice
   gitlab-runner:
     install: false
   nginx-ingress:
