@@ -147,3 +147,17 @@ patches:
                 effect: NoSchedule
     target:
       kind: (Deployment|StatefulSet|Job)
+
+  # Disable Kubernetes service-link environment variables to prevent REGISTRY_*
+  # collisions that break GitLab Registry startup.
+  10-registry-disable-service-links:
+    patch:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: "%{nest::kubernetes::service}-registry"
+        namespace: "%{nest::kubernetes::namespace}"
+      spec:
+        template:
+          spec:
+            enableServiceLinks: false

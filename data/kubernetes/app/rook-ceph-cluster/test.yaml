@@ -1,6 +1,5 @@
 ---
 node_role: workstation
-ssd_storage_class: data-crypt-async-block # SSD pool can't handle the sync load
 ssd_volume_size: 10Gi
 hdd_volume_size: 100Gi
 service_name: "%{nest::kubernetes::service}-%{nest::kubernetes::namespace}"

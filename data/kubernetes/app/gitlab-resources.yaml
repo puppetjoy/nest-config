@@ -40,6 +40,8 @@ resources:
     spec:
       generateBucketName: "%{nest::kubernetes::main_service}-artifacts"
       storageClassName: "%{lookup('bucket_storage_class')}"
+      additionalConfig:
+        bucketOwner: "%{nest::kubernetes::main_service}"
 
   backups-bucket:
     apiVersion: objectbucket.io/v1alpha1
@@ -50,6 +52,8 @@ resources:
     spec:
       generateBucketName: "%{nest::kubernetes::main_service}-backups"
       storageClassName: "%{lookup('bucket_storage_class')}"
+      additionalConfig:
+        bucketOwner: "%{nest::kubernetes::main_service}"
 
   backups-tmp-bucket:
     apiVersion: objectbucket.io/v1alpha1
@@ -60,6 +64,8 @@ resources:
     spec:
       generateBucketName: "%{nest::kubernetes::main_service}-backups-tmp"
       storageClassName: "%{lookup('bucket_storage_class')}"
+      additionalConfig:
+        bucketOwner: "%{nest::kubernetes::main_service}"
 
   lfs-bucket:
     apiVersion: objectbucket.io/v1alpha1
@@ -70,6 +76,8 @@ resources:
     spec:
       generateBucketName: "%{nest::kubernetes::main_service}-lfs"
       storageClassName: "%{lookup('bucket_storage_class')}"
+      additionalConfig:
+        bucketOwner: "%{nest::kubernetes::main_service}"
 
   packages-bucket:
     apiVersion: objectbucket.io/v1alpha1
@@ -80,6 +88,8 @@ resources:
     spec:
       generateBucketName: "%{nest::kubernetes::main_service}-packages"
       storageClassName: "%{lookup('bucket_storage_class')}"
+      additionalConfig:
+        bucketOwner: "%{nest::kubernetes::main_service}"
 
   registry-bucket:
     apiVersion: objectbucket.io/v1alpha1
@@ -90,6 +100,8 @@ resources:
     spec:
       generateBucketName: "%{nest::kubernetes::main_service}-registry"
       storageClassName: "%{lookup('bucket_storage_class')}"
+      additionalConfig:
+        bucketOwner: "%{nest::kubernetes::main_service}"
 
   uploads-bucket:
     apiVersion: objectbucket.io/v1alpha1
@@ -100,3 +112,5 @@ resources:
     spec:
       generateBucketName: "%{nest::kubernetes::main_service}-uploads"
       storageClassName: "%{lookup('bucket_storage_class')}"
+      additionalConfig:
+        bucketOwner: "%{nest::kubernetes::main_service}"

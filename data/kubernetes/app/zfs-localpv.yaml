@@ -38,17 +38,6 @@ resources:
       provisioner: zfs.csi.openebs.io
       volumeBindingMode: WaitForFirstConsumer
 
-    # async pool sets `sync=disabled`
-    - apiVersion: storage.k8s.io/v1
-      kind: StorageClass
-      metadata:
-        name: data-crypt-async-block
-      allowVolumeExpansion: true
-      parameters:
-        poolname: data/crypt/async/kubernetes
-      provisioner: zfs.csi.openebs.io
-      volumeBindingMode: WaitForFirstConsumer
-
     - apiVersion: storage.k8s.io/v1
       kind: StorageClass
       metadata:

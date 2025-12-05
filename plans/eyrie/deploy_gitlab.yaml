@@ -10,8 +10,7 @@ parameters:
   namespace:
     description: 'Kubernetes namespace'
     type: String
-    # default: 'default'
-    default: 'gitlab'
+    default: 'default'
 
   resources:
     description: 'Deploy resources'
@@ -48,21 +47,6 @@ steps:
       deploy: $deploy and $resources
       wait: $render_to == ''
       render_to: $render_to
-
-  - description: 'Authorize buckets'
-    plan: nest::kubernetes::authorize_bucket_user
-    parameters:
-      namespace: $namespace
-      user: $service
-      bucket:
-        - "${service}-artifacts"
-        - "${service}-backups"
-        - "${service}-backups-tmp"
-        - "${service}-lfs"
-        - "${service}-packages"
-        - "${service}-registry"
-        - "${service}-uploads"
-      authorize: $deploy and $resources
 
   - description: 'Deploy the instance'
     plan: nest::kubernetes::deploy

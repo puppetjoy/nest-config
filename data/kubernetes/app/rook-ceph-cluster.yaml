@@ -5,7 +5,7 @@ ssd_storage_class: data-crypt-block
 ssd_volume_size: 64Gi
 hdd_node_role: workstation
 hdd_storage_class: nest-crypt-block
-hdd_volume_size: 256Gi
+hdd_volume_size: 1Ti
 service_name: "%{nest::kubernetes::service}"
 cert_issuer: eyrie-ca
 cert_issuer_kind: ClusterIssuer
