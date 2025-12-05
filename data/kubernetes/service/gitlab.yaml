@@ -6,13 +6,23 @@ resources:
     apiVersion: v1
     kind: Secret
     metadata:
-      name: "%{nest::kubernetes::service}-smtp-password"
+      name: "%{nest::kubernetes::service}-gmail-password"
       namespace: "%{nest::kubernetes::namespace}"
     data:
       password: "%{nest::service::gitlab::gmail_password_base64}"
 
 values:
   global:
+    appConfig:
+      incomingEmail:
+        enabled: true
+        address: "%{lookup('service_name')}+%{literal('%')}{key}@james.tl"
+        expungeDeleted: true
+        host: imap.gmail.com
+        mailbox: GitLab
+        user: "%{nest::service::gitlab::gmail_username}"
+        password:
+          secret: "%{nest::kubernetes::service}-gmail-password"
     email:
       display_name: 'GitLab'
       from: "%{lookup('service_name')}@james.tl"
@@ -26,4 +36,4 @@ values:
       authentication: login
       user_name: "%{nest::service::gitlab::gmail_username}"
       password:
-        secret: "%{nest::kubernetes::service}-smtp-password"
+        secret: "%{nest::kubernetes::service}-gmail-password"
