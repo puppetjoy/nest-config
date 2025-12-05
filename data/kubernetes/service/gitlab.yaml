@@ -13,16 +13,6 @@ resources:
 
 values:
   global:
-    appConfig:
-      incomingEmail:
-        enabled: true
-        address: "%{lookup('service_name')}+%{literal('%')}{key}@james.tl"
-        expungeDeleted: true
-        host: imap.gmail.com
-        mailbox: GitLab
-        user: "%{nest::service::gitlab::gmail_username}"
-        password:
-          secret: "%{nest::kubernetes::service}-gmail-password"
     email:
       display_name: 'GitLab'
       from: "%{lookup('service_name')}@james.tl"
