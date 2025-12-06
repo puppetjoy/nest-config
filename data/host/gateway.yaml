@@ -39,7 +39,11 @@ nest::service::reverse_proxy::hosts:
   registry.gitlab.joyfullee.me:
     destination: 'registry.gitlab.eyrie'
     ip: ['45.77.109.122', '2001:19f0:1000:22c0::122']
-    serveraliases: ['registry.gitlab.james.tl']
+    proxy_ssl: true
+
+  registry.gitlab.james.tl:
+    destination: 'registry.gitlab.eyrie'
+    ip: ['45.77.109.122', '2001:19f0:1000:22c0::122']
     proxy_ssl: true
 
   requests.thesatelliteoflove.net:
