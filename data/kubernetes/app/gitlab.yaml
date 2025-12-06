@@ -114,7 +114,8 @@ values:
       image:
         pullSecrets:
           - name: "%{nest::kubernetes::service}-registry-auths"
-        repository: registry.eyrie/nest/forks/gitlab-webservice
+      workhorse:
+        image: registry.eyrie/nest/forks/gitlab-workhorse
   gitlab-runner:
     install: false
   nginx-ingress:
