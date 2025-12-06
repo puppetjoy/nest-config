@@ -27,18 +27,22 @@ nest::service::gateway::port_forwards:
   #   to_port: 59650
 
 nest::service::reverse_proxy::hosts:
-  gitlab.james.tl:
+  gitlab.joyfullee.me:
     destination: 'gitlab.eyrie'
     ip: ['45.77.109.122', '2001:19f0:1000:22c0::122']
+    serveraliases: ['gitlab.james.tl']
     encoded_slashes: true
     proxy_ssl: true
     timeout: 300
     websockets: true
+    ssl: false
 
-  registry.gitlab.james.tl:
+  registry.gitlab.joyfullee.me:
     destination: 'registry.gitlab.eyrie'
     ip: ['45.77.109.122', '2001:19f0:1000:22c0::122']
+    serveraliases: ['registry.gitlab.james.tl']
     proxy_ssl: true
+    ssl: false
 
   requests.thesatelliteoflove.net:
     destination: 'ombi.nest'
@@ -51,14 +55,16 @@ nest::service::reverse_proxy::hosts:
     proxy_ssl: true
 
   # Wordpress sites
-  james.tl:
+  www.joyfullee.me:
     destination: 'portfolio.eyrie'
-    docroot: '/nest/www/james.tl'
+    docroot: '/nest/www/joyfullee.me'
     ip: ['45.77.109.122', '2001:19f0:1000:22c0::122']
+    serveraliases: ['joyfullee.me', 'james.tl', 'www.james.tl']
     priority: '20'  # higher priority
     proxy_ssl: true
     serve_local: true
     timeout: 600
+    ssl: false
 
   thestaticvoid.com:
     destination: 'thestaticvoid.eyrie'
