@@ -1,9 +1,15 @@
 class nest::base::ssh {
+  $ssh_config = @(SSH_CONFIG)
+    Host gitlab.joyfullee.me gitlab.james.tl
+        Hostname gitlab.eyrie.
+    | SSH_CONFIG
+
   case $facts['os']['family'] {
     'Gentoo': {
       $package_name     = 'net-misc/openssh'
       $package_provider = undef
       $sshdir           = '/etc/ssh'
+      $ssh_config_file  = "${sshdir}/ssh_config.d/10-nest.conf"
       $service_name     = 'sshd'
       $service_ensure   = undef
 
@@ -47,6 +53,7 @@ class nest::base::ssh {
       $package_name     = 'openssh'
       $package_provider = 'cygwin'
       $sshdir           = 'C:/tools/cygwin/etc'
+      $ssh_config_file  = "${sshdir}/ssh_config"
       $service_name     = 'cygsshd'
       $service_ensure   = undef
 
@@ -124,6 +131,11 @@ class nest::base::ssh {
   service { $service_name:
     ensure => $service_ensure,
     enable => true,
+  }
+
+  file { $ssh_config_file:
+    mode    => '0644',
+    content => $ssh_config,
   }
 
   # Deploy host private key to final stage images
