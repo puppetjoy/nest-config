@@ -124,17 +124,19 @@ nest::service::reverse_proxy::hosts:
     ip: '172.22.4.2'
     ssl: false
 
-  gitlab.james.tl:
+  gitlab.joyfullee.me:
     destination: 'gitlab.eyrie'
     ip: '172.22.4.2'
+    serveraliases: ['gitlab.james.tl']
     encoded_slashes: true
     proxy_ssl: true
     timeout: 300
     websockets: true
 
-  registry.gitlab.james.tl:
+  registry.gitlab.joyfullee.me:
     destination: 'registry.gitlab.eyrie'
     ip: '172.22.4.2'
+    serveraliases: ['registry.gitlab.james.tl']
     proxy_ssl: true
 
   cursivemoves.nest:
