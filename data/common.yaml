@@ -85,6 +85,7 @@ nest::cnames:
   # Legacy services
   cursivemoves.nest: 'falcon.nest'
   gitlab.james.tl: 'falcon.nest'
+  gitlab.joyfullee.me: 'falcon.nest'
   nzbget.nest: 'falcon.nest'
   ombi.nest: 'falcon.nest'
   plex.nest: 'falcon.nest'
@@ -92,6 +93,7 @@ nest::cnames:
   puppetdb.nest: 'falcon.nest'
   radarr.nest: 'falcon.nest'
   registry.gitlab.james.tl: 'falcon.nest'
+  registry.gitlab.joyfullee.me: 'falcon.nest'
   smtp.nest: 'falcon.nest'
   sonarr.nest: 'falcon.nest'
 
