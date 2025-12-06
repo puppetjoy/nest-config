@@ -30,7 +30,7 @@ class nest::base::cli {
   }
 
   # Fix broken argument processing with grub-mkrescue(1)
-  # See: https://gitlab.james.tl/nest/cli/-/issues/26
+  # See: https://gitlab.joyfullee.me/nest/cli/-/issues/26
   file { '/usr/local/bin/xorriso':
     mode    => '0755',
     owner   => 'root',

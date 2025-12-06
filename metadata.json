@@ -4,9 +4,9 @@
   "author": "joy",
   "summary": "Configures personal systems of Joyful Lee",
   "license": "Apache-2.0",
-  "source": "https://gitlab.james.tl/nest/config.git",
-  "project_page": "https://gitlab.james.tl/nest/config",
-  "issues_url": "https://gitlab.james.tl/nest/config/-/issues",
+  "source": "https://gitlab.joyfullee.me/nest/config.git",
+  "project_page": "https://gitlab.joyfullee.me/nest/config",
+  "issues_url": "https://gitlab.joyfullee.me/nest/config/-/issues",
   "dependencies": [
     {
       "name": "puppetlabs-stdlib",

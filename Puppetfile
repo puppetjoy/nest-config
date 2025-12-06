@@ -13,13 +13,13 @@ mod 'puppetlabs-zfs_core', '1.4.0'
 
 # Bolt modules
 #mod 'jtl-kubecm', '0.1.1'
-mod 'kubecm', :git => 'git@gitlab.james.tl:joy/kubecm.git', :branch => 'main'
-mod 'reboot', :git => 'git@gitlab.james.tl:nest/forks/puppet-reboot.git', :branch => 'main'
+mod 'kubecm', :git => 'git@gitlab.joyfullee.me:joy/kubecm.git', :branch => 'main'
+mod 'reboot', :git => 'git@gitlab.joyfullee.me:nest/forks/puppet-reboot.git', :branch => 'main'
 mod 'puppetlabs-ruby_task_helper', '0.6.1'
 
 # My modules
-mod 'nest', :git => 'git@gitlab.james.tl:nest/config.git', :branch => :control_branch, :default_branch => 'main'
-mod 'private', :git => 'git@gitlab.james.tl:nest/private.git', :branch => 'main'
+mod 'nest', :git => 'git@gitlab.joyfullee.me:nest/config.git', :branch => :control_branch, :default_branch => 'main'
+mod 'private', :git => 'git@gitlab.joyfullee.me:nest/private.git', :branch => 'main'
 
 # Required by nest
 mod 'puppet-archive', '7.1.0'
@@ -29,14 +29,14 @@ mod 'puppetlabs-apache', '12.2.0'
 mod 'puppetlabs-inifile', '6.1.0'
 mod 'puppetlabs-mysql', '15.0.0'
 mod 'puppetlabs-powershell', '6.0.0'
-mod 'puppetlabs-vcsrepo', :git => 'git@gitlab.james.tl:nest/forks/puppet-vcsrepo.git', :branch => 'main'
-mod 'puppet-firewalld', :git => 'git@gitlab.james.tl:nest/forks/puppet-firewalld.git', :branch => 'fix-new-zone-creation'
+mod 'puppetlabs-vcsrepo', :git => 'git@gitlab.joyfullee.me:nest/forks/puppet-vcsrepo.git', :branch => 'main'
+mod 'puppet-firewalld', :git => 'git@gitlab.joyfullee.me:nest/forks/puppet-firewalld.git', :branch => 'fix-new-zone-creation'
 mod 'puppet-nodejs', '10.0.0'
 mod 'puppet-systemd', '7.1.0'
 mod 'puppetlabs-windows_env', '5.0.0'
 mod 'puppet-windows_firewall', '4.1.0'
 mod 'theforeman-puppet', '18.0.0'
-mod 'portage', :git => 'git@gitlab.james.tl:nest/forks/puppet-portage.git', :branch => 'main'
+mod 'portage', :git => 'git@gitlab.joyfullee.me:nest/forks/puppet-portage.git', :branch => 'main'
 
 # Required by puppetlabs-chocolatey and puppet-windows_firewall
 mod 'puppetlabs-registry', '5.0.1'

@@ -21,7 +21,7 @@ class nest::base::mta::nullmailer (
         ;
 
         '/etc/nullmailer/adminaddr':
-          content => "james@james.tl\n",
+          content => "nest@joyfullee.me\n",
         ;
 
         '/etc/nullmailer/defaultdomain':

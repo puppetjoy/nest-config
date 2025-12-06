@@ -15,7 +15,7 @@ class nest::base::bootloader::uroot {
   }
 
   nest::lib::src_repo { '/usr/src/u-root':
-    url => 'https://gitlab.james.tl/nest/forks/u-root.git',
+    url => 'https://gitlab.joyfullee.me/nest/forks/u-root.git',
     ref => $nest::uroot_tag,
   }
   ~>
@@ -40,7 +40,7 @@ class nest::base::bootloader::uroot {
   }
 
   nest::lib::src_repo { '/usr/src/u-root-linux':
-    url => 'https://gitlab.james.tl/nest/forks/linux.git',
+    url => 'https://gitlab.joyfullee.me/nest/forks/linux.git',
     ref => $nest::kernel_tag,
   }
   ~>

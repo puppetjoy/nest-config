@@ -57,7 +57,7 @@ nest::reset_filter_rules:
   - 'P /var/lib/libvirt/**'
   - 'P /var/lib/samba/**'
 
-nest::service::gitlab_runner::host: 'gitlab.james.tl'
+nest::service::gitlab_runner::host: 'gitlab.joyfullee.me'
 nest::service::gitlab_runner::instances:
   runner:
     bolt: true
@@ -81,7 +81,7 @@ nest::service::gitlab_runner::instances:
     qemu: true
 
   r10k:
-    default_image: 'registry.gitlab.james.tl/nest/tools/r10k:haswell'
+    default_image: 'registry.gitlab.joyfullee.me/nest/tools/r10k:haswell'
     volumes:
       - '/srv/puppet/code:/etc/puppetlabs/code'
       - '/srv/puppet/r10k/config:/etc/puppetlabs/r10k:ro'

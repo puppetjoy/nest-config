@@ -21,8 +21,8 @@ fixtures:
     systemd: 'puppet/systemd'
     registry: 'puppetlabs/registry'
   repositories:
-    vcsrepo: 'https://gitlab.james.tl/nest/forks/puppet-vcsrepo.git'
+    vcsrepo: 'https://gitlab.joyfullee.me/nest/forks/puppet-vcsrepo.git'
     firewalld:
-      repo: 'https://gitlab.james.tl/nest/forks/puppet-firewalld.git'
+      repo: 'https://gitlab.joyfullee.me/nest/forks/puppet-firewalld.git'
       branch: 'fix-new-zone-creation'
-    portage: 'https://gitlab.james.tl/nest/forks/puppet-portage.git'
+    portage: 'https://gitlab.joyfullee.me/nest/forks/puppet-portage.git'

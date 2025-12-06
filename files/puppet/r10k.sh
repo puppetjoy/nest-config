@@ -4,8 +4,8 @@
 #
 # Run a custom r10k container image that supports all of the Nest platforms.
 #
-# See: https://gitlab.james.tl/nest/tools/r10k
-# See: https://gitlab.james.tl/nest/config/-/blob/main/manifests/service/puppet.pp
+# See: https://gitlab.joyfullee.me/nest/tools/r10k
+# See: https://gitlab.joyfullee.me/nest/config/-/blob/main/manifests/service/puppet.pp
 #
 
 exec podman run --rm --dns 172.22.4.3 \

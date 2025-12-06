@@ -52,7 +52,7 @@ lookup_options:
     merge: 'hash'
     convert_to: 'Sensitive'
 
-nest::build::registry: 'registry.gitlab.james.tl'
+nest::build::registry: 'registry.gitlab.joyfullee.me'
 
 nest::build::qemu_user_targets: &qemu_user_targets
   - 'aarch64'
@@ -107,7 +107,7 @@ nest::distcc_hosts:
 # 10–99: fixed DHCP for cluster nodes
 # 100–254: dynamic DHCP
 # Hostnames in roughly alphabetical + chronological order
-# See: https://gitlab.james.tl/nest/config/-/wikis/Hosts#addressing-philosophy
+# See: https://gitlab.joyfullee.me/nest/config/-/wikis/Hosts#addressing-philosophy
 nest::fixed_ips:
   bastion: '172.22.4.5'
   # 172.22.4.6 reserved for future infra (bastion2 / mgmt / whatever)
@@ -160,11 +160,10 @@ nest::nestfs_hostname: 'falcon.nest'
 
 nest::openvpn_servers:
   - 'kestrel.home'
-  - 'nest-ext.james.tl'
+  - 'nest-ext.joyfullee.me'
 
 nest::ssh_host_keys:
-  '*.nest,*.eyrie,*.cluster.local,*.james.tl,localhost': ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL8IV6XOFkcGWKuvfpbEixC7KPDKpfxPGGownlkEVWzw
-  'gitlab.james.tl,[falcon.nest]:2222': ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJKT9+cIWglolZpJnoaY+NJ8rEwlqVyqPtgpocRGaInW
+  '*.nest,*.eyrie,*.cluster.local,*.joyfullee.me,localhost': ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL8IV6XOFkcGWKuvfpbEixC7KPDKpfxPGGownlkEVWzw
   github.com: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl
   unifi.home: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAPx6R+bs1IAfvykJxCN18uQ0qmNts8P1b300HNt0PNr
   gateway.home: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOxXStSLn3YEuZuyAJdUZBZLmWMjqP49FUkOd2r7R29w

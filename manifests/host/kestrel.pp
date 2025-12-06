@@ -1,6 +1,6 @@
 class nest::host::kestrel {
   # Workaround usbnet hang at boot
-  # See: https://gitlab.james.tl/nest/config/-/issues/64
+  # See: https://gitlab.joyfullee.me/nest/config/-/issues/64
   file { '/usr/local/bin/usb_resetter':
     mode   => '0755',
     owner  => 'root',

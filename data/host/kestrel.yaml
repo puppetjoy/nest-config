@@ -23,7 +23,7 @@ nest::dtb_overlay: |
       };
   };
 
-nest::service::gitlab_runner::host: 'gitlab.james.tl'
+nest::service::gitlab_runner::host: 'gitlab.joyfullee.me'
 nest::service::gitlab_runner::instances:
   builder:
     limit: 4

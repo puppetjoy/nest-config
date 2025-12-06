@@ -16,7 +16,7 @@ class nest::firmware::arm {
   }
 
   nest::lib::src_repo { '/usr/src/arm-trusted-firmware':
-    url => 'https://gitlab.james.tl/nest/forks/arm-trusted-firmware.git',
+    url => 'https://gitlab.joyfullee.me/nest/forks/arm-trusted-firmware.git',
     ref => $nest::arm_firmware_tag,
   }
   ~>

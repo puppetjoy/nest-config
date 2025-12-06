@@ -145,17 +145,17 @@ class nest::base::portage {
 
   nest::lib::repo {
     'gentoo':
-      url     => 'https://gitlab.james.tl/nest/gentoo/portage.git',
+      url     => 'https://gitlab.joyfullee.me/nest/gentoo/portage.git',
       default => true,
     ;
 
     'haskell':
-      url      => 'https://gitlab.james.tl/nest/gentoo/haskell.git',
+      url      => 'https://gitlab.joyfullee.me/nest/gentoo/haskell.git',
       unstable => true,
     ;
 
     'nest':
-      url      => 'https://gitlab.james.tl/nest/overlay.git',
+      url      => 'https://gitlab.joyfullee.me/nest/overlay.git',
       unstable => true,
     ;
   }

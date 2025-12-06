@@ -104,7 +104,7 @@ class nest::firmware::uboot {
   }
 
   nest::lib::src_repo { '/usr/src/u-boot':
-    url => 'https://gitlab.james.tl/nest/forks/u-boot.git',
+    url => 'https://gitlab.joyfullee.me/nest/forks/u-boot.git',
     ref => $nest::uboot_tag,
   }
   ~>

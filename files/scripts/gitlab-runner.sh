@@ -1,7 +1,7 @@
 #!/bin/zsh
 #
 # GitLab Runner container wrapper
-# See: https://gitlab.james.tl/nest/config/-/blob/main/manifests/service/gitlab_runner.pp
+# See: https://gitlab.joyfullee.me/nest/config/-/blob/main/manifests/service/gitlab_runner.pp
 #
 
 exec podman run --rm -it -e TERM \

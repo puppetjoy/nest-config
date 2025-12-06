@@ -64,7 +64,7 @@ class nest::base::mta::postfix (
         ;
 
         'virtual':
-          content => "@${trusted['certname']}.nest james@james.tl\n",
+          content => "@${trusted['certname']}.nest nest@joyfullee.me\n",
         ;
       }
       ->

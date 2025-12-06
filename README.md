@@ -6,7 +6,7 @@ Automation for my personal Linux distribution based on Gentoo
 
 ## Overview
 
-This is a standard [Puppet module](https://www.puppet.com/docs/puppet/latest/modules_fundamentals.html) that provides all the configuration, data, and orchestration needed to build and maintain the [Nest distribution](https://james.tl/projects/nest/). It's also a [Bolt project](https://www.puppet.com/docs/bolt/latest/projects.html) for operational support and a [control repo](https://www.puppet.com/docs/pe/latest/control_repo.html) for desired state management.
+This is a standard [Puppet module](https://www.puppet.com/docs/puppet/latest/modules_fundamentals.html) that provides all the configuration, data, and orchestration needed to build and maintain the [Nest distribution](https://www.joyfullee.me/projects/nest/). It's also a [Bolt project](https://www.puppet.com/docs/bolt/latest/projects.html) for operational support and a [control repo](https://www.puppet.com/docs/pe/latest/control_repo.html) for desired state management.
 
 ## Usage
 
@@ -42,10 +42,10 @@ This configuration works with several other projects that provide data and logis
 
 These projects provide pipeline automation and container registries for the OS build:
 
-* [**Stage 0**](https://gitlab.james.tl/nest/stage0): Updated Gentoo Stage 3 images containing Puppet
-* [**Stage 1**](https://gitlab.james.tl/nest/stage1): Basic images intended for containers
-* [**Stage 2**](https://gitlab.james.tl/nest/stage2): Platform-specific images with kernels
-* [**Stage 3**](https://gitlab.james.tl/nest/stage3): Complete images for specific hosts
+* [**Stage 0**](https://gitlab.joyfullee.me/nest/stage0): Updated Gentoo Stage 3 images containing Puppet
+* [**Stage 1**](https://gitlab.joyfullee.me/nest/stage1): Basic images intended for containers
+* [**Stage 2**](https://gitlab.joyfullee.me/nest/stage2): Platform-specific images with kernels
+* [**Stage 3**](https://gitlab.joyfullee.me/nest/stage3): Complete images for specific hosts
 
 They use data and plans from this project.
 
@@ -53,12 +53,12 @@ They use data and plans from this project.
 
 These repositories provide package management configuration data:
 
-* [**Gentoo**](https://gitlab.james.tl/nest/gentoo/portage): Snapshot of the Gentoo Portage tree
-* [**Haskell**](https://gitlab.james.tl/nest/gentoo/haskell): Snapshot of [the Gentoo Haskell tree](https://github.com/gentoo-haskell/gentoo-haskell)
-* [**Overlay**](https://gitlab.james.tl/nest/overlay): Custom ebuilds and profiles
+* [**Gentoo**](https://gitlab.joyfullee.me/nest/gentoo/portage): Snapshot of the Gentoo Portage tree
+* [**Haskell**](https://gitlab.joyfullee.me/nest/gentoo/haskell): Snapshot of [the Gentoo Haskell tree](https://github.com/gentoo-haskell/gentoo-haskell)
+* [**Overlay**](https://gitlab.joyfullee.me/nest/overlay): Custom ebuilds and profiles
 
 ### Tools
 
-* [**CLI**](https://gitlab.james.tl/nest/cli) ([GitHub](https://github.com/jameslikeslinux/nest-cli)): Commands for Nest administration
-* [**Dotfiles**](https://gitlab.james.tl/james/dotfiles) ([GitHub](https://github.com/jameslikeslinux/dotfiles)): Dotfiles and other shared home directory things
-* [**KubeCM**](https://gitlab.james.tl/james/kubecm) ([GitHub](https://github.com/jameslikeslinux/kubecm)): Orchestration for Kubernetes deployments
+* [**CLI**](https://gitlab.joyfullee.me/nest/cli) ([GitHub](https://github.com/jameslikeslinux/nest-cli)): Commands for Nest administration
+* [**Dotfiles**](https://gitlab.joyfullee.me/james/dotfiles) ([GitHub](https://github.com/jameslikeslinux/dotfiles)): Dotfiles and other shared home directory things
+* [**KubeCM**](https://gitlab.joyfullee.me/james/kubecm) ([GitHub](https://github.com/jameslikeslinux/kubecm)): Orchestration for Kubernetes deployments

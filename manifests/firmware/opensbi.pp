@@ -15,7 +15,7 @@ class nest::firmware::opensbi {
   }
 
   nest::lib::src_repo { '/usr/src/opensbi':
-    url => 'https://gitlab.james.tl/nest/forks/opensbi.git',
+    url => 'https://gitlab.joyfullee.me/nest/forks/opensbi.git',
     ref => $nest::opensbi_tag,
   }
   ~>

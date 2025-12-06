@@ -7,7 +7,7 @@ class nest::firmware::sophgo {
   }
 
   nest::lib::src_repo { '/usr/src/fip':
-    url => 'https://gitlab.james.tl/nest/forks/fip.git',
+    url => 'https://gitlab.joyfullee.me/nest/forks/fip.git',
     ref => 'sophgo',
   }
   ->

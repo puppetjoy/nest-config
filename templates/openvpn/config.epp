@@ -58,14 +58,14 @@ keepalive 5 15
 # Sync with pushed options below
 dhcp-option DOMAIN nest
 dhcp-option DOMAIN eyrie
-dhcp-option DOMAIN james.tl
+dhcp-option DOMAIN joyfullee.me
 dhcp-option DNS 172.22.0.1
 
     <%- } -%>
 # Windows only honors the last domain pushed
 push "dhcp-option DOMAIN nest"
 push "dhcp-option DOMAIN eyrie"
-push "dhcp-option DOMAIN james.tl"
+push "dhcp-option DOMAIN joyfullee.me"
 push "dhcp-option DNS 172.22.0.1"
 
 # Preferred routes are < 100 on Gentoo and Windows

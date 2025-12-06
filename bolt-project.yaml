@@ -11,11 +11,11 @@ log:
 modules:
   # - name: jtl-kubecm
   - name: kubecm
-    git: git@gitlab.james.tl:joy/kubecm.git
+    git: git@gitlab.joyfullee.me:joy/kubecm.git
     ref: main
     resolve: false
   - name: reboot
-    git: git@gitlab.james.tl:nest/forks/puppet-reboot.git
+    git: git@gitlab.joyfullee.me:nest/forks/puppet-reboot.git
     ref: main
     resolve: false
   - puppetlabs-ruby_task_helper

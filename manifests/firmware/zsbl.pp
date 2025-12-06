@@ -8,7 +8,7 @@ class nest::firmware::zsbl {
   }
 
   nest::lib::src_repo { '/usr/src/zsbl':
-    url => 'https://gitlab.james.tl/nest/forks/zsbl.git',
+    url => 'https://gitlab.joyfullee.me/nest/forks/zsbl.git',
     ref => 'sophgo-nest',
   }
   ~>

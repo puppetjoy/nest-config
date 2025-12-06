@@ -17,4 +17,4 @@ BUILD_ID=<%= $build_id %>
 IMAGE_ID=<%= $image_id %>
 <% } -%>
 ANSI_COLOR="1;35"
-BUG_REPORT_URL="https://gitlab.james.tl/nest/config/-/issues"
+BUG_REPORT_URL="https://gitlab.joyfullee.me/nest/config/-/issues"

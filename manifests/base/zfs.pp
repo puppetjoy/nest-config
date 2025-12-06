@@ -6,7 +6,7 @@ class nest::base::zfs {
     $zfs_kmod_ensure = absent
     $zfs_binpkg      = false
     $zfs_env         = {
-      'EGIT_OVERRIDE_REPO_OPENZFS_ZFS'   => 'https://gitlab.james.tl/nest/forks/zfs.git',
+      'EGIT_OVERRIDE_REPO_OPENZFS_ZFS'   => 'https://gitlab.joyfullee.me/nest/forks/zfs.git',
       'EGIT_OVERRIDE_BRANCH_OPENZFS_ZFS' => 'linux-6.18-compat',
     }
 

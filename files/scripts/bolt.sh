@@ -4,8 +4,8 @@
 #
 # Run a custom Bolt container image that supports all of the Nest platforms.
 #
-# See: https://gitlab.james.tl/nest/tools/bolt
-# See: https://gitlab.james.tl/nest/config/-/blob/main/manifests/tool/bolt.pp
+# See: https://gitlab.joyfullee.me/nest/tools/bolt
+# See: https://gitlab.joyfullee.me/nest/config/-/blob/main/manifests/tool/bolt.pp
 #
 
 if [[ ! -f 'bolt-project.yaml' ]]; then
