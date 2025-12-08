@@ -1,7 +1,7 @@
 class nest::base::ssh {
   $ssh_config = @(SSH_CONFIG)
     Host gitlab.joyfullee.me gitlab.james.tl
-        Hostname gitlab.eyrie.
+        Hostname ssh.gitlab.eyrie.
     | SSH_CONFIG
 
   case $facts['os']['family'] {

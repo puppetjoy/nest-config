@@ -1,2 +1,7 @@
 ---
 service_name: "%{nest::kubernetes::service}-%{nest::kubernetes::namespace}"
+
+values:
+  global:
+    hosts:
+      ssh: "ssh.%{nest::kubernetes::fqdn}"
