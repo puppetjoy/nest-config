@@ -18,10 +18,13 @@ data:
            ttl 30
         }
         prometheus :9153
-        forward . 172.22.4.2 {
+        forward . 172.22.4.3 {
            max_concurrent 1000
         }
-        cache 30
+        cache 30 {
+           disable success cluster.local
+           disable denial cluster.local
+        }
         loop
         reload
         loadbalance
