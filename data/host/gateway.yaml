@@ -18,7 +18,8 @@ nest::service::gateway::port_forwards:
     port: 22
     proto: tcp
     to_addr: '172.21.2.1'
-    to_port: 2222
+    to_port: 22
+    masquerade: 'tun0'
   # streamlabs:
   #   dest: '45.77.109.122'
   #   port: 59650
