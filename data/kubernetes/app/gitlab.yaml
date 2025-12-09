@@ -5,6 +5,7 @@ include:
 ceph_namespace: rook-ceph
 ceph_object_store: ceph-objectstore
 external_name: "%{nest::kubernetes::fqdn}"
+ingress_class: contour-workstation
 node_role: workstation
 service_name: "%{nest::kubernetes::service}"
 
@@ -66,6 +67,8 @@ values:
       ssh: "%{lookup('external_name')}"
     ingress:
       configureCertmanager: false
+      class: "%{lookup('ingress_class')}"
+      provider: contour # default 'nginx' affects default annotations
       tls:
         secretName: "%{nest::kubernetes::service}-certs"
     minio:
@@ -105,6 +108,11 @@ values:
     gitaly:
       persistence:
         storageClass: data-crypt
+    gitlab-shell:
+      service:
+        type: LoadBalancer
+        externalTrafficPolicy: Local
+        loadBalancerIP: "%{nest::service::gitlab::ssh_load_balancer_ip}"
     toolbox:
       backups:
         objectStorage:
@@ -114,18 +122,20 @@ values:
       image:
         pullSecrets:
           - name: "%{nest::kubernetes::service}-registry-auths"
+      ingress:
+        annotations:
+          projectcontour.io/response-timeout: 600s
       workhorse:
         image: registry.eyrie/nest/forks/gitlab-workhorse
   gitlab-runner:
     install: false
   nginx-ingress:
-    controller:
-      service:
-        annotations:
-          'metallb.universe.tf/loadBalancerIPs': "%{nest::kubernetes::load_balancer_ip}"
+    enabled: false
   registry:
     hostname: "registry.%{nest::kubernetes::fqdn}"
     ingress:
+      annotations:
+        projectcontour.io/response-timeout: 900s
       tls:
         secretName: "%{nest::kubernetes::service}-certs"
     storage:

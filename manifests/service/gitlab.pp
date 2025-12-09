@@ -13,6 +13,7 @@ class nest::service::gitlab (
   Optional[Sensitive] $ssh_private_key        = undef,
 ) inherits nest {
   if defined(Class['nest::kubernetes']) {
+    $ssh_load_balancer_ip = lookup('nest::host_records')["ssh.${nest::kubernetes::fqdn}"]
     $ssh_private_key_base64 = base64('encode', $ssh_private_key.unwrap)
 
     if $nest::kubernetes::service == $nest::kubernetes::main_service {

@@ -1,4 +1,5 @@
 ---
+ingress_class: "contour-%{nest::kubernetes::namespace}"
 service_name: "%{nest::kubernetes::service}-%{nest::kubernetes::namespace}"
 
 values:
