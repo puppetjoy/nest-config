@@ -100,6 +100,7 @@ values:
           resources:
             requests:
               storage: 10Gi
+
     storage:
       useAllNodes: false # use storageClassDeviceSets
       onlyApplyOSDPlacement: true # control placement per set
@@ -187,6 +188,12 @@ values:
                 accessModes:
                   - ReadWriteOnce
     # end: storage
+
+    # Additional Ceph configuration options
+    # See: https://rook.io/docs/rook/latest/CRDs/Cluster/ceph-cluster-crd/#ceph-config
+    cephConfig:
+      osd:
+        bluestore_slow_ops_warn_lifetime: '0' # disable slow op warnings
   # end: cephClusterSpec
 
   ingress:
