@@ -5,8 +5,5 @@ nest::fscache: false
 nest::public_ssh: true
 
 nest::kernel_config:
-  # Writable layer provided by overlayfs
-  CONFIG_OVERLAY_FS: m
-
   # xorriso makes GPT-compatible ISO images using an HFS+ filesystem
   CONFIG_HFSPLUS_FS: y
