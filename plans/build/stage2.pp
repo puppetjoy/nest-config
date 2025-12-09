@@ -111,6 +111,7 @@ plan nest::build::stage2 (
 
     # Apply the main configuration
     apply($target, '_description' => 'Configure the stage') { include nest }.nest::print_report
+    apply($target, '_description' => 'Check for convergence') { include nest }.nest::print_report
 
     run_command("podman stop ${container}", 'localhost', 'Stop build container')
   }
