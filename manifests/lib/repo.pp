@@ -19,6 +19,7 @@ define nest::lib::repo (
       sync-type = git
       sync-uri = ${url}
       sync-depth = 1
+      sync-git-verify-commit-signature = no
       auto-sync = yes
       | END_REPO
 
