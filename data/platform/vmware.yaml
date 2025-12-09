@@ -1,2 +1,13 @@
 ---
 nest::bootloader: grub
+nest::kernel_config:
+  # For VMware Fusion ('y' for early boot)
+  CONFIG_VSOCKETS: m
+  CONFIG_VMWARE_VMCI_VSOCKETS: m
+  CONFIG_VMWARE_BALLOON: m
+  CONFIG_VMWARE_VMCI: m
+  CONFIG_VMWARE_PVSCSI: y
+  CONFIG_VMXNET3: m
+  CONFIG_MOUSE_PS2_VMMOUSE: y
+  CONFIG_DRM_VMWGFX: m
+  CONFIG_SND_ENS1371: m

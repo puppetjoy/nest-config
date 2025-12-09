@@ -17,6 +17,10 @@ nest::kernel_cmdline:
   - 'zfs.zvol_use_blk_mq=1'
 
 nest::kernel_config:
+  # Architecture options
+  CONFIG_NUMA_BALANCING: y
+  CONFIG_ERRATA_THEAD_GHOSTWRITE: n # allow xtheadvector
+
   # System drivers ('Y' for inclusion in u-root kernel)
   CONFIG_KEYBOARD_GPIO: Y
   CONFIG_SENSORS_PWM_FAN: Y
