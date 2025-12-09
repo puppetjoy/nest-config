@@ -14,7 +14,7 @@ nest::package_keywords:
   # Still not fully open-source or mainlined...
   sys-boot/raspberrypi-firmware: {}
 
-nest::kernel_tag: 'raspberrypi/v6.6.67'
+nest::kernel_tag: 'raspberrypi/v6.12.61'
 
 nest::kernel_cmdline:
   - '8250.nr_uarts=1' # set in DT but not passed by u-boot/systemd-boot

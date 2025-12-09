@@ -8,7 +8,7 @@ nest::dtb_file: 'broadcom/bcm2711-rpi-4-b.dtb'
 nest::dvorak: true
 nest::fscache: false
 nest::kernel_defconfig: 'bcm2711_defconfig'
-nest::kernel_tag: 'raspberrypi/v6.12.49'
+nest::kernel_tag: 'raspberrypi/v6.12.61'
 nest::swap_alt_win: true
 nest::uboot_defconfig: 'rpi_arm64_defconfig'
 nest::wifi: true

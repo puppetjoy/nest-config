@@ -5,9 +5,7 @@ nest::classes:
 
 nest::dtb_file: 'rockchip/rk3588-rock-5b.dtb'
 nest::fscache: false
-nest::kernel_tag: 'collabora/v6.12.0'
 nest::uboot_defconfig: 'rock5b-rk3588_defconfig'
-nest::uboot_tag: 'collabora/v2024.10'
 
 nest::kernel_cmdline:
   - 'console=ttyS2,115200n8'
