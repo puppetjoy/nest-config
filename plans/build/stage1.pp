@@ -102,7 +102,6 @@ plan nest::build::stage1 (
     run_command("podman start ${container}", 'localhost', 'Start build container')
 
     # Profile controls Portage and Puppet configurations
-    run_command('sh -c "sed -i \'\$a sync-git-verify-commit-signature = no\' /etc/portage/repos.conf/*.conf"', $target, 'Disable git commit signature verification')
     run_command('eix-sync -aq', $target, 'Sync Portage repos')
     run_command("eselect profile set nest:${cpu}/${variant}", $target, 'Set profile')
 
