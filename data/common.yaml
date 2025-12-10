@@ -133,6 +133,7 @@ nest::host_records:
   # Non-DHCP hosts
   falcon.nest: '172.22.4.2'
   kestrel.nest: '172.22.4.3'
+  owl.nest: '172.22.4.4'
 
   # kube-vip
   control-plane.eyrie: '172.21.255.255'

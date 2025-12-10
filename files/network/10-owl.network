@@ -3,11 +3,11 @@ Host=owl
 Name=en*
 
 [Network]
-DHCP=yes
+Address=172.22.4.4/24
+DNS=172.22.4.3
+Domains=nest
 VLAN=home
 
-[DHCP]
-RouteMetric=10
-
-[DHCPv4]
-UseDomains=yes
+[Route]
+Destination=172.22.0.0/24
+Gateway=172.22.4.3
