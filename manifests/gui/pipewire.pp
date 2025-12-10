@@ -23,7 +23,7 @@ class nest::gui::pipewire {
 
     exec { 'systemd-enable-pipewire-service':
       command => '/bin/systemctl --user --global enable pipewire.service',
-      creates => '/etc/systemd/user/sockets.target.wants/pipewire.service',
+      creates => '/etc/systemd/user/default.target.wants/pipewire.service',
     }
   } else {
     $use = []
