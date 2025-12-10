@@ -50,6 +50,7 @@ spec/default_facts.yml:
     portage_use: 'X a52 aac acl acpi activities alsa arm64 bluetooth branding bzip2 cairo cdda cdr cli crypt cups dbus declarative dri dts dvdr encode exif flac fortran gdbm gif gpm gtk gui iconv icu ipv6 jpeg kde kwallet lcms libnotify libtirpc mad mng mp3 mp4 mpeg ncurses networkmanager nls nptl ogg opengl openmp pam pango pcre pdf pipewire plasma png policykit ppds pulseaudio qml qt5 readline screencast sdl seccomp semantic-desktop sound spell ssl startup-notification svg systemd test-rust tiff truetype udev udisks unicode upower usb vorbis vulkan wayland widgets wxwidgets x264 xattr xcb xft xml xv xvid zlib zsh-completion'
     processors:
       count: 8
+    rpool: 'test/crypt'
 
 spec/spec_helper.rb:
   hiera_config_ruby: "File.expand_path(File.join(__FILE__, '../fixtures/hiera.yaml'))"

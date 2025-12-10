@@ -26,4 +26,5 @@ portage_use: X a52 aac acl acpi activities alsa arm64 bluetooth branding bzip2 c
   x264 xattr xcb xft xml xv xvid zlib zsh-completion
 processors:
   count: 8
+rpool: test/crypt
 
