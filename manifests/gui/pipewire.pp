@@ -17,6 +17,7 @@ class nest::gui::pipewire {
   if $facts['profile']['variant'] == 'server' {
     $use = ['-X']
 
+    # Work without logind (just a user session)
     User <| title == $nest::user |> {
       groups +> 'audio',
     }
