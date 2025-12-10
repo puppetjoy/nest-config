@@ -7,8 +7,18 @@ require_relative '../../ruby_task_helper/files/task_helper.rb'
 # Fetch Kubernetes service names and URIs with kubectl
 class GetKubernetesServices < TaskHelper
   def task(_opts)
-    services = `kubectl get services -A -l 'james.tl/nest in (stage1, puppet)' -o json`
-    return { value: [] } unless $CHILD_STATUS.success?
+    services = `kubectl get services -A -l 'james.tl/nest in (stage1, puppet)' -o json 2>/dev/null`
+    kube_env = ENV['KUBECONFIG']
+    kubeconfig_missing = kube_env.nil? || kube_env.strip.empty? || kube_env.split(File::PATH_SEPARATOR).all? { |p| p.strip.empty? || !File.exist?(p) }
+    unless $CHILD_STATUS.success?
+      # Treat as no targets if kubeconfig is unset or points to non-existent files
+      return { value: [] } if kubeconfig_missing
+      raise TaskHelper::Error.new(
+        'nest/kubectl',
+        "kubectl failed with exit #{$CHILD_STATUS.exitstatus}",
+        {},
+      )
+    end
     services = JSON.parse(services)
 
     targets = services['items'].map { |service|
