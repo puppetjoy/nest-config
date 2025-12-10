@@ -3,6 +3,7 @@ nest::classes:
   - 'nest::host::falcon'
   - 'nest::service::deskflow'
   - 'nest::service::gitlab_runner'
+  - 'nest::service::ipxe'
   - 'nest::service::kubernetes'
   - 'nest::service::libvirt'
   - 'nest::service::nzbget'
@@ -86,6 +87,8 @@ nest::service::gitlab_runner::instances:
       - '/srv/puppet/code:/etc/puppetlabs/code'
       - '/srv/puppet/r10k/config:/etc/puppetlabs/r10k:ro'
       - '/srv/puppet/r10k/cache:/var/cache/r10k'
+
+nest::service::ipxe::servername: 'nest.joyfullee.me'
 
 nest::service::reverse_proxy::hosts:
   nzbget.nest:
