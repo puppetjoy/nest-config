@@ -7,6 +7,10 @@ class nest::gui::policykit {
     });
     | EOT
 
+  nest::lib::package { 'sys-auth/polkit':
+    ensure => installed,
+  }
+  ->
   file {
     default:
       owner => 'root',
