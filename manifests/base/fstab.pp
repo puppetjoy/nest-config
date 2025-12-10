@@ -1,4 +1,6 @@
 class nest::base::fstab {
+  tag 'boot'
+
   $hostname = regsubst($::trusted['certname'], '\..*', '')
 
   $suffix = $hostname ? {
@@ -151,7 +153,7 @@ class nest::base::fstab {
     $falcon_spec = 'falcon'
   }
 
-  if $facts['profile']['platform'] == 'live' {
+  if $facts['live'] {
     $fstab = $specs['nest-nocache'] + $specs['falcon']
   } elsif $nest::nestfs_hostname == "${hostname}.nest" {
     $fstab = $specs[$boot_spec] + $specs['swap'] + $specs['var']

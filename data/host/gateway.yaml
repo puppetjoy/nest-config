@@ -4,7 +4,6 @@ nest::classes:
   - 'nest::service::gateway'
   - 'nest::service::reverse_proxy'
 
-nest::bootloader: grub
 nest::dvorak: true
 
 nest::reset_filter_rules:

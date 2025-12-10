@@ -30,25 +30,15 @@ class nest::base::dracut {
     default => 'zstd',
   }
 
-  if $facts['profile']['platform'] == 'live' {
+  if $facts['live'] {
     $base_config_content = @(EOT)
-      add_dracutmodules+=" dmsquash-live "
-      omit_dracutmodules+=" zfs "
-      kernel_cmdline="rd.live.overlay.overlayfs=1"
+      add_dracutmodules+=" network nfs systemd-resolved "
       | EOT
-
-    # Install dmsetup(8) for dmsquash-live
-    nest::lib::package { 'sys-fs/lvm2':
-      ensure => installed,
-    }
-  } elsif $facts['build'] and $facts['build'] != 'kernel' {
-    $base_config_content = ''
   } else {
     $base_config_content = @("EOT")
       compress="${compress}"
       force="yes"
       hostonly="yes"
-      omit_dracutmodules+=" nfs "
       | EOT
   }
 
