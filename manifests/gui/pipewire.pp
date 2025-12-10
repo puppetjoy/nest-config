@@ -10,6 +10,15 @@ class nest::gui::pipewire {
 
   if $facts['profile']['variant'] == 'server' {
     $use = ['-X']
+
+    User <| title == $nest::user |> {
+      groups +> 'audio',
+    }
+
+    exec { 'systemd-enable-pipewire-service':
+      command => '/bin/systemctl --user --global enable pipewire.service',
+      creates => '/etc/systemd/user/sockets.target.wants/pipewire.service',
+    }
   } else {
     $use = []
   }
