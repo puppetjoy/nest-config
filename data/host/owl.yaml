@@ -4,6 +4,9 @@ nest::classes: ['nest::gui::pipewire']
 nest::text_scaling_factor: 1.5
 nest::vpn_client: false
 
+nest::kernel_config:
+  CONFIG_SND_USB_AUDIO: m
+
 # Allow Roc audio streaming from home
 firewalld::custom_services:
   roc:
