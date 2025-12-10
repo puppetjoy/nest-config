@@ -8,6 +8,12 @@ class nest::gui::pipewire {
     }
   }
 
+  # For realtime priority
+  # See: https://wiki.gentoo.org/wiki/PipeWire#Audio_Groups
+  User <| title == $nest::user |> {
+    groups +> 'pipewire',
+  }
+
   if $facts['profile']['variant'] == 'server' {
     $use = ['-X']
 
