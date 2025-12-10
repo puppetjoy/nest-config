@@ -8,9 +8,15 @@ class nest::gui::pipewire {
     }
   }
 
+  if $facts['profile']['variant'] == 'server' {
+    $use = ['-X']
+  } else {
+    $use = []
+  }
+
   nest::lib::package { 'media-video/pipewire':
     ensure => installed,
-    use    => ['roc', 'sound-server'],
+    use    => $use + ['roc', 'sound-server'],
   }
   ->
   exec {
