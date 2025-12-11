@@ -30,17 +30,11 @@ class nest::base::dracut {
     default => 'zstd',
   }
 
-  if $facts['live'] {
-    $base_config_content = @(EOT)
-      add_dracutmodules+=" network nfs systemd-resolved "
-      | EOT
-  } else {
-    $base_config_content = @("EOT")
-      compress="${compress}"
-      force="yes"
-      hostonly="yes"
-      | EOT
-  }
+  $base_config_content = @("EOT")
+    compress="${compress}"
+    force="yes"
+    hostonly="yes"
+    | EOT
 
   file {
     default:

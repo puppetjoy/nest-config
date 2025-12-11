@@ -153,7 +153,7 @@ class nest::base::fstab {
     $falcon_spec = 'falcon'
   }
 
-  if $facts['live'] {
+  if $facts['live'] { # placeholder for future ext4 root support
     $fstab = $specs['nest-nocache'] + $specs['falcon']
   } elsif $nest::nestfs_hostname == "${hostname}.nest" {
     $fstab = $specs[$boot_spec] + $specs['swap'] + $specs['var']

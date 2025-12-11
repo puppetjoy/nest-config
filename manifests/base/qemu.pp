@@ -1,6 +1,5 @@
 class nest::base::qemu {
-  if ($facts['hypervisors'] and $facts['hypervisors']['kvm'])
-  or ($facts['profile'] and $facts['profile']['platform'] == 'live') {
+  if $facts['hypervisors'] and $facts['hypervisors']['kvm'] {
     $qemu_guest_agent_ensure = installed
   } else {
     $qemu_guest_agent_ensure = absent

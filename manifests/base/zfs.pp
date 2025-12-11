@@ -103,7 +103,7 @@ class nest::base::zfs {
     }
   }
 
-  unless $facts['is_container'] or $facts['live'] {
+  unless $facts['is_container'] {
     # Manage swap volume properties for experimenting with workarounds listed in
     # https://github.com/openzfs/zfs/issues/7734
     zfs { "${facts['rpool']}/swap":

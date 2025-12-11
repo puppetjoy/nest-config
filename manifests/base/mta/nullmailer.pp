@@ -41,8 +41,7 @@ class nest::base::mta::nullmailer (
       }
       ~>
       service { 'nullmailer':
-        enable => !$facts['live'], # doesn't start on NFS root
-        tag    => 'boot',
+        enable => true,
       }
 
       # XXX cleanup

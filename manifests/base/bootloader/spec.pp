@@ -2,7 +2,7 @@ class nest::base::bootloader::spec {
   tag 'boot'
   tag 'kernel'
 
-  if $facts['mountpoints']['/boot'] or $facts['live'] {
+  if $facts['mountpoints']['/boot'] {
     # For nest::base::bootloader::kernel_cmdline
     include 'nest::base::bootloader'
 

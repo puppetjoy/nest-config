@@ -1,5 +1,5 @@
 class nest::base::containers {
-  unless $facts['is_container'] or $facts['live'] or $facts['mountpoints']['/var/lib/containers'] {
+  unless $facts['is_container'] or $facts['mountpoints']['/var/lib/containers'] {
     zfs { 'containers':
       name       => "${facts['rpool'].regsubst('/crypt$', '')}/containers",
       mountpoint => '/var/lib/containers',

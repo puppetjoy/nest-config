@@ -53,7 +53,7 @@ class nest::base::puppet {
         content => $fqdn_yaml,
       }
 
-      if $facts['build'] or $facts['live'] {
+      if $facts['build'] {
         $puppet_runmode = 'unmanaged'
       } elsif !$nest::puppet {
         $puppet_runmode = 'none'
