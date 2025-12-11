@@ -81,7 +81,7 @@ nest::service::gitlab_runner::instances:
     qemu: true
 
   r10k:
-    default_image: 'nest/tools/r10k'
+    default_image: 'registry.gitlab.joyfullee.me/nest/tools/r10k'
     volumes:
       - '/srv/puppet/code:/etc/puppetlabs/code'
       - '/srv/puppet/r10k/config:/etc/puppetlabs/r10k:ro'
