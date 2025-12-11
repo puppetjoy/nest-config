@@ -1,5 +1,7 @@
 ---
-nest::classes: ['nest::gui::pipewire']
+nest::classes:
+  - 'nest::gui::pipewire'
+  - 'nest::service::gitlab_runner'
 
 nest::dvorak: true
 nest::text_scaling_factor: 1.5
@@ -20,3 +22,16 @@ firewalld::custom_services:
 firewalld::services:
   roc:
     zone: 'home'
+
+nest::service::gitlab_runner::host: 'gitlab.joyfullee.me'
+nest::service::gitlab_runner::instances:
+  runner:
+    bolt: true
+    podman: true
+    qemu: true
+
+  builder:
+    limit: 2
+    bolt: true
+    podman: true
+    qemu: true
