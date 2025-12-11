@@ -13,14 +13,14 @@ nest::service::apache::manage_firewall: true
 
 nest::service::gateway::port_forwards:
   git:
-    dest: '45.77.109.122'
+    dest: '45.77.156.204'
     port: 22
     proto: tcp
     to_addr: '172.21.2.1'
     to_port: 22
     masquerade: 'tun0'
   # streamlabs:
-  #   dest: '45.77.109.122'
+  #   dest: '45.77.156.204'
   #   port: 59650
   #   proto: tcp
   #   to_addr: '172.22.0.9'
@@ -29,7 +29,7 @@ nest::service::gateway::port_forwards:
 nest::service::reverse_proxy::hosts:
   gitlab.joyfullee.me:
     destination: 'gitlab.eyrie'
-    ip: ['45.77.109.122', '2001:19f0:1000:22c0::122']
+    ip: ['45.77.156.204', '2001:19f0:1000:e1dc::204']
     serveraliases: ['gitlab.james.tl']
     encoded_slashes: true
     proxy_ssl: true
@@ -38,31 +38,31 @@ nest::service::reverse_proxy::hosts:
 
   registry.gitlab.joyfullee.me:
     destination: 'registry.gitlab.eyrie'
-    ip: ['45.77.109.122', '2001:19f0:1000:22c0::122']
+    ip: ['45.77.156.204', '2001:19f0:1000:e1dc::204']
     proxy_ssl: true
     timeout: 930
 
   registry.gitlab.james.tl:
     destination: 'registry.gitlab.eyrie'
-    ip: ['45.77.109.122', '2001:19f0:1000:22c0::122']
+    ip: ['45.77.156.204', '2001:19f0:1000:e1dc::204']
     proxy_ssl: true
     timeout: 930
 
   requests.thesatelliteoflove.net:
     destination: 'ombi.nest'
-    ip: ['45.77.109.122', '2001:19f0:1000:22c0::122']
+    ip: ['45.77.156.204', '2001:19f0:1000:e1dc::204']
     serveraliases: ['requests.heloandnala.net']
 
   vault.thesatelliteoflove.net:
     destination: 'bitwarden.eyrie'
-    ip: ['45.77.109.122', '2001:19f0:1000:22c0::122']
+    ip: ['45.77.156.204', '2001:19f0:1000:e1dc::204']
     proxy_ssl: true
 
   # Wordpress sites
   www.joyfullee.me:
     destination: 'portfolio.eyrie'
     docroot: '/nest/www/joyfullee.me'
-    ip: ['45.77.109.122', '2001:19f0:1000:22c0::122']
+    ip: ['45.77.156.204', '2001:19f0:1000:e1dc::204']
     serveraliases: ['joyfullee.me', 'james.tl', 'www.james.tl']
     priority: '20'  # higher priority
     proxy_ssl: true
@@ -72,7 +72,7 @@ nest::service::reverse_proxy::hosts:
   thestaticvoid.com:
     destination: 'thestaticvoid.eyrie'
     docroot: '/nest/www/thestaticvoid.com'
-    ip: ['45.77.109.122', '2001:19f0:1000:22c0::122']
+    ip: ['45.77.156.204', '2001:19f0:1000:e1dc::204']
     serveraliases: ['www.thestaticvoid.com', 'thestaticvoid.org', 'www.thestaticvoid.org', 'tsv.co', 'www.tsv.co']
     proxy_ssl: true
     serve_local: true
