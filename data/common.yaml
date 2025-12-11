@@ -162,7 +162,7 @@ nest::host_records:
 nest::nestfs_hostname: 'falcon.nest'
 
 nest::openvpn_servers:
-  - 'kestrel.home'
+  - 'nest.joyfullee.me'
   - 'nest-ext.joyfullee.me'
 
 nest::ssh_host_keys:
