@@ -102,6 +102,7 @@ nest::cups_servers:
 
 nest::distcc_hosts:
   falcon.nest: 16
+  owl.nest: 32
 
 # 1–9: static / critical infra and control nodes
 # 10–99: fixed DHCP for cluster nodes

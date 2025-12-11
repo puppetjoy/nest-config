@@ -4,6 +4,7 @@ nest::classes:
   - 'nest::service::gitlab_runner'
   - 'nest::tool::bolt'
 
+nest::distcc_server: true
 nest::dvorak: true
 nest::text_scaling_factor: 1.5
 nest::vpn_client: false
