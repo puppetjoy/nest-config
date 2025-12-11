@@ -17,13 +17,4 @@ class nest::host::falcon {
   nest::lib::package { 'media-libs/libva-intel-media-driver':
     ensure => installed,
   }
-
-  nest::lib::virtual_host { 'nest':
-    docroot     => '/srv/www/nest.joyfullee.me',
-    servername  => 'nest.joyfullee.me',
-    ssl         => false,
-    zfs_docroot => false,
-  }
-
-  nest::lib::external_service { 'http': }
 }

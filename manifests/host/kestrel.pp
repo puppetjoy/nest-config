@@ -24,4 +24,11 @@ class nest::host::kestrel {
   service { 'reset-usbnet-device@0525:a4a2':
     enable => true,
   }
+
+  # Host images
+  nest::lib::virtual_host { 'nest':
+    servername  => 'nest.joyfullee.me',
+    ssl         => false,
+    zfs_docroot => false,
+  }
 }

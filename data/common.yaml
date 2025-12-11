@@ -382,8 +382,9 @@ nest::kernel_config:
 #
 
 apache::mpm_module: 'worker'
-apache::mod::ssl::ssl_protocol: ['all', '-SSLv2', '-SSLv3', '-TLSv1', '-TLSv1.1']
+apache::lib_path: '/usr/lib64/apache2/modules'
 apache::servername: "%{facts.fqdn}"
+apache::mod::ssl::ssl_protocol: ['all', '-SSLv2', '-SSLv3', '-TLSv1', '-TLSv1.1']
 
 kubecm::deploy::include_key: 'include'
 kubecm::deploy::resources_key: 'resources'
