@@ -1,9 +1,0 @@
----
-nest::bootloader: grub
-nest::dvorak: true
-nest::fscache: false
-nest::public_ssh: true
-
-nest::kernel_config:
-  # xorriso makes GPT-compatible ISO images using an HFS+ filesystem
-  CONFIG_HFSPLUS_FS: y

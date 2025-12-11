@@ -7,25 +7,9 @@ class nest::base::kexec {
       ensure => installed,
     }
 
-    case $nest::bootloader {
-      'grub': {
-        $image  = "/boot/vmlinuz-${nest::kernel_version}"
-        $initrd = "/boot/initramfs-${nest::kernel_version}.img"
-      }
-
-      'systemd': {
-        $image  = "/boot/${facts['machine_id']}/${nest::kernel_version}/linux"
-        $initrd = "/boot/${facts['machine_id']}/${nest::kernel_version}/initrd"
-      }
-
-      default: {
-        fail("Unhandled support for kexec with ${nest::bootloader} bootloader")
-      }
-    }
-
     $kexec_load_env = @("ENV")
-      IMAGE=${image}
-      INITRD=${initrd}
+      IMAGE=/boot/${facts['machine_id']}/${nest::kernel_version}/linux
+      INITRD=/boot/${facts['machine_id']}/${nest::kernel_version}/initrd
       KERNEL_CMDLINE="root=zfs:AUTO ${nest::base::bootloader::kernel_cmdline}"
       | ENV
 

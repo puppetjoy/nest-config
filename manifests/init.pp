@@ -34,7 +34,7 @@ class nest (
   Optional[String]                  $arm_firmware_tag    = undef,
   Enum['off', 'sway', 'xmonad']     $autologin           = xmonad,
   Optional[Nest::BirdRole]          $bird_role           = undef,
-  Enum['grub', 'systemd', 'u-root'] $bootloader          = systemd,
+  Enum['systemd', 'u-root']         $bootloader          = systemd,
   Integer[0]                        $boot_menu_delay     = 3,
   Optional[Integer]                 $cpus                = undef,
   Optional[String]                  $dtb_file            = undef,

@@ -1,6 +1,4 @@
 class nest::base::fstab {
-  tag 'boot'
-
   $hostname = regsubst($::trusted['certname'], '\..*', '')
 
   $suffix = $hostname ? {
@@ -14,16 +12,11 @@ class nest::base::fstab {
     $labelname = $hostname
   }
 
-  $boot_vfstype = $nest::bootloader ? {
-    'grub'  => 'ext2',
-    default => 'vfat',
-  }
-
   $specs = {
     'boot'    => [
       "set 1/spec PARTLABEL=${hostname}-boot",
       'set 1/file /boot',
-      "set 1/vfstype ${boot_vfstype}",
+      'set 1/vfstype vfat',
       'set 1/opt defaults',
       'set 1/dump 0',
       'set 1/passno 2',
@@ -32,7 +25,7 @@ class nest::base::fstab {
     'boot-mbr' => [
       "set 1/spec LABEL=${labelname}-bt",
       'set 1/file /boot',
-      "set 1/vfstype ${boot_vfstype}",
+      'set 1/vfstype vfat',
       'set 1/opt defaults',
       'set 1/dump 0',
       'set 1/passno 2',
@@ -153,9 +146,7 @@ class nest::base::fstab {
     $falcon_spec = 'falcon'
   }
 
-  if $facts['live'] { # placeholder for future ext4 root support
-    $fstab = $specs['nest-nocache'] + $specs['falcon']
-  } elsif $nest::nestfs_hostname == "${hostname}.nest" {
+  if $nest::nestfs_hostname == "${hostname}.nest" {
     $fstab = $specs[$boot_spec] + $specs['swap'] + $specs['var']
   } elsif $facts['mountpoints']['/efi'] {
     $fstab = $specs[$boot_spec] + $specs['efi'] + $specs['swap'] + $specs['var'] + $specs[$nest_spec] + $specs[$falcon_spec]

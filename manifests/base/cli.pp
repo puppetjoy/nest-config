@@ -22,19 +22,4 @@ class nest::base::cli {
       source => 'puppet:///modules/nest/cli/reset-test-filter.rules',
     ;
   }
-
-  # Required for building live ISOs
-  # Do not use nest::lib::package so grub class can define USE flags
-  package { 'sys-boot/grub':
-    ensure => installed,
-  }
-
-  # Fix broken argument processing with grub-mkrescue(1)
-  # See: https://gitlab.joyfullee.me/nest/cli/-/issues/26
-  file { '/usr/local/bin/xorriso':
-    mode    => '0755',
-    owner   => 'root',
-    group   => 'root',
-    content => "#!/bin/zsh\nexec /usr/bin/xorriso \"\${@:#--}\"\n",
-  }
 }

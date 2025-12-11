@@ -48,10 +48,6 @@ class nest::base::bootloader {
   }
 
   case $nest::bootloader {
-    'grub': {
-      contain 'nest::base::bootloader::grub'
-    }
-
     'systemd': {
       contain 'nest::base::bootloader::systemd'
     }
