@@ -1,7 +1,7 @@
 define nest::lib::gitlab_runner (
   String            $host,
   String            $registration_token,
-  String            $default_image    = 'registry.gitlab.joyfullee.me/nest/stage1/server',
+  String            $default_image    = 'nest/stage1/server',
   Optional[String]  $dns              = undef,
   Array[String]     $devices          = [],
   Nest::Ensure      $ensure           = present,
