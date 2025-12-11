@@ -176,17 +176,11 @@ nest::package_keywords:
   app-admin/puppet: {}
   app-emulation/qemu: {}
   app-misc/tmux: {}
-  app-editors/vim: {}
-  app-editors/vim-core: {}
-  dev-libs/ell: {} # for iwd
   dev-ruby/hiera-eyaml: {}
-  net-firewall/firewalld: {}
-  net-wireless/iwd: {}
   sys-apps/systemd: {}
   sys-cluster/kubeadm: {}
   sys-cluster/kubectl: {}
   sys-cluster/kubelet: {}
-  sys-kernel/dracut: {}
 
   # For distcc, match version deployed on riscv
   cross-riscv64-unknown-linux-gnu/binutils: {}
@@ -195,36 +189,23 @@ nest::package_keywords:
   cross-riscv64-unknown-linux-gnu/glibc: {}
   cross-riscv64-unknown-linux-gnu/linux-headers: {}
 
-  # For Puppet
-  dev-ruby/sys-filesystem:
-    version: '~1.4.4'
-
-  # For Nest CLI
-  dev-ruby/tty-command:
-    version: '~0.10.1'
-
   # Podman and dependencies
   app-containers/podman: {}
   app-containers/catatonit: {}
   app-containers/conmon: {}
   app-containers/crun: {}
-  app-containers/slirp4netns: {}
   sys-fs/fuse-overlayfs: {}
 
   # For Kubernetes
   app-containers/cri-o: {}
 
-  # For V4L2 VP9 support in Chromium
-  sys-kernel/linux-headers:
-    version: '~5.19'
-
-  # For systemd-boot
-  dev-python/pyelftools:
-    version: '~0.30'
-
   # For hiera-eyaml
   dev-ruby/optimist:
-    version: '~3.2.0'
+    version: '~3.2.1'
+
+  # For Nest CLI
+  dev-ruby/tty-command:
+    version: '~0.10.1'
 
 nest::arm_firmware_tag: 'arm/v2.12.0'
 nest::opensbi_tag: 'riscv-software-src/v1.7'

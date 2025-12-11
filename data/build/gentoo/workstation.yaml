@@ -28,17 +28,11 @@ nest::classes:
 nest::package_keywords:
   # I always want the latest of these
   app-editors/vscode: {}
-  app-misc/ddcutil: {}
-  dev-libs/wayland: {} # for sway
-  dev-util/intel_clc: {} # for mesa
-  gui-apps/foot: {}
   gui-apps/gtkgreet: {}
   gui-apps/waybar: {}
-  gui-apps/wl-clipboard: {}
   gui-libs/greetd: {}
   gui-libs/wlroots: {}
   gui-wm/sway: {}
-  media-fonts/fontawesome: {}
   media-libs/mesa: {}
   media-video/pipewire: {}
   media-video/wireplumber: {}
@@ -49,28 +43,9 @@ nest::package_keywords:
   # For firefox
   dev-libs/nspr: {}
   dev-libs/nss: {}
-  media-libs/dav1d:
-    version: '~1.0.0'
-  media-libs/libepoxy:
-    version: '~1.5.10'
-
-  # For foot
-  dev-libs/tllist: {}
-  gui-apps/foot-terminfo: {}
-  media-libs/fcft: {}
 
   # For mesa
   dev-util/mesa_clc: {}
-
-  # For pipewire
-  media-libs/roc-toolkit:
-    version: '~0.3.0'
-
-  # For waybar
-  dev-libs/date:
-    version: '~3.0.0'
-  dev-libs/spdlog:
-    version: '~1.8.5'
 
 nest::kernel_cmdline:
   - 'preempt=full' # prioritize interactivity
