@@ -13,6 +13,9 @@ resources:
 
 values:
   global:
+    appConfig:
+      defaultTheme: 1 # Indigo
+      defaultColorMode: 3 # Auto
     email:
       display_name: 'GitLab'
       from: "%{lookup('service_name')}@joyfullee.me"
