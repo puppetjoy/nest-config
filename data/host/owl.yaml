@@ -2,6 +2,7 @@
 nest::classes:
   - 'nest::gui::pipewire'
   - 'nest::service::gitlab_runner'
+  - 'nest::tool::bolt'
 
 nest::dvorak: true
 nest::text_scaling_factor: 1.5
