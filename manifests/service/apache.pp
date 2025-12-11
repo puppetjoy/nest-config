@@ -14,10 +14,8 @@ class nest::service::apache (
     require => Class['apache'],
   }
 
+  # Include required modules
   apache::mod { 'log_config': }
-  apache::mod { 'lbmethod_byrequests': }
-  apache::mod { 'proxy_balancer': }
-  apache::mod { 'slotmem_shm': }
   apache::mod { 'unixd': }
 
   nest::lib::package_use { 'httpd':

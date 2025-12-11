@@ -15,6 +15,8 @@ define nest::lib::reverse_proxy (
   Variant[Boolean, String] $websockets      = false,
   String                   $docroot         = "/srv/www/${servername}",
 ) {
+  include 'apache::mod::proxy'
+
   if $proxy_ssl {
     $http_proto = 'https'
     $ws_proto   = 'wss'
@@ -27,6 +29,9 @@ define nest::lib::reverse_proxy (
     $url      = "${http_proto}://${destination}/"
     $balancer = ''
   } else {
+    include 'apache::mod::proxy_balancer'
+    apache::mod { 'lbmethod_byrequests': } # apache::mod::lbmethod_byrequests has a broken version check
+
     $url      = "balancer://${name}/"
     $members  = $destination.map |$d| { "    BalancerMember ${http_proto}://${d}" }
     $balancer = @("BALANCER")
