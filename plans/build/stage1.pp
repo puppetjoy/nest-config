@@ -56,88 +56,88 @@ plan nest::build::stage1 (
     }
   }
 
-  if $init {
-    if $refresh {
-      $from_image       = "nest/stage1/${variant}:${cpu}"
-      $from_image_debug = "nest/stage1/${variant}/debug:${cpu}"
-    } else {
-      $from_image       = "nest/stage0:${cpu}"
-      $from_image_debug = "nest/stage0/debug:${cpu}"
-    }
+  # if $init {
+  #   if $refresh {
+  #     $from_image       = "nest/stage1/${variant}:${cpu}"
+  #     $from_image_debug = "nest/stage1/${variant}/debug:${cpu}"
+  #   } else {
+  #     $from_image       = "nest/stage0:${cpu}"
+  #     $from_image_debug = "nest/stage0/debug:${cpu}"
+  #   }
 
-    run_command("podman rm -f ${container}", 'localhost', 'Stop and remove existing build container')
-    run_command("podman volume rm -f ${debug_volume}", 'localhost', 'Remove existing debug volume')
+  #   run_command("podman rm -f ${container}", 'localhost', 'Stop and remove existing build container')
+  #   run_command("podman volume rm -f ${debug_volume}", 'localhost', 'Remove existing debug volume')
 
-    $podman_debug_copy_cmd = @("COPY"/L)
-      podman run \
-      --name=${container} \
-      --pull=always \
-      --rm \
-      --volume=${debug_volume}:/usr/lib/.debug \
-      ${qemu_args} \
-      ${from_image_debug} \
-      cp -a /usr/lib/debug/. /usr/lib/.debug
-      | COPY
+  #   $podman_debug_copy_cmd = @("COPY"/L)
+  #     podman run \
+  #     --name=${container} \
+  #     --pull=always \
+  #     --rm \
+  #     --volume=${debug_volume}:/usr/lib/.debug \
+  #     ${qemu_args} \
+  #     ${from_image_debug} \
+  #     cp -a /usr/lib/debug/. /usr/lib/.debug
+  #     | COPY
 
-    run_command($podman_debug_copy_cmd, 'localhost', 'Repopulate debug volume')
+  #   run_command($podman_debug_copy_cmd, 'localhost', 'Repopulate debug volume')
 
-    $podman_create_cmd = @("CREATE"/L)
-      podman create \
-      --init \
-      --name=${container} \
-      --pids-limit=0 \
-      --pull=always \
-      --volume=/nest:/nest \
-      --volume=${debug_volume}:/usr/lib/debug \
-      --volume=${repos_volume}:/var/db/repos \
-      ${qemu_args} \
-      ${from_image} \
-      sleep infinity
-      | CREATE
+  #   $podman_create_cmd = @("CREATE"/L)
+  #     podman create \
+  #     --init \
+  #     --name=${container} \
+  #     --pids-limit=0 \
+  #     --pull=always \
+  #     --volume=/nest:/nest \
+  #     --volume=${debug_volume}:/usr/lib/debug \
+  #     --volume=${repos_volume}:/var/db/repos \
+  #     ${qemu_args} \
+  #     ${from_image} \
+  #     sleep infinity
+  #     | CREATE
 
-    run_command($podman_create_cmd, 'localhost', 'Create build container')
-  }
+  #   run_command($podman_create_cmd, 'localhost', 'Create build container')
+  # }
 
-  if $build {
-    run_command("podman start ${container}", 'localhost', 'Start build container')
+  # if $build {
+  #   run_command("podman start ${container}", 'localhost', 'Start build container')
 
-    # Profile controls Portage and Puppet configurations
-    run_command('eix-sync -aq', $target, 'Sync Portage repos')
-    run_command("eselect profile set nest:${cpu}/${variant}", $target, 'Set profile')
+  #   # Profile controls Portage and Puppet configurations
+  #   run_command('eix-sync -aq', $target, 'Sync Portage repos')
+  #   run_command("eselect profile set nest:${cpu}/${variant}", $target, 'Set profile')
 
-    # Set up the build environment
-    $target.apply_prep
-    $target.add_facts({
-      'build'               => 'stage1',
-      'emerge_default_opts' => $emerge_default_opts,
-      'makeopts'            => $makeopts,
-    })
+  #   # Set up the build environment
+  #   $target.apply_prep
+  #   $target.add_facts({
+  #     'build'               => 'stage1',
+  #     'emerge_default_opts' => $emerge_default_opts,
+  #     'makeopts'            => $makeopts,
+  #   })
 
-    # Run Puppet to configure Portage and set up @world
-    run_command('sh -c "echo profile > /.apply_tags"', $target, 'Set Puppet tags for profile run')
-    apply($target, '_description' => 'Configure the profile') { include nest }.nest::print_report
-    run_command('rm /.apply_tags', $target, 'Clear Puppet tags')
-    run_command('emerge --info', $target, 'Show Portage configuration')
+  #   # Run Puppet to configure Portage and set up @world
+  #   run_command('sh -c "echo profile > /.apply_tags"', $target, 'Set Puppet tags for profile run')
+  #   apply($target, '_description' => 'Configure the profile') { include nest }.nest::print_report
+  #   run_command('rm /.apply_tags', $target, 'Clear Puppet tags')
+  #   run_command('emerge --info', $target, 'Show Portage configuration')
 
-    # Resolve circular dependencies
-    if $variant == 'workstation' and !$refresh {
-      run_command('emerge --oneshot --verbose media-libs/harfbuzz media-libs/freetype media-libs/mesa media-libs/tiff', $target, 'Resolve media circular dependencies', _env_vars => {
-        'USE' => '-cairo -harfbuzz -truetype -vaapi -webp',
-      })
-      run_command('emerge --oneshot --verbose x11-misc/xdg-utils', $target, 'Resolve Plasma circular dependencies', _env_vars => {
-        'USE' => '-plasma',
-      })
-    }
+  #   # Resolve circular dependencies
+  #   if $variant == 'workstation' and !$refresh {
+  #     run_command('emerge --oneshot --verbose media-libs/harfbuzz media-libs/freetype media-libs/mesa media-libs/tiff', $target, 'Resolve media circular dependencies', _env_vars => {
+  #       'USE' => '-cairo -harfbuzz -truetype -vaapi -webp',
+  #     })
+  #     run_command('emerge --oneshot --verbose x11-misc/xdg-utils', $target, 'Resolve Plasma circular dependencies', _env_vars => {
+  #       'USE' => '-plasma',
+  #     })
+  #   }
 
-    # Make the system consistent with the profile
-    run_command('emerge --deep --newuse --update --verbose --with-bdeps=y @world', $target, 'Install packages')
-    run_command('emerge --depclean', $target, 'Remove unused packages')
+  #   # Make the system consistent with the profile
+  #   run_command('emerge --deep --newuse --update --verbose --with-bdeps=y @world', $target, 'Install packages')
+  #   run_command('emerge --depclean', $target, 'Remove unused packages')
 
-    # Apply the main configuration
-    apply($target, '_description' => 'Configure the stage') { include nest }.nest::print_report
+  #   # Apply the main configuration
+  #   apply($target, '_description' => 'Configure the stage') { include nest }.nest::print_report
 
-    run_command("podman stop ${container}", 'localhost', 'Stop build container')
-  }
+  #   run_command("podman stop ${container}", 'localhost', 'Stop build container')
+  # }
 
   if $deploy {
     $image = "${registry}/nest/stage1/${variant}:${cpu}"

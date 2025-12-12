@@ -48,8 +48,6 @@ resources:
     apiVersion: networking.k8s.io/v1
     kind: Ingress
     metadata:
-      annotations:
-        projectcontour.io/response-timeout: infinity
       name: "%{lookup('service_name')}-objectstore"
       namespace: "%{nest::kubernetes::namespace}"
     spec:

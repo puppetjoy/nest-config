@@ -139,8 +139,6 @@ values:
     enabled: true
   ingress:
     enabled: true
-    annotations:
-      projectcontour.io/request-timeout: 900s # based on gitlab registry tuning
     hosts:
       - host: "%{nest::kubernetes::fqdn}"
     tls:
