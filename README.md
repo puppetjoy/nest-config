@@ -10,27 +10,27 @@ This is a standard [Puppet module](https://www.puppet.com/docs/puppet/latest/mod
 
 ## Usage
 
-This module defines three main stages to progressively build server and workstation images for OCI containers and bare metal systems.
+This module defines three main stages to progressively build server and workstation images for OCI containers, VMs, and bare metal systems.
 
 ### Supported Platforms
 
 | ISA    | CPU                                                                      | Platform                                                                            |
 |--------|--------------------------------------------------------------------------|-------------------------------------------------------------------------------------|
-| x86-64 | [Haswell](https://en.wikipedia.org/wiki/Haswell_(microarchitecture))     | Intel PC                                                                            |
-|        |                                                                          | Live ISO/USB                                                                        |
-|        |                                                                          | VMware                                                                              |
-| ARM    | [Cortex-A8](https://en.wikipedia.org/wiki/ARM_Cortex-A8)                 | [BeagleBone Black](https://beagleboard.org/black)                                   |
+| x86-64 | [Haswell](https://en.wikipedia.org/wiki/Haswell_(microarchitecture))     | [Wellsburg](https://en.wikipedia.org/wiki/Intel_X99)                                |
+|        | [Zen 5](https://en.wikipedia.org/wiki/Zen_5)                             | [Strix Halo](https://en.wikipedia.org/wiki/Zen_5#Strix_Halo)                        |
+| ARM    | [Cortex-A8](https://en.wikipedia.org/wiki/ARM_Cortex-A8)                 | [BeagleBone Black](https://www.beagleboard.org/boards/beaglebone-black)             |
 |        |                                                                          | [Raspberry Pi 3](https://www.raspberrypi.com/products/raspberry-pi-3-model-a-plus/) |
-| ARM64  | [Cortex-A53](https://en.wikipedia.org/wiki/ARM_Cortex-A53)               | [Pine64](https://www.pine64.org/)                                                   |
+| ARM64  | [Cortex-A53](https://en.wikipedia.org/wiki/ARM_Cortex-A53)               | [Pine64](https://pine64.org/)                                                       |
 |        |                                                                          | [Radxa Zero](https://wiki.radxa.com/Zero)                                           |
-|        |                                                                          | [SOPine](https://www.pine64.org/sopine/)                                            |
-|        | [Cortex-A72](https://en.wikipedia.org/wiki/ARM_Cortex-A72)               | [Pinebook Pro](https://www.pine64.org/pinebook-pro/)                                |
-|        |                                                                          | [Raspberry Pi 4/400](https://www.raspberrypi.com/products/raspberry-pi-400-unit/)   |
-|        |                                                                          | [Raspberry Pi 5/500](https://www.raspberrypi.com/products/raspberry-pi-500-plus/)   |
+|        |                                                                          | [SOPINE](https://pine64.org/devices/sopine/)                                        |
+|        | [Cortex-A72](https://en.wikipedia.org/wiki/ARM_Cortex-A72)               | [Pinebook Pro](https://pine64.org/devices/pinebook_pro/)                            |
+|        |                                                                          | [Raspberry Pi 4 / 400](https://www.raspberrypi.com/products/raspberry-pi-400-unit/)   |
+|        |                                                                          | [Raspberry Pi 5 / 500](https://www.raspberrypi.com/products/raspberry-pi-500-plus/)   |
 |        |                                                                          | [Rock 4](https://wiki.radxa.com/Rock4)                                              |
 |        |                                                                          | [Rock 5](https://wiki.radxa.com/Rock5)                                              |
-|        |                                                                          | [RockPro64](https://www.pine64.org/rockpro64/)                                      |
-| RISC-V | [XuanTie C920](https://www.xrvm.com/product/xuantie/4224888731980599296) | [Milk-V Pioneer](https://milkv.io/pioneer)                                          |
+|        |                                                                          | [RockPro64](https://pine64.org/devices/rockpro64/)                                  |
+|        |                                                                          | [VMware Fusion](https://en.wikipedia.org/wiki/VMware_Fusion)                        |
+| RISC-V | [XuanTie C920](https://www.xrvm.com/product/xuantie/C920)                | [Milk-V Pioneer](https://milkv.io/pioneer)                                          |
 
 Additionally, the module has comprehensive Kubernetes support.
 
