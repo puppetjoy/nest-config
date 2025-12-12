@@ -8,4 +8,4 @@ DHCP=yes
 RouteMetric=20
 
 [DHCPv4]
-UseDomains=yes
+UseDNS=no
