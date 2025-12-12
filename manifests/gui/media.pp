@@ -7,12 +7,14 @@ class nest::gui::media {
   }
 
   if 'vaapi' in $facts['portage_use'].split(' ') {
-    $libva_utils_ensure = installed
-  } else {
-    $libva_utils_ensure = absent
-  }
+    nest::lib::package { 'media-video/libva-utils':
+      ensure => installed,
+    }
 
-  nest::lib::package { 'media-video/libva-utils':
-    ensure => $libva_utils_ensure,
+    if 'intel' in $facts['portage_video_cards'].split(' ') {
+      nest::lib::package { 'media-libs/libva-intel-driver':
+        ensure => installed,
+      }
+    }
   }
 }

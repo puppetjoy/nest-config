@@ -18,7 +18,7 @@ class nest::base::dracut {
     ensure => installed,
   }
 
-  if $facts['profile']['architecture'] == 'amd64' {
+  if $facts['profile']['cpu'] == 'haswell' {
     nest::lib::package { 'sys-firmware/intel-microcode':
       ensure => installed,
     }

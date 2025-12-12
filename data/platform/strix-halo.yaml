@@ -1,0 +1,14 @@
+---
+nest::classes:
+  - 'nest::service::power'
+
+nest::kernel_config:
+  # Device drivers
+  CONFIG_DRM_AMDGPU: m
+
+  # For platform profile selection
+  CONFIG_AMD_SFH_HID: m
+  CONFIG_AMD_PMF: m
+  CONFIG_AMD_PMC: m
+  CONFIG_TEE: m
+  CONFIG_CRYPTO_DEV_CCP: y

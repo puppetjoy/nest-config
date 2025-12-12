@@ -13,8 +13,4 @@ class nest::host::falcon {
       gcc_only => true,
     ;
   }
-
-  nest::lib::package { 'media-libs/libva-intel-media-driver':
-    ensure => installed,
-  }
 }

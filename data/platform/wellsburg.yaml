@@ -3,7 +3,6 @@ nest::kernel_defconfig: 'defconfig kvm_guest.config'
 nest::kernel_config:
   # Architecture options
   CONFIG_NUMA_BALANCING: y
-  CONFIG_X86_X2APIC: y
   CONFIG_TRANSPARENT_HUGEPAGE: y
   CONFIG_INTEL_IDLE: y
 
@@ -26,8 +25,8 @@ nest::kernel_config:
   CONFIG_IPMI_DEVICE_INTERFACE: m
   CONFIG_IPMI_SI: m
   CONFIG_I2C_CHARDEV: m
-  CONFIG_DRM_AMDGPU: m
-  CONFIG_DRM_SIMPLEDRM: y
+  CONFIG_DRM_XE: m
+  CONFIG_DRM_XE_FORCE_PROBE: '*'
   CONFIG_SND_HDA_INTEL: m
   CONFIG_SND_HDA_CODEC_REALTEK: m
   CONFIG_SND_HDA_CODEC_HDMI: m

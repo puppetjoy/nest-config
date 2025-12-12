@@ -41,8 +41,6 @@ nest::kernel_cmdline:
 nest::kernel_config:
   CONFIG_CPU_FREQ_DEFAULT_GOV_PERFORMANCE: y
   CONFIG_CPU_FREQ_DEFAULT_GOV_USERSPACE: n
-  CONFIG_DRM_XE: m
-  CONFIG_DRM_XE_FORCE_PROBE: '*'
 
 # Protect service state
 nest::reset_filter_rules:
