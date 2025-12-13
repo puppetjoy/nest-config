@@ -9,6 +9,7 @@ nest::dvorak: true
 nest::external_interfaces: ['br0', 'tun0'] # for dnsmasq
 nest::monitor_layout: ['DP-3@0', 'HDMI-A-1@2560']
 nest::primary_monitor: 'HDMI-A-1'
+nest::public_ssh: true
 nest::router: true
 nest::swap_alt_win: true
 nest::text_scaling_factor: 1.1
