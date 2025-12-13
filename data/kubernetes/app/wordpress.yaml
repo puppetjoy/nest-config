@@ -23,6 +23,7 @@ values:
     hostname: "%{nest::kubernetes::fqdn}"
     annotations:
       "cert-manager.io/%{lookup('cert_issuer_kind')}": "%{lookup('cert_issuer')}"
+      projectcontour.io/response-timeout: infinity
     tls: true
   resources:
     requests:
