@@ -5,6 +5,7 @@
 #
 
 exec podman run --rm -it -e TERM \
+    --dns=172.22.4.3 \
     --entrypoint=/usr/bin/gitlab-runner \
     -v /srv/gitlab-runner:/etc/gitlab-runner \
     alpinelinux/gitlab-runner $@
