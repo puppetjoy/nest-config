@@ -7,6 +7,9 @@ resources:
 
 values:
   fullnameOverride: "%{nest::kubernetes::service}"
+  configInline:
+    timeouts:
+      connect-timeout: 60s # Reduce proxy timeouts (default 2s)
   contour:
     manageCRDs: false
     ingressClass:
