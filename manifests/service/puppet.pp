@@ -69,7 +69,7 @@ class nest::service::puppet (
     env     => [
       'PUPPETSERVER_ENVIRONMENT_TIMEOUT=0',
       'PUPPETSERVER_HOSTNAME=puppet',
-      'DNS_ALT_NAMES=puppet.nest',
+      'DNS_ALT_NAMES=puppet.nest,puppet.joyfullee.me',
       'CA_ALLOW_SUBJECT_ALT_NAMES=true',
       'PUPPETDB_SERVER_URLS=https://puppet:8081',
     ],
