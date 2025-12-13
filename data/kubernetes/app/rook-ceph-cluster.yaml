@@ -190,8 +190,16 @@ values:
     # Additional Ceph configuration options
     # See: https://rook.io/docs/rook/latest/CRDs/Cluster/ceph-cluster-crd/#ceph-config
     cephConfig:
-      osd:
-        bluestore_slow_ops_warn_lifetime: '0' # disable slow op warnings
+      global:
+        # Reduce slow op false positives
+        # See: https://docs.ceph.com/en/latest/rados/operations/health-checks/#bluestore-slow-op-alert
+        bluestore_slow_ops_warn_lifetime: '300'
+        bluestore_slow_ops_warn_threshold: '5'
+
+        # Tune for delete heavy workloads
+        # See: https://docs.ceph.com/en/latest/radosgw/config-ref/#garbage-collection-settings
+        rgw_gc_max_concurrent_io: '20'
+        rgw_gc_max_trim_chunk: '64'
   # end: cephClusterSpec
 
   ingress:
