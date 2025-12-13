@@ -141,13 +141,13 @@ plan nest::build::stage1 (
 
   if $deploy {
     $image = "${registry}/nest/stage1/${variant}:${cpu}"
-    run_command("podman commit --change CMD=/bin/zsh ${container} ${image}", 'localhost', 'Commit build container')
+    # run_command("podman commit --change CMD=/bin/zsh ${container} ${image}", 'localhost', 'Commit build container')
 
-    $debug_container = "${container}-debug"
+    # $debug_container = "${container}-debug"
     $debug_image = "${registry}/nest/stage1/${variant}/debug:${cpu}"
-    run_command("podman run --name=${debug_container} --volume=${debug_volume}:/usr/lib/.debug:ro ${qemu_args} ${image} cp -a /usr/lib/.debug/. /usr/lib/debug", 'localhost', 'Copy debug symbols')
-    run_command("podman commit --change CMD=/bin/zsh ${debug_container} ${debug_image}", 'localhost', 'Commit debug container')
-    run_command("podman rm ${debug_container}", 'localhost', 'Remove debug container')
+    # run_command("podman run --name=${debug_container} --volume=${debug_volume}:/usr/lib/.debug:ro ${qemu_args} ${image} cp -a /usr/lib/.debug/. /usr/lib/debug", 'localhost', 'Copy debug symbols')
+    # run_command("podman commit --change CMD=/bin/zsh ${debug_container} ${debug_image}", 'localhost', 'Commit debug container')
+    # run_command("podman rm ${debug_container}", 'localhost', 'Remove debug container')
 
     unless $registry == 'localhost' {
       run_command("podman push ${image}", 'localhost', "Push ${image}")
