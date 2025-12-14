@@ -40,13 +40,13 @@ nest::service::reverse_proxy::hosts:
     destination: 'registry.gitlab.eyrie'
     ip: ['45.77.156.204', '2001:19f0:1000:e1dc::204']
     proxy_ssl: true
-    timeout: 900
+    timeout: 3600
 
   registry.gitlab.james.tl:
     destination: 'registry.gitlab.eyrie'
     ip: ['45.77.156.204', '2001:19f0:1000:e1dc::204']
     proxy_ssl: true
-    timeout: 900
+    timeout: 3600
 
   requests.thesatelliteoflove.net:
     destination: 'ombi.nest'

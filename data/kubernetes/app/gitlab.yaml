@@ -124,7 +124,7 @@ values:
           - name: "%{nest::kubernetes::service}-registry-auths"
       ingress:
         annotations:
-          projectcontour.io/response-timeout: 600s
+          projectcontour.io/response-timeout: 10m
       workhorse:
         image: registry.eyrie/nest/forks/gitlab-workhorse
   gitlab-runner:
@@ -135,7 +135,7 @@ values:
     hostname: "registry.%{nest::kubernetes::fqdn}"
     ingress:
       annotations:
-        projectcontour.io/response-timeout: 900s
+        projectcontour.io/response-timeout: 1h
       tls:
         secretName: "%{nest::kubernetes::service}-certs"
     storage:

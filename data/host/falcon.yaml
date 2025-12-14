@@ -135,13 +135,13 @@ nest::service::reverse_proxy::hosts:
     destination: 'registry.gitlab.eyrie'
     ip: '172.22.4.2'
     proxy_ssl: true
-    timeout: 900
+    timeout: 3600
 
   registry.gitlab.james.tl:
     destination: 'registry.gitlab.eyrie'
     ip: '172.22.4.2'
     proxy_ssl: true
-    timeout: 900
+    timeout: 3600
 
   cursivemoves.nest:
     destination: ['pixel7pro.nest:8080 lbset=0', 'streamer.nest:8080 lbset=1']
