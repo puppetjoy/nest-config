@@ -135,7 +135,7 @@ values:
     hostname: "registry.%{nest::kubernetes::fqdn}"
     ingress:
       annotations:
-        projectcontour.io/response-timeout: 600s
+        projectcontour.io/response-timeout: 900s
       tls:
         secretName: "%{nest::kubernetes::service}-certs"
     storage:

@@ -49,7 +49,7 @@ resources:
     kind: Ingress
     metadata:
       annotations:
-        projectcontour.io/response-timeout: 600s
+        projectcontour.io/response-timeout: 900s
       name: "%{lookup('service_name')}-objectstore"
       namespace: "%{nest::kubernetes::namespace}"
     spec:

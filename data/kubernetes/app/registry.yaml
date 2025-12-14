@@ -130,6 +130,7 @@ values:
         secretkey: "%{nest::service::registry::bucket_config.AWS_SECRET_ACCESS_KEY}"
         regionendpoint: "%{nest::service::registry::bucket_config.BUCKET_HOST}"
         bucket: "%{nest::service::registry::bucket_config.BUCKET_NAME}"
+        chunksize: 50000000 # 50MB (default is 10MB)
         secure: false
       delete:
         enabled: true
