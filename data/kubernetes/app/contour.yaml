@@ -9,7 +9,7 @@ values:
   fullnameOverride: "%{nest::kubernetes::service}"
   configInline:
     timeouts:
-      connect-timeout: 120s # Reduce proxy timeouts (default 2s)
+      stream-idle-timeout: 30m
   contour:
     manageCRDs: false
     ingressClass:

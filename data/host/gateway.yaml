@@ -33,20 +33,20 @@ nest::service::reverse_proxy::hosts:
     serveraliases: ['gitlab.james.tl']
     encoded_slashes: true
     proxy_ssl: true
-    timeout: 600
+    timeout: 2400
     websockets: true
 
   registry.gitlab.joyfullee.me:
     destination: 'registry.gitlab.eyrie'
     ip: ['45.77.156.204', '2001:19f0:1000:e1dc::204']
     proxy_ssl: true
-    timeout: 900
+    timeout: 2400
 
   registry.gitlab.james.tl:
     destination: 'registry.gitlab.eyrie'
     ip: ['45.77.156.204', '2001:19f0:1000:e1dc::204']
     proxy_ssl: true
-    timeout: 900
+    timeout: 2400
 
   requests.thesatelliteoflove.net:
     destination: 'ombi.nest'
@@ -67,7 +67,7 @@ nest::service::reverse_proxy::hosts:
     priority: '20'  # higher priority
     proxy_ssl: true
     serve_local: true
-    timeout: 600
+    timeout: 2400
 
   thestaticvoid.com:
     destination: 'thestaticvoid.eyrie'
@@ -76,4 +76,4 @@ nest::service::reverse_proxy::hosts:
     serveraliases: ['www.thestaticvoid.com', 'thestaticvoid.org', 'www.thestaticvoid.org', 'tsv.co', 'www.tsv.co']
     proxy_ssl: true
     serve_local: true
-    timeout: 600
+    timeout: 2400

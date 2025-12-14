@@ -54,7 +54,6 @@ class nest::service::gitlab (
 
       # Registry object storage config
       # see: https://docs.gitlab.com/charts/charts/registry/#storage
-      # see: https://docs.gitlab.com/administration/packages/container_registry_troubleshooting/#aws-s3-with-the-gitlab-registry-error-when-pushing-large-images
       # example: https://gitlab.com/gitlab-org/charts/gitlab/-/blob/master/examples/objectstorage/registry.s3.yaml
       $registry_config = @("YAML")
         s3:
@@ -63,7 +62,7 @@ class nest::service::gitlab (
           region: not-important
           regionendpoint: ${endpoint}
           bucket: ${registry_bucket_config['BUCKET_NAME']}
-          chunksize: 50000000 # 50MB (default is 10MB)
+          chunksize: 67108864 # 64 MiB
           secure: false
         | YAML
 

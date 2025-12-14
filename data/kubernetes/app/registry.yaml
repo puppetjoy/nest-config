@@ -130,7 +130,7 @@ values:
         secretkey: "%{nest::service::registry::bucket_config.AWS_SECRET_ACCESS_KEY}"
         regionendpoint: "%{nest::service::registry::bucket_config.BUCKET_HOST}"
         bucket: "%{nest::service::registry::bucket_config.BUCKET_NAME}"
-        chunksize: 50000000 # 50MB (default is 10MB)
+        chunksize: 67108864 # 64 MiB
         secure: false
       delete:
         enabled: true
@@ -141,7 +141,7 @@ values:
   ingress:
     enabled: true
     annotations:
-      projectcontour.io/response-timeout: 600s
+      projectcontour.io/response-timeout: 30m
     hosts:
       - host: "%{nest::kubernetes::fqdn}"
     tls:
