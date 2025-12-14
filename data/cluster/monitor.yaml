@@ -1,8 +1,0 @@
----
-nest::classes:
-  - 'nest::service::kubernetes'
-
-nest::bird_role: worker
-nest::external_interfaces: ['usb0']
-nest::vpn_client: false
-nest::wifi: false
