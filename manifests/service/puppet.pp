@@ -68,8 +68,8 @@ class nest::service::puppet (
     image   => 'registry.gitlab.joyfullee.me/nest/forks/container-puppetserver:8.7.0',
     env     => [
       'PUPPETSERVER_ENVIRONMENT_TIMEOUT=0',
-      'PUPPETSERVER_HOSTNAME=puppet',
-      'DNS_ALT_NAMES=puppet.nest,puppet.joyfullee.me',
+      'PUPPETSERVER_HOSTNAME=puppet.nest',
+      'DNS_ALT_NAMES=puppet.joyfullee.me',
       'CA_ALLOW_SUBJECT_ALT_NAMES=true',
       'PUPPETDB_SERVER_URLS=https://puppet:8081',
     ],
