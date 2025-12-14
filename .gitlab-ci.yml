@@ -28,7 +28,7 @@ stages:
         --build-arg=BRANCH="$CI_COMMIT_BRANCH"
         --build-arg=REPOSITORY="$CI_REPOSITORY_URL"
         --file=Containerfile
-        --secret=id=ssh_private_key,src=<(echo "$NEST_CI_DEPLOY_KEY")
+        --secret=id=ssh_private_key,src="$NEST_CI_PRIVATE_KEY_FILE"
         --squash
         --tag="${CI_REGISTRY_IMAGE}/${CI_COMMIT_BRANCH}:${CPU}"
         empty'
