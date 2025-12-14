@@ -16,6 +16,8 @@ lookup_options:
     merge: 'unique'
   nest::kernel_config:
     merge: 'hash'
+  nest::packages:
+    merge: 'unique'
   nest::package_env:
     merge: 'hash'
   nest::package_keywords:

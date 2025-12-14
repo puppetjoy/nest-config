@@ -68,6 +68,7 @@ class nest (
   Enum['nullmailer', 'postfix'] $mta = nullmailer,
 
   # Package resources
+  Array[String]      $packages         = [],
   Hash[String, Hash] $package_env      = {},
   Hash[String, Hash] $package_keywords = {},
   Hash[String, Hash] $package_unmask   = {},

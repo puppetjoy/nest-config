@@ -1,4 +1,8 @@
 class nest::base::packages {
+  nest::lib::package { $nest::packages:
+    ensure => installed,
+  }
+
   case $facts['os']['family'] {
     'Gentoo': {
       nest::lib::package { [
