@@ -4,4 +4,5 @@ nest::classes:
   - 'nest::firmware::uboot'
 
 nest::dtb_file: 'starfive/jh7110-milkv-mars.dtb'
+nest::fscache: false
 nest::uboot_defconfig: 'starfive_visionfive2_defconfig'
