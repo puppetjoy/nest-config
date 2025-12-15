@@ -99,6 +99,10 @@ class nest::service::streamux (
   #
   # Gstreamer
   #
+  nest::lib::package_use { 'media-libs/gst-plugins-base':
+    use => '-pango',
+  }
+  ->
   nest::lib::package { [
     'media-libs/gst-plugins-bad',
     'media-libs/gst-plugins-good',
