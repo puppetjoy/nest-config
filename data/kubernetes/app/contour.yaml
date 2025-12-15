@@ -9,7 +9,7 @@ values:
   fullnameOverride: "%{nest::kubernetes::service}"
   configInline:
     timeouts:
-      stream-idle-timeout: 30m
+      stream-idle-timeout: 1h
   contour:
     manageCRDs: false
     ingressClass:
