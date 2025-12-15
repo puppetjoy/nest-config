@@ -28,7 +28,7 @@ P /boot/**
 - /root/
 - /srv/
 P /var/lib/bluetooth/**
-- /var/lib/misc/dnsmasq.leases
+P /var/lib/misc/dnsmasq.leases
 P /var/log/**
 P /var/tmp/**
 
