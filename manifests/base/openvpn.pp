@@ -109,6 +109,6 @@ class nest::base::openvpn {
   }
   ~>
   service { $openvpn_service:
-    enable => $nest::vpn,
+    enable => $nest::vpn or $nest::router,
   }
 }
