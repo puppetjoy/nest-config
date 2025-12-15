@@ -1,6 +1,6 @@
 [Match]
 Host=owl
-Name=en*
+Name=br0
 
 [Network]
 Address=172.22.4.4/24

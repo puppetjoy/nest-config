@@ -1,0 +1,6 @@
+[Match]
+Host=owl
+Name=en*
+
+[Network]
+Bridge=br0

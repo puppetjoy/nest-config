@@ -1,0 +1,6 @@
+[Match]
+Host=owl
+
+[NetDev]
+Kind=bridge
+Name=br0
