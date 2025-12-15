@@ -1,3 +1,4 @@
 ---
 nest::classes: ['nest::service::deskflow']
 nest::text_scaling_factor: 1.1
+nest::vpn: true

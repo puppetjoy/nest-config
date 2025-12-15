@@ -28,7 +28,7 @@ class nest (
   Boolean $puppet        = true,
   Boolean $public_ssh    = false,
   Boolean $router        = false,
-  Boolean $vpn_client    = true,
+  Boolean $vpn           = false,
 
   # System settings
   Optional[String]                  $arm_firmware_tag    = undef,

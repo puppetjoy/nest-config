@@ -4,4 +4,3 @@ nest::classes:
 
 nest::bird_role: control-plane
 nest::external_interfaces: ['bond0']
-nest::vpn_client: false

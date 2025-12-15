@@ -1,5 +1,3 @@
 ---
 nest::packages:
   - 'sys-apps/ipmitool'
-
-nest::vpn_client: false

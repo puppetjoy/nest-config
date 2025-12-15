@@ -6,7 +6,5 @@ nest::classes:
 nest::packages:
   - 'net-dialup/minicom'
 
-nest::vpn_client: false
-
 nest::service::usb_resetter::device_ids:
   - '2109:3431' # VIA Labs, Inc. Hub

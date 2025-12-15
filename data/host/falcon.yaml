@@ -28,7 +28,6 @@ nest::kexec: true
 nest::mta: postfix
 nest::public_ssh: true
 nest::srv_zpool: data/crypt
-nest::vpn_client: false
 
 nest::kernel_cmdline:
   - 'console=ttyS1,115200n8'

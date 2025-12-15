@@ -2,8 +2,6 @@
 nest::classes:
   - 'nest::service::gitlab_runner'
 
-nest::vpn_client: false
-
 nest::service::gitlab_runner::host: 'gitlab.joyfullee.me'
 nest::service::gitlab_runner::instances:
   runner:

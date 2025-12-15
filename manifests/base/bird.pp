@@ -1,7 +1,7 @@
 class nest::base::bird {
   if $nest::bird_role {
     $bird_role = $nest::bird_role
-  } elsif !$nest::vpn_client {
+  } elsif !$nest::vpn {
     $bird_role = 'client'
   } else {
     $bird_role = undef

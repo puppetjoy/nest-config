@@ -1,2 +1,2 @@
 ---
-#nest::vpn_client: false
+nest::vpn: true

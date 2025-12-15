@@ -5,4 +5,3 @@ nest::classes:
 
 nest::bird_role: worker
 nest::external_interfaces: ['end0']
-nest::vpn_client: false

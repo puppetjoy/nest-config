@@ -5,7 +5,6 @@ nest::classes:
   - 'nest::tool::qemu'
 
 nest::distcc_server: true
-nest::vpn_client: false
 
 nest::service::gitlab_runner::host: 'gitlab.joyfullee.me'
 nest::service::gitlab_runner::instances:

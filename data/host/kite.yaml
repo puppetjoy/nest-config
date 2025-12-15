@@ -5,4 +5,3 @@ nest::journal: persistent
 nest::monitor_layout: ['HDMI-A-1@0', 'HDMI-A-2@2560']
 nest::primary_monitor: 'HDMI-A-1'
 nest::text_scaling_factor: 1.1
-nest::vpn_client: false

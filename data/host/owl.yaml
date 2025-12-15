@@ -7,7 +7,6 @@ nest::classes:
 nest::distcc_server: true
 nest::dvorak: true
 nest::text_scaling_factor: 1.5
-nest::vpn_client: false
 
 nest::service::power::profile: 'performance'
 
