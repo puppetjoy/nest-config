@@ -22,7 +22,6 @@ class nest::base::packages {
         'net-misc/whois',
         'sys-apps/ethtool',
         'sys-apps/gptfdisk',
-        'sys-apps/ipmitool',
         'sys-apps/pciutils',
         'sys-apps/pv',
         'sys-apps/usbutils',
