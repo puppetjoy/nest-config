@@ -33,14 +33,6 @@ class nest::host::eagle_console {
     ;
   }
 
-  nest::lib::package { [
-    'dev-libs/libgpiod',
-    'net-dialup/minicom',
-  ]:
-    ensure => installed,
-  }
-
-
   # Deploy Arduino sketch
   unless $facts['is_container'] {
     Exec {

@@ -2,6 +2,7 @@
 nest::classes:
   - 'nest::host::kestrel'
   - 'nest::service::gitlab_runner'
+  - 'nest::service::usb_resetter'
 
 nest::autologin: sway
 nest::bird_role: server
@@ -44,3 +45,8 @@ nest::service::gitlab_runner::instances:
     bolt: true
     podman: true
     qemu: true
+
+# Workaround usbnet hang at boot
+# See: https://gitlab.joyfullee.me/nest/config/-/issues/64
+nest::service::usb_resetter::device_ids:
+  - '0525:a4a2' # Linux-USB Ethernet/RNDIS Gadget
