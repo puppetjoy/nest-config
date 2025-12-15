@@ -1,3 +1,5 @@
 ---
 nest::packages:
   - 'net-dialup/minicom'
+
+nest::vpn_client: false
