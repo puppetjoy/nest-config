@@ -224,6 +224,7 @@ nest::kernel_config:
   CONFIG_IKCONFIG: y
   CONFIG_IKCONFIG_PROC: y
   CONFIG_GCC_PLUGINS: n  # work with distcc
+  CONFIG_MAGIC_SYSRQ: y
 
   # Tuning
   CONFIG_HZ_PERIODIC: n
