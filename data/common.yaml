@@ -112,8 +112,6 @@ nest::distcc_hosts:
 # Hostnames in roughly alphabetical + chronological order
 # See: https://gitlab.joyfullee.me/nest/config/-/wikis/Hosts#addressing-philosophy
 nest::fixed_ips:
-  bastion: '172.22.4.5'
-  # 172.22.4.6 reserved for future infra (bastion2 / mgmt / whatever)
   control1: '172.22.4.7'
   control2: '172.22.4.8'
   control3: '172.22.4.9'
@@ -137,6 +135,8 @@ nest::host_records:
   falcon.nest: '172.22.4.2'
   kestrel.nest: '172.22.4.3'
   owl.nest: '172.22.4.4'
+  falcon-console.nest: '172.22.4.5'
+  kestrel-console.nest: '172.22.4.6'
 
   # kube-vip
   control-plane.eyrie: '172.21.255.255'
