@@ -72,9 +72,16 @@ plan nest::build::stage3 (
 
     # Preserve and restore host identity info
     apply($target, '_description' => 'Set up host identity info') {
+      file { $hostroot:
+        ensure => directory,
+        mode   => '0555',
+        owner  => 'root',
+        group  => 'root',
+      }
+      ->
       exec { 'systemd-machine-id-setup':
         command => "/usr/bin/systemd-machine-id-setup --root=${hostroot.shellquote}",
-        creates => "${hostroot}/etc/machine-id", # creates $hostroot too
+        creates => "${hostroot}/etc/machine-id",
       }
       ->
       file {
