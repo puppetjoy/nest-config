@@ -5,6 +5,7 @@ nest::classes:
 
 nest::dtb_file: 'allwinner/sun50i-a64-pine64-lts.dtb'
 nest::fscache: false
+nest::journal: volatile
 nest::kexec: true # buggy reset
 nest::soc: 'sun50i_a64'
 nest::uboot_defconfig: 'pine64-lts_defconfig'

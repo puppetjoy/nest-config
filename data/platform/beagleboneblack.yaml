@@ -4,6 +4,7 @@ nest::classes:
 
 nest::dtb_file: 'ti/omap/am335x-boneblack.dtb'
 nest::fscache: false
+nest::journal: volatile
 nest::puppet: false
 nest::uboot_defconfig: 'am335x_evm_defconfig'
 

@@ -5,6 +5,7 @@ nest::classes:
 
 nest::dtb_file: 'amlogic/meson-g12a-radxa-zero.dtb'
 nest::fscache: false
+nest::journal: volatile
 nest::puppet: false
 nest::uboot_defconfig: 'radxa-zero_defconfig'
 nest::wifi: true

@@ -4,6 +4,7 @@ nest::classes:
   - 'nest::firmware::uboot'
 
 nest::fscache: false
+nest::journal: volatile
 nest::kexec: true # buggy reset
 nest::puppet: false
 nest::soc: 'sun50i_a64'

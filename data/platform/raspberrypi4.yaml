@@ -7,6 +7,7 @@ nest::autologin: sway
 nest::dtb_file: 'broadcom/bcm2711-rpi-4-b.dtb'
 nest::dvorak: true
 nest::fscache: false
+nest::journal: volatile
 nest::kernel_defconfig: 'bcm2711_defconfig'
 nest::kernel_tag: 'raspberrypi/v6.12.61'
 nest::swap_alt_win: true

@@ -6,6 +6,7 @@ nest::classes:
 nest::dtb_file: 'broadcom/bcm2835-rpi-b.dtb'
 nest::dvorak: true
 nest::fscache: false
+nest::journal: volatile
 nest::kernel_defconfig: 'bcmrpi_defconfig'
 nest::puppet: false
 nest::uboot_defconfig: 'rpi_defconfig'
