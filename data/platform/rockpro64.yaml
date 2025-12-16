@@ -17,5 +17,4 @@ nest::kernel_cmdline:
 nest::kernel_config:
   # Device drivers
   CONFIG_SND_SOC_ES8316: m
-  CONFIG_USB_ETH: y
   CONFIG_VIDEO_ROCKCHIP_VDEC: m

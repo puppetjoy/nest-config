@@ -1,3 +1,0 @@
----
-nest::kernel_cmdline: ['cma=256M'] # For hardware accelerated decoding of h264@1080p
-nest::vpn: true

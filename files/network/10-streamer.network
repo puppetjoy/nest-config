@@ -1,6 +1,0 @@
-[Match]
-Host=streamer
-Name=wlan0
-
-[Network]
-Address=172.22.100.1/24
