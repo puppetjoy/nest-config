@@ -21,8 +21,3 @@ nest::kernel_cmdline:
   - '8250.nr_uarts=1' # set in DT but not passed by u-boot/systemd-boot
   - 'console=tty0'
   - 'noefi' # EFI services prevent full shutdown
-
-nest::kernel_config:
-  # Rely on filesystem compression
-  CONFIG_MODULE_COMPRESS_NONE: y
-  CONFIG_MODULE_COMPRESS_XZ: n

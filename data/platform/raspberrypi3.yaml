@@ -29,5 +29,4 @@ nest::kernel_config:
   CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL: y
 
   # Rely on filesystem compression
-  CONFIG_MODULE_COMPRESS_NONE: y
-  CONFIG_MODULE_COMPRESS_XZ: n
+  CONFIG_MODULE_COMPRESS: n
