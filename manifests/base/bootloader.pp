@@ -2,12 +2,12 @@ class nest::base::bootloader {
   tag 'boot'
   tag 'kernel'
 
-  # For nest::base::console::keymap
-  include 'nest::base::console'
+  include 'nest::base::console' # for nest::base::console::keymap
+  include 'nest::base::fstab'   # for nest::base::fstab::hostname
 
   $kernel_cmdline = [
     $nest::zfs ? {
-      false   => 'root=/dev/mapper/rootfs',
+      false   => "root=PARTLABEL=${nest::base::fstab::hostname}",
       default => 'root=zfs:AUTO',
     },
 
