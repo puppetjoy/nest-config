@@ -23,3 +23,11 @@ nest::kernel_cmdline:
   - '8250.nr_uarts=1' # set in DT but not passed by u-boot/systemd-boot
   - 'console=tty0'
   - 'noefi' # EFI services prevent full shutdown
+
+nest::kernel_config:
+  # Unsupported
+  CONFIG_BLK_DEV_NVME: null
+  CONFIG_HW_RANDOM_VIRTIO: null
+  CONFIG_DRM_NOUVEAU: null
+  CONFIG_VIRTIO_PCI: null
+  CONFIG_VIRTIO_BALLOON: null
