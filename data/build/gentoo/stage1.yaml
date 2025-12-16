@@ -19,6 +19,7 @@ nest::classes:
   - 'nest::base::network'
   - 'nest::base::openvpn'
   - 'nest::base::packages'
+  - 'nest::base::policykit'
   - 'nest::base::portage'
   - 'nest::base::puppet'
   - 'nest::base::qemu'

@@ -1,6 +1,6 @@
 ---
 nest::classes:
-  - 'nest::gui::pipewire'
+  - 'nest::service::pipewire'
 
 # Allow Roc audio streaming from home
 firewalld::custom_services:

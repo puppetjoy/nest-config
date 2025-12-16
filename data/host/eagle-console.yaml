@@ -2,9 +2,9 @@
 nest::classes:
   - 'nest::host::eagle_console'
   - 'nest::tool::arduino'
+  - 'nest::tool::minicom'
 
 nest::packages:
   - 'dev-libs/libgpiod'
-  - 'net-dialup/minicom'
 
 nest::tool::arduino::cli_source: 'https://downloads.arduino.cc/arduino-cli/arduino-cli_latest_Linux_ARMv7.tar.gz'

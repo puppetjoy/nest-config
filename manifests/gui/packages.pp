@@ -3,8 +3,4 @@ class nest::gui::packages {
     ensure => installed,
     use    => ['extra', 'xetex'],
   }
-
-  nest::lib::package { 'net-dialup/minicom':
-    ensure => installed,
-  }
 }

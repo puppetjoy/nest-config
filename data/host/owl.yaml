@@ -1,7 +1,7 @@
 ---
 nest::classes:
-  - 'nest::gui::pipewire'
   - 'nest::service::gitlab_runner'
+  - 'nest::service::pipewire'
   - 'nest::tool::bolt'
 
 nest::distcc_server: true

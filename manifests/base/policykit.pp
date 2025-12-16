@@ -1,4 +1,4 @@
-class nest::gui::policykit {
+class nest::base::policykit {
   nest::lib::package_use { 'sys-apps/systemd':
     use => 'policykit',
   }
