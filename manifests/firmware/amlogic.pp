@@ -12,6 +12,7 @@ class nest::firmware::amlogic {
   nest::lib::build { 'amlogic-firmware':
     args      => "distclean fip BOARD=${board} UBOOT_BIN=/usr/src/u-boot/u-boot.bin",
     dir       => '/usr/src/fip',
+    makeargs  => '-j1', # FIP build system is not parallel-safe
     subscribe => Class['nest::firmware::uboot'],
   }
 }
