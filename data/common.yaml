@@ -125,10 +125,7 @@ nest::fixed_ips:
   storage1: '172.22.4.17'
   storage2: '172.22.4.18'
   storage3: '172.22.4.19'
-
-nest::hosts:
-  unifi.home:
-    ip: '172.22.1.2'
+  storage4: '172.22.4.20'
 
 nest::host_records:
   # Non-DHCP hosts
@@ -161,6 +158,10 @@ nest::host_records:
   gitlab.eyrie: '172.21.2.0'
   registry.gitlab.eyrie: '172.21.2.0'
   ssh.gitlab.eyrie: '172.21.2.1'
+
+nest::hosts:
+  unifi.home:
+    ip: '172.22.1.2'
 
 nest::nestfs_hostname: 'falcon.nest'
 
