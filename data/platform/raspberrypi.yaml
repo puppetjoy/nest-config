@@ -10,6 +10,8 @@ nest::journal: volatile
 nest::kernel_defconfig: 'bcmrpi_defconfig'
 nest::puppet: false
 nest::uboot_defconfig: 'rpi_defconfig'
+nest::zfs: false
+nest::zswap: false
 
 nest::package_keywords:
   # Still not fully open-source or mainlined...

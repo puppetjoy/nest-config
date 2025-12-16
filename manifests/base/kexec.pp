@@ -10,7 +10,7 @@ class nest::base::kexec {
     $kexec_load_env = @("ENV")
       IMAGE=/boot/${facts['machine_id']}/${nest::kernel_version}/linux
       INITRD=/boot/${facts['machine_id']}/${nest::kernel_version}/initrd
-      KERNEL_CMDLINE="root=zfs:AUTO ${nest::base::bootloader::kernel_cmdline}"
+      KERNEL_CMDLINE="${nest::base::bootloader::kernel_cmdline}"
       | ENV
 
     file { '/etc/default/kexec-load':

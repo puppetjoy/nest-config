@@ -36,7 +36,7 @@ class nest::base::bootloader::spec {
       ;
 
       '/etc/kernel/cmdline':
-        content => "root=zfs:AUTO ${nest::base::bootloader::kernel_cmdline}\n",
+        content => "${nest::base::bootloader::kernel_cmdline}\n",
         notify  => Exec['kernel-install'],
       ;
     }

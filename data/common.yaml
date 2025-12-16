@@ -216,7 +216,7 @@ nest::opensbi_tag: 'riscv-software-src/v1.7'
 nest::uboot_tag: 'u-boot/v2025.10'
 nest::uroot_tag: 'u-root/v0.15.0'
 nest::kernel_tag: 'stable/v6.18.0'
-nest::zfs_fork: true # for Linux 6.18 compatibility
+nest::zfs: fork # for Linux 6.18 compatibility
 
 nest::kernel_config:
   # Preferences

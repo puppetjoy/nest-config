@@ -60,7 +60,8 @@ class nest (
   Boolean                           $wifi                = false,
   Boolean                           $wifi_power_save     = true,
   Optional[Sensitive[Hash]]         $wlans               = undef,
-  Boolean                           $zfs_fork            = false,
+  Variant[Boolean, Enum['fork']]    $zfs                 = true,
+  Boolean                           $zswap               = true,
 
   # Mail settings
   Optional[String] $gmail_username   = undef,

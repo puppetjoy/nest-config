@@ -13,104 +13,117 @@ class nest::base::fstab {
   }
 
   $specs = {
-    'boot'    => [
-      "set 1/spec PARTLABEL=${hostname}-boot",
-      'set 1/file /boot',
-      'set 1/vfstype vfat',
-      'set 1/opt defaults',
-      'set 1/dump 0',
-      'set 1/passno 2',
-    ],
+    'boot'   => $facts['profile']['platform'] ? {
+      'radxazero' => [
+        # Firmware overwrites GPT :(
+        "set 1/spec LABEL=${labelname}-bt",
+        'set 1/file /boot',
+        'set 1/vfstype vfat',
+        'set 1/opt defaults',
+        'set 1/dump 0',
+        'set 1/passno 2',
+      ],
+      default     => [
+        "set 1/spec PARTLABEL=${hostname}-boot",
+        'set 1/file /boot',
+        'set 1/vfstype vfat',
+        'set 1/opt defaults',
+        'set 1/dump 0',
+        'set 1/passno 2',
+      ],
+    },
 
-    'boot-mbr' => [
-      "set 1/spec LABEL=${labelname}-bt",
-      'set 1/file /boot',
-      'set 1/vfstype vfat',
-      'set 1/opt defaults',
-      'set 1/dump 0',
-      'set 1/passno 2',
-    ],
+    'swap'   => $nest::zswap ? {
+      true    => [
+        "set 2/spec LABEL=${labelname}-swap",
+        'set 2/file none',
+        'set 2/vfstype swap',
+        'set 2/opt discard',
+        'set 2/dump 0',
+        'set 2/passno 0',
+      ],
+      default => [],
+    },
 
-    'efi'     => [
-      "set 2/spec PARTLABEL=${hostname}-efi",
-      'set 2/file /efi',
-      'set 2/vfstype vfat',
-      'set 2/opt defaults',
-      'set 2/dump 0',
-      'set 2/passno 2',
-    ],
+    'root'   => $nest::zfs ? {
+      false   => [
+        "set 3/spec PARTLABEL=${hostname}",
+        'set 3/file /',
+        'set 3/vfstype auto',
+        'set 3/opt[1] defaults',
+        'set 3/opt[2] noatime',
+        'set 3/dump 0',
+        'set 3/passno 1',
+      ],
+      default => [],
+    },
 
-    'swap'    => [
-      "set 3/spec LABEL=${labelname}-swap",
-      'set 3/file none',
-      'set 3/vfstype swap',
-      'set 3/opt discard',
-      'set 3/dump 0',
-      'set 3/passno 0',
-    ],
+    'var'    => $nest::zfs ? {
+      false   => [],
+      default => [
+        'set 4/spec none',
+        'set 4/file /var',
+        'set 4/vfstype none',
+        'set 4/opt[1] fake',
+        'set 4/opt[2] noauto',
+        'set 4/opt[3] x-systemd.requires',
+        'set 4/opt[3]/value zfs-mount.service',
+        'set 4/dump 0',
+        'set 4/passno 0',
+      ],
+    },
 
-    'var'     => [
-      'set 4/spec none',
-      'set 4/file /var',
-      'set 4/vfstype none',
-      'set 4/opt[1] fake',
-      'set 4/opt[2] noauto',
-      'set 4/opt[3] x-systemd.requires',
-      'set 4/opt[3]/value zfs-mount.service',
-      'set 4/dump 0',
-      'set 4/passno 0',
-    ],
+    'nest'   => $nest::fscache ? {
+      true => [
+        "set 5/spec LABEL=${labelname}-fscache",
+        'set 5/file /var/cache/fscache',
+        'set 5/vfstype ext4',
+        'set 5/opt[1] defaults',
+        'set 5/opt[2] discard',
+        'set 5/dump 0',
+        'set 5/passno 2',
 
-    'nest-fscache' => [
-      "set 5/spec LABEL=${labelname}-fscache",
-      'set 5/file /var/cache/fscache',
-      'set 5/vfstype ext4',
-      'set 5/opt[1] defaults',
-      'set 5/opt[2] discard',
-      'set 5/dump 0',
-      'set 5/passno 2',
+        "set 6/spec ${nest::nestfs_hostname}:/nest",
+        'set 6/file /nest',
+        'set 6/vfstype nfs',
+        'set 6/opt[1] fsc',
+        'set 6/opt[2] x-systemd.automount',
+        'set 6/opt[3] x-systemd.requires',
+        'set 6/opt[3]/value cachefilesd.service',
 
-      "set 6/spec ${nest::nestfs_hostname}:/nest",
-      'set 6/file /nest',
-      'set 6/vfstype nfs',
-      'set 6/opt[1] fsc',
-      'set 6/opt[2] x-systemd.automount',
-      'set 6/opt[3] x-systemd.requires',
-      'set 6/opt[3]/value cachefilesd.service',
+        $nest::vpn ? {
+          true    => [
+            'set 6/opt[4] x-systemd.requires',
+            'set 6/opt[4]/value openvpn-client@nest.service',
+            'set 6/opt[5] x-systemd.requires',
+            'set 6/opt[5]/value sys-subsystem-net-devices-tun0.device',
+          ],
+          default => [],
+        },
 
-      $nest::vpn ? {
-        true    => [
-          'set 6/opt[4] x-systemd.requires',
-          'set 6/opt[4]/value openvpn-client@nest.service',
-          'set 6/opt[5] x-systemd.requires',
-          'set 6/opt[5]/value sys-subsystem-net-devices-tun0.device',
-        ],
-        default => [],
-      },
+        'set 6/dump 0',
+        'set 6/passno 0',
+      ],
+      default => [
+        "set 6/spec ${nest::nestfs_hostname}:/nest",
+        'set 6/file /nest',
+        'set 6/vfstype nfs',
+        'set 6/opt[1] x-systemd.automount',
 
-      'set 6/dump 0',
-      'set 6/passno 0',
-    ],
+        $nest::vpn ? {
+          true    => [
+            'set 6/opt[2] x-systemd.requires',
+            'set 6/opt[2]/value openvpn-client@nest.service',
+            'set 6/opt[3] x-systemd.requires',
+            'set 6/opt[3]/value sys-subsystem-net-devices-tun0.device',
+          ],
+          default => [],
+        },
 
-    'nest-nocache' => [
-      "set 6/spec ${nest::nestfs_hostname}:/nest",
-      'set 6/file /nest',
-      'set 6/vfstype nfs',
-      'set 6/opt[1] x-systemd.automount',
-
-      $nest::vpn ? {
-        true    => [
-          'set 6/opt[2] x-systemd.requires',
-          'set 6/opt[2]/value openvpn-client@nest.service',
-          'set 6/opt[3] x-systemd.requires',
-          'set 6/opt[3]/value sys-subsystem-net-devices-tun0.device',
-        ],
-        default => [],
-      },
-
-      'set 6/dump 0',
-      'set 6/passno 0',
-    ],
+        'set 6/dump 0',
+        'set 6/passno 0',
+      ],
+    },
 
     'falcon' => [
       'set 7/spec falcon.nest:/falcon',
@@ -133,25 +146,10 @@ class nest::base::fstab {
     ],
   }
 
-  $boot_spec = $facts['profile']['platform'] ? {
-    'radxazero' => 'boot-mbr',
-    default     => 'boot',
-  }
-
-  if $nest::fscache {
-    $nest_spec   = 'nest-fscache'
-    $falcon_spec = 'falcon'
-  } else {
-    $nest_spec   = 'nest-nocache'
-    $falcon_spec = 'falcon'
-  }
-
   if $nest::nestfs_hostname == "${hostname}.nest" {
-    $fstab = $specs[$boot_spec] + $specs['swap'] + $specs['var']
-  } elsif $facts['mountpoints']['/efi'] {
-    $fstab = $specs[$boot_spec] + $specs['efi'] + $specs['swap'] + $specs['var'] + $specs[$nest_spec] + $specs[$falcon_spec]
+    $fstab = $specs['boot'] + $specs['swap'] + $specs['var']
   } else {
-    $fstab = $specs[$boot_spec] + $specs['swap'] + $specs['var'] + $specs[$nest_spec] + $specs[$falcon_spec]
+    $fstab = $specs['boot'] + $specs['swap'] + $specs['root'] + $specs['var'] + $specs['nest'] + $specs['falcon']
   }
 
   augeas { 'fstab':

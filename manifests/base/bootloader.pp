@@ -6,6 +6,11 @@ class nest::base::bootloader {
   include 'nest::base::console'
 
   $kernel_cmdline = [
+    $nest::zfs ? {
+      false   => 'root=/dev/mapper/rootfs',
+      default => 'root=zfs:AUTO',
+    },
+
     'loglevel=3', # must come after 'quiet', if specified
 
     # Let I/O preferences be configurable at boot time
@@ -22,16 +27,21 @@ class nest::base::bootloader {
       default => [],
     },
 
-    # Let kernel swap to compressed memory instead of a physical volume, which
-    # is slow and, currently, prone to hanging.  max_pool_percent=100 ensures
-    # the OOM killer is invoked before zswap sends pages to physical swap.
-    # Physical swap is still useful for hibernation.
-    #
-    # See: https://github.com/openzfs/zfs/issues/7734
-    # See also: nest::base::zfs for workarounds
-    'sysctl.vm.swappiness=100',
-    'zswap.enabled=1',
-    'zswap.max_pool_percent=100',
+    $nest::zswap ? {
+      true => [
+        # Let kernel swap to compressed memory instead of a physical volume, which
+        # is slow and, currently, prone to hanging.  max_pool_percent=100 ensures
+        # the OOM killer is invoked before zswap sends pages to physical swap.
+        # Physical swap is still useful for hibernation.
+        #
+        # See: https://github.com/openzfs/zfs/issues/7734
+        # See also: nest::base::zfs for workarounds
+        'sysctl.vm.swappiness=100',
+        'zswap.enabled=1',
+        'zswap.max_pool_percent=100',
+      ],
+      default => [],
+    },
 
     # For iotop
     'delayacct',
