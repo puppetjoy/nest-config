@@ -1,0 +1,16 @@
+---
+nest::classes:
+  - 'nest::gui::pipewire'
+
+# Allow Roc audio streaming from home
+firewalld::custom_services:
+  roc:
+    description: 'Roc is real-time audio streaming over the network.'
+    ports:
+      - port: '10001:10003'
+        protocol: 'tcp'
+      - port: '10001:10003'
+        protocol: 'udp'
+firewalld::services:
+  roc:
+    zone: 'home'

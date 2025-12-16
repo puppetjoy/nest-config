@@ -1,0 +1,13 @@
+[Match]
+Host=owl
+Name=en*
+
+[Network]
+DHCP=yes
+VLAN=home
+
+[DHCP]
+RouteMetric=10
+
+[DHCPv4]
+UseDomains=yes
