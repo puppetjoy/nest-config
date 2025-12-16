@@ -6,7 +6,7 @@ class nest::firmware::raspberrypi {
     group => undef,
   }
 
-  if $facts['profile']['platform'] =~ /^raspberrypi[34]$/ {
+  if $facts['profile']['platform'] =~ /^raspberrypi[34]?$/ {
     nest::lib::package { 'sys-boot/raspberrypi-firmware':
       ensure => installed,
       before => File['/boot/config.txt'],
