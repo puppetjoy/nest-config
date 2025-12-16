@@ -1,6 +1,8 @@
 class nest::service::power (
   Optional[Enum['performance', 'balanced', 'powersaver']] $profile = undef,
 ) {
+  require 'nest::gui::policykit'
+
   nest::lib::package { 'sys-power/power-profiles-daemon':
     ensure => installed,
   }

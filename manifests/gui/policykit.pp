@@ -1,4 +1,8 @@
 class nest::gui::policykit {
+  nest::lib::package_use { 'sys-apps/systemd':
+    use => 'policykit',
+  }
+
   $admin_rules_content = @(EOT)
     polkit.addRule(function(action, subject) {
         if (subject.isInGroup("wheel")) {
