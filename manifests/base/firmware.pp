@@ -56,7 +56,7 @@ class nest::base::firmware {
 
     if $facts['profile']['platform'] and $facts['profile']['platform'] =~ /^raspberrypi/ {
       file { '/boot/overlays':
-        source  => '/usr/src/linux/arch/arm64/boot/dts/overlays',
+        source  => "/usr/src/linux/arch/${facts['profile']['architecture']}/boot/dts/overlays",
         links   => follow,
         recurse => true,
         purge   => true,

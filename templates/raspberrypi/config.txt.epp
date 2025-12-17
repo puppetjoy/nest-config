@@ -1,4 +1,8 @@
 <% case $facts['profile']['platform'] { -%>
+<% 'raspberrypi': { -%>
+enable_uart=1
+uart_2ndstage=1
+<% } -%>
 <% 'raspberrypi3': { -%>
 dtoverlay=miniuart-bt
 enable_uart=1
