@@ -54,7 +54,7 @@ class nest::base::firmware {
       }
     }
 
-    if $facts['profile']['platform'] and $facts['profile']['platform'] =~ /^raspberrypi/ {
+    if $nest::kernel_tag =~ /^raspberrypi\// {
       file { '/boot/overlays':
         source  => "/usr/src/linux/arch/${facts['profile']['architecture']}/boot/dts/overlays",
         links   => follow,

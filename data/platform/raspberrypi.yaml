@@ -7,7 +7,7 @@ nest::dtb_file: 'broadcom/bcm2835-rpi-b-rev2.dtb'
 nest::dvorak: true
 nest::fscache: false
 nest::journal: volatile
-nest::kernel_defconfig: 'bcmrpi_defconfig'
+nest::kernel_defconfig: 'bcm2835_defconfig'
 nest::puppet: false
 nest::uboot_defconfig: 'rpi_defconfig'
 nest::zfs: false
@@ -17,8 +17,6 @@ nest::package_keywords:
   # Still not fully open-source or mainlined...
   sys-boot/raspberrypi-firmware: {}
 
-nest::kernel_tag: 'raspberrypi/v6.12.61'
-
 nest::kernel_cmdline:
   - '8250.nr_uarts=1' # set in DT but not passed by u-boot/systemd-boot
   - 'console=tty0'
@@ -26,11 +24,6 @@ nest::kernel_cmdline:
   - 'noefi' # EFI services prevent full shutdown
 
 nest::kernel_config:
-  # Use older MMC driver for better stability
-  CONFIG_REGULATOR_FIXED_VOLTAGE: y
-  CONFIG_MMC_BCM2835_SDHOST: y
-  CONFIG_MMC_BCM2835: n
-
   # Unsupported
   CONFIG_BLK_DEV_NVME: null
   CONFIG_HW_RANDOM_VIRTIO: null
