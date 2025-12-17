@@ -6,11 +6,8 @@ Name=en*
 Address=172.22.4.6/24
 DNS=172.22.4.3
 Domains=nest
+Gateway=172.22.4.1
 
 [Route]
 Destination=172.22.0.0/24
 Gateway=172.22.4.3
-
-[Route]
-Destination=0.0.0.0/0
-Gateway=172.22.4.1

@@ -10,22 +10,6 @@ nest::text_scaling_factor: 1.5
 
 nest::service::power::profile: 'performance'
 
-nest::kernel_config:
-  CONFIG_SND_USB_AUDIO: m
-
-# Allow Roc audio streaming from home
-firewalld::custom_services:
-  roc:
-    description: 'Roc is real-time audio streaming over the network.'
-    ports:
-      - port: '10001:10003'
-        protocol: 'tcp'
-      - port: '10001:10003'
-        protocol: 'udp'
-firewalld::services:
-  roc:
-    zone: 'home'
-
 nest::service::gitlab_runner::host: 'gitlab.joyfullee.me'
 nest::service::gitlab_runner::instances:
   runner:

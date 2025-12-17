@@ -2,6 +2,9 @@
 nest::classes:
   - 'nest::service::pipewire'
 
+nest::kernel_config:
+  CONFIG_SND_USB_AUDIO: m
+
 # Allow Roc audio streaming from home
 firewalld::custom_services:
   roc:
