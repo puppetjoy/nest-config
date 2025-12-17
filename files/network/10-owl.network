@@ -6,7 +6,6 @@ Name=br0
 Address=172.22.4.4/24
 DNS=172.22.4.3
 Domains=nest
-VLAN=home
 
 [Route]
 Destination=172.22.0.0/24
