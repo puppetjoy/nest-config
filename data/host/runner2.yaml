@@ -3,3 +3,17 @@ nest::classes:
   - 'nest::host::runner2'
 
 nest::wifi: false
+
+# Enable USB-C device mode
+nest::dtb_overlay: |
+  / {
+    fragment@0 {
+      target-path = "/usb@fe800000/usb@fe800000";
+      __overlay__ {
+        dr_mode = "peripheral";
+      };
+    };
+  };
+
+nest::kernel_config:
+  CONFIG_USB_ETH: y
