@@ -53,7 +53,7 @@ plan nest::kubernetes::join_node (
     _run_as => 'root',
   })
 
-  run_command('kubeadm join --config=/root/kubeadm-config.yaml', $targets, 'Join node to Kubernetes cluster', {
+  run_command('kubeadm join --config=/root/kubeadm-config.yaml --ignore-preflight-errors=SystemVerification', $targets, 'Join node to Kubernetes cluster', {
     _run_as => 'root',
   })
 
