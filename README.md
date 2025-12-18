@@ -18,19 +18,21 @@ This module defines three main stages to progressively build server and workstat
 |--------|--------------------------------------------------------------------------|-------------------------------------------------------------------------------------|
 | x86-64 | [Haswell](https://en.wikipedia.org/wiki/Haswell_(microarchitecture))     | [Wellsburg](https://en.wikipedia.org/wiki/Intel_X99)                                |
 |        | [Zen 5](https://en.wikipedia.org/wiki/Zen_5)                             | [Strix Halo](https://en.wikipedia.org/wiki/Zen_5#Strix_Halo)                        |
-| ARM    | [Cortex-A8](https://en.wikipedia.org/wiki/ARM_Cortex-A8)                 | [BeagleBone Black](https://www.beagleboard.org/boards/beaglebone-black)             |
+| ARM    | [ARM11](https://en.wikipedia.org/wiki/ARM11)                             | [Raspberry Pi](https://www.raspberrypi.com/products/raspberry-pi-1-model-b-plus/)   |
+|        | [Cortex-A8](https://en.wikipedia.org/wiki/ARM_Cortex-A8)                 | [BeagleBone Black](https://www.beagleboard.org/boards/beaglebone-black)             |
 |        |                                                                          | [Raspberry Pi 3](https://www.raspberrypi.com/products/raspberry-pi-3-model-a-plus/) |
 | ARM64  | [Cortex-A53](https://en.wikipedia.org/wiki/ARM_Cortex-A53)               | [Pine64](https://pine64.org/)                                                       |
 |        |                                                                          | [Radxa Zero](https://wiki.radxa.com/Zero)                                           |
 |        |                                                                          | [SOPINE](https://pine64.org/devices/sopine/)                                        |
 |        | [Cortex-A72](https://en.wikipedia.org/wiki/ARM_Cortex-A72)               | [Pinebook Pro](https://pine64.org/devices/pinebook_pro/)                            |
-|        |                                                                          | [Raspberry Pi 4 / 400](https://www.raspberrypi.com/products/raspberry-pi-400-unit/)   |
-|        |                                                                          | [Raspberry Pi 5 / 500](https://www.raspberrypi.com/products/raspberry-pi-500-plus/)   |
+|        |                                                                          | [Raspberry Pi 4 / 400](https://www.raspberrypi.com/products/raspberry-pi-400-unit/) |
+|        |                                                                          | [Raspberry Pi 5 / 500](https://www.raspberrypi.com/products/raspberry-pi-500-plus/) |
 |        |                                                                          | [Rock 4](https://wiki.radxa.com/Rock4)                                              |
 |        |                                                                          | [Rock 5](https://wiki.radxa.com/Rock5)                                              |
 |        |                                                                          | [RockPro64](https://pine64.org/devices/rockpro64/)                                  |
 |        |                                                                          | [VMware Fusion](https://en.wikipedia.org/wiki/VMware_Fusion)                        |
-| RISC-V | [XuanTie C920](https://www.xrvm.com/product/xuantie/C920)                | [Milk-V Pioneer](https://milkv.io/pioneer)                                          |
+| RISC-V | [SiFive U74](https://www.sifive.com/cores/essential-u-series)            | [Milk-V Mars](https://milkv.io/mars)                                                |
+|        | [XuanTie C920](https://www.xrvm.com/product/xuantie/C920)                | [Milk-V Pioneer](https://milkv.io/pioneer)                                          |
 
 Additionally, the module has comprehensive Kubernetes support.
 
