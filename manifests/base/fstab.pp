@@ -1,16 +1,6 @@
 class nest::base::fstab {
-  $hostname = regsubst($::trusted['certname'], '\..*', '')
-
-  $suffix = $hostname ? {
-    /(\d+)$/ => $1,
-    default  => '',
-  }
-
-  if length($hostname) > 8 {
-    $labelname = "${hostname[0,8 - $suffix.length]}${suffix}"
-  } else {
-    $labelname = $hostname
-  }
+  $hostname  = regsubst($::trusted['certname'], '\..*', '')
+  $labelname = nest::labelname($hostname)
 
   $specs = {
     'boot'   => $facts['profile']['platform'] ? {
