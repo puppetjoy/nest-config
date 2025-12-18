@@ -1,5 +1,6 @@
 ---
 node_role: workstation
+ssd_osd_count: 3
 ssd_volume_size: 10Gi
 hdd_volume_size: 100Gi
 service_name: "%{nest::kubernetes::service}-%{nest::kubernetes::namespace}"

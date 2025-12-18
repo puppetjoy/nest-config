@@ -1,9 +1,11 @@
 ---
 node_role: storage
 ssd_node_role: "%{lookup('node_role')}"
+ssd_osd_count: 4
 ssd_storage_class: data-crypt-block
-ssd_volume_size: 64Gi
+ssd_volume_size: 32Gi
 hdd_node_role: workstation
+hdd_osd_count: 3
 hdd_storage_class: nest-crypt-block
 hdd_volume_size: 1Ti
 service_name: "%{nest::kubernetes::service}"
@@ -106,7 +108,7 @@ values:
       onlyApplyOSDPlacement: true # control placement per set
       storageClassDeviceSets:
         - name: set1 # operator expects this name e.g. set2, set3
-          count: 3
+          count: "%{alias('ssd_osd_count')}"
           portable: false
           placement: &ssd_osd_placement
             nodeAffinity:
@@ -147,7 +149,7 @@ values:
                 accessModes:
                   - ReadWriteOnce
         - name: set2
-          count: 3
+          count: "%{alias('hdd_osd_count')}"
           portable: false
           placement: &hdd_osd_placement
             nodeAffinity:
