@@ -1,8 +1,0 @@
-[Unit]
-Before=local-fs.target
-
-[Automount]
-Where=/mnt/external
-
-[Install]
-WantedBy=local-fs.target

@@ -1,6 +1,0 @@
-[Mount]
-What=/dev/mmcblk0p1
-Where=/mnt/external
-Type=exfat
-Options=sync,umask=0000
-LazyUnmount=true
