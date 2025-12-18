@@ -15,7 +15,7 @@ class nest::service::pipewire {
   }
 
   if $facts['profile']['variant'] == 'server' {
-    $use = ['-X']
+    $use = ['dbus', '-X'] # dbus silences some warnings, -X to avoid pulling in X11 deps
 
     # Work without logind (just a user session)
     User <| title == $nest::user |> {
