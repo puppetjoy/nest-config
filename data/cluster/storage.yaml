@@ -4,3 +4,4 @@ nest::classes:
 
 nest::bird_role: worker
 nest::external_interfaces: ['bond0']
+nest::journal: persistent
