@@ -19,6 +19,12 @@ class nest::base::firmware {
     $dtb_source = "/usr/src/linux/arch/${facts['profile']['architecture']}/boot/dts/${nest::dtb_file}"
 
     if $nest::dtb_overlay {
+      file { '/boot/nest.dtb':
+        source  => $dtb_source,
+        require => Class['nest::base::kernel'],
+        notify  => Exec['fdtoverlay'],
+      }
+
       $dtso_content = @("DTSO")
         /dts-v1/;
         /plugin/;
@@ -37,11 +43,12 @@ class nest::base::firmware {
       }
       ~>
       exec { 'fdtoverlay':
-        command     => "/usr/src/linux/scripts/dtc/fdtoverlay -i ${dtb_source} -o ${dtb_dest} /boot/nest.dtbo",
+        command     => "/usr/src/linux/scripts/dtc/fdtoverlay -i /boot/nest.dtb -o ${dtb_dest} /boot/nest.dtbo",
         refreshonly => true,
       }
     } else {
       file { [
+        '/boot/nest.dtb',
         '/boot/nest.dtso',
         '/boot/nest.dtbo',
       ]:
