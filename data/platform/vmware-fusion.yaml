@@ -1,4 +1,7 @@
 ---
+nest::kernel_cmdline:
+  - 'vmwgfx.force_coherent=1' # maybe improve stability
+
 nest::kernel_config:
   CONFIG_VSOCKETS: m
   CONFIG_VMWARE_VMCI_VSOCKETS: m
