@@ -32,11 +32,17 @@ class nest::base::openvpn {
         $ovpn_module = 'ovpn-dco-v2'
       }
 
-      file { '/etc/modules-load.d/openvpn.conf':
-        mode    => '0644',
-        owner   => 'root',
-        group   => 'root',
-        content => "${ovpn_module}\n",
+      if $nest::router or $nest::vpn {
+        file { '/etc/modules-load.d/openvpn.conf':
+          mode    => '0644',
+          owner   => 'root',
+          group   => 'root',
+          content => "${ovpn_module}\n",
+        }
+      } else {
+        file { '/etc/modules-load.d/openvpn.conf':
+          ensure => absent,
+        }
       }
 
       if $nest::router {
