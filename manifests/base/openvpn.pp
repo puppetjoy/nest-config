@@ -22,6 +22,12 @@ class nest::base::openvpn {
           line   => 'net-vpn/ovpn-dco-9999',
           before => Package[$openvpn_package_name],
         }
+
+        # Use latest sources for upstream kernel module support
+        package_accept_keywords { $openvpn_package_name:
+          accept_keywords => '**',
+          before          => Package[$openvpn_package_name],
+        }
       } else {
         $ovpn_module = 'ovpn-dco-v2'
       }
