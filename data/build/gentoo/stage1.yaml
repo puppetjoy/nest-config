@@ -17,7 +17,6 @@ nest::classes:
   - 'nest::base::locale'
   - 'nest::base::mta'
   - 'nest::base::network'
-  - 'nest::base::openvpn'
   - 'nest::base::packages'
   - 'nest::base::policykit'
   - 'nest::base::portage'

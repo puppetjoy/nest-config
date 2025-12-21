@@ -25,7 +25,6 @@ describe 'nest' do
     'nest::base::locale',
     'nest::base::mta',
     'nest::base::network',
-    'nest::base::openvpn',
     'nest::base::packages',
     'nest::base::policykit',
     'nest::base::portage',
@@ -49,6 +48,7 @@ describe 'nest' do
     'nest::base::firmware',
     'nest::base::fstab',
     'nest::base::kernel',
+    'nest::base::openvpn',
     'nest::base::plymouth',
     'nest::base::zfs',
   ]

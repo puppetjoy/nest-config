@@ -26,3 +26,6 @@ nest::kernel_cmdline:
 nest::kernel_config:
   # Rely on filesystem compression
   CONFIG_MODULE_COMPRESS: n
+
+  # Unsupported on 6.12
+  CONFIG_OVPN: null

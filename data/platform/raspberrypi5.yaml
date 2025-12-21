@@ -41,3 +41,6 @@ nest::kernel_config:
 
   # For optimal v3d performance
   CONFIG_TRANSPARENT_HUGEPAGE: y
+
+  # Unsupported on 6.12
+  CONFIG_OVPN: null

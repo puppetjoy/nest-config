@@ -45,6 +45,9 @@ nest::kernel_config:
   # For optimal v3d performance
   CONFIG_TRANSPARENT_HUGEPAGE: y
 
+  # Unsupported on 6.12
+  CONFIG_OVPN: null
+
 nest::uboot_config:
   # Fails with "Unknown partition table type 0"
   CONFIG_MMC_SDHCI_SDMA: n

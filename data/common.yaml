@@ -255,7 +255,6 @@ nest::kernel_config:
   CONFIG_BRIDGE: y
   CONFIG_VLAN_8021Q: m
   CONFIG_BONDING: m
-  CONFIG_TUN: m
 
   # Framebuffer
   CONFIG_SYSFB_SIMPLEFB: y
@@ -360,6 +359,11 @@ nest::kernel_config:
   CONFIG_TASK_DELAY_ACCT: y
   CONFIG_TASK_XACCT: y
   CONFIG_TASK_IO_ACCOUNTING: y
+
+  # For OpenVPN
+  CONFIG_OVPN: m
+  CONFIG_TUN: m
+  CONFIG_CRYPTO_CHACHA20POLY1305: m
 
 
 #

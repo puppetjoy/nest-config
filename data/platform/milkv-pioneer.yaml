@@ -31,3 +31,6 @@ nest::kernel_config:
   # Device drivers
   CONFIG_AQTION: m
   CONFIG_DRM_AMDGPU: m
+
+  # Unsupported on 6.12
+  CONFIG_OVPN: null

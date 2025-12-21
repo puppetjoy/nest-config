@@ -9,6 +9,30 @@ class nest::base::openvpn {
         group => 'root',
       }
 
+      nest::lib::package_use { $openvpn_package_name:
+        use     => 'dco',
+        require => Class['nest::base::kernel'],
+      }
+
+      if $nest::kernel_config['CONFIG_OVPN'] {
+        $ovpn_module = 'ovpn'
+
+        file_line { 'package.provided-ovpn-dco':
+          path   => '/etc/portage/profile/package.provided',
+          line   => 'net-vpn/ovpn-dco-9999',
+          before => Package[$openvpn_package_name],
+        }
+      } else {
+        $ovpn_module = 'ovpn-dco-v2'
+      }
+
+      file { '/etc/modules-load.d/openvpn.conf':
+        mode    => '0644',
+        owner   => 'root',
+        group   => 'root',
+        content => "${ovpn_module}\n",
+      }
+
       if $nest::router {
         contain 'nest::lib::router'
 
