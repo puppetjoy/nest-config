@@ -6,35 +6,27 @@ nest::classes:
 
 nest::bootloader: u-root
 nest::dtb_file: 'sophgo/sg2042-milkv-pioneer.dtb'
+nest::kernel_defconfig: 'sophgo_mango_normal_defconfig'
+nest::kernel_tag: 'sophgo/v6.12.42'
 nest::opensbi_tag: 'sophgo/v1.7'
 nest::soc: 'sg2042'
-nest::uroot_delay: 1
 
 nest::kernel_cmdline:
   - 'console=tty0'
   - 'console=ttyS0,115200n8'
   - 'zfs.zvol_use_blk_mq=1'
-  - 'loglevel=7'
-  - 'earlycon'
 
 nest::kernel_config:
   # Architecture options
-  CONFIG_NUMA: y
   CONFIG_NUMA_BALANCING: y
   CONFIG_ERRATA_THEAD_GHOSTWRITE: n # allow xtheadvector
 
   # System drivers ('Y' for inclusion in u-root kernel)
-  CONFIG_KEXEC_FILE: Y
-  CONFIG_PCIE_SG2042_HOST: y
   CONFIG_KEYBOARD_GPIO: Y
-  CONFIG_SPI_SG2044_NOR: Y
-  CONFIG_PINCTRL_SOPHGO_SG2042: Y
   CONFIG_SENSORS_PWM_FAN: Y
-  CONFIG_SENSORS_SG2042_MCU: Y
   CONFIG_RTC_DRV_DS1307: Y
+  CONFIG_PWM: Y
   CONFIG_PWM_SOPHGO_SG2042: Y
-  CONFIG_SOPHGO_SG2042_MSI: y
-  CONFIG_NLS_ISO8859_1: Y # for vfat sdcard
 
   # Device drivers
   CONFIG_AQTION: m
