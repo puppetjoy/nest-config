@@ -142,6 +142,13 @@ values:
       secret: "%{nest::kubernetes::service}-registry-storage"
       redirect:
         disable: true
+    database:
+      enabled: true
+      name: registry
+      user: registry
+      password:
+        secret: "%{nest::kubernetes::service}-registry-database-password"
+        key: password
 
 patches:
   # Supposedly there are global values for this, but I can't get them to work
@@ -175,15 +182,16 @@ patches:
   # collisions that break GitLab Registry startup.
   10-registry-disable-service-links:
     patch:
-      apiVersion: apps/v1
-      kind: Deployment
+      kind: not-important
       metadata:
-        name: "%{nest::kubernetes::service}-registry"
-        namespace: "%{nest::kubernetes::namespace}"
+        name: not-important
       spec:
         template:
           spec:
             enableServiceLinks: false
+    target:
+      kind: (Deployment|Job)
+      labelSelector: app in (registry, registry-migrations)
 
   10-registry-ingress-override:
     - patch:
