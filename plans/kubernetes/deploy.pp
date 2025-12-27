@@ -37,9 +37,9 @@ plan nest::kubernetes::deploy (
     $render_to_real = undef
   }
 
-  # Initialize service and avoid trashing backups during restore
+  # Initialize service and avoid conflicts with backup/restore jobs
   if $init {
-    $remove_resources = ['backup']
+    $remove_resources = ['backup', 'restore']
     $remove_patches   = []
   } else {
     $remove_resources = []

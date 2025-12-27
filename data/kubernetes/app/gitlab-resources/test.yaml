@@ -1,0 +1,4 @@
+---
+bucket_storage_class: "ceph-%{nest::kubernetes::namespace}-bucket"
+ceph_namespace: "%{nest::kubernetes::namespace}"
+ceph_object_store: "ceph-%{nest::kubernetes::namespace}-objectstore"

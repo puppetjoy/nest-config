@@ -4,6 +4,7 @@ ceph_object_store: "ceph-%{nest::kubernetes::namespace}-objectstore"
 cert_issuer: "eyrie-ca-%{nest::kubernetes::namespace}"
 cert_issuer_kind: Issuer
 ingress_class: "contour-%{nest::kubernetes::namespace}"
+restore_hour: '7' # Restore requires downtime; pick up 6 AM backup only
 service_name: "%{nest::kubernetes::service}-%{nest::kubernetes::namespace}"
 
 values:
