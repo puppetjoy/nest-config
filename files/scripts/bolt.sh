@@ -28,6 +28,7 @@ exec podman run --rm -it -e TERM \
     -v /etc/eyaml:/etc/eyaml:ro \
     -v /etc/puppetlabs/bolt:/etc/puppetlabs/bolt:ro \
     -v /etc/ssh/ssh_known_hosts:/etc/ssh/ssh_known_hosts:ro \
+    -v /nest/backup:/nest/backup \
     -v /nest/home/kubeconfigs:/nest/home/kubeconfigs \
     -e KUBECONFIG \
     -e SSH_AUTH_SOCK -v "${SSH_AUTH_SOCK}:${SSH_AUTH_SOCK}:ro" \
