@@ -29,7 +29,7 @@ plan nest::eyrie::registry::backup (
     "/nest/backup/${service}/",
   ].flatten.shellquote
 
-  run_command($backup_cmd, $backup_target, 's3cmd', {
+  run_command($backup_cmd, $backup_target, 's3cmd sync', {
     '_run_as' => 'root',
   })
 }

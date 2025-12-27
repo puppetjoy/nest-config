@@ -10,8 +10,6 @@ node_role: workstation
 service_name: "%{nest::kubernetes::service}"
 
 resources:
-  backup: {}
-
   certs:
     apiVersion: cert-manager.io/v1
     kind: Certificate

@@ -1,0 +1,7 @@
+---
+# One hour before most other restore jobs
+backup_hour: '2-23/3'
+restore_hour: '*/3'
+
+# Ensure 'test' jobs use prod images
+registry: 'registry.eyrie'

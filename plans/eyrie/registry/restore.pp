@@ -31,7 +31,7 @@ plan nest::eyrie::registry::restore (
     "s3://${bucket_config['BUCKET_NAME']}/",
   ].flatten.shellquote
 
-  run_command($restore_cmd, $restore_target, 's3cmd', {
+  run_command($restore_cmd, $restore_target, 's3cmd sync', {
     '_run_as' => 'root',
   })
 }
