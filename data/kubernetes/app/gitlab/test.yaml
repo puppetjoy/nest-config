@@ -1,4 +1,8 @@
 ---
+ceph_namespace: "%{nest::kubernetes::namespace}"
+ceph_object_store: "ceph-%{nest::kubernetes::namespace}-objectstore"
+cert_issuer: "eyrie-ca-%{nest::kubernetes::namespace}"
+cert_issuer_kind: Issuer
 ingress_class: "contour-%{nest::kubernetes::namespace}"
 service_name: "%{nest::kubernetes::service}-%{nest::kubernetes::namespace}"
 
@@ -6,3 +10,6 @@ values:
   global:
     hosts:
       ssh: "ssh.%{nest::kubernetes::fqdn}"
+  prometheus:
+    server:
+      clusterRoleNameOverride: "%{nest::kubernetes::service}-%{nest::kubernetes::namespace}-prometheus-server"

@@ -1,5 +1,5 @@
 ---
-storage_class: ceph-test-block
+storage_class: "ceph-%{nest::kubernetes::namespace}-block"
 node_role: workstation
 
 resources:

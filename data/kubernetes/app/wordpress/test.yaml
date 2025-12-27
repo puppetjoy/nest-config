@@ -3,8 +3,8 @@ service_name: "%{nest::kubernetes::service}-%{nest::kubernetes::namespace}"
 cert_issuer: "eyrie-ca-%{nest::kubernetes::namespace}"
 cert_issuer_kind: issuer
 ingress_class: "contour-%{nest::kubernetes::namespace}"
-storage_class: ceph-test-filesystem
-db_storage_class: ceph-test-block
+storage_class: "ceph-%{nest::kubernetes::namespace}-filesystem"
+db_storage_class: "ceph-%{nest::kubernetes::namespace}-block"
 node_role: workstation
 
 .affinity: &affinity

@@ -9,6 +9,7 @@ ceph_object_store: ceph-objectstore
 resources:
   registry_auths: {}
   backup: {}
+  restore: {}
 
   # The gitlab chart looks for Secrets as part of a helm install hook. Our
   # secrets need to exist first.

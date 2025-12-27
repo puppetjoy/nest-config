@@ -4,12 +4,16 @@ include:
 
 ceph_namespace: rook-ceph
 ceph_object_store: ceph-objectstore
+cert_issuer: eyrie-ca
+cert_issuer_kind: ClusterIssuer
 external_name: "%{nest::kubernetes::fqdn}"
 ingress_class: contour-workstation
 node_role: workstation
 service_name: "%{nest::kubernetes::service}"
 
 resources:
+  restore: {}
+
   certs:
     apiVersion: cert-manager.io/v1
     kind: Certificate
@@ -19,11 +23,11 @@ resources:
     spec:
       secretName: "%{nest::kubernetes::service}-certs"
       issuerRef:
-        name: eyrie-ca
-        kind: ClusterIssuer
+        name: "%{lookup('cert_issuer')}"
+        kind: "%{lookup('cert_issuer_kind')}"
       dnsNames:
-        - "%{nest::kubernetes::service}.eyrie"
-        - "*.%{nest::kubernetes::service}.eyrie"
+        - "%{nest::kubernetes::fqdn}"
+        - "*.%{nest::kubernetes::fqdn}"
 
   backups-storage-secret:
     apiVersion: v1
@@ -124,7 +128,7 @@ values:
         annotations:
           projectcontour.io/response-timeout: infinity
       workhorse:
-        image: registry.eyrie/nest/forks/gitlab-workhorse
+        image: "%{lookup('registry')}/nest/forks/gitlab-workhorse"
   gitlab-runner:
     install: false
   nginx-ingress:
@@ -149,6 +153,16 @@ values:
         key: password
 
 patches:
+  # Eyrie is a small cluster and this is not a major app
+  10-disable-hpa:
+    patch:
+      kind: not-important
+      metadata:
+        name: not-important
+      $patch: delete
+    target:
+      kind: HorizontalPodAutoscaler
+
   # Supposedly there are global values for this, but I can't get them to work
   # and it doesn't expose tolerations in all cases anyway.
   # See: https://docs.gitlab.com/charts/charts/gitlab/index.html#affinity

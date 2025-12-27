@@ -1,2 +1,2 @@
 ---
-bucket_storage_class: ceph-test-bucket
+bucket_storage_class: "ceph-%{nest::kubernetes::namespace}-bucket"
