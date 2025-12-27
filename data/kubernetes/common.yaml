@@ -1,4 +1,5 @@
 ---
+backup_hour: '*/3'
 registry: 'registry.eyrie'
 
 include:
@@ -23,7 +24,7 @@ resources:
       namespace: "%{nest::kubernetes::namespace}"
     spec:
       concurrencyPolicy: Forbid
-      schedule: "%{nest::kubernetes::cron_job_offset} */3 * * *"
+      schedule: "%{nest::kubernetes::cron_job_offset} %{lookup('backup_hour')} * * *"
       timeZone: 'America/New_York'
       jobTemplate:
         spec:
@@ -39,6 +40,7 @@ resources:
                     - plan
                     - run
                     - "nest::eyrie::%{nest::kubernetes::app}::backup"
+                    - "namespace=%{nest::kubernetes::namespace}"
                     - "service=%{nest::kubernetes::service}"
                     - "service_name=%{nest::kubernetes::service_name}"
                   env:
@@ -170,9 +172,13 @@ patches:
               - plan
               - run
               - "nest::eyrie::%{nest::kubernetes::app}::init"
+              - "namespace=%{nest::kubernetes::namespace}"
               - "service=%{nest::kubernetes::service}"
+            env:
+              - name: KUBECONFIG
+                value: '/nest/home/kubeconfigs/eyrie.conf'
             volumeMounts:
-              - name: nest
+              - name: nest-init
                 mountPath: '/nest'
               - name: bolt-config
                 mountPath: '/etc/puppetlabs/bolt'
@@ -180,13 +186,20 @@ patches:
               - name: eyaml-config
                 mountPath: '/etc/eyaml'
                 readOnly: true
-              - name: eyrie-ssh-key
+              - name: eyrie-ssh-key-init
                 mountPath: '/root/.ssh/id_ed25519'
                 readOnly: true
         - op: replace
           path: '/spec/template/spec/imagePullSecrets'
           value:
             - name: "%{nest::kubernetes::service}-registry-auths"
+        - op: add
+          path: '/spec/template/spec/volumes/-'
+          value:
+            name: nest-init
+            hostPath:
+              path: '/nest'
+              type: Directory
         - op: add
           path: '/spec/template/spec/volumes/-'
           value:
@@ -201,6 +214,13 @@ patches:
             hostPath:
               path: '/etc/eyaml'
               type: Directory
+        - op: add
+          path: '/spec/template/spec/volumes/-'
+          value:
+            name: eyrie-ssh-key-init
+            hostPath:
+              path: '/root/.ssh/id_ed25519_eyrie'
+              type: File
       target:
         group: apps
         version: v1

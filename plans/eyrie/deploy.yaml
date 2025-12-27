@@ -7,6 +7,11 @@ parameters:
     type: Boolean
     default: true
 
+  registry:
+    description: 'Deploy registry'
+    type: Boolean
+    default: true
+
   jump:
     description: 'Deploy jump'
     type: Boolean
@@ -38,6 +43,18 @@ parameters:
     default: false
 
 steps:
+  - description: 'Deploy registry'
+    plan: nest::eyrie::deploy_registry
+    parameters:
+      resources: true
+      deploy: $deploy and $registry
+
+  - description: 'Initialize registry'
+    plan: nest::eyrie::registry::init
+    parameters:
+      deploy: $deploy and $registry
+      init: $init
+
   - description: 'Deploy jump'
     plan: nest::eyrie::deploy_jump
     parameters:

@@ -26,9 +26,6 @@ token_service: 'Container registry'
     effect: NoSchedule
 
 resources:
-  backup: {}
-  restore: {}
-
   certs:
     apiVersion: cert-manager.io/v1
     kind: Certificate
@@ -227,3 +224,18 @@ patches:
         name: "%{nest::kubernetes::service}"
       spec:
         ingressClassName: "%{lookup('ingress_class')}"
+
+  10-nest:
+    patch:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: "%{nest::kubernetes::service}"
+        labels:
+          'james.tl/nest': 'init-only'
+      spec:
+        template:
+          spec:
+            initContainers: []
+
+  20-nest: [] # Do not run Nest sidecar

@@ -2,6 +2,11 @@
 description: 'Backup a WordPress instance'
 
 parameters:
+  namespace:
+    description: 'Kubernetes namespace (unused)'
+    type: String
+    default: 'unused'
+
   service:
     description: 'WordPress service to backup'
     type: String

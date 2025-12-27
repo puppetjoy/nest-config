@@ -7,7 +7,7 @@ class nest::service::registry (
     $admin_password_hash = pw_hash($admin_password, 'bcrypt', "05\$${admin_salt}")
 
     # Bucket defined in registry-resources.yaml
-    $bucket_config = nest::kubernetes::bucket_config('registry')
+    $bucket_config = nest::kubernetes::bucket_config($nest::kubernetes::service)
 
     # Random value used for load balancing
     $http_secret = fqdn_rand_string(32, undef, "${nest::kubernetes::service_name}-http")

@@ -1,0 +1,62 @@
+---
+description: 'Deploy container registry'
+
+parameters:
+  service:
+    description: 'Registry service to deploy'
+    type: String
+    default: 'registry'
+
+  namespace:
+    description: 'Kubernetes namespace'
+    type: String
+    default: 'default'
+
+  resources:
+    description: 'Deploy resources'
+    type: Boolean
+    default: false
+
+  registry:
+    description: 'Deploy registry'
+    type: Boolean
+    default: true
+
+  deploy:
+    description: 'Run or skip the deployment'
+    type: Boolean
+    default: true
+
+  init:
+    description: 'Deploy initial revision'
+    type: Boolean
+    default: false
+
+  render_to:
+    description: 'Render the template to a file'
+    type: String
+    default: ''
+
+steps:
+  - description: 'Deploy resources'
+    plan: nest::kubernetes::deploy
+    parameters:
+      namespace: $namespace
+      service: "${service}-resources"
+      app: 'scratch'
+      deploy: $deploy and $resources or $init
+      wait: $render_to == ''
+      render_to: $render_to
+
+  - description: 'Deploy registry'
+    plan: nest::kubernetes::deploy
+    parameters:
+      namespace: $namespace
+      service: $service
+      chart: 'mya/registry'
+      repo_url: 'https://mya.sh'
+      version: '22.4.11'
+      deploy: $deploy and $registry
+      init: $init
+      wait: $init
+      render_to: $render_to

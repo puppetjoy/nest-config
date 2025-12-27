@@ -9,17 +9,17 @@ resources:
     apiVersion: objectbucket.io/v1alpha1
     kind: ObjectBucketClaim
     metadata:
-      name: registry-bucket # used for the configmap and secret
+      name: "%{nest::kubernetes::main_service}-bucket" # used for the configmap and secret
       namespace: "%{nest::kubernetes::namespace}"
     spec:
-      generateBucketName: registry
+      generateBucketName: "%{nest::kubernetes::main_service}"
       storageClassName: "%{lookup('bucket_storage_class')}"
 
   ui-secret:
     apiVersion: v1
     kind: Secret
     metadata:
-      name: registry-ui
+      name: "%{nest::kubernetes::main_service}-ui"
       namespace: "%{nest::kubernetes::namespace}"
     data:
       SECRET_KEY_BASE: "%{nest::service::registry::ui_secret}"

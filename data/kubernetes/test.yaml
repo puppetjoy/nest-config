@@ -1,6 +1,7 @@
 ---
 node_role: workstation
 registry: 'registry-test.eyrie'
+restore_hour: '1-23/3'
 
 .affinity: &affinity
   nodeAffinity:
@@ -28,7 +29,7 @@ resources:
       namespace: "%{nest::kubernetes::namespace}"
     spec:
       concurrencyPolicy: Forbid
-      schedule: "%{nest::kubernetes::cron_job_offset} 1-23/3 * * *"
+      schedule: "%{nest::kubernetes::cron_job_offset} %{lookup('restore_hour')} * * *"
       timeZone: 'America/New_York'
       jobTemplate:
         spec:
@@ -45,6 +46,7 @@ resources:
                     - plan
                     - run
                     - "nest::eyrie::%{nest::kubernetes::app}::restore"
+                    - "namespace=%{nest::kubernetes::namespace}"
                     - "service=%{nest::kubernetes::service}"
                     - "service_name=%{nest::kubernetes::service_name}"
                     - 'restore=true'

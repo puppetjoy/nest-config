@@ -2,6 +2,11 @@
 description: 'Initialize a WordPress instance'
 
 parameters:
+  namespace:
+    description: 'Kubernetes namespace (unused)'
+    type: String
+    default: 'unused'
+
   service:
     description: 'WordPress service to restore'
     type: String

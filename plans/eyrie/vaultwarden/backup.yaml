@@ -2,6 +2,11 @@
 description: 'Backup a Vaultwarden instance'
 
 parameters:
+  namespace:
+    description: 'Kubernetes namespace (unused)'
+    type: String
+    default: 'unused'
+
   service:
     description: 'Vaultwarden service to backup'
     type: String

@@ -39,13 +39,14 @@ steps:
     parameters:
       deploy: $system
 
-  - description: 'Deploy test registry'
-    plan: nest::eyrie::test::deploy_registry
-    parameters:
-      deploy: $system
-      resources: $init
-
   # Test applications
+  - description: 'Deploy test registry'
+    plan: nest::eyrie::deploy_registry
+    parameters:
+      namespace: 'test'
+      deploy: $apps
+      init: $init
+
   - description: 'Deploy test jump'
     plan: nest::eyrie::deploy_jump
     parameters:

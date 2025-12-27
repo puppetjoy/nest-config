@@ -1,0 +1,31 @@
+---
+description: 'Initialize a registry instance'
+
+parameters:
+  namespace:
+    description: 'Kubernetes namespace'
+    type: String
+    default: 'default'
+
+  service:
+    description: 'Registry service to restore'
+    type: String
+    default: 'registry'
+
+  service_name:
+    description: 'Service name (unused)'
+    type: String
+    default: 'unused'
+
+  init:
+    description: 'Run or skip initialization'
+    type: Boolean
+    default: true
+
+steps:
+  - description: "Restore registry instance"
+    plan: nest::eyrie::registry::restore
+    parameters:
+      namespace: $namespace
+      service: $service
+      restore: $init
