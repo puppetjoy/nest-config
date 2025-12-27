@@ -20,7 +20,6 @@ plan nest::eyrie::registry::restore (
       's3cmd',
       'sync',
       '--delete-removed',
-      '--skip-existing',
       '--no-preserve',
       '--no-ssl',
       '--multipart-chunk-size-mb=64',

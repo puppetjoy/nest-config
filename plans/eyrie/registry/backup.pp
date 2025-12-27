@@ -17,7 +17,6 @@ plan nest::eyrie::registry::backup (
     's3cmd',
     'sync',
     '--delete-removed',
-    '--skip-existing',
     '--no-preserve',
     '--no-ssl',
     '--multipart-chunk-size-mb=64',
