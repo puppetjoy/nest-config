@@ -154,56 +154,56 @@ values:
 
 patches:
   10-deployment-env:
-    - patch:
-        # Disable traces export and debug logging
-        # See: https://distribution.github.io/distribution/about/configuration/#disable-traces-export
-        - op: replace
-          path: '/spec/template/spec/containers/0/args'
-          value:
-            - '-c'
-            - 'env -i OTEL_TRACES_EXPORTER=none REGISTRY_LOG_LEVEL=info /bin/registry serve /etc/docker/registry/config.yml'
-        # Configure UI container
-        # See: https://github.com/klausmeyer/docker-registry-browser/blob/master/docs/README.md
-        - op: add
-          path: '/spec/template/spec/containers/1/env/-'
-          value:
-            name: ENABLE_DELETE_IMAGES
-            value: 'true'
-        # For communication with the auth server
-        - op: add
-          path: '/spec/template/spec/containers/1/env/-'
-          value:
-            name: NO_SSL_VERIFICATION
-            value: 'true'
-        # Password set in registry-resources.yaml...
-        - op: add
-          path: '/spec/template/spec/containers/1/env/-'
-          value:
-            name: TOKEN_AUTH_USER
-            value: 'admin'
-        # ...and passed to the container here
-        - op: add
-          path: '/spec/template/spec/containers/1/envFrom'
-          value:
-            - secretRef:
-                name: "%{nest::kubernetes::service}-ui"
-        - op: add
-          path: '/spec/template/spec/containers/1/volumeMounts'
-          value:
-            - name: session-store-config-volume
-              mountPath: /app/config/initializers/session_store.rb
-              subPath: session_store.rb
-        - op: add
-          path: '/spec/template/spec/volumes/-'
-          value:
-            name: session-store-config-volume
-            configMap:
-              name: "%{nest::kubernetes::service}-session-store-config"
-      target:
-        group: apps
-        version: v1
-        kind: Deployment
-        name: "%{nest::kubernetes::service}"
+    patch:
+      # Disable traces export and debug logging
+      # See: https://distribution.github.io/distribution/about/configuration/#disable-traces-export
+      - op: replace
+        path: '/spec/template/spec/containers/0/args'
+        value:
+          - '-c'
+          - 'env -i OTEL_TRACES_EXPORTER=none REGISTRY_LOG_LEVEL=info /bin/registry serve /etc/docker/registry/config.yml'
+      # Configure UI container
+      # See: https://github.com/klausmeyer/docker-registry-browser/blob/master/docs/README.md
+      - op: add
+        path: '/spec/template/spec/containers/1/env/-'
+        value:
+          name: ENABLE_DELETE_IMAGES
+          value: 'true'
+      # For communication with the auth server
+      - op: add
+        path: '/spec/template/spec/containers/1/env/-'
+        value:
+          name: NO_SSL_VERIFICATION
+          value: 'true'
+      # Password set in registry-resources.yaml...
+      - op: add
+        path: '/spec/template/spec/containers/1/env/-'
+        value:
+          name: TOKEN_AUTH_USER
+          value: 'admin'
+      # ...and passed to the container here
+      - op: add
+        path: '/spec/template/spec/containers/1/envFrom'
+        value:
+          - secretRef:
+              name: "%{nest::kubernetes::service}-ui"
+      - op: add
+        path: '/spec/template/spec/containers/1/volumeMounts'
+        value:
+          - name: session-store-config-volume
+            mountPath: /app/config/initializers/session_store.rb
+            subPath: session_store.rb
+      - op: add
+        path: '/spec/template/spec/volumes/-'
+        value:
+          name: session-store-config-volume
+          configMap:
+            name: "%{nest::kubernetes::service}-session-store-config"
+    target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: "%{nest::kubernetes::service}"
 
   10-garbage-collect-ttl:
     patch:

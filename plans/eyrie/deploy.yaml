@@ -12,6 +12,11 @@ parameters:
     type: Boolean
     default: true
 
+  gitlab:
+    description: 'Deploy GitLab'
+    type: Boolean
+    default: true
+
   jump:
     description: 'Deploy jump'
     type: Boolean
@@ -53,6 +58,12 @@ steps:
     plan: nest::eyrie::registry::init
     parameters:
       deploy: $deploy and $registry
+      init: $init
+
+  - description: 'Deploy GitLab'
+    plan: nest::eyrie::deploy_gitlab
+    parameters:
+      deploy: $deploy and $gitlab
       init: $init
 
   - description: 'Deploy jump'

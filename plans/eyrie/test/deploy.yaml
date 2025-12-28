@@ -47,6 +47,13 @@ steps:
       deploy: $apps
       init: $init
 
+  - description: 'Deploy test GitLab'
+    plan: nest::eyrie::deploy_gitlab
+    parameters:
+      namespace: 'test'
+      deploy: $apps
+      init: $init
+
   - description: 'Deploy test jump'
     plan: nest::eyrie::deploy_jump
     parameters:
