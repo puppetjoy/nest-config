@@ -9,3 +9,6 @@ values:
       - key: node-role.kubernetes.io/workstation
         operator: Exists
         effect: NoSchedule
+      - key: node-role.kubernetes.io/compute
+        operator: Exists
+        effect: NoSchedule

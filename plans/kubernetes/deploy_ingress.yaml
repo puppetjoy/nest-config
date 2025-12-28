@@ -30,18 +30,6 @@ steps:
       wait: true
       deploy: $contour
 
-  - description: 'Install Contour on workstations'
-    plan: 'nest::kubernetes::deploy'
-    parameters:
-      service: 'ingress-workstations'
-      app: 'contour'
-      chart: 'contour/contour'
-      namespace: 'projectcontour'
-      repo_url: 'https://projectcontour.github.io/helm-charts/'
-      version: '0.1.0'
-      wait: true
-      deploy: $contour
-
   - description: 'Install cert-manager'
     plan: 'nest::kubernetes::deploy'
     parameters:

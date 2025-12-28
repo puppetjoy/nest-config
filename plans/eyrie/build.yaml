@@ -28,19 +28,19 @@ steps:
       labels: node-role.kubernetes.io/storage:NoSchedule
     targets: eyrie-storage
 
-  - description: 'Join monitor nodes'
-    plan: nest::kubernetes::join_node
-    parameters:
-      control_plane: eyrie-control-plane
-      labels: node-role.kubernetes.io/monitor:NoSchedule
-    targets: eyrie-monitor
-
   - description: 'Join workstation nodes'
     plan: nest::kubernetes::join_node
     parameters:
       control_plane: eyrie-control-plane
       labels: node-role.kubernetes.io/workstation:NoSchedule
     targets: eyrie-workstations
+
+  - description: 'Join compute nodes'
+    plan: nest::kubernetes::join_node
+    parameters:
+      control_plane: eyrie-control-plane
+      labels: node-role.kubernetes.io/compute:NoSchedule
+    targets: eyrie-compute
 
   - description: 'Deploy network'
     plan: nest::kubernetes::deploy_network
@@ -50,6 +50,9 @@ steps:
 
   - description: 'Deploy ingress'
     plan: nest::kubernetes::deploy_ingress
+
+  - description: 'Deploy ingress'
+    plan: nest::eyrie::deploy_ingress
 
   - description: 'Deploy monitoring'
     plan: nest::kubernetes::deploy_monitoring

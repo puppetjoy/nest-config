@@ -159,6 +159,9 @@ nest::host_records:
   registry.gitlab.eyrie: '172.21.2.0'
   ssh.gitlab.eyrie: '172.21.2.1'
 
+  # Compute services
+  ingress-compute.eyrie: '172.21.3.0'
+
 nest::hosts:
   unifi.home:
     ip: '172.22.1.2'

@@ -1,0 +1,25 @@
+---
+service_name: ingress-compute
+class_name: contour-compute
+node_role: compute
+
+.affinity: &affinity
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+          - key: "node-role.kubernetes.io/%{lookup('node_role')}"
+            operator: Exists
+
+.tolerations: &tolerations
+  - key: "node-role.kubernetes.io/%{lookup('node_role')}"
+    operator: Exists
+    effect: NoSchedule
+
+values:
+  contour:
+    affinity: *affinity
+    tolerations: *tolerations
+  envoy:
+    affinity: *affinity
+    tolerations: *tolerations

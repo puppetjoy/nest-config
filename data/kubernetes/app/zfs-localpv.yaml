@@ -7,17 +7,6 @@ resources:
     - apiVersion: storage.k8s.io/v1
       kind: StorageClass
       metadata:
-        name: data
-      allowVolumeExpansion: true
-      parameters:
-        fstype: zfs
-        poolname: data/kubernetes
-      provisioner: zfs.csi.openebs.io
-      volumeBindingMode: WaitForFirstConsumer
-
-    - apiVersion: storage.k8s.io/v1
-      kind: StorageClass
-      metadata:
         name: data-crypt
       allowVolumeExpansion: true
       parameters:
@@ -52,15 +41,30 @@ resources:
             values:
               - falcon
 
+    - apiVersion: storage.k8s.io/v1
+      kind: StorageClass
+      metadata:
+        name: owl-crypt
+      allowVolumeExpansion: true
+      parameters:
+        fstype: zfs
+        poolname: owl/crypt/kubernetes
+      provisioner: zfs.csi.openebs.io
+      allowedTopologies:
+        - matchLabelExpressions:
+          - key: kubernetes.io/hostname
+            values:
+              - owl
+
 values:
   zfsNode:
     tolerations:
-      - key: node-role.kubernetes.io/monitor
-        operator: Exists
-        effect: NoSchedule
       - key: node-role.kubernetes.io/storage
         operator: Exists
         effect: NoSchedule
       - key: node-role.kubernetes.io/workstation
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/compute
         operator: Exists
         effect: NoSchedule

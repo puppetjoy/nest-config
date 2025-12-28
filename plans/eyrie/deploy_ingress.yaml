@@ -1,0 +1,38 @@
+---
+description: 'Deploy role-specific ingresses'
+
+parameters:
+  workstations:
+    description: 'Deploy ingress on workstation nodes'
+    type: Boolean
+    default: true
+
+  compute:
+    description: 'Deploy ingress on compute nodes'
+    type: Boolean
+    default: true
+
+steps:
+  - description: 'Install Contour on workstations'
+    plan: 'nest::kubernetes::deploy'
+    parameters:
+      service: 'ingress-workstations'
+      app: 'contour'
+      chart: 'contour/contour'
+      namespace: 'projectcontour'
+      repo_url: 'https://projectcontour.github.io/helm-charts/'
+      version: '0.1.0'
+      wait: true
+      deploy: $workstations
+
+  - description: 'Install Contour on compute'
+    plan: 'nest::kubernetes::deploy'
+    parameters:
+      service: 'ingress-compute'
+      app: 'contour'
+      chart: 'contour/contour'
+      namespace: 'projectcontour'
+      repo_url: 'https://projectcontour.github.io/helm-charts/'
+      version: '0.1.0'
+      wait: true
+      deploy: $compute

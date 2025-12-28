@@ -75,6 +75,13 @@ groups:
             target_mapping:
               name: certname
               uri: facts.fqdn
+      - name: 'eyrie-compute'
+        targets:
+          - _plugin: puppetdb
+            query: "nodes { resources { type = 'Class' and title = 'Nest::Tool::Rocm' } and resources { type = 'Class' and title = 'Nest::Service::Kubernetes' } }"
+            target_mapping:
+              name: certname
+              uri: facts.fqdn
 
   - name: 'kubernetes'
     targets:
