@@ -33,9 +33,6 @@ nest::package_keywords:
   gui-libs/greetd: {}
   gui-libs/wlroots: {}
   gui-wm/sway: {}
-  media-libs/mesa: {}
-  media-video/pipewire: {}
-  media-video/wireplumber: {}
   net-im/zoom: {}
   www-client/firefox: {}
   x11-terms/alacritty: {}
@@ -43,9 +40,6 @@ nest::package_keywords:
   # For firefox
   dev-libs/nspr: {}
   dev-libs/nss: {}
-
-  # For mesa
-  dev-util/mesa_clc: {}
 
 nest::kernel_cmdline:
   - 'preempt=full' # prioritize interactivity

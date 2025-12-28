@@ -181,6 +181,7 @@ nest::package_keywords:
   app-emulation/qemu: {}
   app-misc/tmux: {}
   dev-ruby/hiera-eyaml: {}
+  media-libs/mesa: {}
   sys-apps/systemd: {}
   sys-cluster/kubeadm: {}
   sys-cluster/kubectl: {}
@@ -202,6 +203,10 @@ nest::package_keywords:
 
   # For Kubernetes
   app-containers/cri-o: {}
+
+  # For mesa
+  dev-util/mesa_clc: {}
+  x11-libs/libdrm: {}
 
   # For hiera-eyaml
   dev-ruby/optimist:
