@@ -65,23 +65,27 @@ nest::tool::qemu::user_targets: *qemu_user_targets
 
 nest::cnames:
   # Prod kubernetes services
+  auth.registry.eyrie: 'ingress-workstations.eyrie'
   bitwarden.eyrie: 'ingress.eyrie'
   ceph.eyrie: 'ingress.eyrie'
+  gitlab.eyrie: 'ingress-workstations.eyrie'
   grafana.eyrie: 'ingress.eyrie'
   kubernetes.eyrie: 'ingress.eyrie'
   portfolio.eyrie: 'ingress.eyrie'
   registry.eyrie: 'ingress-workstations.eyrie'
-  auth.registry.eyrie: 'ingress-workstations.eyrie'
+  registry.gitlab.eyrie: 'ingress-workstations.eyrie'
   thestaticvoid.eyrie: 'ingress.eyrie'
 
   # Test kubernetes services
+  auth.registry-test.eyrie: 'ingress-test.eyrie'
   bitwarden-test.eyrie: 'ingress-test.eyrie'
   ceph-test.eyrie: 'ingress-test.eyrie'
+  gitlab-test.eyrie: 'ingress-test.eyrie'
   grafana-test.eyrie: 'ingress-test.eyrie'
   kubernetes-test.eyrie: 'ingress-test.eyrie'
   portfolio-test.eyrie: 'ingress-test.eyrie'
   registry-test.eyrie: 'ingress-test.eyrie'
-  auth.registry-test.eyrie: 'ingress-test.eyrie'
+  registry.gitlab-test.eyrie: 'ingress-test.eyrie'
   thestaticvoid-test.eyrie: 'ingress-test.eyrie'
 
   # Legacy services
@@ -147,16 +151,12 @@ nest::host_records:
   objectstore-test.eyrie: '172.21.1.0'
   .objectstore-test.eyrie: '172.21.1.0'
   jump-test.eyrie: '172.21.1.1'
-  gitlab-test.eyrie: '172.21.1.0'
-  registry.gitlab-test.eyrie: '172.21.1.0'
   ssh.gitlab-test.eyrie: '172.21.1.2'
 
   # Workstation services
   ingress-workstations.eyrie: '172.21.2.0'
   objectstore.eyrie: '172.21.2.0'
   .objectstore.eyrie: '172.21.2.0'
-  gitlab.eyrie: '172.21.2.0'
-  registry.gitlab.eyrie: '172.21.2.0'
   ssh.gitlab.eyrie: '172.21.2.1'
 
   # Compute services
