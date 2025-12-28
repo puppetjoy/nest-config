@@ -7,6 +7,9 @@ nest::distcc_server: true
 nest::dvorak: true
 nest::text_scaling_factor: 1.5
 
+nest::kernel_cmdline:
+  - 'ttm.pages_limit=25165824' # @ 4 KiB pages = 96 GiB for GPU
+
 nest::service::power::profile: 'performance'
 
 nest::service::gitlab_runner::host: 'gitlab.joyfullee.me'
