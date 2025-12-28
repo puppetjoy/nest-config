@@ -1,8 +1,8 @@
-class nest::tool::amdgpu {
+class nest::tool::rocm {
   include 'nest' # for nest::user
 
   User <| title == $nest::user |> {
-    groups +> 'render',
+    groups +> ['render', 'video'],
   }
 
   package_accept_keywords { [
@@ -19,7 +19,11 @@ class nest::tool::amdgpu {
     unstable => true,
   }
 
-  nest::lib::package { 'dev-util/rocm-smi':
+  package_accept_keywords { 'dev-libs/rocm-core':
+    tag => 'profile',
+  }
+  ->
+  nest::lib::package { 'dev-util/amdsmi':
     ensure   => installed,
     unstable => true,
   }
