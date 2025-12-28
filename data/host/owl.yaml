@@ -1,8 +1,10 @@
 ---
 nest::classes:
   - 'nest::service::gitlab_runner'
+  - 'nest::service::kubernetes'
   - 'nest::tool::bolt'
 
+nest::bird_role: worker
 nest::distcc_server: true
 nest::dvorak: true
 nest::text_scaling_factor: 1.5
