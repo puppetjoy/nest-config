@@ -46,9 +46,9 @@ plan nest::kubernetes::deploy (
     $remove_patches   = ['20-nest-init', '30-nest-init']
   }
 
-  # Give extra time for any VIPs to propagate
+  # Give extra time for any VIPs to propagate, claims to be satisfied, etc.
   if $wait and !$render_to_real {
-    $sleep = 10
+    $sleep = 15
   } else {
     $sleep = undef
   }

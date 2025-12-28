@@ -204,15 +204,28 @@ patches:
       labelSelector: app in (registry, registry-migrations)
 
   10-registry-ingress-override:
-    - patch:
-        - op: replace
-          path: /spec/rules/0/host
-          value: "registry.%{nest::kubernetes::fqdn}"
-        - op: replace
-          path: /spec/tls/0/hosts/0
-          value: "registry.%{nest::kubernetes::fqdn}"
-      target:
-        group: networking.k8s.io
-        version: v1
-        kind: Ingress
-        name: "%{nest::kubernetes::service}-registry"
+    patch:
+      - op: replace
+        path: /spec/rules/0/host
+        value: "registry.%{nest::kubernetes::fqdn}"
+      - op: replace
+        path: /spec/tls/0/hosts/0
+        value: "registry.%{nest::kubernetes::fqdn}"
+    target:
+      group: networking.k8s.io
+      version: v1
+      kind: Ingress
+      name: "%{nest::kubernetes::service}-registry"
+
+  # This job is a good place to run the init, but it can't be patched like a
+  # deployment. Delete it manually and redeploy to toggle off the init flag.
+  10-nest:
+    patch:
+      - op: add
+        path: '/metadata/labels/james.tl~1nest'
+        value: 'init-only'
+    target:
+      kind: Job
+      labelSelector: 'app=migrations'
+
+  20-nest: [] # Do not run Nest sidecar

@@ -177,6 +177,9 @@ patches:
             env:
               - name: KUBECONFIG
                 value: '/nest/home/kubeconfigs/eyrie.conf'
+            securityContext:
+              runAsUser: 0
+              runAsGroup: 0
             volumeMounts:
               - name: nest-init
                 mountPath: '/nest'
@@ -222,7 +225,5 @@ patches:
               path: '/root/.ssh/id_ed25519_eyrie'
               type: File
       target:
-        group: apps
-        version: v1
-        kind: Deployment
+        kind: (Deployment|Job)
         labelSelector: 'james.tl/nest'
