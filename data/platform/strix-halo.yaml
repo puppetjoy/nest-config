@@ -1,7 +1,7 @@
 ---
 nest::classes:
   - 'nest::service::power'
-  - 'nest::tool::rocm'
+  - 'nest::tool::amdgpu'
 
 nest::kernel_config:
   # Architecture options (especially for HSA_AMD_SVM)

@@ -1,4 +1,4 @@
-class nest::tool::rocm {
+class nest::tool::amdgpu {
   include 'nest' # for nest::user
 
   User <| title == $nest::user |> {
@@ -20,6 +20,11 @@ class nest::tool::rocm {
   }
 
   nest::lib::package { 'dev-util/rocm-smi':
+    ensure   => installed,
+    unstable => true,
+  }
+
+  nest::lib::package { 'sys-apps/amdgpu_top':
     ensure   => installed,
     unstable => true,
   }
