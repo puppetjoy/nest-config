@@ -1,21 +1,26 @@
 class nest::tool::rocm {
   include 'nest' # for nest::user
 
+  User <| title == $nest::user |> {
+    groups +> 'render',
+  }
+
   package_accept_keywords { [
     'dev-build/rocm-cmake',
     'dev-libs/rocm-device-libs',
     'dev-libs/rocr-runtime',
     'dev-libs/roct-thunk-interface',
-    'dev-util/rocminfo',
   ]:
     tag => 'profile',
   }
   ->
   nest::lib::package { 'dev-util/rocminfo':
-    ensure => installed,
+    ensure   => installed,
+    unstable => true,
   }
 
-  User <| title == $nest::user |> {
-    groups +> 'render',
+  nest::lib::package { 'dev-util/rocm-smi':
+    ensure   => installed,
+    unstable => true,
   }
 }

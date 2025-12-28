@@ -1,4 +1,6 @@
 class nest::service::pipewire {
+  include 'nest' # for nest::user
+
   if $facts['profile']['architecture'] in ['arm64', 'riscv'] {
     nest::lib::package_env { 'media-libs/roc-toolkit':
       env    => {
