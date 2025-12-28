@@ -8,7 +8,10 @@ nest::dvorak: true
 nest::text_scaling_factor: 1.5
 
 nest::kernel_cmdline:
-  - 'ttm.pages_limit=25165824' # @ 4 KiB pages = 96 GiB for GPU
+  # Max VRAM allocation (112 GiB)
+  # https://knowledgebase.frame.work/changing-memory-allocation-amd-ryzen-ai-max-300-series-By1LG5Yrll
+  - 'ttm.pages_limit=29360128'
+  - 'ttm.page_pool_size=29360128'
 
 nest::service::power::profile: 'performance'
 
