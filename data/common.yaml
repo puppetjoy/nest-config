@@ -319,6 +319,7 @@ nest::kernel_config:
   CONFIG_NAMESPACES: y
   CONFIG_USER_NS: y
   CONFIG_BRIDGE_VLAN_FILTERING: y
+  CONFIG_TUN: m
   CONFIG_VETH: m
 
   # For Kubernetes
