@@ -1,0 +1,17 @@
+---
+resources:
+  registry_auths: {}
+  backup: {}
+  restore: {}
+
+values:
+  affinity: "%{alias('affinity')}"
+  tolerations: "%{alias('tolerations')}"
+  image:
+    repository: ghcr.io/berriai/litellm # not the database version
+  db:
+    deployStandalone: false
+  migrationJob:
+    enabled: false
+  service:
+    port: 80

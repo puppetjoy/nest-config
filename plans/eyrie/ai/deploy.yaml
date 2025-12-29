@@ -12,6 +12,11 @@ parameters:
     type: Boolean
     default: true
 
+  litellm:
+    description: 'Deploy LiteLLM proxy'
+    type: Boolean
+    default: true
+
   init:
     description: 'Deploy initial revision'
     type: Boolean
@@ -29,3 +34,8 @@ steps:
     parameters:
       deploy: $deploy and $llama
       init: $init
+
+  - description: 'Deploy LiteLLM proxy'
+    plan: nest::eyrie::ai::deploy_litellm
+    parameters:
+      deploy: $deploy and $litellm

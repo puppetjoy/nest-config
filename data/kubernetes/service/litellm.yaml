@@ -1,0 +1,29 @@
+---
+ingress_class: contour-compute
+service_name: ai
+
+values:
+  ingress:
+    enabled: true
+    className: "%{lookup('ingress_class')}"
+    hosts:
+      - host: "%{nest::kubernetes::fqdn}"
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+  proxy_config:
+    model_list:
+      - model_name: general
+        litellm_params:
+          model: openai/general
+          api_base: http://llama-general/v1
+          api_key: dummy
+          timeout: 600
+          max_tokens: 4096
+      - model_name: coder
+        litellm_params:
+          model: openai/coder
+          api_base: http://llama-coder/v1
+          api_key: dummy
+          timeout: 300
+          max_tokens: 4096

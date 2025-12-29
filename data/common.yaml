@@ -88,6 +88,9 @@ nest::cnames:
   registry.gitlab-test.eyrie: 'ingress-test.eyrie'
   thestaticvoid-test.eyrie: 'ingress-test.eyrie'
 
+  # AI services
+  ai.eyrie: 'ingress-compute.eyrie'
+
   # Legacy services
   cursivemoves.nest: 'falcon.nest'
   gitlab.james.tl: 'falcon.nest'

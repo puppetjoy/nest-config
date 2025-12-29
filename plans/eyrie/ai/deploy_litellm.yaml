@@ -1,0 +1,25 @@
+---
+description: 'Deploy LiteLLM proxy'
+
+parameters:
+  deploy:
+    description: 'Run or skip the deployment'
+    type: Boolean
+    default: true
+
+  render_to:
+    description: 'Just render the template'
+    type: String
+    default: ''
+
+steps:
+  - description: 'Deploy LiteLLM'
+    plan: 'nest::kubernetes::deploy'
+    parameters:
+      service: 'litellm'
+      app: 'litellm'
+      namespace: 'ai'
+      chart: 'oci://docker.litellm.ai/berriai/litellm-helm'
+      version: '0.1.832'
+      deploy: $deploy
+      render_to: $render_to
