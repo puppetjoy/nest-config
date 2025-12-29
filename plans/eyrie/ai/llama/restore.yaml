@@ -22,6 +22,6 @@ parameters:
 
 steps:
   - description: "Restore ${service} cache"
-    command: "rsync -av --dry-run --delete falcon:/nest/backup/${service}/ /root/.cache/llama.cpp"
+    command: "rsync -av --delete falcon:/nest/backup/${service}/ /root/.cache/llama.cpp"
     run_as: root
     targets: $service_name

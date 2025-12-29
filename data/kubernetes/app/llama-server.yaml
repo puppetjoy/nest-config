@@ -45,8 +45,7 @@ resources:
         spec:
           affinity: "%{alias('affinity')}"
           tolerations: "%{alias('tolerations')}"
-          seccompProfile:
-            type: Unconfined
+          initContainers: []
           containers:
             - name: llama-server
               image: "%{lookup('image')}"
