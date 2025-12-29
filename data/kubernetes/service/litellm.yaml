@@ -18,12 +18,8 @@ values:
           model: openai/general
           api_base: http://llama-general/v1
           api_key: dummy
-          timeout: 600
-          max_tokens: 4096
       - model_name: coder
         litellm_params:
           model: openai/coder
           api_base: http://llama-coder/v1
           api_key: dummy
-          timeout: 300
-          max_tokens: 4096

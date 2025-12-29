@@ -7,11 +7,12 @@ resources:
 values:
   affinity: "%{alias('affinity')}"
   tolerations: "%{alias('tolerations')}"
-  image:
-    repository: ghcr.io/berriai/litellm # not the database version
   db:
     deployStandalone: false
   migrationJob:
     enabled: false
+  proxy_config:
+    general_settings:
+      allow_requests_on_db_unavailable: true
   service:
     port: 80
