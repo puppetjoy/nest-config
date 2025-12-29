@@ -93,13 +93,3 @@ resources:
         myASN: 65000
         peerASN: 65000
         peerAddress: 172.22.4.3
-
-    - apiVersion: metallb.io/v1beta2
-      kind: BGPPeer
-      metadata:
-        name: owl
-        namespace: "%{nest::kubernetes::namespace}"
-      spec:
-        myASN: 65000
-        peerASN: 65000
-        peerAddress: 172.22.4.4
