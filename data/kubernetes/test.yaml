@@ -2,6 +2,7 @@
 node_role: workstation
 registry: 'registry-test.eyrie'
 restore_hour: '1-23/3'
+restore_job_ttl: 21600 # 6h; keep last two restore jobs in history
 
 .affinity: &affinity
   nodeAffinity:
@@ -33,7 +34,7 @@ resources:
       timeZone: 'America/New_York'
       jobTemplate:
         spec:
-          ttlSecondsAfterFinished: 21600 # 6h; keep last two restore jobs in history
+          ttlSecondsAfterFinished: "%{alias('restore_job_ttl')}"
           template:
             spec:
               affinity: *affinity

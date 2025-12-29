@@ -3,6 +3,7 @@ include:
   - 'nest::kubernetes'
 
 backup_hour: '*/3'
+backup_job_ttl: 21600 # 6h; keep last two backup jobs in history
 plan_base: "nest::eyrie::%{nest::kubernetes::app}"
 registry: 'registry.eyrie'
 
@@ -29,7 +30,7 @@ resources:
       timeZone: 'America/New_York'
       jobTemplate:
         spec:
-          ttlSecondsAfterFinished: 21600 # 6h; keep last two backup jobs in history
+          ttlSecondsAfterFinished: "%{alias('backup_job_ttl')}"
           template:
             spec:
               containers:
