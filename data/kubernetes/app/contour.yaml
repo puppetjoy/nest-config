@@ -17,4 +17,5 @@ values:
       default: false
   envoy:
     service:
+      externalTrafficPolicy: Cluster
       loadBalancerIP: "%{nest::kubernetes::load_balancer_ip}"

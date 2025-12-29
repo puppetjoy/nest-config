@@ -111,7 +111,6 @@ values:
     gitlab-shell:
       service:
         type: LoadBalancer
-        externalTrafficPolicy: Local
         loadBalancerIP: "%{nest::service::gitlab::ssh_load_balancer_ip}"
     toolbox:
       backups:
