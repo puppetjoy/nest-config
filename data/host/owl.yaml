@@ -4,7 +4,7 @@ nest::classes:
   - 'nest::service::kubernetes'
   - 'nest::tool::bolt'
 
-nest::bird_role: worker
+nest::bird_role: server
 nest::distcc_server: true
 nest::dvorak: true
 nest::text_scaling_factor: 1.5
