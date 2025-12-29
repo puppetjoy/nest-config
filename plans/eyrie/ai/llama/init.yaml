@@ -1,0 +1,19 @@
+---
+description: 'Initialize a llama-server cache'
+
+parameters:
+  namespace:
+    description: 'Kubernetes namespace (unused)'
+    type: String
+    default: 'unused'
+
+  service:
+    description: 'llama service to restore'
+    type: String
+
+steps:
+  - description: "Initialize ${service} cache"
+    plan: nest::eyrie::ai::llama::restore
+    parameters:
+      service: $service
+      service_name: 'localhost'

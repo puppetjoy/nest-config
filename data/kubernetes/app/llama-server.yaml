@@ -1,0 +1,127 @@
+---
+plan_base: 'nest::eyrie::ai::llama'
+
+# Thin provisioned model cache
+cache_size: 128Gi
+storage_class: owl-crypt
+
+# Prefer ROCm
+image: 'rocm/llama.cpp:llama.cpp-b6652.amd0_rocm7.0.0_ubuntu24.04_server'
+
+resources:
+  storage:
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: "%{nest::kubernetes::service}-cache"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: "%{lookup('cache_size')}"
+      storageClassName: "%{lookup('storage_class')}"
+
+  deployment:
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: "%{nest::kubernetes::service}"
+      namespace: "%{nest::kubernetes::namespace}"
+      labels:
+        'james.tl/nest': 'stage1'
+    spec:
+      replicas: 1
+      strategy:
+        type: Recreate
+      selector:
+        matchLabels:
+          app: "%{nest::kubernetes::service}"
+      template:
+        metadata:
+          labels:
+            app: "%{nest::kubernetes::service}"
+        spec:
+          affinity: "%{alias('affinity')}"
+          tolerations: "%{alias('tolerations')}"
+          seccompProfile:
+            type: Unconfined
+          containers:
+            - name: llama-server
+              image: "%{lookup('image')}"
+              args: "%{alias('server_args')}"
+              ports:
+                - containerPort: 8080
+              resources:
+                limits:
+                  squat.ai/amdgpu: '1'
+              volumeMounts:
+                - name: cache
+                  mountPath: /root/.cache
+              startupProbe:
+                tcpSocket:
+                  port: 8080
+                # Allow up to 60 minutes for initial HF download + startup
+                periodSeconds: 10
+                failureThreshold: 360   # 360 * 10s = 3600s = 60m
+                timeoutSeconds: 1
+              readinessProbe:
+                tcpSocket:
+                  port: 8080
+                periodSeconds: 5
+                failureThreshold: 3
+                timeoutSeconds: 1
+              livenessProbe:
+                tcpSocket:
+                  port: 8080
+                # Don’t be too twitchy; inference can stall briefly under load
+                periodSeconds: 10
+                failureThreshold: 6     # ~60s
+                timeoutSeconds: 1
+          volumes:
+            - name: cache
+              persistentVolumeClaim:
+                claimName: "%{nest::kubernetes::service}-cache"
+
+  service:
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: "%{nest::kubernetes::service}"
+      namespace: "%{nest::kubernetes::namespace}"
+      labels:
+        'james.tl/nest': 'stage1'
+    spec:
+      type: ClusterIP
+      selector:
+        app: "%{nest::kubernetes::service}"
+      ports:
+        - name: http
+          port: 80
+          targetPort: 8080
+
+patches:
+  30-nest:
+    patch:
+      - op: add
+        path: '/spec/template/spec/containers/1/volumeMounts/-'
+        value: &cache
+          name: cache
+          mountPath: '/root/.cache'
+    target:
+      group: apps
+      version: v1
+      kind: Deployment
+      labelSelector: 'james.tl/nest'
+
+  30-nest-init:
+    patch:
+      - op: add
+        path: '/spec/template/spec/initContainers/0/volumeMounts/-'
+        value: *cache
+    target:
+      group: apps
+      version: v1
+      kind: Deployment
+      labelSelector: 'james.tl/nest'

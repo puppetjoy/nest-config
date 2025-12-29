@@ -1,0 +1,13 @@
+---
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+          - key: 'node-role.kubernetes.io/compute'
+            operator: Exists
+
+tolerations:
+  - key: 'node-role.kubernetes.io/compute'
+    operator: Exists
+    effect: NoSchedule

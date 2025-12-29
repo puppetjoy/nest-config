@@ -42,6 +42,9 @@ steps:
       labels: node-role.kubernetes.io/compute:NoSchedule
     targets: eyrie-compute
 
+  - description: 'Deploy device plugins'
+    plan: nest::kubernetes::deploy_device_plugins
+
   - description: 'Deploy network'
     plan: nest::kubernetes::deploy_network
 

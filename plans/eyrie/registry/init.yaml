@@ -12,20 +12,10 @@ parameters:
     type: String
     default: 'registry'
 
-  service_name:
-    description: 'Service name (unused)'
-    type: String
-    default: 'unused'
-
-  init:
-    description: 'Run or skip initialization'
-    type: Boolean
-    default: true
-
 steps:
   - description: "Restore registry instance"
     plan: nest::eyrie::registry::restore
     parameters:
       namespace: $namespace
       service: $service
-      restore: $init
+      restore: true

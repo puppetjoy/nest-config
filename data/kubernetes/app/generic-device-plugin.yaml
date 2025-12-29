@@ -1,0 +1,21 @@
+---
+resources:
+  backup: {}
+  restore: {}
+
+values:
+  config:
+    data: |
+      devices:
+        - name: amdgpu
+          groups:
+            - count: 2
+              paths:
+                - path: /dev/dri/renderD128
+                - path: /dev/kfd
+  nodeSelector:
+    node-role.kubernetes.io/compute: ''
+  tolerations:
+    - key: 'node-role.kubernetes.io/compute'
+      operator: 'Exists'
+      effect: 'NoSchedule'

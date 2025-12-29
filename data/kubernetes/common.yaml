@@ -1,9 +1,10 @@
 ---
-backup_hour: '*/3'
-registry: 'registry.eyrie'
-
 include:
   - 'nest::kubernetes'
+
+backup_hour: '*/3'
+plan_base: "nest::eyrie::%{nest::kubernetes::app}"
+registry: 'registry.eyrie'
 
 resources:
   registry_auths:
@@ -39,7 +40,7 @@ resources:
                     - bolt
                     - plan
                     - run
-                    - "nest::eyrie::%{nest::kubernetes::app}::backup"
+                    - "%{lookup('plan_base')}::backup"
                     - "namespace=%{nest::kubernetes::namespace}"
                     - "service=%{nest::kubernetes::service}"
                     - "service_name=%{nest::kubernetes::service_name}"
@@ -171,7 +172,7 @@ patches:
               - bolt
               - plan
               - run
-              - "nest::eyrie::%{nest::kubernetes::app}::init"
+              - "%{lookup('plan_base')}::init"
               - "namespace=%{nest::kubernetes::namespace}"
               - "service=%{nest::kubernetes::service}"
             env:

@@ -45,7 +45,7 @@ resources:
                     - bolt
                     - plan
                     - run
-                    - "nest::eyrie::%{nest::kubernetes::app}::restore"
+                    - "%{lookup('plan_base')}::restore"
                     - "namespace=%{nest::kubernetes::namespace}"
                     - "service=%{nest::kubernetes::service}"
                     - "service_name=%{nest::kubernetes::service_name}"

@@ -1,0 +1,33 @@
+---
+description: 'Deploy the coder LLM'
+
+parameters:
+  namespace:
+    description: 'Kubernetes namespace'
+    type: String
+    default: 'ai'
+
+  deploy:
+    description: 'Run or skip the deployment'
+    type: Boolean
+    default: true
+
+  init:
+    description: 'Deploy initial revision'
+    type: Boolean
+    default: false
+
+  render_to:
+    description: 'Just render the template'
+    type: String
+    default: ''
+
+steps:
+  - description: 'Deploy coder llama-server'
+    plan: nest::eyrie::ai::llama::deploy
+    parameters:
+      service: 'llama-coder'
+      namespace: $namespace
+      deploy: $deploy
+      init: $init
+      render_to: $render_to

@@ -1,0 +1,22 @@
+---
+description: 'Backup a llama-server cache'
+
+parameters:
+  namespace:
+    description: 'Kubernetes namespace (unused)'
+    type: String
+    default: 'unused'
+
+  service:
+    description: 'llama service to backup'
+    type: String
+
+  service_name:
+    description: 'Service name'
+    type: String
+
+steps:
+  - description: "Backup ${service} cache"
+    command: "rsync -av --delete /root/.cache/llama.cpp/ falcon:/nest/backup/${service}"
+    run_as: root
+    targets: $service_name

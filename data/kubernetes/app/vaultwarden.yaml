@@ -83,25 +83,25 @@ patches:
             'james.tl/nest': 'stage1'
 
   30-nest:
-    - patch:
-        - op: add
-          path: '/spec/template/spec/containers/1/volumeMounts/-'
-          value: &vaultwarden_data
-            name: vaultwarden-data
-            mountPath: '/srv/vaultwarden/data'
-      target:
-        group: apps
-        version: v1
-        kind: Deployment
-        labelSelector: 'james.tl/nest'
+    patch:
+      - op: add
+        path: '/spec/template/spec/containers/1/volumeMounts/-'
+        value: &vaultwarden_data
+          name: vaultwarden-data
+          mountPath: '/srv/vaultwarden/data'
+    target:
+      group: apps
+      version: v1
+      kind: Deployment
+      labelSelector: 'james.tl/nest'
 
   30-nest-init:
-    - patch:
-        - op: add
-          path: '/spec/template/spec/initContainers/0/volumeMounts/-'
-          value: *vaultwarden_data
-      target:
-        group: apps
-        version: v1
-        kind: Deployment
-        labelSelector: 'james.tl/nest'
+    patch:
+      - op: add
+        path: '/spec/template/spec/initContainers/0/volumeMounts/-'
+        value: *vaultwarden_data
+    target:
+      group: apps
+      version: v1
+      kind: Deployment
+      labelSelector: 'james.tl/nest'

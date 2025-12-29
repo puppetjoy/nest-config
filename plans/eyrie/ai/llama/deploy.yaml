@@ -1,0 +1,39 @@
+---
+description: 'Deploy a llama-server instance'
+
+parameters:
+  service:
+    description: 'llama service to deploy'
+    type: String
+
+  namespace:
+    description: 'Kubernetes namespace'
+    type: String
+    default: 'ai'
+
+  deploy:
+    description: 'Run or skip the deployment'
+    type: Boolean
+    default: true
+
+  init:
+    description: 'Deploy initial revision'
+    type: Boolean
+    default: false
+
+  render_to:
+    description: 'Just render the template'
+    type: String
+    default: ''
+
+steps:
+  - description: 'Deploy the instance'
+    plan: nest::kubernetes::deploy
+    parameters:
+      namespace: $namespace
+      service: $service
+      app: 'llama-server'
+      deploy: $deploy
+      init: $init
+      wait: $init
+      render_to: $render_to

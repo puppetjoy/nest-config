@@ -1,0 +1,27 @@
+---
+description: 'Restore a llama-server cache'
+
+parameters:
+  namespace:
+    description: 'Kubernetes namespace (unused)'
+    type: String
+    default: 'unused'
+
+  service:
+    description: 'llama service to restore'
+    type: String
+
+  service_name:
+    description: 'Service name'
+    type: String
+
+  restore:
+    description: 'Safety gate (unused)'
+    type: Boolean
+    default: true
+
+steps:
+  - description: "Restore ${service} cache"
+    command: "rsync -av --dry-run --delete falcon:/nest/backup/${service}/ /root/.cache/llama.cpp"
+    run_as: root
+    targets: $service_name

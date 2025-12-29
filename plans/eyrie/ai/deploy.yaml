@@ -1,0 +1,31 @@
+---
+description: 'Deploy AI services'
+
+parameters:
+  deploy:
+    description: 'Run or skip the deployment'
+    type: Boolean
+    default: true
+
+  llama:
+    description: 'Deploy llama-server'
+    type: Boolean
+    default: true
+
+  init:
+    description: 'Deploy initial revision'
+    type: Boolean
+    default: false
+
+steps:
+  - description: 'Deploy general llama-server'
+    plan: nest::eyrie::ai::deploy_llama_general
+    parameters:
+      deploy: $deploy and $llama
+      init: $init
+
+  - description: 'Deploy coder llama-server'
+    plan: nest::eyrie::ai::deploy_llama_coder
+    parameters:
+      deploy: $deploy and $llama
+      init: $init
