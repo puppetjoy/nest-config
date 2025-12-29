@@ -1,5 +1,6 @@
 ---
 resources:
+  registry_auths: {}
   backup: {}
   restore: {}
 

@@ -12,10 +12,16 @@ parameters:
     type: String
     default: 'registry'
 
+  # This plan may be called during deployment
+  init:
+    description: 'Run or skip initialization'
+    type: Boolean
+    default: true
+
 steps:
   - description: "Restore registry instance"
     plan: nest::eyrie::registry::restore
     parameters:
       namespace: $namespace
       service: $service
-      restore: true
+      restore: $init

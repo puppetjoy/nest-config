@@ -57,8 +57,7 @@ steps:
   - description: 'Initialize registry'
     plan: nest::eyrie::registry::init
     parameters:
-      deploy: $deploy and $registry
-      init: $init
+      init: $init and $registry
 
   - description: 'Deploy GitLab'
     plan: nest::eyrie::deploy_gitlab

@@ -10,6 +10,9 @@ ingress_class: contour
 storage_class: ceph-filesystem
 db_storage_class: ceph-block
 
+resources:
+  registry_auths: {}
+
 values:
   image:
     tag: 'latest'

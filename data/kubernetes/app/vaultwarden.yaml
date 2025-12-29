@@ -9,6 +9,8 @@ ingress_class: contour
 storage_class: ceph-filesystem
 
 resources:
+  registry_auths: {}
+
   certs:
     apiVersion: cert-manager.io/v1
     kind: Certificate

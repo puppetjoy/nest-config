@@ -9,6 +9,8 @@ storage_class: owl-crypt
 image: 'rocm/llama.cpp:llama.cpp-b6652.amd0_rocm7.0.0_ubuntu24.04_server'
 
 resources:
+  registry_auths: {}
+
   storage:
     apiVersion: v1
     kind: PersistentVolumeClaim

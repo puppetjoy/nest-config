@@ -26,6 +26,8 @@ token_service: 'Container registry'
     effect: NoSchedule
 
 resources:
+  registry_auths: {}
+
   certs:
     apiVersion: cert-manager.io/v1
     kind: Certificate
