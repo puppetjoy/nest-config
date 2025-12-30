@@ -17,9 +17,9 @@ values:
         litellm_params:
           model: openai/general
           api_base: http://llama-general/v1
-          api_key: dummy
+          api_key: none
       - model_name: coder
         litellm_params:
           model: openai/coder
           api_base: http://llama-coder/v1
-          api_key: dummy
+          api_key: none

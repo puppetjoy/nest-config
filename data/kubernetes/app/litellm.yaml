@@ -13,6 +13,6 @@ values:
     enabled: false
   proxy_config:
     general_settings:
-      allow_requests_on_db_unavailable: true
+      master_key: null
   service:
     port: 80
