@@ -1,0 +1,67 @@
+---
+plan_base: 'nest::eyrie::ai::webui'
+
+cert_issuer: eyrie-ca
+cert_issuer_kind: ClusterIssuer
+ingress_class: contour-compute
+storage_class: owl-crypt
+volume_size: 2Gi # chart default
+
+resources:
+  registry_auths: {}
+  backup: {}
+  restore: {}
+
+  certs:
+    apiVersion: cert-manager.io/v1
+    kind: Certificate
+    metadata:
+      name: "%{nest::kubernetes::service}-certs"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      secretName: "%{nest::kubernetes::service}-certs"
+      issuerRef:
+        name: "%{lookup('cert_issuer')}"
+        kind: "%{lookup('cert_issuer_kind')}"
+      dnsNames:
+        - "%{nest::kubernetes::fqdn}"
+
+values:
+  affinity: "%{alias('affinity')}"
+  tolerations: "%{alias('tolerations')}"
+  ingress:
+    enabled: true
+    class: "%{lookup('ingress_class')}"
+    host: "%{nest::kubernetes::fqdn}"
+    tls: true
+    existingSecret: "%{nest::kubernetes::service}-certs"
+  ollama:
+    enabled: false
+  pipelines:
+    enabled: false
+  persistence:
+    size: "%{lookup('volume_size')}"
+    storageClass: "%{lookup('storage_class')}"
+
+patches:
+  # Contour requires explicit path for websocket routes
+  10-ingress-websockets:
+    patch:
+      - op: add
+        path: /metadata/annotations/projectcontour.io~1websocket-routes
+        value: /ws/socket.io/
+      - op: add
+        path: /spec/rules/0/http/paths/-
+        value:
+          path: /ws/socket.io/
+          pathType: Prefix
+          backend:
+            service:
+              name: "%{nest::kubernetes::service}"
+              port:
+                number: 80
+    target:
+      group: networking.k8s.io
+      version: v1
+      kind: Ingress
+      name: "%{nest::kubernetes::service}"
