@@ -5,6 +5,8 @@ service_name: ai
 values:
   ingress:
     enabled: true
+    annotations:
+      projectcontour.io/response-timeout: infinity
     className: "%{lookup('ingress_class')}"
     hosts:
       - host: "%{nest::kubernetes::fqdn}"
