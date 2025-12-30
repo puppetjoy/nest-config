@@ -5,9 +5,8 @@ plan_base: 'nest::eyrie::ai::llama'
 cache_size: 128Gi
 storage_class: owl-crypt
 
-# Prefer Vulkan backend for speed and stability
-image: 'ghcr.io/ggml-org/llama.cpp:server-vulkan'
-# image: 'rocm/llama.cpp:llama.cpp-b6652.amd0_rocm7.0.0_ubuntu24.04_server'
+# Prefer Vulkan for speed and stability
+backend: vulkan # or rocm
 
 resources:
   registry_auths: {}
@@ -51,7 +50,7 @@ resources:
           initContainers: []
           containers:
             - name: llama-server
-              image: "%{lookup('image')}"
+              image: "ghcr.io/ggml-org/llama.cpp:server-%{lookup('backend')}"
               args: "%{alias('server_args')}"
               ports:
                 - containerPort: 8080
