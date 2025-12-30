@@ -1,7 +1,4 @@
 ---
-# gpt-oss hangs during initialization with current ROCm build
-image: 'ghcr.io/ggml-org/llama.cpp:server-vulkan'
-
 # https://huggingface.co/ggml-org/gpt-oss-120b-GGUF
 server_args:
   - --hf-repo
