@@ -1,0 +1,89 @@
+---
+plan_base: 'nest::eyrie::ai::librechat'
+
+cert_issuer: eyrie-ca
+cert_issuer_kind: ClusterIssuer
+ingress_class: contour-compute
+storage_class: owl-crypt
+image_volume_size: 8Gi
+mongo_volume_size: 8Gi
+meili_volume_size: 8Gi
+
+resources:
+  registry_auths: {}
+  backup: {}
+  restore: {}
+
+  certs:
+    apiVersion: cert-manager.io/v1
+    kind: Certificate
+    metadata:
+      name: "%{nest::kubernetes::service}-certs"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      secretName: "%{nest::kubernetes::service}-certs"
+      issuerRef:
+        name: "%{lookup('cert_issuer')}"
+        kind: "%{lookup('cert_issuer_kind')}"
+      dnsNames:
+        - "%{nest::kubernetes::fqdn}"
+
+  secrets:
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: "%{nest::kubernetes::service}-secrets"
+      namespace: "%{nest::kubernetes::namespace}"
+    data:
+      CREDS_KEY: "%{lookup('creds_key')}"
+      CREDS_IV: "%{lookup('creds_iv')}"
+      JWT_SECRET: "%{lookup('jwt_secret')}"
+      JWT_REFRESH_SECRET: "%{lookup('jwt_refresh_secret')}"
+      MEILI_MASTER_KEY: "%{lookup('meili_master_key')}"
+
+values:
+  affinity: "%{alias('affinity')}"
+  tolerations: "%{alias('tolerations')}"
+  global:
+    librechat:
+      existingSecretName: "%{nest::kubernetes::service}-secrets"
+  librechat:
+    configEnv:
+      # Override default values
+      CREDS_KEY: null
+      CREDS_IV: null
+      JWT_SECRET: null
+      JWT_REFRESH_SECRET: null
+    imageVolume:
+      accessModes: ReadWriteMany
+      size: "%{lookup('image_volume_size')}"
+      storageClassName: "%{lookup('storage_class')}"
+  ingress:
+    className: "%{lookup('ingress_class')}"
+    hosts:
+      - host: "%{nest::kubernetes::fqdn}"
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+    tls:
+      - secretName: "%{nest::kubernetes::service}-certs"
+        hosts:
+          - "%{nest::kubernetes::fqdn}"
+  mongodb:
+    affinity: "%{alias('affinity')}"
+    tolerations: "%{alias('tolerations')}"
+    image:
+      tag: latest # Bitnami :(
+    persistence:
+      size: "%{lookup('mongo_volume_size')}"
+      storageClass: "%{lookup('storage_class')}"
+    updateStrategy:
+      type: Recreate
+  meilisearch:
+    affinity: "%{alias('affinity')}"
+    tolerations: "%{alias('tolerations')}"
+    auth:
+      existingMasterKeySecret: "%{nest::kubernetes::service}-secrets"
+    persistence:
+      size: "%{lookup('meili_volume_size')}"
+      storageClass: "%{lookup('storage_class')}"

@@ -1,8 +1,0 @@
----
-service_name: chat
-
-values:
-  extraEnvVars:
-    WEBUI_NAME: Chat
-  openaiBaseApiUrl: http://litellm/v1
-  openaiApiKey: null

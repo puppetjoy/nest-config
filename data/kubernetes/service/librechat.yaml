@@ -1,0 +1,26 @@
+---
+service_name: chat
+
+values:
+  fullnameOverride: "%{nest::kubernetes::service}"
+  librechat:
+    configEnv:
+      ALLOW_REGISTRATION: 'true'
+      ALLOWED_EMAIL_DOMAINS: joyfullee.me
+      EMAIL_HOST: smtp.nest
+      EMAIL_FROM: "%{nest::kubernetes::service}@joyfullee.me"
+    configYamlContent: |
+      version: 1.2.9
+
+      endpoints:
+        custom:
+          - name: LiteLLM
+            apiKey: none
+            baseURL: http://litellm/v1
+            models:
+              default:
+                - gpt-oss-120b
+                - qwen3-coder-30b
+            modelDisplayLabel: Local
+            titleConvo: true
+            titleModel: current_model

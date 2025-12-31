@@ -1,11 +1,11 @@
 ---
-description: 'Deploy an Open WebUI instance'
+description: 'Deploy a LibreChat instance'
 
 parameters:
   service:
-    description: 'Open WebUI service to deploy'
+    description: 'LibreChat service to deploy'
     type: String
-    default: 'open-webui'
+    default: 'librechat'
 
   namespace:
     description: 'Kubernetes namespace'
@@ -33,10 +33,9 @@ steps:
     parameters:
       namespace: $namespace
       service: $service
-      app: 'open-webui'
-      chart: 'open-webui/open-webui'
-      repo_url: 'https://helm.openwebui.com/'
-      version: '8.22.0'
+      app: 'librechat'
+      chart: 'oci://ghcr.io/danny-avila/librechat-chart/librechat'
+      version: '1.9.4'
       deploy: $deploy
       init: $init
       wait: $init

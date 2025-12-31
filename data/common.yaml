@@ -89,8 +89,8 @@ nest::cnames:
   thestaticvoid-test.eyrie: 'ingress-test.eyrie'
 
   # AI services
-  ai.eyrie: 'ingress-compute.eyrie'
   chat.eyrie: 'ingress-compute.eyrie'
+  llm.eyrie: 'ingress-compute.eyrie'
 
   # Legacy services
   cursivemoves.nest: 'falcon.nest'

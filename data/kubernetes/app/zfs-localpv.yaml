@@ -49,6 +49,7 @@ resources:
       parameters:
         fstype: zfs
         poolname: owl/crypt/kubernetes
+        shared: 'yes'
       provisioner: zfs.csi.openebs.io
       allowedTopologies:
         - matchLabelExpressions:
