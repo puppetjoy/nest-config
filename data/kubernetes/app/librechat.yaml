@@ -49,16 +49,22 @@ values:
       existingSecretName: "%{nest::kubernetes::service}-secrets"
   librechat:
     configEnv:
+      CUSTOM_FOOTER: ''
+      DOMAIN_CLIENT: "https://%{nest::kubernetes::fqdn}" # user-facing
+      DOMAIN_SERVER: "https://%{nest::kubernetes::fqdn}" # backend
+      SEARCH: 'true'
+
       # Override default values
       CREDS_KEY: null
       CREDS_IV: null
       JWT_SECRET: null
       JWT_REFRESH_SECRET: null
     imageVolume:
-      accessModes: ReadWriteMany
       size: "%{lookup('image_volume_size')}"
       storageClassName: "%{lookup('storage_class')}"
   ingress:
+    annotations:
+      projectcontour.io/response-timeout: infinity
     className: "%{lookup('ingress_class')}"
     hosts:
       - host: "%{nest::kubernetes::fqdn}"
