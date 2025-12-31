@@ -19,13 +19,16 @@ class nest::tool::rocm {
     unstable => true,
   }
 
-  package_accept_keywords { 'dev-libs/rocm-core':
-    tag => 'profile',
-  }
-  ->
-  nest::lib::package { 'dev-util/amdsmi':
-    ensure   => installed,
-    unstable => true,
+  # AMD SMI expects cpuid.h which is not available on RISC-V
+  unless $facts['profile']['architecture'] == 'riscv' {
+    package_accept_keywords { 'dev-libs/rocm-core':
+      tag => 'profile',
+    }
+    ->
+    nest::lib::package { 'dev-util/amdsmi':
+      ensure   => installed,
+      unstable => true,
+    }
   }
 
   nest::lib::package { 'sys-apps/amdgpu_top':
