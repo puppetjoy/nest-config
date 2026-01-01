@@ -5,8 +5,8 @@ class nest::base::portage {
     eselect_ensure => installed,
   }
 
-  # Disable package rebuilds (from portage module) during build
-  if $facts['build'] {
+  # Disable package rebuilds (from portage module) during build stages
+  if $facts['build'] and $facts['build'] =~ /^stage\d+$/ {
     Exec <| title == 'changed_makeconf' |> {
       noop => true,
     }
@@ -129,6 +129,12 @@ class nest::base::portage {
     'makeopts':
       content => $makeopts,
     ;
+  }
+
+  unless empty($nest::use) {
+    portage::makeconf { 'use':
+      content => $nest::use.sort.join(' '),
+    }
   }
 
   # Don't timeout rebuilding packages

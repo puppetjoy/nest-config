@@ -8,12 +8,11 @@ values:
   config:
     data: |
       devices:
-        - name: amdgpu
+        - name: gpu
           groups:
             - count: 2
               paths:
                 - path: /dev/dri/renderD128
-                - path: /dev/kfd
   nodeSelector:
     node-role.kubernetes.io/compute: ''
   tolerations:

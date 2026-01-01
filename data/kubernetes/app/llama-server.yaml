@@ -5,9 +5,6 @@ plan_base: 'nest::eyrie::ai::llama'
 cache_size: 128Gi
 storage_class: owl-crypt
 
-# Prefer Vulkan for speed and stability
-backend: vulkan # or rocm
-
 resources:
   registry_auths: {}
 
@@ -50,13 +47,13 @@ resources:
           initContainers: []
           containers:
             - name: llama-server
-              image: "ghcr.io/ggml-org/llama.cpp:server-%{lookup('backend')}"
+              image: ghcr.io/ggml-org/llama.cpp:server-vulkan
               args: "%{alias('server_args')}"
               ports:
                 - containerPort: 8080
               resources:
                 limits:
-                  squat.ai/amdgpu: '1'
+                  squat.ai/gpu: '1'
               volumeMounts:
                 - name: cache
                   mountPath: /root/.cache

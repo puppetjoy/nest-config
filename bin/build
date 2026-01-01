@@ -40,9 +40,9 @@ case $build in
     bolt|chromium|pdk)
         extra_args=("cpu=${name}")
         ;;
-    r10k)
+    llama.cpp|r10k)
+        extra_args=("cpu=${name}" "tool=${build}")
         build=tool
-        extra_args=("cpu=${name}" 'tool=r10k')
         ;;
     *)
         print "Invalid build: ${build}" >&2

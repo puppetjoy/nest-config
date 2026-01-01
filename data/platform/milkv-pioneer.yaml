@@ -3,7 +3,6 @@ nest::classes:
   - 'nest::firmware::opensbi'
   - 'nest::firmware::sophgo'
   - 'nest::firmware::zsbl'
-  - 'nest::tool::rocm'
 
 nest::bootloader: u-root
 nest::dtb_file: 'sophgo/sg2042-milkv-pioneer.dtb'
@@ -32,7 +31,6 @@ nest::kernel_config:
   # Device drivers
   CONFIG_AQTION: m
   CONFIG_DRM_AMDGPU: m
-  CONFIG_HSA_AMD: y
 
   # Unsupported on 6.12
   CONFIG_OVPN: null

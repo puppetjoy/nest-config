@@ -41,16 +41,6 @@ class nest::base::packages {
         ensure => installed,
       }
 
-      if 'vulkan' in $facts['portage_use'].split(' ') {
-        nest::lib::package { [
-          'dev-util/vulkan-tools',
-          'media-libs/mesa',
-          'media-libs/vulkan-loader',
-        ]:
-          ensure => installed,
-        }
-      }
-
       unless $facts['profile']['architecture'] == 'arm' {
         nest::lib::package { 'llvm-core/lld':
           ensure => installed,

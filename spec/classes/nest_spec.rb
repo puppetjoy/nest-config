@@ -21,6 +21,7 @@ describe 'nest' do
     'nest::base::fs',
     'nest::base::gentoo',
     'nest::base::git',
+    'nest::base::gpu',
     'nest::base::hosts',
     'nest::base::locale',
     'nest::base::mta',

@@ -1,0 +1,6 @@
+---
+nest::classes:
+  - 'nest::tool::llamacpp'
+
+nest::tool::llamacpp::tag: 'b7595'
+nest::use: ['vulkan']
