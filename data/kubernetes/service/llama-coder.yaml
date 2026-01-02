@@ -2,7 +2,7 @@
 # https://huggingface.co/ggml-org/Qwen3-Coder-30B-A3B-Instruct-Q8_0-GGUF
 server_args:
   - --hf-repo
-  - ggml-org/Qwen3-Coder-30B-A3B-Instruct-Q8_0-GGUF:Q8_0
+  - ggml-org/Qwen3-Coder-30B-A3B-Instruct-Q8_0-GGUF
   - --ctx-size
   - '32768'
   - --jinja

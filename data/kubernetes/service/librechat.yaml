@@ -52,6 +52,8 @@ values:
               max_tokens: 4096
               greeting: |
                 Ask questions, explore ideas, or have longer conversations.
+              promptPrefix: |
+                You are a concise assistant. Answer directly and be brief unless asked for expansion.
 
           - name: coder
             label: Qwen Coder 30B
@@ -66,18 +68,18 @@ values:
               greeting: |
                 Ask about programming, code explanations, or technical problems.
 
-          # - name: small
-          #   label: Gemma 3 4B
-          #   description: Fast, multimodal assistant
-          #   preset:
-          #     endpoint: LiteLLM
-          #     model: gemma3-4b
-          #     modelLabel: Gemma
-          #     temperature: 0.7
-          #     maxContextTokens: 8192
-          #     max_tokens: 2048
-          #     greeting: |
-          #       Run quick tasks like summaries, rewrites, and transformations.
+          - name: small
+            label: Gemma 3 4B
+            description: Fast, multimodal assistant
+            preset:
+              endpoint: LiteLLM
+              model: gemma3-4b
+              modelLabel: Gemma
+              temperature: 0.7
+              maxContextTokens: 8192
+              max_tokens: 2048
+              greeting: |
+                Run quick tasks like summaries, rewrites, and transformations.
 
       memory:
         disabled: false

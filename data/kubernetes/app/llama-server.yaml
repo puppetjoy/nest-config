@@ -47,7 +47,8 @@ resources:
           initContainers: []
           containers:
             - name: llama-server
-              image: ghcr.io/ggml-org/llama.cpp:server-vulkan
+              image: registry.gitlab.joyfullee.me/nest/tools/llama.cpp:zen5
+              command: ['llama-server', '--host', '0.0.0.0']
               args: "%{alias('server_args')}"
               ports:
                 - containerPort: 8080
