@@ -2,7 +2,7 @@ class nest::tool::llamacpp (
   String $tag = 'master',
 ) {
   portage::makeconf { 'video_cards':
-    content => '-* amdgpu radeonsi',
+    content => '-* intel amdgpu radeonsi',
   }
 
   nest::lib::package { [
@@ -27,7 +27,8 @@ class nest::tool::llamacpp (
         '-DCMAKE_INSTALL_PREFIX=/usr/local',
         '-DCMAKE_INSTALL_RPATH=/usr/local/lib64',
         '-DCMAKE_BUILD_WITH_INSTALL_RPATH=ON',
-        '-DGGML_VULKAN=1',
+        '-DGGML_RVV=OFF',
+        '-DGGML_VULKAN=ON',
       ].join(' '),
       'cmake --build build',
       'cmake --install build',
