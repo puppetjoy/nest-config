@@ -10,10 +10,21 @@ class nest::service::llama_server (
     }
 
     $instances.each |$instance, $attributes| {
-      nest::lib::llama_server { $instance:
-        *       => $attributes,
-        require => Nest::Lib::Secret['llama-server-hf-token'],
+      if $attributes['count'] {
+        Integer[1, $attributes['count']].each |$i| {
+          nest::lib::llama_server { $instance:
+            instance => $i,
+            *        => $attributes - ['count'],
+          }
+        }
+      } else {
+        nest::lib::llama_server { $instance:
+          * => $attributes,
+        }
       }
     }
+
+    Nest::Lib::Secret['llama-server-hf-token']
+    -> Nest::Lib::Llama_server <||>
   }
 }
