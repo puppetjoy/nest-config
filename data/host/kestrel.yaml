@@ -48,12 +48,10 @@ nest::service::gitlab_runner::instances:
     qemu: true
 
 nest::service::llama_server::instances:
-  util1:
-    port: 8081
-    repo: google/gemma-3-1b-it-qat-q4_0-gguf
-  # util2:
-  #   port: 8082
-  #   repo: google/gemma-3-1b-it-qat-q4_0-gguf
+  util:
+    count: 4 # saturate GPU / amortize Vulkan CPU submission overhead
+    repo: Qwen/Qwen2.5-1.5B-Instruct-GGUF
+    kv_size: 16384 # tokens; 16K = half Qwen default 32K
 
 # Workaround usbnet hang at boot
 # See: https://gitlab.joyfullee.me/nest/config/-/issues/64
