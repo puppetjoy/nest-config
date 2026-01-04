@@ -15,6 +15,9 @@ values:
     ingressClass:
       name: "%{lookup('class_name')}"
       default: false
+    startupProbe:
+      enabled: true
+      failureThreshold: 30
   envoy:
     service:
       externalTrafficPolicy: Cluster
