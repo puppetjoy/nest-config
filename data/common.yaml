@@ -32,6 +32,8 @@ lookup_options:
     merge: 'deep'
   nest::service::kubernetes::bolt_private_key:
     convert_to: 'Sensitive'
+  nest::service::llama_server::hf_token:
+    convert_to: 'Sensitive'
   nest::service::mysql::root_password:
     convert_to: 'Sensitive'
   nest::service::puppet::puppetboard_secret_key:

@@ -1,16 +1,18 @@
 define nest::lib::container (
-  String              $image,
-  Array[String]       $cap_add    = [],
-  Array[String]       $command    = [],
-  Optional[String]    $dns        = undef,
-  Nest::ServiceEnsure $ensure     = running,
-  Optional[String]    $entrypoint = undef,
-  Array[String]       $env        = [],
-  Optional[String]    $network    = undef,
-  Optional[String]    $pod        = undef,
-  Array[String]       $publish    = [],
-  Array[String]       $tmpfs      = [],
-  Array[String]       $volumes    = [],
+  String               $image,
+  Array[String]        $cap_add    = [],
+  Array[String]        $command    = [],
+  Optional[String]     $dns        = undef,
+  Array[String]        $devices    = [],
+  Nest::ServiceEnsure  $ensure     = running,
+  Optional[String]     $entrypoint = undef,
+  Array[String]        $env        = [],
+  Optional[String]     $network    = undef,
+  Optional[String]     $pod        = undef,
+  Array[String]        $publish    = [],
+  Hash[String, String] $secrets    = {},
+  Array[String]        $tmpfs      = [],
+  Array[String]        $volumes    = [],
 ) {
   unless $facts['is_container'] {
     require 'nest::base::containers'
@@ -108,8 +110,16 @@ define nest::lib::container (
         "--cap-add=${e}"
       }
 
+      $devices_args = $devices.map |$device| {
+        "--device=${device}"
+      }
+
       $publish_args = $publish.map |$e| {
         "--publish=${e}"
+      }
+
+      $secrets_args = $secrets.map |$secret_name, $secret_target| {
+        "--secret=${secret_name},target=${secret_target},type=env"
       }
 
       $tmpfs_args = $tmpfs.map |$t| {
@@ -125,11 +135,13 @@ define nest::lib::container (
         '--replace',
         $cap_add_args,
         $dns_args,
+        $devices_args,
         $entrypoint_args,
         $env_args,
         $network_args,
         $pod_args,
         $publish_args,
+        $secrets_args,
         $tmpfs_args,
         $volumes_args,
         "--label=nest.podman.version=${facts['podman_version']}",

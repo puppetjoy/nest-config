@@ -2,6 +2,7 @@
 nest::classes:
   - 'nest::host::kestrel'
   - 'nest::service::gitlab_runner'
+  - 'nest::service::llama_server'
   - 'nest::service::usb_resetter'
 
 nest::autologin: sway
@@ -45,6 +46,14 @@ nest::service::gitlab_runner::instances:
     bolt: true
     podman: true
     qemu: true
+
+nest::service::llama_server::instances:
+  util1:
+    port: 8081
+    repo: google/gemma-3-1b-it-qat-q4_0-gguf
+  # util2:
+  #   port: 8082
+  #   repo: google/gemma-3-1b-it-qat-q4_0-gguf
 
 # Workaround usbnet hang at boot
 # See: https://gitlab.joyfullee.me/nest/config/-/issues/64

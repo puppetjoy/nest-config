@@ -1,4 +1,7 @@
 ---
+include:
+ - 'nest::service::llama_server'
+
 plan_base: 'nest::eyrie::ai::llama'
 
 # Thin provisioned model cache
@@ -21,6 +24,16 @@ resources:
         requests:
           storage: "%{lookup('cache_size')}"
       storageClassName: "%{lookup('storage_class')}"
+
+  secrets:
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: "%{nest::kubernetes::service}-secrets"
+      namespace: "%{nest::kubernetes::namespace}"
+    type: Opaque
+    data:
+      HF_TOKEN: "%{nest::service::llama_server::hf_token_base64}"
 
   deployment:
     apiVersion: apps/v1
@@ -47,9 +60,12 @@ resources:
           initContainers: []
           containers:
             - name: llama-server
-              image: registry.gitlab.joyfullee.me/nest/tools/llama.cpp:zen5
+              image: registry.gitlab.joyfullee.me/nest/tools/llama.cpp
               command: ['llama-server', '--host', '0.0.0.0']
               args: "%{alias('server_args')}"
+              envFrom:
+                - secretRef:
+                    name: "%{nest::kubernetes::service}-secrets"
               ports:
                 - containerPort: 8080
               resources:

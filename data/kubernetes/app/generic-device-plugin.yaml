@@ -13,9 +13,20 @@ values:
             - count: 2
               paths:
                 - path: /dev/dri/renderD128
-  nodeSelector:
-    node-role.kubernetes.io/compute: ''
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+            - key: 'node-role.kubernetes.io/compute'
+              operator: Exists
+          - matchExpressions:
+            - key: 'node-role.kubernetes.io/workstation'
+              operator: Exists
   tolerations:
     - key: 'node-role.kubernetes.io/compute'
+      operator: 'Exists'
+      effect: 'NoSchedule'
+    - key: 'node-role.kubernetes.io/workstation'
       operator: 'Exists'
       effect: 'NoSchedule'

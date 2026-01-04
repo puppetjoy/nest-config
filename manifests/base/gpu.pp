@@ -13,21 +13,14 @@ class nest::base::gpu {
     }
   }
 
-  if $facts['portage_video_cards'] {
-    $video_cards = $facts['portage_video_cards'].split(' ')
-
-    if 'amdgpu' in $video_cards {
-      nest::lib::package { 'sys-apps/amdgpu_top':
-        ensure   => installed,
-        unstable => true,
-      }
+  if $facts['portage_video_cards'] and 'amdgpu' in $facts['portage_video_cards'].split(' ') {
+    nest::lib::package { 'sys-apps/amdgpu_top':
+      ensure   => installed,
+      unstable => true,
     }
+  }
 
-    if 'intel' in $video_cards {
-      nest::lib::package { 'x11-apps/igt-gpu-tools':
-        ensure   => installed,
-        unstable => true,
-      }
-    }
+  nest::lib::package { 'sys-process/nvtop':
+    ensure => installed,
   }
 }
