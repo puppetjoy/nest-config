@@ -32,9 +32,41 @@ values:
               default:
                 - gpt-oss-120b
                 - qwen3-coder-30b
-                - gemma-3-4b
             titleConvo: true
+            titleEndpoint: LiteLLM-Title
             titleModel: qwen25-util
+
+          - name: LiteLLM-Title
+            apiKey: none
+            baseURL: http://litellm/v1
+            models:
+              default:
+                - qwen25-util
+            addParams:
+              temperature: 0
+
+          - name: LiteLLM-Vision
+            apiKey: none
+            baseURL: http://litellm/v1
+            models:
+              default:
+                - gemma-3-4b
+
+      fileConfig:
+        endpoints:
+          LiteLLM:
+            supportedMimeTypes:
+              - "^text/.*$"
+              - "^application/pdf$"
+              - "^application/json$"
+              - "^text/markdown$"
+              # (intentionally NO image/.* here)
+
+          LiteLLM-Vision:
+            supportedMimeTypes:
+              - "image/.*"
+              - "^text/.*$"
+              - "^application/pdf$"
 
       modelSpecs:
         enforce: false
@@ -77,7 +109,7 @@ values:
             label: Gemma 3 4B
             description: Fast, multimodal assistant
             preset:
-              endpoint: LiteLLM
+              endpoint: LiteLLM-Vision
               model: gemma-3-4b
               modelLabel: Gemma
               temperature: 0.7
