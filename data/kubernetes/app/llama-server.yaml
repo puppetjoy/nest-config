@@ -29,7 +29,7 @@ resources:
     apiVersion: v1
     kind: Secret
     metadata:
-      name: "%{nest::kubernetes::service}-secrets"
+      name: "%{nest::kubernetes::service}"
       namespace: "%{nest::kubernetes::namespace}"
     type: Opaque
     data:
@@ -65,7 +65,7 @@ resources:
               args: "%{alias('server_args')}"
               envFrom:
                 - secretRef:
-                    name: "%{nest::kubernetes::service}-secrets"
+                    name: "%{nest::kubernetes::service}"
               ports:
                 - containerPort: 8080
               resources:
