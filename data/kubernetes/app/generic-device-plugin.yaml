@@ -10,7 +10,7 @@ values:
       devices:
         - name: gpu
           groups:
-            - count: 2
+            - count: 3
               paths:
                 - path: /dev/dri/renderD128
   affinity:

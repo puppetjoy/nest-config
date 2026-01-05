@@ -4,5 +4,5 @@ server_args:
   - --hf-repo
   - ggml-org/gpt-oss-120b-GGUF
   - --ctx-size
-  - '0'
+  - '65536'
   - --jinja

@@ -13,15 +13,51 @@ values:
         paths:
           - path: /
             pathType: ImplementationSpecific
+
   proxy_config:
     model_list:
+      # General reasoning
       - model_name: gpt-oss-120b
         litellm_params:
           model: openai/general
           api_base: http://llama-general/v1
           api_key: none
+
+      # Coding
       - model_name: qwen3-coder-30b
         litellm_params:
           model: openai/coder
           api_base: http://llama-coder/v1
           api_key: none
+
+      # Multimodal assistant
+      - model_name: gemma-3-4b
+        litellm_params:
+          model: openai/multi
+          api_base: http://llama-multi/v1
+          api_key: none
+
+      # Utility pool (Qwen 2.5 1.5B x4)
+      - model_name: qwen25-util
+        litellm_params:
+          model: openai/util
+          api_base: http://llama-util:8081/v1
+          api_key: none
+      - model_name: qwen25-util
+        litellm_params:
+          model: openai/util
+          api_base: http://llama-util:8082/v1
+          api_key: none
+      - model_name: qwen25-util
+        litellm_params:
+          model: openai/util
+          api_base: http://llama-util:8083/v1
+          api_key: none
+      - model_name: qwen25-util
+        litellm_params:
+          model: openai/util
+          api_base: http://llama-util:8084/v1
+          api_key: none
+
+    router_settings:
+      routing_strategy: least-busy

@@ -4,5 +4,5 @@ server_args:
   - --hf-repo
   - ggml-org/Qwen3-Coder-30B-A3B-Instruct-Q8_0-GGUF
   - --ctx-size
-  - '32768'
+  - '65536'
   - --jinja

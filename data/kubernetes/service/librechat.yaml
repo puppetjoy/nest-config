@@ -32,8 +32,9 @@ values:
               default:
                 - gpt-oss-120b
                 - qwen3-coder-30b
+                - gemma-3-4b
             titleConvo: true
-            titleModel: current_model
+            titleModel: qwen25-util
 
       modelSpecs:
         enforce: false
@@ -48,38 +49,52 @@ values:
               model: gpt-oss-120b
               modelLabel: GPT
               temperature: 0.7
-              maxContextTokens: 32768
+              maxContextTokens: 65536
               max_tokens: 4096
               greeting: |
                 Ask questions, explore ideas, or have longer conversations.
               promptPrefix: |
-                You are a concise assistant. Answer directly and be brief unless asked for expansion.
+                You are a friendly, practical assistant.
+
+                Be direct and concise by default. Expand only when asked, or when detail is necessary to be correct.
+
+                Prefer short paragraphs and bullet lists. Avoid tables unless the user explicitly requests one or the information truly requires tabular comparison.
 
           - name: coder
-            label: Qwen Coder 30B
+            label: Qwen3 Coder 30B
             description: Code-first assistant
             preset:
               endpoint: LiteLLM
               model: qwen3-coder-30b
               modelLabel: Qwen
               temperature: 0.2
-              maxContextTokens: 32768
+              maxContextTokens: 65536
               max_tokens: 2048
               greeting: |
                 Ask about programming, code explanations, or technical problems.
 
-          - name: small
+          - name: multi
             label: Gemma 3 4B
             description: Fast, multimodal assistant
             preset:
               endpoint: LiteLLM
-              model: gemma3-4b
+              model: gemma-3-4b
               modelLabel: Gemma
               temperature: 0.7
-              maxContextTokens: 8192
+              maxContextTokens: 65536
               max_tokens: 2048
               greeting: |
-                Run quick tasks like summaries, rewrites, and transformations.
+                Summarize, transform, and analyze text or images.
+              promptPrefix: |
+                You are a friendly, task-oriented assistant.
+
+                You may be shown background context such as saved memories or prior facts about the user.
+                These are provided for awareness only.
+
+                Do NOT respond to, summarize, analyze, or comment on memories unless the user explicitly asks you to.
+                Do NOT describe memory IDs, timestamps, or possible actions.
+
+                Always respond only to the user's most recent message as a normal conversational reply.
 
       memory:
         disabled: false
@@ -93,7 +108,7 @@ values:
           - learned_facts
         agent:
           provider: LiteLLM
-          model: gpt-oss-120b
+          model: qwen25-util
           instructions: |
             You are the Memory agent. Be strict and conservative.
 
