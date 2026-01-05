@@ -141,8 +141,3 @@ nest::service::reverse_proxy::hosts:
     ip: '172.22.4.2'
     proxy_ssl: true
     timeout: 3600
-
-  cursivemoves.nest:
-    destination: ['pixel7pro.nest:8080 lbset=0', 'streamer.nest:8080 lbset=1']
-    ip: '172.22.4.2'
-    ssl: false

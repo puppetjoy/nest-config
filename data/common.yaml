@@ -93,20 +93,22 @@ nest::cnames:
   # AI services
   chat.eyrie: 'ingress-compute.eyrie'
   llm.eyrie: 'ingress-compute.eyrie'
+  llama-util.nest: 'kestrel.nest'
 
-  # Legacy services
-  cursivemoves.nest: 'falcon.nest'
+  # Local services
   gitlab.james.tl: 'falcon.nest'
   gitlab.joyfullee.me: 'falcon.nest'
+  registry.gitlab.james.tl: 'falcon.nest'
+  registry.gitlab.joyfullee.me: 'falcon.nest'
+  smtp.nest: 'falcon.nest'
+
+  # Legacy services
   nzbget.nest: 'falcon.nest'
   ombi.nest: 'falcon.nest'
   plex.nest: 'falcon.nest'
   puppet.nest: 'falcon.nest'
   puppetdb.nest: 'falcon.nest'
   radarr.nest: 'falcon.nest'
-  registry.gitlab.james.tl: 'falcon.nest'
-  registry.gitlab.joyfullee.me: 'falcon.nest'
-  smtp.nest: 'falcon.nest'
   sonarr.nest: 'falcon.nest'
 
 nest::cups_servers:
