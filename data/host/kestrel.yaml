@@ -49,9 +49,9 @@ nest::service::gitlab_runner::instances:
 
 nest::service::llama_server::instances:
   util:
-    count: 4 # saturate GPU / amortize Vulkan CPU submission overhead
-    repo: Qwen/Qwen2.5-1.5B-Instruct-GGUF
-    kv_size: 16384 # tokens; 16K = half Qwen default 32K
+    count: 2
+    repo: Qwen/Qwen2.5-3B-Instruct-GGUF:Q8_0
+    kv_size: 8192 # tokens (Qwen default: 32K)
 
 # Workaround usbnet hang at boot
 # See: https://gitlab.joyfullee.me/nest/config/-/issues/64
