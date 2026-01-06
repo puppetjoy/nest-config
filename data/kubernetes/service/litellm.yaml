@@ -22,6 +22,8 @@ values:
           model: openai/general
           api_base: http://llama-general/v1
           api_key: none
+          max_tokens: 4096
+          temperature: 0.7
 
       # Coding
       - model_name: qwen3-coder-30b
@@ -29,6 +31,8 @@ values:
           model: openai/coder
           api_base: http://llama-coder/v1
           api_key: none
+          max_tokens: 2048
+          temperature: 0.2
 
       # Multimodal assistant
       - model_name: gemma-3-4b
@@ -36,30 +40,26 @@ values:
           model: openai/multi
           api_base: http://llama-multi/v1
           api_key: none
+          max_tokens: 2048
+          temperature: 0.4
         model_info:
           supports_vision: True
 
-      # Utility pool (Qwen 2.5 1.5B x4)
+      # Utility pool (Qwen2.5 3B x2)
       - model_name: qwen25-util
         litellm_params:
           model: openai/util
           api_base: http://llama-util:8081/v1
           api_key: none
+          temperature: 0
+          top_p: 0.2
       - model_name: qwen25-util
         litellm_params:
           model: openai/util
           api_base: http://llama-util:8082/v1
           api_key: none
-      - model_name: qwen25-util
-        litellm_params:
-          model: openai/util
-          api_base: http://llama-util:8083/v1
-          api_key: none
-      - model_name: qwen25-util
-        litellm_params:
-          model: openai/util
-          api_base: http://llama-util:8084/v1
-          api_key: none
+          temperature: 0
+          top_p: 0.2
 
     router_settings:
       routing_strategy: least-busy
