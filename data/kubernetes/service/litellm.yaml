@@ -38,7 +38,7 @@ values:
           model: openai/multi
           api_base: http://llama-multi/v1
           api_key: none
-          temperature: 0.4
+          temperature: 0.2
         model_info:
           supports_vision: True
 
