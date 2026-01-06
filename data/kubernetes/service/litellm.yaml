@@ -22,7 +22,6 @@ values:
           model: openai/general
           api_base: http://llama-general/v1
           api_key: none
-          max_tokens: 4096
           temperature: 0.7
 
       # Coding
@@ -31,7 +30,6 @@ values:
           model: openai/coder
           api_base: http://llama-coder/v1
           api_key: none
-          max_tokens: 2048
           temperature: 0.2
 
       # Multimodal assistant
@@ -40,7 +38,6 @@ values:
           model: openai/multi
           api_base: http://llama-multi/v1
           api_key: none
-          max_tokens: 2048
           temperature: 0.4
         model_info:
           supports_vision: True
