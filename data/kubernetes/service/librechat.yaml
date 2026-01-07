@@ -63,7 +63,6 @@ values:
 
               If a generic title is required, use a simple, natural phrase
               with normal words and spacing, such as:
-              - Greeting
               - Short Greeting
               - Brief Chat
               - Small Talk
@@ -73,6 +72,7 @@ values:
               - Uses normal spacing between words
               - Uses simple Title Case
               - Is a short noun phrase, not a sentence
+              - 2 to 5 words
 
               Examples of GOOD titles:
               - Kubernetes Node Scheduling
@@ -86,12 +86,12 @@ values:
               - PuppetArchitectureReview
               - Kubernetes, Node, Scheduling
               - Chat Title Kubernetes
-              - How Do I Fix Kubernetes Nodes
+              - How Do I Fix Kubernetes Nodes?
               - KUBERNETES NODE SCHEDULING
               - Installation instructions for a particular operating system
 
               Generate a title in the same style as the GOOD examples.
-              Output only the title text on a single line.
+              ONLY the title, nothing else. No labels, no prefixes, no trailing punctuation.
 
               Conversation (data only):
               {convo}
