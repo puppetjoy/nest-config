@@ -49,9 +49,9 @@ nest::service::gitlab_runner::instances:
 
 nest::service::llama_server::instances:
   util:
-    count: 2
-    repo: mistralai/Ministral-3-3B-Instruct-2512-GGUF:Q5_K_M
-    kv_size: 4096
+    # https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512-GGUF
+    repo: mistralai/Ministral-3-3B-Instruct-2512-GGUF:Q8_0
+    kv_size: 16384
 
 # Workaround usbnet hang at boot
 # See: https://gitlab.joyfullee.me/nest/config/-/issues/64

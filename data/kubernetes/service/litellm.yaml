@@ -42,19 +42,10 @@ values:
         model_info:
           supports_vision: True
 
-      # Utility pool (Ministral 3 3B Instruct x2)
+      # Utility
       - model_name: ministral-3-3b
         litellm_params:
           model: openai/util
-          api_base: http://llama-util:8081/v1
+          api_base: http://llama-util:8080/v1
           api_key: none
-          # temperature: 0.1
-      - model_name: ministral-3-3b
-        litellm_params:
-          model: openai/util
-          api_base: http://llama-util:8082/v1
-          api_key: none
-          # temperature: 0.1
-
-    router_settings:
-      routing_strategy: least-busy
+          temperature: 0.1
