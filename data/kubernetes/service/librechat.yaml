@@ -33,7 +33,7 @@ values:
                 - gpt-oss-120b
                 - qwen3-coder-30b
                 - gemma-3-4b
-            titleModel: qwen25-util
+            titleModel: ministral-3-3b
             titlePrompt: |
               You generate short, human-readable chat titles.
 
