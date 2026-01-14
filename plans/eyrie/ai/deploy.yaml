@@ -17,20 +17,19 @@ parameters:
     type: Boolean
     default: true
 
+  librechat:
+    description: 'Deploy LibreChat'
+    type: Boolean
+    default: true
+
   init:
     description: 'Deploy initial revision'
     type: Boolean
     default: false
 
 steps:
-  - description: 'Deploy general llama-server'
-    plan: nest::eyrie::ai::deploy_llama_general
-    parameters:
-      deploy: $deploy and $llama
-      init: $init
-
-  - description: 'Deploy coder llama-server'
-    plan: nest::eyrie::ai::deploy_llama_coder
+  - description: 'Deploy LLM servers'
+    plan: nest::eyrie::ai::deploy_llama
     parameters:
       deploy: $deploy and $llama
       init: $init
@@ -39,3 +38,8 @@ steps:
     plan: nest::eyrie::ai::deploy_litellm
     parameters:
       deploy: $deploy and $litellm
+
+  - description: 'Deploy LibreChat'
+    plan: nest::eyrie::ai::deploy_librechat
+    parameters:
+      deploy: $deploy and $librechat

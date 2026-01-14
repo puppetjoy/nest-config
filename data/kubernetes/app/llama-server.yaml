@@ -9,6 +9,8 @@ cache_size: 128Gi
 storage_class: owl-crypt
 
 resources:
+  backup: {}
+  restore: {}
   registry_auths: {}
 
   storage:
@@ -41,8 +43,6 @@ resources:
     metadata:
       name: "%{nest::kubernetes::service}"
       namespace: "%{nest::kubernetes::namespace}"
-      labels:
-        'james.tl/nest': 'stage1'
     spec:
       replicas: 1
       strategy:
@@ -105,8 +105,6 @@ resources:
     metadata:
       name: "%{nest::kubernetes::service}"
       namespace: "%{nest::kubernetes::namespace}"
-      labels:
-        'james.tl/nest': 'stage1'
     spec:
       type: ClusterIP
       selector:
@@ -115,28 +113,3 @@ resources:
         - name: http
           port: 80
           targetPort: 8080
-
-patches:
-  30-nest:
-    patch:
-      - op: add
-        path: '/spec/template/spec/containers/1/volumeMounts/-'
-        value: &cache
-          name: cache
-          mountPath: '/root/.cache'
-    target:
-      group: apps
-      version: v1
-      kind: Deployment
-      labelSelector: 'james.tl/nest'
-
-  30-nest-init:
-    patch:
-      - op: add
-        path: '/spec/template/spec/initContainers/0/volumeMounts/-'
-        value: *cache
-    target:
-      group: apps
-      version: v1
-      kind: Deployment
-      labelSelector: 'james.tl/nest'

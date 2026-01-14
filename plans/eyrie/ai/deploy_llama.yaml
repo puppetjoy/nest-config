@@ -1,0 +1,47 @@
+---
+description: 'Deploy LLM servers'
+
+parameters:
+  deploy:
+    description: 'Run or skip the deployment'
+    type: Boolean
+    default: true
+
+  general:
+    description: 'Deploy llama-general'
+    type: Boolean
+    default: true
+
+  coder:
+    description: 'Deploy llama-coder'
+    type: Boolean
+    default: true
+
+  multi:
+    description: 'Deploy llama-multi'
+    type: Boolean
+    default: true
+
+  init:
+    description: 'Deploy initial revision'
+    type: Boolean
+    default: false
+
+steps:
+  - description: 'Deploy general llama-server'
+    plan: nest::eyrie::ai::deploy_llama_general
+    parameters:
+      deploy: $deploy and $general
+      init: $init
+
+  - description: 'Deploy coder llama-server'
+    plan: nest::eyrie::ai::deploy_llama_coder
+    parameters:
+      deploy: $deploy and $coder
+      init: $init
+
+  - description: 'Deploy multi llama-server'
+    plan: nest::eyrie::ai::deploy_llama_multi
+    parameters:
+      deploy: $deploy and $multi
+      init: $init
