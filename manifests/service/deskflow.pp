@@ -17,9 +17,7 @@ class nest::service::deskflow (
     }
 
     'windows': {
-      # Horizontal scroll bug
-      # package { 'deskflow':
-      package { 'barrier':
+      package { 'deskflow':
         ensure => installed,
       }
     }
