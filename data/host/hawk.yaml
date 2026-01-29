@@ -1,7 +1,6 @@
 ---
 nest::classes:
   - 'nest::host::hawk'
-  - 'nest::service::deskflow'
   - 'nest::service::gateway'
   - 'nest::service::gitlab'
   - 'nest::service::gitlab_runner'

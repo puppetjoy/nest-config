@@ -1,9 +1,9 @@
 ---
 nest::classes:
   - 'nest::host::falcon'
-  - 'nest::service::deskflow'
   - 'nest::service::gitlab_runner'
   - 'nest::service::kubernetes'
+  - 'nest::service::kvm'
   - 'nest::service::libvirt'
   - 'nest::service::nzbget'
   - 'nest::service::ombi'

@@ -1,9 +1,9 @@
-class nest::service::deskflow (
+class nest::service::kvm (
   Boolean $server = true,
 ) {
   case $facts['os']['family'] {
     'Gentoo': {
-      nest::lib::package { 'gui-apps/deskflow':
+      nest::lib::package { 'gui-apps/input-leap':
         ensure => installed,
         use    => '-gui',
       }
@@ -17,7 +17,7 @@ class nest::service::deskflow (
     }
 
     'windows': {
-      package { 'deskflow':
+      package { 'input-leap':
         ensure => installed,
       }
     }
