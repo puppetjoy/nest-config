@@ -3,4 +3,11 @@ class nest::gui::packages {
     ensure => installed,
     use    => ['extra', 'xetex'],
   }
+
+  nest::lib::package { [
+    'media-gfx/gimp',
+    'media-gfx/inkscape',
+  ]:
+    ensure => installed,
+  }
 }
