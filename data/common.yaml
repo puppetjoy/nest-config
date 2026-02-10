@@ -381,6 +381,9 @@ nest::kernel_config:
   CONFIG_OVPN: m
   CONFIG_CRYPTO_CHACHA20POLY1305: m
 
+  # For Codex
+  CONFIG_SECURITY_LANDLOCK: y
+
 
 #
 # Other module defaults
