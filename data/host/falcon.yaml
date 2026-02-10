@@ -12,6 +12,7 @@ nest::classes:
   - 'nest::service::radarr'
   - 'nest::service::sonarr'
   - 'nest::service::reverse_proxy'
+  - 'nest::tool::codex'
 
 nest::dvorak: true
 nest::monitor_layout: ['DP-4@0', 'DP-2@2560']
