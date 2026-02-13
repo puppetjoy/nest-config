@@ -17,9 +17,8 @@
 
 ## Shipping Workflow
 - When the user says "ship it", run this sequence unless they explicitly request otherwise:
-- `pdk validate`
-- Targeted unit tests for changed areas via `pdk test unit --tests=<...>` when relevant specs exist.
-- Full `pdk test unit --parallel` only if the user explicitly asks for it.
+- Do not run local validation or tests by default.
+- Only run `pdk validate` and/or unit tests if the user explicitly requests them.
 - `git add` and commit with the repository commit style (include a body for larger/new-feature commits).
 - `git push`
 - `bolt plan run nest::puppet::deploy`
