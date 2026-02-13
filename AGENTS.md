@@ -14,6 +14,14 @@
 - `pdk test unit --parallel`: required unit test command (omit `--verbose`).
 - Do not substitute validation/testing commands (for example `bundle exec rake ...` or `pdk bundle exec rspec`) unless explicitly requested by the user for troubleshooting.
 
+## Shipping Workflow
+- When the user says "ship it", run this sequence unless they explicitly request otherwise:
+- `pdk validate`
+- `pdk test unit --parallel`
+- `git add` and commit with the repository commit style (include a body for larger/new-feature commits).
+- `git push`
+- `bolt plan run nest::puppet::deploy`
+
 ## Coding Style & Naming Conventions
 - Use 2-space indentation in Puppet and Ruby files; avoid unrelated formatting churn.
 - Keep class/file mapping consistent: `manifests/base/console.pp` defines `nest::base::console`.
@@ -48,8 +56,10 @@
 ## Commit & Pull Request Guidelines
 - Follow observed commit style: `<scope>: <imperative summary>`.
 - For larger commits and new features, include a commit message body describing intent and key changes.
-- When creating multiline commit messages from the shell, do not embed `\n` in a quoted `-m` string and do not use unescaped backticks in double-quoted text.
-- Prefer safe forms: multiple `-m` flags for paragraphs, or a single-quoted heredoc/file passed via `git commit -F`.
+- Never construct multiline commit messages with quoted `-m` strings.
+- For any multiline commit message (including `--amend`), use a single-quoted heredoc or file and pass it with `git commit -F <file>`.
+- Do not use literal `\n` escapes in commit messages.
+- Do not use unescaped backticks in shell-quoted commit message text.
 - Keep commits scoped; include related test updates.
 - PRs/MRs should include a summary, affected paths/classes/plans, tests run, and issues.
 

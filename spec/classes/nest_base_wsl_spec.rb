@@ -21,6 +21,8 @@ describe 'nest::base::wsl' do # rubocop:disable RSpec/EmptyExampleGroup
           end
 
           it { is_expected.to contain_exec('nest-wsl-import-distribution-initial') }
+          it { is_expected.to contain_exec('nest-wsl-download-crane') }
+          it { is_expected.to contain_exec('nest-wsl-export-image-rootfs') }
           it { is_expected.not_to contain_notify('nest-wsl-reboot-required') }
         end
 
@@ -36,6 +38,8 @@ describe 'nest::base::wsl' do # rubocop:disable RSpec/EmptyExampleGroup
           end
 
           it { is_expected.not_to contain_exec('nest-wsl-import-distribution-initial') }
+          it { is_expected.not_to contain_exec('nest-wsl-download-crane') }
+          it { is_expected.not_to contain_exec('nest-wsl-export-image-rootfs') }
           it { is_expected.to contain_notify('nest-wsl-reboot-required') }
         end
       end
