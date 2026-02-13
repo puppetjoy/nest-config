@@ -10,14 +10,16 @@
 
 ## Build, Test, and Development Commands
 - `bundle install`: install Ruby and test dependencies.
-- `pdk validate`: required validation command (syntax, lint, metadata, style).
-- `pdk test unit --parallel`: required unit test command (omit `--verbose`).
+- `pdk validate`: default and required local validation command (syntax, lint, metadata, style).
+- `pdk test unit --tests=<comma-separated spec files>`: focused unit-test command for changed/related specs.
+- `pdk test unit --parallel`: full unit suite; run only when explicitly requested by the user or when broader confidence is needed.
 - Do not substitute validation/testing commands (for example `bundle exec rake ...` or `pdk bundle exec rspec`) unless explicitly requested by the user for troubleshooting.
 
 ## Shipping Workflow
 - When the user says "ship it", run this sequence unless they explicitly request otherwise:
 - `pdk validate`
-- `pdk test unit --parallel`
+- Targeted unit tests for changed areas via `pdk test unit --tests=<...>` when relevant specs exist.
+- Full `pdk test unit --parallel` only if the user explicitly asks for it.
 - `git add` and commit with the repository commit style (include a body for larger/new-feature commits).
 - `git push`
 - `bolt plan run nest::puppet::deploy`
@@ -36,6 +38,10 @@
 - Reference: `pdk-templates` `.sync.yml` docs: https://github.com/puppetlabs/pdk-templates/blob/main/README.md
 
 ## Testing Guidelines
+- Prefer fast feedback: default to `pdk validate` during normal iteration.
+- Be deliberate with unit tests: run focused specs for touched behavior using `--tests=...` instead of the full suite.
+- Discovery for this environment: `pdk test unit --parallel --tests=...` can still execute the full suite; for focused runs use `pdk test unit --tests=...` (without `--parallel`).
+- It is acceptable to rely on CI for full-suite coverage unless the user requests local full-suite execution.
 - Keep unit tests lightweight: this repo primarily verifies class inclusion/exclusion and key dependency relationships, not full resource behavior.
 - Follow the existing pattern in `spec/classes/nest_spec.rb` and `spec/spec_helper_local.rb` (`it_should_and_should_not_contain_classes`) when adding coverage.
 - Do not proactively replace lightweight class/relationship specs with deep resource/content assertions unless explicitly requested.
