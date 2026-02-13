@@ -74,6 +74,7 @@ describe 'nest' do
     'nest::base::syslog',
     'nest::base::users',
     'nest::base::vmware',
+    'nest::base::wsl',
     'nest::gui::firefox',
     'nest::gui::fonts',
     'nest::gui::terminals',

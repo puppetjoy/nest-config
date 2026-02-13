@@ -1,5 +1,5 @@
 class nest::tool::llamacpp (
-  String $tag = 'master',
+  String $revision = 'master',
 ) {
   portage::makeconf { 'video_cards':
     content => '-* intel amdgpu radeonsi',
@@ -15,7 +15,7 @@ class nest::tool::llamacpp (
 
   nest::lib::src_repo { '/usr/src/llama.cpp':
     url => 'https://github.com/ggml-org/llama.cpp.git',
-    ref => $tag,
+    ref => $revision,
   }
   ~>
   nest::lib::build { 'llama.cpp':

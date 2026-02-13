@@ -10,12 +10,9 @@
 
 ## Build, Test, and Development Commands
 - `bundle install`: install Ruby and test dependencies.
-- `bundle exec rake validate`: run Ruby syntax, Puppet syntax, and metadata checks.
-- `bundle exec rake lint`: run `puppet-lint` with project rules.
-- `bundle exec rake spec` or `bundle exec rake parallel_spec`: run unit tests.
-- `pdk validate`: CI-aligned validation.
-- `pdk test unit --parallel --verbose`: CI unit-test flow (no generic RSpec arg pass-through).
-- `pdk bundle exec rspec --fail-fast`: stop early when many tests fail.
+- `pdk validate`: required validation command (syntax, lint, metadata, style).
+- `pdk test unit --parallel`: required unit test command (omit `--verbose`).
+- Do not substitute validation/testing commands (for example `bundle exec rake ...` or `pdk bundle exec rspec`) unless explicitly requested by the user for troubleshooting.
 
 ## Coding Style & Naming Conventions
 - Use 2-space indentation in Puppet and Ruby files; avoid unrelated formatting churn.
@@ -35,10 +32,24 @@
 - Follow the existing pattern in `spec/classes/nest_spec.rb` and `spec/spec_helper_local.rb` (`it_should_and_should_not_contain_classes`) when adding coverage.
 - Do not proactively replace lightweight class/relationship specs with deep resource/content assertions unless explicitly requested.
 - Add deeper resource/content assertions only when needed to lock down a real regression or critical ordering dependency.
-- For broad failures, prefer `pdk bundle exec rspec --fail-fast` over `pdk test unit`; fail-fast is not passed through by `pdk test unit`.
+- Base classes under `manifests/base/` are private; prefer validating them via `nest` class inclusion/relationship tests.
+- If a private base class has fact-driven branching/guard behavior that needs direct assertions, add a dedicated class spec (for example `spec/classes/nest_base_<name>_spec.rb`) with focused expectations only.
+- For `on_supported_os`-driven example groups, use targeted RuboCop disables only when required (for example `RSpec/EmptyExampleGroup`).
+
+## Private Base Classes
+- Classes under `manifests/base/` are private implementation details of `nest`.
+- Private base classes should not expose parameters.
+- If configurability is needed, expose it sparingly on `class nest` (`manifests/init.pp`) and let `nest` wire private classes internally.
+
+## Custom Facts
+- Custom facts do not need project namespacing; simple fact names are preferred.
+- When a custom fact controls branching behavior, add spec coverage for the key states so expected resources are explicitly enforced.
 
 ## Commit & Pull Request Guidelines
 - Follow observed commit style: `<scope>: <imperative summary>`.
+- For larger commits and new features, include a commit message body describing intent and key changes.
+- When creating multiline commit messages from the shell, do not embed `\n` in a quoted `-m` string and do not use unescaped backticks in double-quoted text.
+- Prefer safe forms: multiple `-m` flags for paragraphs, or a single-quoted heredoc/file passed via `git commit -F`.
 - Keep commits scoped; include related test updates.
 - PRs/MRs should include a summary, affected paths/classes/plans, tests run, and issues.
 
