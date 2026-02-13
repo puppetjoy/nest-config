@@ -9,6 +9,7 @@ class nest::tool::codex {
   }
   ->
   nodejs::npm { '@openai/codex':
+    ensure => 'latest',
     target => '/opt/codex',
   }
   ->
