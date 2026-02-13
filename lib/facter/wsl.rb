@@ -5,11 +5,10 @@ Facter.add('wsl') do
   setcode do
     script = <<~'POWERSHELL'
       $wslFeature = (Get-WindowsOptionalFeature -Online -FeatureName 'Microsoft-Windows-Subsystem-Linux').State -eq 'Enabled'
-      $vmFeature = (Get-WindowsOptionalFeature -Online -FeatureName 'VirtualMachinePlatform').State -eq 'Enabled'
       $rebootPending = (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending') -or
         (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired') -or
         ((Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' -Name 'PendingFileRenameOperations' -ErrorAction SilentlyContinue) -ne $null)
-      $featuresEnabled = $wslFeature -and $vmFeature
+      $featuresEnabled = $wslFeature
       $ready = $featuresEnabled -and (-not $rebootPending)
 
       @{

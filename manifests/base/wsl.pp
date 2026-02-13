@@ -57,16 +57,6 @@ class nest::base::wsl {
     require  => File[$wsl_root],
   }
 
-  $vm_feature_unless = "if ((Get-WindowsOptionalFeature -Online -FeatureName 'VirtualMachinePlatform').State -eq 'Enabled') { exit 0 } else { exit 1 }"
-
-  exec { 'nest-wsl-enable-vm-platform':
-    command  => 'Enable-WindowsOptionalFeature -Online -NoRestart -FeatureName VirtualMachinePlatform',
-    unless   => $vm_feature_unless,
-    provider => powershell,
-    returns  => [0, 3010],
-    require  => File[$wsl_root],
-  }
-
   if $wsl_state['ready'] {
     $crane_download_command = "Invoke-WebRequest -UseBasicParsing -Uri '${crane_source}' -OutFile '${crane_archive}'"
 
@@ -104,7 +94,6 @@ class nest::base::wsl {
       provider => powershell,
       require  => [
         Exec['nest-wsl-enable-subsystem'],
-        Exec['nest-wsl-enable-vm-platform'],
         Exec['nest-wsl-install-crane'],
       ],
       timeout  => $wsl_exec_timeout,
@@ -120,7 +109,7 @@ class nest::base::wsl {
     $distro_exists_unless = "if ((& '${wsl_binary}' --list --quiet | Select-String -Pattern '^${distribution_name}$' -Quiet)) { exit 0 } else { exit 1 }"
 
     exec { 'nest-wsl-import-distribution-initial':
-      command  => "& '${wsl_binary}' --import '${distribution_name}' '${install_path}' '${image_tar_path}' --version 2",
+      command  => "& '${wsl_binary}' --import '${distribution_name}' '${install_path}' '${image_tar_path}' --version 1",
       unless   => $distro_exists_unless,
       provider => powershell,
       require  => Exec['nest-wsl-write-image-digest'],
@@ -131,7 +120,7 @@ class nest::base::wsl {
       $distro_exists_onlyif = $distro_exists_unless
 
       exec { 'nest-wsl-reimport-distribution':
-        command     => "& '${wsl_binary}' --unregister '${distribution_name}'; & '${wsl_binary}' --import '${distribution_name}' '${install_path}' '${image_tar_path}' --version 2",
+        command     => "& '${wsl_binary}' --unregister '${distribution_name}'; & '${wsl_binary}' --import '${distribution_name}' '${install_path}' '${image_tar_path}' --version 1",
         onlyif      => $distro_exists_onlyif,
         provider    => powershell,
         refreshonly => true,
