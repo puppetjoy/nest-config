@@ -17,22 +17,6 @@ class nest::base::cygwin {
     require  => File['C:/tools/cygwin'],
   }
 
-  # Exclude key Cygwin startup binaries to reduce Defender overhead during
-  # terminal and tmux cold starts.
-  exec { 'windows-defender-exclude-cygwin-zsh':
-    command  => 'Add-MpPreference -ExclusionProcess "C:\tools\cygwin\bin\zsh.exe"',
-    unless   => 'if ((Get-MpPreference)."ExclusionProcess" -notcontains "C:\tools\cygwin\bin\zsh.exe") { exit 1 }',
-    provider => powershell,
-    require  => File['C:/tools/cygwin'],
-  }
-
-  exec { 'windows-defender-exclude-cygwin-tmux':
-    command  => 'Add-MpPreference -ExclusionProcess "C:\tools\cygwin\bin\tmux.exe"',
-    unless   => 'if ((Get-MpPreference)."ExclusionProcess" -notcontains "C:\tools\cygwin\bin\tmux.exe") { exit 1 }',
-    provider => powershell,
-    require  => File['C:/tools/cygwin'],
-  }
-
 
   #
   # Deterministic Permissions
