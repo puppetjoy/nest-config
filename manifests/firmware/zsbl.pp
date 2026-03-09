@@ -1,4 +1,9 @@
 class nest::firmware::zsbl {
+  nest::lib::package { 'sys-apps/dtc':
+    ensure => installed,
+    before => Nest::Lib::Build['zsbl'],
+  }
+
   # Install bare-metal toolchain with newlib C library
   # - disable multilib so newlib doesn't fail trying to build for rv32
   # - with /usr/bin/ld for PIE support
