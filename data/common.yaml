@@ -382,6 +382,7 @@ nest::kernel_config:
   CONFIG_CRYPTO_CHACHA20POLY1305: m
 
   # For Codex
+  CONFIG_SECURITY: y
   CONFIG_SECURITY_LANDLOCK: y
 
 
