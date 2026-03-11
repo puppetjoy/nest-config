@@ -1,0 +1,15 @@
+--- a/ncurses/tinfo/access.c
++++ b/ncurses/tinfo/access.c
+@@ -36,12 +36,10 @@
+ #include <ctype.h>
+ 
+ #ifndef USE_ROOT_ACCESS
+-#if HAVE_SETFSUID && HAVE_SYS_FSUID_H
++#if HAVE_SETFSUID
+ #include <sys/fsuid.h>
+ #else
+ #include <sys/stat.h>
+-#undef HAVE_SETFSUID
+-#define HAVE_SETFSUID 0		/* workaround for misconfigured system */
+ #endif
+ #endif
