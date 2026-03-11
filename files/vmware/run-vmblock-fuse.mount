@@ -10,7 +10,7 @@ Wants=vmtoolsd.service
 [Mount]
 What=vmware-vmblock-fuse
 Where=/run/vmblock-fuse
-Type=fuse
+Type=fuse3
 Options=subtype=vmware-vmblock,default_permissions,allow_other
 
 [Install]

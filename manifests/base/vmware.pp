@@ -32,7 +32,7 @@ class nest::base::vmware {
           changes +> [
             'set 9/spec vmhgfs-fuse',
             'set 9/file /mnt/hgfs',
-            'set 9/vfstype fuse',
+            'set 9/vfstype fuse3',
             'set 9/opt[1] defaults',
             'set 9/opt[2] allow_other',
             'set 9/dump 0',
