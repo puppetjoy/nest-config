@@ -5,7 +5,7 @@ class nest::lib::router {
     addn-hosts=/etc/hosts.nest
     expand-hosts
     domain=nest
-    dhcp-range=172.22.4.100,172.22.4.254
+    dhcp-range=172.22.4.100,172.22.4.254,24h
     dhcp-option=option:router,172.22.4.1
     dhcp-option=option:classless-static-route,0.0.0.0/0,172.22.4.1,172.22.0.0/24,172.22.4.3
     local=/nest/
@@ -40,7 +40,7 @@ class nest::lib::router {
     ;
 
     '/etc/dnsmasq.d/dhcp-hosts.conf':
-      content => $nest::fixed_ips.map |$name, $ip| { "dhcp-host=${name},${ip}\n" }.join(''),
+      content => $nest::fixed_ips.map |$name, $ip| { "dhcp-host=${name},${ip},infinite\n" }.join(''),
     ;
 
     '/etc/dnsmasq.d/host-records.conf':
