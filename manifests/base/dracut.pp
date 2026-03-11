@@ -34,6 +34,7 @@ class nest::base::dracut {
     compress="${compress}"
     force="yes"
     hostonly="yes"
+    omit_dracutmodules+=" nfs "
     | EOT
 
   file {
