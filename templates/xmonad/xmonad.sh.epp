@@ -15,6 +15,7 @@ else
     export GDK_DPI_SCALE=<%= $gdk_dpi_scale %>
     export QT_SCALE_FACTOR=<%= $nest::gui_scaling_factor %>
     export QT_FONT_DPI=<%= $qt_font_dpi %>
+    export SVGA_GL43=0
     export XCURSOR_SIZE=<%= $nest::cursor_size %>
     export XDG_SESSION_DESKTOP=xmonad
     export XDG_SESSION_TYPE=x11
