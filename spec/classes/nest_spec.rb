@@ -60,7 +60,6 @@ describe 'nest' do
   ]
 
   darwin = [
-    'nest::base::homebrew',
     'nest::base::puppet',
   ]
 
