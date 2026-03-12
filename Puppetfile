@@ -36,6 +36,7 @@ mod 'puppet-systemd', '7.1.0'
 mod 'puppetlabs-windows_env', '5.0.0'
 mod 'puppet-windows_firewall', '4.1.0'
 mod 'theforeman-puppet', '18.0.0'
+mod 'thekevjames-homebrew', '2.0.0'
 mod 'portage', :git => 'git@gitlab.joyfullee.me:nest/forks/puppet-portage.git', :branch => 'main'
 
 # Required by puppetlabs-chocolatey and puppet-windows_firewall

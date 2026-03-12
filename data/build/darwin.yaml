@@ -1,2 +1,3 @@
 nest::classes:
+  - 'nest::base::homebrew'
   - 'nest::base::puppet'
