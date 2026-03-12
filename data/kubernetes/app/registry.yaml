@@ -81,12 +81,14 @@ resources:
 
 values:
   image:
+    repository: 'docker.io/distribution/distribution'
     tag: '3.0.0'
   affinity: *affinity
   tolerations: *tolerations
   auth:
     enabled: true
     image:
+      repository: 'docker.io/cesanta/docker_auth'
       tag: '1.14.0'
     affinity: *affinity
     tolerations: *tolerations
@@ -150,6 +152,7 @@ values:
   ui:
     enabled: true
     image:
+      repository: 'docker.io/klausmeyer/docker-registry-browser'
       tag: '1.8.5'
     config:
       domain: "%{nest::kubernetes::fqdn}"
