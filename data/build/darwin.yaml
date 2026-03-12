@@ -1,2 +1,3 @@
 nest::classes:
   - 'nest::base::puppet'
+  - 'nest::gui::firefox'

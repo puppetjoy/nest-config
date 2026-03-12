@@ -61,6 +61,7 @@ describe 'nest' do
 
   darwin = [
     'nest::base::puppet',
+    'nest::gui::firefox',
   ]
 
   windows = [

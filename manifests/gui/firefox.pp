@@ -62,6 +62,12 @@ class nest::gui::firefox {
       }
     }
 
+    'Darwin': {
+      package { 'firefox':
+        ensure => installed,
+      }
+    }
+
     'windows': {
       package { 'firefox':
         ensure => installed,
