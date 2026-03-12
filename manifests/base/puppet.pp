@@ -12,7 +12,7 @@ class nest::base::puppet {
   }.stdlib::to_yaml
 
   case $facts['os']['family'] {
-    'Gentoo', 'Darwin': {
+    'Gentoo': {
       file { [
         '/etc/puppetlabs',
         '/etc/puppetlabs/facter',
@@ -37,13 +37,11 @@ class nest::base::puppet {
         content => $facter_conf,
       }
 
-      if $facts['os']['family'] == 'Gentoo' {
-        file { '/etc/puppetlabs/facter/facts.d/outputs.yaml':
-          mode    => '0644',
-          owner   => 'root',
-          group   => 'root',
-          content => epp('nest/puppet/outputs.yaml.epp'),
-        }
+      file { '/etc/puppetlabs/facter/facts.d/outputs.yaml':
+        mode    => '0644',
+        owner   => 'root',
+        group   => 'root',
+        content => epp('nest/puppet/outputs.yaml.epp'),
       }
 
       # My hosts take on the domain name of the network to which they're attached.
@@ -59,7 +57,7 @@ class nest::base::puppet {
         $puppet_runmode = 'unmanaged'
       } elsif !$nest::puppet {
         $puppet_runmode = 'none'
-      } elsif $facts['os']['family'] == 'Gentoo' {
+      } else {
         $puppet_runmode = 'systemd.timer'
 
         file {
@@ -79,8 +77,6 @@ class nest::base::puppet {
             content => "[Timer]\nPersistent=false\n",
           ;
         }
-      } else {
-        $puppet_runmode = 'service'
       }
 
       class { 'puppet':
@@ -101,10 +97,45 @@ class nest::base::puppet {
           noop => true,
         }
       }
+    }
 
-      # XXX: Cleanup old fqdn external fact
-      file { '/etc/puppetlabs/facter/facts.d/nest.yaml':
-        ensure => absent,
+    'Darwin': {
+      $facter_conf = @(FACTER_CONF)
+        global : {
+            external-dir : [ "/etc/puppetlabs/facter/facts.d" ]
+        }
+        | FACTER_CONF
+
+      file {
+        default:
+          mode  => '0644',
+          owner => 'root',
+          group => 'wheel',
+        ;
+
+        ['/etc/puppetlabs/facter', '/etc/puppetlabs/facter/facts.d']:
+          ensure => directory,
+        ;
+
+        '/etc/puppetlabs/facter/facter.conf':
+          content => $facter_conf,
+        ;
+
+        '/etc/puppetlabs/facter/facts.d/fqdn.yaml':
+          content => $fqdn_yaml,
+        ;
+      }
+
+      if $nest::puppet {
+        $puppet_runmode = 'service'
+      } else {
+        $puppet_runmode = 'none'
+      }
+
+      class { 'puppet':
+        dns_alt_names        => $dns_alt_names,
+        runmode              => $puppet_runmode,
+        unavailable_runmodes => ['systemd.timer'],
       }
     }
 
