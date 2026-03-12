@@ -23,9 +23,14 @@ class nest::gui::xmonad {
 
   $gdk_dpi_scale = inline_template('<%= (1.0 / scope.lookupvar("nest::gui_scaling_factor_rounded")).round(3) %>')
   $qt_font_dpi = inline_template('<%= (scope.lookupvar("nest::text_scaling_factor_percent_of_gui") * 96).round %>')
+  $software_rendering = $facts['profile']['platform'] ? {
+    'vmware-fusion' => '1',
+    default         => '0',
+  }
   $xmonad_wrapper_content = epp('nest/xmonad/xmonad.sh.epp', {
-    'gdk_dpi_scale' => $gdk_dpi_scale,
-    'qt_font_dpi'   => $qt_font_dpi,
+    'gdk_dpi_scale'      => $gdk_dpi_scale,
+    'qt_font_dpi'        => $qt_font_dpi,
+    'software_rendering' => $software_rendering,
   })
 
   $taffybar_wrapper_content = @("END_WRAPPER")

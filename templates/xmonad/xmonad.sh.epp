@@ -1,6 +1,7 @@
 <% |
   $gdk_dpi_scale,
   $qt_font_dpi,
+  $software_rendering,
 | -%>
 #!/bin/bash
 
@@ -13,6 +14,7 @@ if [[ $DISPLAY ]]; then
 else
     export GDK_SCALE=<%= $nest::gui_scaling_factor_rounded %>
     export GDK_DPI_SCALE=<%= $gdk_dpi_scale %>
+    export LIBGL_ALWAYS_SOFTWARE=<%= $software_rendering %>
     export QT_SCALE_FACTOR=<%= $nest::gui_scaling_factor %>
     export QT_FONT_DPI=<%= $qt_font_dpi %>
     export XCURSOR_SIZE=<%= $nest::cursor_size %>
