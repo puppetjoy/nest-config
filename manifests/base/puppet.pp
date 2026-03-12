@@ -134,6 +134,7 @@ class nest::base::puppet {
 
       class { 'puppet':
         dns_alt_names        => $dns_alt_names,
+        manage_packages      => false,
         runmode              => $puppet_runmode,
         unavailable_runmodes => ['systemd.timer'],
       }
