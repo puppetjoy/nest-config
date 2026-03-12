@@ -78,10 +78,10 @@
       "operatingsystem": "Gentoo"
     },
     {
-      "operatingsystem": "windows",
-      "operatingsystemrelease": [
-        "10"
-      ]
+      "operatingsystem": "Darwin"
+    },
+    {
+      "operatingsystem": "windows"
     }
   ],
   "requirements": [

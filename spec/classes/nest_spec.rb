@@ -59,6 +59,10 @@ describe 'nest' do
     'nest::base::kexec',
   ]
 
+  darwin = [
+    'nest::base::puppet',
+  ]
+
   windows = [
     'nest::base::certs',
     'nest::base::chocolatey',
@@ -224,6 +228,15 @@ describe 'nest' do
 
           it_should_and_should_not_contain_classes(stage1 + ['nest::tool::r10k'], stage2 + stage3 + windows + workstation)
         end
+      end
+
+    when %r{^Darwin-}
+      context 'on macOS' do # rubocop:disable RSpec/EmptyExampleGroup
+        let(:facts) do
+          facts
+        end
+
+        it_should_and_should_not_contain_classes(darwin, stage1 + stage2 + stage3 + workstation)
       end
 
     when %r{^windows-}

@@ -12,7 +12,7 @@ class nest::base::puppet {
   }.stdlib::to_yaml
 
   case $facts['os']['family'] {
-    'Gentoo': {
+    'Gentoo', 'Darwin': {
       file { [
         '/etc/puppetlabs',
         '/etc/puppetlabs/facter',
@@ -37,11 +37,13 @@ class nest::base::puppet {
         content => $facter_conf,
       }
 
-      file { '/etc/puppetlabs/facter/facts.d/outputs.yaml':
-        mode    => '0644',
-        owner   => 'root',
-        group   => 'root',
-        content => epp('nest/puppet/outputs.yaml.epp'),
+      if $facts['os']['family'] == 'Gentoo' {
+        file { '/etc/puppetlabs/facter/facts.d/outputs.yaml':
+          mode    => '0644',
+          owner   => 'root',
+          group   => 'root',
+          content => epp('nest/puppet/outputs.yaml.epp'),
+        }
       }
 
       # My hosts take on the domain name of the network to which they're attached.
@@ -57,27 +59,30 @@ class nest::base::puppet {
         $puppet_runmode = 'unmanaged'
       } elsif !$nest::puppet {
         $puppet_runmode = 'none'
-      } else {
+      } elsif $facts['os']['family'] == 'Gentoo' {
         $puppet_runmode = 'systemd.timer'
+
+        file {
+          default:
+            mode   => '0644',
+            owner  => 'root',
+            group  => 'root',
+            before => Class['puppet'],
+          ;
+
+          '/etc/systemd/system/puppet-run.timer.d':
+            ensure => directory,
+          ;
+
+          # Avoid running Puppet immediately at boot; just wait for the next run
+          '/etc/systemd/system/puppet-run.timer.d/10-nonpersistent.conf':
+            content => "[Timer]\nPersistent=false\n",
+          ;
+        }
+      } else {
+        $puppet_runmode = 'service'
       }
 
-      file {
-        default:
-          mode  => '0644',
-          owner => 'root',
-          group => 'root',
-        ;
-
-        '/etc/systemd/system/puppet-run.timer.d':
-          ensure => directory,
-        ;
-
-        # Avoid running Puppet immediately at boot; just wait for the next run
-        '/etc/systemd/system/puppet-run.timer.d/10-nonpersistent.conf':
-          content => "[Timer]\nPersistent=false\n",
-        ;
-      }
-      ->
       class { 'puppet':
         dns_alt_names        => $dns_alt_names,
         dir                  => '/etc/puppetlabs/puppet',
