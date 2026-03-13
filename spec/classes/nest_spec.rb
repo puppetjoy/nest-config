@@ -238,7 +238,7 @@ describe 'nest' do
         end
       end
 
-    when %r{^Darwin-}
+    when %r{^darwin-}
       context 'on macOS' do # rubocop:disable RSpec/EmptyExampleGroup
         let(:facts) do
           facts

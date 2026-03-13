@@ -5,7 +5,7 @@ describe 'nest::base::homebrew' do
 
   on_supported_os.each do |os, facts|
     case os
-    when %r{^Darwin-}
+    when %r{^darwin-}
       context 'on macOS' do
         let(:facts) do
           facts
