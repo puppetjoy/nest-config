@@ -90,6 +90,12 @@ class nest::base::users {
       }
     }
 
+    'Darwin': {
+      $homes = {
+        $nest::user => "/Users/${nest::user}",
+      }
+    }
+
     'windows': {
       package { 'zsh':
         ensure   => installed,
@@ -122,7 +128,7 @@ class nest::base::users {
         $exec_user   = $user
         $home_dir    = $dir
         $refresh_cmd = "${home_dir}/.refresh"
-        $test_cmd    = "/usr/bin/test -x ${home_dir}/.refresh"
+        $test_cmd    = "/bin/test -x ${home_dir}/.refresh"
       }
     }
 

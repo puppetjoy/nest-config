@@ -62,6 +62,7 @@ describe 'nest' do
   darwin = [
     'nest::base::openvpn',
     'nest::base::puppet',
+    'nest::base::users',
     'nest::gui::firefox',
   ]
 
