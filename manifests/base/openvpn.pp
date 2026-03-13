@@ -125,6 +125,14 @@ class nest::base::openvpn {
       }
     }
 
+    'Darwin': {
+      $openvpn_package_name = 'openvpn'
+      $openvpn_package_opts = undef
+      $openvpn_config_file  = '/opt/homebrew/etc/openvpn/openvpn.conf'
+      $openvpn_config       = epp('nest/openvpn/config.epp')
+      $openvpn_service      = undef # XXX pending brew service provider
+    }
+
     'windows': {
       $openvpn_package_name = 'openvpn'
       $openvpn_package_opts = ['--package-parameters', '"', '/Service', '/TapDriver', '"']
@@ -143,8 +151,11 @@ class nest::base::openvpn {
     mode    => '0644',
     content => $openvpn_config,
   }
-  ~>
-  service { $openvpn_service:
-    enable => $nest::vpn or $nest::router,
+
+  if $openvpn_service {
+    service { $openvpn_service:
+      enable    => $nest::vpn or $nest::router,
+      subscribe => File[$openvpn_config_file],
+    }
   }
 }

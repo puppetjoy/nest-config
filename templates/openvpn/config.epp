@@ -2,6 +2,18 @@
   Optional[Enum['udp', 'tcp']] $server = undef,
 | -%>
 <%
+if $facts['os']['family'] == 'windows' {
+  $ca = 'C:/ProgramData/PuppetLabs/puppet/etc/ssl/certs/ca.pem'
+  $cert = "C:/ProgramData/PuppetLabs/puppet/etc/ssl/certs/${trusted['certname']}.pem"
+  $key = "C:/ProgramData/PuppetLabs/puppet/etc/ssl/private_keys/${trusted['certname']}.pem"
+  $crl = 'C:/ProgramData/PuppetLabs/puppet/etc/ssl/crl.pem'
+} else {
+  $ca = '/etc/puppetlabs/puppet/ssl/certs/ca.pem'
+  $cert = "/etc/puppetlabs/puppet/ssl/certs/${trusted['certname']}.pem"
+  $key = "/etc/puppetlabs/puppet/etc/ssl/private_keys/${trusted['certname']}.pem"
+  $crl = '/etc/puppetlabs/puppet/etc/ssl/crl.pem'
+}
+
 case $server {
   udp: {
     $device        = 'tun0'
@@ -22,13 +34,13 @@ case $server {
   }
 }
 -%>
-<%- if $facts['os']['family'] == 'windows' { -%>
+<%- if $facts['os']['family'] in ['Darwin', 'windows'] { -%>
 dev tun
 persist-tun
-ca C:/ProgramData/PuppetLabs/puppet/etc/ssl/certs/ca.pem
-cert C:/ProgramData/PuppetLabs/puppet/etc/ssl/certs/<%= $trusted['certname'] %>.pem
-key C:/ProgramData/PuppetLabs/puppet/etc/ssl/private_keys/<%= $trusted['certname'] %>.pem
-crl-verify C:/ProgramData/PuppetLabs/puppet/etc/ssl/crl.pem
+ca <%= $ca %>
+cert <%= $cert %>
+key <%= $key %>
+crl-verify <%= $crl %>
 down-pre
 verb 3
 <%- } else { -%>
@@ -38,10 +50,10 @@ proto tcp
 dev <%= $device %>
 persist-tun
 txqueuelen 1000
-ca /etc/puppetlabs/puppet/ssl/certs/ca.pem
-cert /etc/puppetlabs/puppet/ssl/certs/<%= $trusted['certname'] %>.pem
-key /etc/puppetlabs/puppet/ssl/private_keys/<%= $trusted['certname'] %>.pem
-crl-verify /etc/puppetlabs/puppet/ssl/crl.pem
+ca <%= $ca %>
+cert <%= $cert %>
+key <%= $key %>
+crl-verify <%= $crl %>
 script-security 2
 up /etc/openvpn/up.sh
 down /etc/openvpn/down.sh
