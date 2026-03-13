@@ -63,6 +63,7 @@ describe 'nest' do
     'nest::base::openvpn',
     'nest::base::packages',
     'nest::base::puppet',
+    'nest::base::sudo',
     'nest::base::users',
     'nest::gui::firefox',
     'nest::gui::fonts',
