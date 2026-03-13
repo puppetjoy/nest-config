@@ -1,8 +1,7 @@
 class nest::base::homebrew {
-  require nest::base::sudo
-
   class { 'homebrew':
-    user => $nest::user,
+    user    => $nest::user,
+    require => Class['nest::base::sudo'],
   }
   ->
   Package <|
