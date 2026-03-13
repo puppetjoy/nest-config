@@ -84,7 +84,7 @@ push "dhcp-option DNS 172.22.0.1"
 push "route-metric 100"
 
 # Windows needs a default route to recognize network
-push "route 0.0.0.0 0.0.0.0"
+push "redirect-gateway def1"
 
 # Join to other half of Nest network
 push "route <%= $other_network %> 255.255.255.128"
