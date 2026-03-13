@@ -25,4 +25,5 @@ fixtures:
     firewalld:
       repo: 'https://gitlab.joyfullee.me/nest/forks/puppet-firewalld.git'
       branch: 'fix-new-zone-creation'
+    homebrew: 'https://gitlab.joyfullee.me/nest/forks/puppet-homebrew.git'
     portage: 'https://gitlab.joyfullee.me/nest/forks/puppet-portage.git'
