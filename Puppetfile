@@ -7,6 +7,7 @@ mod 'puppetlabs-concat', '9.0.0'
 # Core types and providers
 mod 'puppetlabs-augeas_core', '1.4.1'
 mod 'puppetlabs-chocolatey', '8.0.0'
+mod 'puppetlabs-cron_core', '2.0.2'
 mod 'puppetlabs-host_core', '1.2.0'
 mod 'puppetlabs-sshkeys_core', '2.4.0'
 mod 'puppetlabs-zfs_core', '1.4.0'

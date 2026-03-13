@@ -5,6 +5,7 @@ fixtures:
     concat: 'puppetlabs/concat'
     augeas_core: 'puppetlabs/augeas_core'
     chocolatey: 'puppetlabs/chocolatey'
+    cron_core: 'puppetlabs/cron_core'
     host_core: 'puppetlabs/host_core'
     sshkeys_core: 'puppetlabs/sshkeys_core'
     zfs_core: 'puppetlabs/zfs_core'
