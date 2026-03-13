@@ -80,12 +80,6 @@ push "dhcp-option DOMAIN eyrie"
 push "dhcp-option DOMAIN joyfullee.me"
 push "dhcp-option DNS 172.22.0.1"
 
-# Preferred routes are < 100 on Gentoo and Windows
-push "route-metric 100"
-
-# Windows needs a default route to recognize network
-push "redirect-gateway def1"
-
 # Join to other half of Nest network
 push "route <%= $other_network %> 255.255.255.128"
 
@@ -116,5 +110,12 @@ remote <%= $server %> 1194<% if $nest::vpn_transport == tcp { %> tcp<% } %>
 remote <%= $ip %> 1194<% if $nest::vpn_transport == tcp { %> tcp<% } %>
       <%- } -%>
     <%- } -%>
+  <%- } -%>
+  <%- if $facts['os']['family'] == 'windows' { -%>
+
+# Windows needs a default route to recognize the network
+# Preferred route metrics are < 100
+route-metric 100
+route 0.0.0.0 0.0.0.0
   <%- } -%>
 <%- } -%>
