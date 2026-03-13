@@ -168,7 +168,6 @@ class nest (
       }
 
       'Darwin': {
-        # XXX check for presence of homebrew and fail with instructions if not found
         Package {
           provider => 'homebrew',
         }

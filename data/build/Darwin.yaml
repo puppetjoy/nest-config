@@ -1,4 +1,5 @@
 nest::classes:
+  - 'nest::base::homebrew'
   - 'nest::base::openvpn'
   - 'nest::base::packages'
   - 'nest::base::puppet'
