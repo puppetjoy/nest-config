@@ -79,6 +79,14 @@ class nest::base::packages {
       }
     }
 
+    'Darwin': {
+      package { [
+        'tmux',
+      ]:
+        ensure => installed,
+      }
+    }
+
     'windows': {
       package { [
         'cygutils-extra',

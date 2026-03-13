@@ -27,6 +27,14 @@ class nest::gui::fonts {
       }
     }
 
+    'Darwin': {
+      $fontconfig_local_conf = undef
+
+      package { 'font-powerline-symbols':
+        ensure => installed,
+      }
+    }
+
     'windows': {
       require 'nest::gui::xorg'
 
@@ -51,7 +59,9 @@ class nest::gui::fonts {
   # RGB LCDs; however, this could be made configurable in Hiera with some
   # module parameters.  User preference type configurations, like hinting,
   # belong in the user's home directory (~/.config/fontconfig/fonts.conf)
-  file { $fontconfig_local_conf:
-    source => 'puppet:///modules/nest/fonts/local.conf',
+  if $fontconfig_local_conf {
+    file { $fontconfig_local_conf:
+      source => 'puppet:///modules/nest/fonts/local.conf',
+    }
   }
 }

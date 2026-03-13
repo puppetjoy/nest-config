@@ -36,6 +36,12 @@ class nest::gui::terminals {
       }
     }
 
+    'Darwin': {
+      package { 'kitty':
+        ensure => installed,
+      }
+    }
+
     'windows': {
       package { 'xterm':
         ensure   => installed,
