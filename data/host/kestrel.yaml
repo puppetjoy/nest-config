@@ -4,6 +4,7 @@ nest::classes:
   - 'nest::service::gitlab_runner'
   - 'nest::service::llama_server'
   - 'nest::service::usb_resetter'
+  - 'nest::tool::bolt'
 
 nest::autologin: sway
 nest::bird_role: server
