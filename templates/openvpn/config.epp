@@ -10,8 +10,8 @@ if $facts['os']['family'] == 'windows' {
 } else {
   $ca = '/etc/puppetlabs/puppet/ssl/certs/ca.pem'
   $cert = "/etc/puppetlabs/puppet/ssl/certs/${trusted['certname']}.pem"
-  $key = "/etc/puppetlabs/puppet/etc/ssl/private_keys/${trusted['certname']}.pem"
-  $crl = '/etc/puppetlabs/puppet/etc/ssl/crl.pem'
+  $key = "/etc/puppetlabs/puppet/ssl/private_keys/${trusted['certname']}.pem"
+  $crl = '/etc/puppetlabs/puppet/ssl/crl.pem'
 }
 
 case $server {
