@@ -185,9 +185,7 @@ class nest::base::ssh {
     purge => true,
   }
 
-  #
-  # XXX Cleanup
-  #
+  # Keep the host key set restricted to the managed keys above.
   file { [
     "${sshdir}/ssh_host_dsa_key",
     "${sshdir}/ssh_host_dsa_key.pub",
@@ -199,13 +197,5 @@ class nest::base::ssh {
   ]:
     ensure => absent,
     notify => Service[$service_name],
-  }
-
-  file_line { 'sshd_config-PubkeyAcceptedKeyTypes':
-    ensure            => absent,
-    path              => "${sshdir}/sshd_config",
-    match             => '^#?PubkeyAcceptedKeyTypes\s*',
-    match_for_absence => true,
-    notify            => Service[$service_name],
   }
 }
