@@ -60,6 +60,7 @@ describe 'nest' do
   ]
 
   darwin = [
+    'nest::base::certs',
     'nest::base::homebrew',
     'nest::base::openvpn',
     'nest::base::packages',

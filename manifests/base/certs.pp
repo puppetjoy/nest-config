@@ -25,6 +25,33 @@ class nest::base::certs {
       }
     }
 
+    'Darwin': {
+      $eyrie_crt         = '/etc/ssl/certs/eyrie.crt'
+      $eyrie_fingerprint = '32C34D755F5206B7B2A96E21697F42BE698AD7BE'
+
+      file { $eyrie_crt:
+        mode   => '0644',
+        owner  => 'root',
+        group  => 'wheel',
+        source => 'puppet:///modules/nest/certs/eyrie.crt',
+      }
+
+      exec { 'security-add-trusted-cert-eyrie-root':
+        command => shellquote(
+          '/usr/bin/security',
+          'add-trusted-cert',
+          '-d',
+          '-r',
+          'trustRoot',
+          '-k',
+          '/Library/Keychains/System.keychain',
+          $eyrie_crt
+        ),
+        unless  => "/usr/bin/security find-certificate -a -Z -c Eyrie /Library/Keychains/System.keychain | /usr/bin/grep -q '${eyrie_fingerprint}'",
+        require => File[$eyrie_crt],
+      }
+    }
+
     'windows': {
       $eyrie_crt = 'C:/tools/cygwin/etc/pki/ca-trust/source/anchors/eyrie.crt'
 
