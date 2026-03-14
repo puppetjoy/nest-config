@@ -11,7 +11,6 @@ class nest::base::ssh {
       $sshdir           = '/etc/ssh'
       $ssh_config_file  = "${sshdir}/ssh_config.d/10-nest.conf"
       $service_name     = 'sshd'
-      $service_ensure   = undef
 
       File {
         mode   => '0644',
@@ -49,13 +48,26 @@ class nest::base::ssh {
       }
     }
 
+    'Darwin': {
+      $package_name     = undef
+      $package_provider = undef
+      $sshdir           = '/etc/ssh'
+      $ssh_config_file  = "${sshdir}/ssh_config.d/10-nest.conf"
+      $service_name     = 'com.openssh.sshd'
+
+      File {
+        owner => 'root',
+        group => 'wheel',
+        mode  => '0644',
+      }
+    }
+
     'windows': {
       $package_name     = 'openssh'
       $package_provider = 'cygwin'
       $sshdir           = 'C:/tools/cygwin/etc'
       $ssh_config_file  = "${sshdir}/ssh_config"
       $service_name     = 'cygsshd'
-      $service_ensure   = undef
 
       File {
         owner => 'Administrators',
@@ -101,14 +113,20 @@ class nest::base::ssh {
     }
   }
 
-  package { $package_name:
-    ensure   => installed,
-    provider => $package_provider,
+  if $package_name {
+    package { $package_name:
+      ensure   => installed,
+      provider => $package_provider,
+    }
+    $package_resource = Package[$package_name]
+  } else {
+    $package_resource = undef
   }
-  ->
+
   file_line {
     default:
-      path => "${sshdir}/sshd_config",
+      path    => "${sshdir}/sshd_config",
+      require => $package_resource,
     ;
 
     'sshd_config-ChallengeResponseAuthentication':
@@ -129,13 +147,12 @@ class nest::base::ssh {
   }
   ~>
   service { $service_name:
-    ensure => $service_ensure,
     enable => true,
   }
 
   file { $ssh_config_file:
-    mode    => '0644',
     content => $ssh_config,
+    require => $package_resource,
   }
 
   # Deploy host private key to final stage images
