@@ -11,6 +11,7 @@ class nest::base::ssh {
       $sshdir           = '/etc/ssh'
       $ssh_config_file  = "${sshdir}/ssh_config.d/10-nest.conf"
       $service_name     = 'sshd'
+      $service_ensure   = undef
 
       File {
         mode   => '0644',
@@ -54,6 +55,7 @@ class nest::base::ssh {
       $sshdir           = '/etc/ssh'
       $ssh_config_file  = "${sshdir}/ssh_config.d/10-nest.conf"
       $service_name     = 'com.openssh.sshd'
+      $service_ensure   = running
 
       File {
         owner => 'root',
@@ -68,6 +70,7 @@ class nest::base::ssh {
       $sshdir           = 'C:/tools/cygwin/etc'
       $ssh_config_file  = "${sshdir}/ssh_config"
       $service_name     = 'cygsshd'
+      $service_ensure   = running
 
       File {
         owner => 'Administrators',
@@ -147,6 +150,7 @@ class nest::base::ssh {
   }
   ~>
   service { $service_name:
+    ensure => $service_ensure,
     enable => true,
   }
 
