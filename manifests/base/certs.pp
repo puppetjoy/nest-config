@@ -26,17 +26,34 @@ class nest::base::certs {
     }
 
     'Darwin': {
-      $eyrie_crt         = '/etc/ssl/certs/eyrie.crt'
-      $eyrie_fingerprint = '32C34D755F5206B7B2A96E21697F42BE698AD7BE'
+      $cert_file   = '/etc/ssl/certs/eyrie.crt'
+      $cert_source = find_file('nest/certs/eyrie.crt')
+      $cert_info = generate(
+        '/usr/bin/openssl',
+        'x509',
+        '-in',
+        $cert_source,
+        '-noout',
+        '-subject',
+        '-nameopt',
+        'RFC2253',
+        '-fingerprint',
+        '-sha1',
+      ).chomp.split("\n")
+      $cert_subject_line     = $cert_info[0]
+      $cert_fingerprint_line = $cert_info[1]
+      $cert_cn               = regsubst($cert_subject_line, '^subject=.*CN=([^,]+).*$' , '\1')
+      $cert_fingerprint_hex  = regsubst($cert_fingerprint_line, '^.*=', '')
+      $cert_fingerprint      = regsubst($cert_fingerprint_hex, ':', '', 'G')
 
-      file { $eyrie_crt:
+      file { $cert_file:
         mode   => '0644',
         owner  => 'root',
         group  => 'wheel',
         source => 'puppet:///modules/nest/certs/eyrie.crt',
       }
 
-      exec { 'security-add-trusted-cert-eyrie-root':
+      exec { 'security-add-trusted-cert-root':
         command => shellquote(
           '/usr/bin/security',
           'add-trusted-cert',
@@ -45,17 +62,17 @@ class nest::base::certs {
           'trustRoot',
           '-k',
           '/Library/Keychains/System.keychain',
-          $eyrie_crt
+          $cert_file
         ),
-        unless  => "/usr/bin/security find-certificate -a -Z -c Eyrie /Library/Keychains/System.keychain | /usr/bin/grep -q '${eyrie_fingerprint}'",
-        require => File[$eyrie_crt],
+        unless  => "/usr/bin/security find-certificate -a -Z -c ${cert_cn.shellquote} /Library/Keychains/System.keychain | /usr/bin/grep -q '${cert_fingerprint}'",
+        require => File[$cert_file],
       }
     }
 
     'windows': {
-      $eyrie_crt = 'C:/tools/cygwin/etc/pki/ca-trust/source/anchors/eyrie.crt'
+      $cert_file = 'C:/tools/cygwin/etc/pki/ca-trust/source/anchors/eyrie.crt'
 
-      file { $eyrie_crt:
+      file { $cert_file:
         mode   => '0644',
         owner  => 'Administrators',
         group  => 'None',
@@ -70,10 +87,10 @@ class nest::base::certs {
         refreshonly => true,
       }
 
-      exec { 'certutil-addstore-eyrie-root':
-        command  => "C:/Windows/System32/certutil.exe -addstore Root ${eyrie_crt}",
-        unless   => "if ((C:/Windows/System32/certutil.exe -verify ${eyrie_crt} | Select-String -Pattern UNTRUSTED).Length -gt 0) { exit 1 }",
-        require  => File['C:/tools/cygwin/etc/pki/ca-trust/source/anchors/eyrie.crt'],
+      exec { 'certutil-addstore-root':
+        command  => "C:/Windows/System32/certutil.exe -addstore Root ${cert_file}",
+        unless   => "if ((C:/Windows/System32/certutil.exe -verify ${cert_file} | Select-String -Pattern UNTRUSTED).Length -gt 0) { exit 1 }",
+        require  => File[$cert_file],
         provider => powershell,
       }
     }
