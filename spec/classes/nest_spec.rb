@@ -71,6 +71,7 @@ describe 'nest' do
     'nest::gui::firefox',
     'nest::gui::fonts',
     'nest::gui::terminals',
+    'nest::gui::vscode',
     'nest::tool::bolt',
     'nest::tool::pdk',
   ]
