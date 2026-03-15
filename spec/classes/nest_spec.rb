@@ -65,6 +65,7 @@ describe 'nest' do
     'nest::base::openvpn',
     'nest::base::packages',
     'nest::base::puppet',
+    'nest::base::ruby',
     'nest::base::ssh',
     'nest::base::sudo',
     'nest::base::users',
