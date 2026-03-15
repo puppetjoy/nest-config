@@ -74,6 +74,7 @@ describe 'nest' do
     'nest::gui::terminals',
     'nest::gui::vscode',
     'nest::tool::bolt',
+    'nest::tool::codex',
     'nest::tool::pdk',
   ]
 
