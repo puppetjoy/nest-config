@@ -72,6 +72,7 @@ describe 'nest' do
     'nest::gui::fonts',
     'nest::gui::terminals',
     'nest::tool::bolt',
+    'nest::tool::pdk',
   ]
 
   windows = [

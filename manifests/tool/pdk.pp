@@ -33,12 +33,27 @@ class nest::tool::pdk {
         match => 'update_lock.*json.*local',
       ;
     }
-  } elsif $facts['os']['family'] == 'Gentoo' {
-    file { '/usr/local/bin/pdk':
-      mode   => '0755',
-      owner  => 'root',
-      group  => 'root',
-      source => 'puppet:///modules/nest/scripts/pdk.sh',
+  } else {
+    case $facts['os']['family'] {
+      'Gentoo': {
+        file { '/usr/local/bin/pdk':
+          mode   => '0755',
+          owner  => 'root',
+          group  => 'root',
+          source => 'puppet:///modules/nest/scripts/pdk.sh',
+        }
+      }
+
+      'Darwin': {
+        package { 'puppetlabs/puppet':
+          ensure   => present,
+          provider => 'tap',
+        }
+        ->
+        package { 'pdk':
+          ensure => installed,
+        }
+      }
     }
   }
 }

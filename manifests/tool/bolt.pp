@@ -42,7 +42,7 @@ class nest::tool::bolt (
       onlyif  => "/bin/grep -q '^\\s*private def extract_json' ${bolt_gem_dir}/lib/bolt/transport/podman/connection.rb",
       require => Package['bolt'],
     }
-  } elsif $facts['os']['family'] in ['Gentoo', 'Darwin'] {
+  } else {
     if $ca {
       $ca_content = $ca
     } elsif $settings::ssldir == '/etc/puppetlabs/puppet/ssl' {
