@@ -21,7 +21,7 @@ class nest::base::ruby {
     }
 
     'Darwin': {
-      package { 'ruby':
+      package { 'ruby@3.4':
         ensure => installed,
       }
     }
