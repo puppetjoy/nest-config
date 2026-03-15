@@ -71,6 +71,7 @@ describe 'nest' do
     'nest::gui::firefox',
     'nest::gui::fonts',
     'nest::gui::terminals',
+    'nest::tool::bolt',
   ]
 
   windows = [

@@ -42,7 +42,7 @@ class nest::tool::bolt (
       onlyif  => "/bin/grep -q '^\\s*private def extract_json' ${bolt_gem_dir}/lib/bolt/transport/podman/connection.rb",
       require => Package['bolt'],
     }
-  } elsif $facts['os']['family'] == 'Gentoo' {
+  } elsif $facts['os']['family'] in ['Gentoo', 'Darwin'] {
     if $ca {
       $ca_content = $ca
     } elsif $settings::ssldir == '/etc/puppetlabs/puppet/ssl' {
@@ -51,11 +51,16 @@ class nest::tool::bolt (
       $ca_content = ''
     }
 
+    $config_group = $facts['os']['family'] ? {
+      'Darwin' => 'wheel',
+      default  => 'root',
+    }
+
     file {
       default:
         mode  => '0644',
         owner => 'root',
-        group => 'root',
+        group => $config_group,
       ;
 
       '/etc/puppetlabs/bolt':
@@ -83,11 +88,22 @@ class nest::tool::bolt (
           puppetdb_key        => '/etc/puppetlabs/bolt/key.pem',
         }),
       ;
+    }
 
-      '/usr/local/bin/bolt':
-        mode   => '0755',
-        source => 'puppet:///modules/nest/scripts/bolt.sh',
-      ;
+    case $facts['os']['family'] {
+      'Gentoo': {
+        file { '/usr/local/bin/bolt':
+          mode   => '0755',
+          source => 'puppet:///modules/nest/scripts/bolt.sh',
+        }
+      }
+
+      'Darwin': {
+        package { 'openvox8-openbolt':
+          ensure  => installed,
+          require => Class['nest::base::puppet'],
+        }
+      }
     }
   }
 }
