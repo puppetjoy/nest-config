@@ -66,6 +66,18 @@ class nest::gui::firefox {
       package { 'firefox':
         ensure => installed,
       }
+
+      file {
+        default:
+          owner => $nest::user,
+          group => 'staff',
+        ;
+
+        "/Users/${nest::user}/Library/Application Support/Firefox":
+          ensure => link,
+          target => "/Users/${nest::user}/.mozilla/firefox",
+        ;
+      }
     }
 
     'windows': {
