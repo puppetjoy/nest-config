@@ -1,5 +1,6 @@
 nest::classes:
   - 'nest::base::certs'
+  - 'nest::base::autofs'
   - 'nest::base::homebrew'
   - 'nest::base::openvpn'
   - 'nest::base::packages'
