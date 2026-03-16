@@ -18,7 +18,7 @@ class nest::base::autofs {
     mode    => '0644',
     owner   => 'root',
     group   => 'wheel',
-    content => "home -fstype=nfs,noowners,vers=4 ${nest::nestfs_hostname}:/nest/home\n",
+    content => "home -fstype=nfs,noowners,resvport,vers=4 ${nest::nestfs_hostname}:/nest/home\n",
     notify  => Exec['automount-reload'],
   }
 

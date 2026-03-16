@@ -33,7 +33,7 @@ describe 'nest::base::autofs' do
             mode: '0644',
             owner: 'root',
             group: 'wheel',
-            content: "home -fstype=nfs,noowners,vers=4 falcon.nest:/nest/home\n"
+            content: "home -fstype=nfs,noowners,resvport,vers=4 falcon.nest:/nest/home\n"
           )
         end
 
