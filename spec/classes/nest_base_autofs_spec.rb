@@ -12,6 +12,15 @@ describe 'nest::base::autofs' do
         end
 
         it do
+          is_expected.to contain_file('/Volumes/nest').with(
+            ensure: 'directory',
+            mode: '0755',
+            owner: 'root',
+            group: 'wheel'
+          )
+        end
+
+        it do
           is_expected.to contain_file_line('auto_master-/Volumes/nest').with(
             path: '/etc/auto_master',
             line: '/Volumes/nest auto_nest',
@@ -35,15 +44,29 @@ describe 'nest::base::autofs' do
           )
         end
 
+        it { is_expected.to contain_file('/Volumes/nest').that_notifies('Exec[automount-reload]') }
         it { is_expected.to contain_file_line('auto_master-/Volumes/nest').that_notifies('Exec[automount-reload]') }
         it { is_expected.to contain_file('/etc/auto_nest').that_notifies('Exec[automount-reload]') }
 
         it do
-          is_expected.to contain_file('/nest').with(
-            ensure: 'link',
-            target: '/Volumes/nest'
+          is_expected.to contain_file('/etc/synthetic.d').with(
+            ensure: 'directory',
+            mode: '0755',
+            owner: 'root',
+            group: 'wheel'
           )
         end
+
+        it do
+          is_expected.to contain_file('/etc/synthetic.d/nest.conf').with(
+            mode: '0644',
+            owner: 'root',
+            group: 'wheel',
+            content: "nest\tVolumes/nest\n"
+          )
+        end
+
+        it { is_expected.to contain_file('/etc/synthetic.d/nest.conf').that_requires('File[/etc/synthetic.d]') }
       end
     end
   end
