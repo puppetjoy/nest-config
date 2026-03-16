@@ -1,2 +1,3 @@
 ---
+nest::text_scaling_factor: 1.5
 nest::vpn: true
