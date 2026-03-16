@@ -131,7 +131,7 @@ class nest::gui::xorg {
         mode    => '0644',
         owner   => 'Administrators',
         group   => 'None',
-        content => "Xft.dpi: ${nest::dpi}\n",
+        content => "Xcursor.size: ${nest::cursor_size}\nXft.dpi: ${nest::dpi}\n",
         require => Package['xinit'],
       }
     }
