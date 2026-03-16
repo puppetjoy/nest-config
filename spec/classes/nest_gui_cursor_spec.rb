@@ -14,6 +14,16 @@ describe 'nest::gui::cursor' do
         it { is_expected.to contain_file('/usr/share/icons/breeze_cursors').that_requires('Class[nest::gui::plasma]') }
         it { is_expected.to contain_file('/usr/share/icons/Breeze_Snow').that_requires('Class[nest::gui::plasma]') }
       end
+
+    when %r{^windows-}
+      context 'on Windows' do
+        let(:facts) do
+          facts
+        end
+
+        it { is_expected.to contain_file('C:/tools/cygwin/usr/share/icons/breeze_cursors') }
+        it { is_expected.to contain_file('C:/tools/cygwin/usr/share/icons/Breeze_Snow') }
+      end
     end
   end
 end

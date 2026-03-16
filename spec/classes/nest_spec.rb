@@ -94,6 +94,7 @@ describe 'nest' do
     'nest::base::syslog',
     'nest::base::users',
     'nest::base::vmware',
+    'nest::gui::cursor',
     'nest::gui::firefox',
     'nest::gui::fonts',
     'nest::gui::terminals',
