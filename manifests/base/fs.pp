@@ -25,7 +25,7 @@ class nest::base::fs {
       require => Package['net-fs/samba'],
     }
 
-    $samba_config = @(EOT)
+    $samba_config = @("EOT")
       [global]
         usershare path = /var/lib/samba/usershares
         usershare max shares = 100
@@ -36,6 +36,21 @@ class nest::base::fs {
         comment = Home Directories
         browseable = no
         writable = yes
+
+      [nest_crypt]
+        path = /nest
+        browseable = yes
+        read only = no
+        valid users = ${nest::user}
+
+        map acl inherit = yes
+        inherit acls = yes
+        inherit permissions = yes
+
+        store dos attributes = no
+        map hidden = no
+        map system = no
+        map archive = no
       | EOT
 
     file { '/etc/samba/smb.conf':
