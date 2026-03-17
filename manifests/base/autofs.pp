@@ -2,7 +2,7 @@ class nest::base::autofs {
   file_line { 'auto_master-/nest':
     path   => '/etc/auto_master',
     line   => '/nest auto_nest',
-    match  => '^(/Volumes/nest|/nest)\s+',
+    match  => '^/nest\s+',
     notify => Exec['automount-reload'],
   }
 
@@ -17,9 +17,5 @@ class nest::base::autofs {
   exec { 'automount-reload':
     command     => '/usr/sbin/automount -vc',
     refreshonly => true,
-  }
-
-  file { '/etc/synthetic.d/nest.conf':
-    ensure => absent,
   }
 }

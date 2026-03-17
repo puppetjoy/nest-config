@@ -2,7 +2,7 @@ class nest::gui::cursor {
   case $facts['os']['family'] {
     'Gentoo': {
       $icons_dir = '/usr/share/icons'
-      
+
       File {
         owner   => 'root',
         group   => 'root',
