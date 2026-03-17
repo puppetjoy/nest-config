@@ -167,6 +167,10 @@ class nest::base::ssh {
       show_diff => false,
       notify    => Service[$service_name],
     }
+
+    if $facts['os']['family'] == 'windows' {
+      Exec['ssh-host-config'] -> File["${sshdir}/ssh_host_ed25519_key"]
+    }
   }
 
   $nest::ssh_host_keys.each |$host, $line| {
