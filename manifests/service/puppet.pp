@@ -29,7 +29,7 @@ class nest::service::puppet (
       '8140:8140',  # Puppet Server
       '8080:8080',  # PuppetDB dashboard
       '8081:8081',  # PuppetDB API
-      '8180:80',    # Puppetboard
+      '8180:8180',    # Puppetboard
     ],
   }
 
@@ -137,9 +137,10 @@ class nest::service::puppet (
   #
   nest::lib::container { 'puppetboard':
     pod   => 'puppet',
-    image => 'ghcr.io/voxpupuli/puppetboard:5.4.0',
+    image => 'ghcr.io/voxpupuli/puppetboard:7.0.1',
     env   => [
       'PUPPETDB_HOST=puppet',
+      'PUPPETBOARD_PORT=8180',
       'ENABLE_CATALOG=True',
       'DEFAULT_ENVIRONMENT=main',
       'UNRESPONSIVE_HOURS=8760', # 1 year
