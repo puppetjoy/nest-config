@@ -27,30 +27,18 @@ class nest::base::fs {
 
     $samba_config = @("EOT")
       [global]
-        usershare path = /var/lib/samba/usershares
-        usershare max shares = 100
-        usershare allow guests = yes
-        usershare owner only = no
+        unix extensions = no
 
       [homes]
         comment = Home Directories
         browseable = no
-        writable = yes
+        read only = no
 
-      [nest_crypt]
+      [nest]
         path = /nest
         browseable = yes
         read only = no
         valid users = ${nest::user}
-
-        map acl inherit = yes
-        inherit acls = yes
-        inherit permissions = yes
-
-        store dos attributes = no
-        map hidden = no
-        map system = no
-        map archive = no
       | EOT
 
     file { '/etc/samba/smb.conf':
