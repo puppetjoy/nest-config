@@ -1,4 +1,4 @@
 ---
-nest::gui_scaling_factor: 1.5
-nest::text_scaling_factor: 1.6
+nest::gui_scaling_factor: 1.75 # matches Windows scaling
+nest::text_scaling_factor: 1.6 # ideal
 nest::vpn: true
