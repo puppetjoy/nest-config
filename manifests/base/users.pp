@@ -92,6 +92,7 @@ class nest::base::users {
 
     'Darwin': {
       $homes = {
+        'root'      => '/var/root',
         $nest::user => "/Users/${nest::user}",
       }
     }
