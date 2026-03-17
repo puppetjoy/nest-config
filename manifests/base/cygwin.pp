@@ -28,7 +28,14 @@ class nest::base::cygwin {
   $fix_perms_content = @(END_FIX_PERMS)
     #!/bin/bash
     find /bin /etc /lib /sbin /usr /var \
+      \( -type f -o -type d \) \
+      -not -path /etc/hosts \
       -not -path /etc/mtab \
+      -not -path /etc/networks \
+      -not -path /etc/protocols \
+      -not -path /etc/services \
+      -not -path /usr/share/fonts/microsoft \
+      -not -path /usr/share/fonts/microsoft/* \
       -print0 |
       xargs -0 chown Administrators:None
     | END_FIX_PERMS
