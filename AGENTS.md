@@ -38,6 +38,7 @@
 
 ## Testing Guidelines
 - Prefer fast feedback: default to `pdk validate` during normal iteration.
+- Not every change needs tests. Do not add or update specs for straightforward manifest wiring, dependency, or ordering tweaks unless the user explicitly asks for coverage or the change fixes a demonstrated regression.
 - Be deliberate with unit tests: run focused specs for touched behavior using `--tests=...` instead of the full suite.
 - Discovery for this environment: `pdk test unit --parallel --tests=...` can still execute the full suite; for focused runs use `pdk test unit --tests=...` (without `--parallel`).
 - It is acceptable to rely on CI for full-suite coverage unless the user requests local full-suite execution.
