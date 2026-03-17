@@ -40,7 +40,7 @@ class nest::base::eyaml {
         ),
         environment => "HOME=/home/${nest::user}",
         creates     => "C:/tools/cygwin/home/${nest::user}/bin/eyaml",
-        require     => Package['ruby'],
+        require     => Class['nest::base::ruby'],
         before      => File[$conf_dir],
       }
 

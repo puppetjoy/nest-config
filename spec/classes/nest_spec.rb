@@ -90,6 +90,7 @@ describe 'nest' do
     'nest::base::packages',
     'nest::base::puppet',
     'nest::base::qemu',
+    'nest::base::ruby',
     'nest::base::ssh',
     'nest::base::syslog',
     'nest::base::users',

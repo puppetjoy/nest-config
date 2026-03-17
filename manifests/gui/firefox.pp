@@ -96,6 +96,7 @@ class nest::gui::firefox {
 
         "C:/Users/${nest::user}/AppData/Roaming/Mozilla/Firefox":
           ensure => link,
+          force  => true,
           target => "C:/tools/cygwin/home/${nest::user}/.mozilla/firefox",
         ;
       }

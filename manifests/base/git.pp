@@ -8,11 +8,6 @@ class nest::base::git {
     }
 
     'windows': {
-      package { ['git', 'ruby']:
-        ensure   => installed,
-        provider => 'cygwin',
-      }
-
       # Windows and Puppet don't really support assuming other user contexts,
       # but Cygwin has managed to hack it into `setuid` when coming from the
       # SYSTEM account.  Force git to operate as my user so I can work in repos
@@ -41,7 +36,7 @@ class nest::base::git {
 
         'C:/tools/cygwin/usr/local/bin/git':
           content => $git_wrapper_content,
-          require => Package['git', 'ruby'],
+          require => Class['nest::base::ruby']
         ;
 
         'C:/Program Files/Puppet Labs/Puppet/bin/git.bat':

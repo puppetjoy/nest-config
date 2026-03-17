@@ -25,5 +25,12 @@ class nest::base::ruby {
         ensure => installed,
       }
     }
+
+    'windows': {
+      package { ['ruby', 'rubygems']:
+        ensure   => installed,
+        provider => 'cygwin',
+      }
+    }
   }
 }
