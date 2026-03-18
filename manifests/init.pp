@@ -174,11 +174,9 @@ class nest (
       }
 
       'windows': {
-        Concat {
-          # The default is usually 0644, but Windows keeps changing it to 0674, so
-          # just accept what it does.
-          mode => '0674',
-        }
+        # Avoid dealing with ACLs
+        File { group => 'None' }
+        Concat { group => 'None' }
 
         Package {
           provider => 'chocolatey',
