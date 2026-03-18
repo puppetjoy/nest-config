@@ -81,6 +81,8 @@ class nest::base::packages {
 
     'Darwin': {
       package { [
+        'helm',
+        'kubectl',
         'tmux',
       ]:
         ensure => installed,
