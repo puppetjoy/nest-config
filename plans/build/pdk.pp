@@ -60,6 +60,7 @@ plan nest::build::pdk (
   if $build {
     run_command("podman start ${container}", 'localhost', 'Start build container')
 
+    run_command('env', $target, 'Show Puppet Core environment', _env_vars => $puppetcore_env_vars)
     run_command('pdk new module --skip-interview build /module', $target, 'Create test module', _env_vars => $puppetcore_env_vars)
     run_command('sh -c "cd /module && bundle install && pdk validate"', $target, 'Install gems and validate module', _env_vars => $puppetcore_env_vars)
     run_command('rm -rf /module && mkdir /module', $target, 'Clean up test module')
