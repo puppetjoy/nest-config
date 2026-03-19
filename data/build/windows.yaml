@@ -20,3 +20,5 @@ nest::classes:
   - 'nest::gui::fonts'
   - 'nest::gui::terminals'
   - 'nest::gui::xorg'
+
+nest::vpn: true
