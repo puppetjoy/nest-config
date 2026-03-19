@@ -8,7 +8,18 @@ describe 'nest::base::homebrew' do
     when %r{^darwin-}
       context 'on macOS' do
         let(:facts) do
-          facts
+          os_facts = facts[:os] || facts['os']
+          release_facts = os_facts[:release] || os_facts['release']
+
+          facts.merge(
+            homebrew_clt_installed: true,
+            homebrew_owner: 'joy',
+            identity: { 'user' => 'root' },
+            os: os_facts.merge(
+              architecture: 'arm64',
+              release: release_facts.merge(major: '25'),
+            ),
+          )
         end
 
         let(:post_condition) do
@@ -20,7 +31,7 @@ describe 'nest::base::homebrew' do
           PP
         end
 
-        it { is_expected.to contain_class('homebrew').that_requires('Class[nest::base::sudo]') }
+        it { is_expected.to contain_class('homebrew').with_install_user('joy') }
         it { is_expected.to contain_class('homebrew').that_comes_before('Package[foo]') }
       end
     end

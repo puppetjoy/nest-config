@@ -45,10 +45,7 @@ class nest::tool::pdk {
       }
 
       'Darwin': {
-        package { 'puppetlabs/puppet':
-          ensure   => present,
-          provider => 'tap',
-        }
+        homebrew::tap { 'puppetlabs/puppet': }
         ->
         package { 'pdk':
           ensure => installed,

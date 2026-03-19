@@ -132,14 +132,11 @@ class nest::base::puppet {
         $puppet_runmode = 'none'
       }
 
-      package { 'openvoxproject/openvox':
-        ensure   => present,
-        provider => 'tap',
-      }
+      homebrew::tap { 'openvoxproject/openvox': }
       ->
       class { 'puppet':
         client_package       => 'openvox8-agent',
-        package_provider     => 'brewcask',
+        package_provider     => 'homebrew',
         dns_alt_names        => $dns_alt_names,
         runmode              => $puppet_runmode,
         unavailable_runmodes => ['systemd.timer'],

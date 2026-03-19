@@ -1,14 +1,7 @@
 class nest::base::homebrew {
   class { 'homebrew':
-    user    => $nest::user,
-    require => Class['nest::base::sudo'],
+    install_user => $nest::user,
   }
-  ->
-  Package <|
-    provider == 'brew' or
-    provider == 'brewcask' or
-    provider == 'homebrew' or
-    provider == 'tap' or
-    provider == undef
-  |>
+
+  Class['homebrew'] -> Package <| provider == 'homebrew' or provider == undef |>
 }

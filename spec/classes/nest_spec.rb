@@ -252,7 +252,18 @@ describe 'nest' do
     when %r{^darwin-}
       context 'on macOS' do # rubocop:disable RSpec/EmptyExampleGroup
         let(:facts) do
-          facts
+          os_facts = facts[:os] || facts['os']
+          release_facts = os_facts[:release] || os_facts['release']
+
+          facts.merge(
+            homebrew_clt_installed: true,
+            homebrew_owner: 'joy',
+            identity: { 'user' => 'root' },
+            os: os_facts.merge(
+              architecture: 'arm64',
+              release: release_facts.merge(major: '25'),
+            ),
+          )
         end
 
         it_should_and_should_not_contain_classes(darwin, stage1 + stage2 + stage3 + workstation)
