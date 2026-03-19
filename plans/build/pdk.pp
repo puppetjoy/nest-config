@@ -37,9 +37,9 @@ plan nest::build::pdk (
   $puppetcore_gem_source = system::env('GEM_SOURCE_PUPPETCORE')
   $puppet_forge_token    = system::env('PUPPET_FORGE_TOKEN')
   $puppetcore_env_vars   = {
-    nest::bundler_source_env($puppetcore_gem_source) => "forge-key:${puppet_forge_token}",
-    'GEM_SOURCE_PUPPETCORE'                          => $puppetcore_gem_source,
-    'PUPPET_FORGE_TOKEN'                             => $puppet_forge_token,
+    'BUNDLE_RUBYGEMS___PUPPETCORE__PUPPET__COM' => "forge-key:${puppet_forge_token}",
+    'GEM_SOURCE_PUPPETCORE'                     => $puppetcore_gem_source,
+    'PUPPET_FORGE_TOKEN'                        => $puppet_forge_token,
   }
 
   run_plan('nest::build::tool', {
