@@ -17,3 +17,5 @@ nest::classes:
   - 'nest::tool::bolt'
   - 'nest::tool::codex'
   - 'nest::tool::pdk'
+
+nest::vpn: true
