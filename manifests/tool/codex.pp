@@ -18,7 +18,6 @@ class nest::tool::codex {
         unless      => "${nodejs::npm_path} ls ${codex_package} --depth=0 >/dev/null 2>&1 && ${nodejs::npm_path} outdated ${codex_package} --depth=0 >/dev/null 2>&1",
         cwd         => $codex_target,
         environment => ['HOME=/root'],
-        provider    => shell,
         require     => Class['nodejs'],
       }
       ->
