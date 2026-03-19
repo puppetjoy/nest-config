@@ -14,6 +14,11 @@ class nest::base::ruby {
 
   case $facts['os']['family'] {
     'Gentoo': {
+      File {
+        owner => 'root',
+        group => 'root',
+      }
+
       # Workaround ruby-lsp issue calling bundle with version argument
       # See: https://github.com/Shopify/ruby-lsp/issues/3022
       exec { '/bin/mv /usr/bin/bundle /usr/bin/bundle.real':
@@ -22,8 +27,6 @@ class nest::base::ruby {
       ->
       file { '/usr/bin/bundle':
         mode    => '0755',
-        owner   => 'root',
-        group   => 'root',
         content => @(WRAPPER),
           #!/usr/bin/env ruby
           args = ARGV
@@ -33,37 +36,32 @@ class nest::base::ruby {
       }
 
       $gemrc_path = '/etc/gemrc'
-      $gemrc_owner = 'root'
-      $gemrc_group = 'root'
       $gemrc_require = []
 
       $bundler_puppetcore_env_path = '/etc/profile.d/puppetcore-bundler.sh'
-      $bundler_puppetcore_env_owner = 'root'
-      $bundler_puppetcore_env_group = 'root'
     }
 
     'Darwin': {
+      File {
+        owner => 'root',
+        group => 'wheel',
+      }
+
       package { 'ruby@3.4':
         ensure => installed,
       }
 
       file { '/opt/homebrew/opt/ruby@3.4/etc':
         ensure  => directory,
-        owner   => 'root',
-        group   => 'wheel',
         mode    => '0755',
         require => Package['ruby@3.4'],
       }
 
       $gemrc_path = '/opt/homebrew/opt/ruby@3.4/etc/gemrc'
-      $gemrc_owner = 'root'
-      $gemrc_group = 'wheel'
       $gemrc_require = [Package['ruby@3.4']]
 
       file { '/etc/profile.d':
         ensure => directory,
-        owner  => 'root',
-        group  => 'wheel',
         mode   => '0755',
       }
 
@@ -80,35 +78,32 @@ class nest::base::ruby {
       }
 
       $bundler_puppetcore_env_path = '/etc/profile.d/puppetcore-bundler.sh'
-      $bundler_puppetcore_env_owner = 'root'
-      $bundler_puppetcore_env_group = 'wheel'
     }
 
     'windows': {
+      File {
+        owner => 'Administrators',
+        group => 'None',
+      }
+
       package { ['ruby', 'rubygems']:
         ensure   => installed,
         provider => 'cygwin',
       }
 
       $gemrc_path = 'C:/tools/cygwin/etc/gemrc'
-      $gemrc_owner = 'Administrators'
-      $gemrc_group = 'None'
       $gemrc_require = [
         Package['ruby'],
         Package['rubygems'],
       ]
 
       $bundler_puppetcore_env_path = 'C:/tools/cygwin/etc/profile.d/puppetcore-bundler.sh'
-      $bundler_puppetcore_env_owner = 'Administrators'
-      $bundler_puppetcore_env_group = 'None'
     }
   }
 
   if $gemrc_content {
     file { $gemrc_path:
       ensure    => file,
-      owner     => $gemrc_owner,
-      group     => $gemrc_group,
       mode      => '0644',
       show_diff => false,
       content   => $gemrc_content,
@@ -119,8 +114,6 @@ class nest::base::ruby {
   if $bundler_puppetcore_env_content {
     file { $bundler_puppetcore_env_path:
       ensure    => file,
-      owner     => $bundler_puppetcore_env_owner,
-      group     => $bundler_puppetcore_env_group,
       mode      => '0644',
       show_diff => false,
       content   => $bundler_puppetcore_env_content,
