@@ -1,10 +1,15 @@
 class nest::base::ruby {
   if $nest::puppet_forge_key {
+    $bundler_puppetcore_credentials = "forge-key:${$nest::puppet_forge_key.unwrap}"
     $gemrc_content = Sensitive(epp('nest/ruby/gemrc.epp', {
       'puppet_forge_key' => $nest::puppet_forge_key.unwrap,
     }))
+    $bundler_puppetcore_env_content = Sensitive(epp('nest/ruby/bundler-puppetcore-env.epp', {
+      'bundler_puppetcore_credentials' => $bundler_puppetcore_credentials,
+    }))
   } else {
     $gemrc_content = undef
+    $bundler_puppetcore_env_content = undef
   }
 
   case $facts['os']['family'] {
@@ -31,6 +36,10 @@ class nest::base::ruby {
       $gemrc_owner = 'root'
       $gemrc_group = 'root'
       $gemrc_require = []
+
+      $bundler_puppetcore_env_path = '/etc/profile.d/puppetcore-bundler.sh'
+      $bundler_puppetcore_env_owner = 'root'
+      $bundler_puppetcore_env_group = 'root'
     }
 
     'Darwin': {
@@ -50,6 +59,29 @@ class nest::base::ruby {
       $gemrc_owner = 'root'
       $gemrc_group = 'wheel'
       $gemrc_require = [Package['ruby@3.4']]
+
+      file { '/etc/profile.d':
+        ensure => directory,
+        owner  => 'root',
+        group  => 'wheel',
+        mode   => '0755',
+      }
+
+      file_line { 'macos-profile-source-profile-d-puppetcore-bundler':
+        path  => '/etc/profile',
+        line  => '[ -r /etc/profile.d/puppetcore-bundler.sh ] && . /etc/profile.d/puppetcore-bundler.sh',
+        match => 'puppetcore-bundler\.sh',
+      }
+
+      file_line { 'macos-zprofile-source-profile-d-puppetcore-bundler':
+        path  => '/etc/zprofile',
+        line  => '[ -r /etc/profile.d/puppetcore-bundler.sh ] && . /etc/profile.d/puppetcore-bundler.sh',
+        match => 'puppetcore-bundler\.sh',
+      }
+
+      $bundler_puppetcore_env_path = '/etc/profile.d/puppetcore-bundler.sh'
+      $bundler_puppetcore_env_owner = 'root'
+      $bundler_puppetcore_env_group = 'wheel'
     }
 
     'windows': {
@@ -65,6 +97,10 @@ class nest::base::ruby {
         Package['ruby'],
         Package['rubygems'],
       ]
+
+      $bundler_puppetcore_env_path = 'C:/tools/cygwin/etc/profile.d/puppetcore-bundler.sh'
+      $bundler_puppetcore_env_owner = 'Administrators'
+      $bundler_puppetcore_env_group = 'None'
     }
   }
 
@@ -77,6 +113,21 @@ class nest::base::ruby {
       show_diff => false,
       content   => $gemrc_content,
       require   => $gemrc_require,
+    }
+  }
+
+  if $bundler_puppetcore_env_content {
+    file { $bundler_puppetcore_env_path:
+      ensure    => file,
+      owner     => $bundler_puppetcore_env_owner,
+      group     => $bundler_puppetcore_env_group,
+      mode      => '0644',
+      show_diff => false,
+      content   => $bundler_puppetcore_env_content,
+    }
+  } else {
+    file { $bundler_puppetcore_env_path:
+      ensure  => absent,
     }
   }
 }
