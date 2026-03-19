@@ -11,6 +11,7 @@ define nest::lib::gitlab_runner (
   Array[String]     $volumes          = [],
   Boolean           $bolt             = false,
   Boolean           $podman           = false,
+  Boolean           $puppetcore       = false,
   Boolean           $qemu             = false,
 ) {
   # Required for /srv/gitlab-runner and container
@@ -44,6 +45,9 @@ define nest::lib::gitlab_runner (
   }
 
   if $bolt {
+    require nest::base::eyaml
+    require nest::tool::bolt
+
     $bolt_args = [
       '--docker-volumes', '/etc/eyaml:/etc/eyaml:ro',
       '--docker-volumes', '/etc/puppetlabs/bolt:/etc/puppetlabs/bolt:ro',
@@ -61,8 +65,20 @@ define nest::lib::gitlab_runner (
     $podman_args = []
   }
 
+  if $puppetcore {
+    require nest::base::ruby
+
+    $puppetcore_args = [
+      '--docker-volumes', '/etc/gemrc:/etc/gemrc:ro',
+      '--env', "BUNDLE_RUBYGEMS___PUPPETCORE__PUPPET__COM=forge-key:${$nest::puppet_forge_key.unwrap}",
+    ]
+  } else {
+    $puppetcore_args = []
+  }
+
   if $qemu {
-    include nest::tool::qemu
+    require nest::tool::qemu
+
     $qemu_args = $nest::tool::qemu::user_targets.map |$arch| {
       ['--docker-volumes', "/usr/bin/qemu-${arch}:/usr/bin/qemu-${arch}:ro"]
     }
@@ -89,6 +105,7 @@ define nest::lib::gitlab_runner (
     $volume_args,
     $bolt_args,
     $podman_args,
+    $puppetcore_args,
     $qemu_args,
     '--request-concurrency', '2',
     '--url', "https://${host}/",

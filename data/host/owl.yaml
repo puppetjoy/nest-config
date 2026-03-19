@@ -28,4 +28,5 @@ nest::service::gitlab_runner::instances:
     limit: 2
     bolt: true
     podman: true
+    puppetcore: true
     qemu: true
