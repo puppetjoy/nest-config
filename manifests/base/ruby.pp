@@ -120,7 +120,7 @@ class nest::base::ruby {
     }
   } else {
     file { $bundler_puppetcore_env_path:
-      ensure  => absent,
+      ensure => absent,
     }
   }
 }
