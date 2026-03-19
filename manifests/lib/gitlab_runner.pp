@@ -69,7 +69,6 @@ define nest::lib::gitlab_runner (
     require nest::base::ruby
 
     $puppetcore_args = [
-      '--docker-volumes', '/etc/gemrc:/etc/gemrc:ro',
       '--env', "BUNDLE_RUBYGEMS___PUPPETCORE__PUPPET__COM=forge-key:${$nest::puppet_forge_key.unwrap}",
     ]
   } else {

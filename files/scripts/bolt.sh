@@ -26,7 +26,6 @@ exec podman run --rm -it -e TERM \
     -w "/modules/${name}" \
     -v "${PWD}:/modules/${name}" \
     -v /etc/eyaml:/etc/eyaml:ro \
-    -v /etc/gemrc:/etc/gemrc:ro \
     -v /etc/puppetlabs/bolt:/etc/puppetlabs/bolt:ro \
     -v /etc/ssh/ssh_known_hosts:/etc/ssh/ssh_known_hosts:ro \
     -v /nest/backup:/nest/backup \
