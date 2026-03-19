@@ -1,2 +1,0 @@
-<%- | String $bundler_puppetcore_credentials | -%>
-export BUNDLE_RUBYGEMS___PUPPETCORE__PUPPET__COM="<%= $bundler_puppetcore_credentials %>"

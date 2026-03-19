@@ -34,13 +34,17 @@ class nest::tool::pdk {
       ;
     }
   } else {
+    require nest::base::puppet
+
     case $facts['os']['family'] {
       'Gentoo': {
         file { '/usr/local/bin/pdk':
-          mode   => '0755',
-          owner  => 'root',
-          group  => 'root',
-          source => 'puppet:///modules/nest/scripts/pdk.sh',
+          mode    => '0755',
+          owner   => 'root',
+          group   => 'root',
+          content => epp('nest/scripts/pdk.sh.epp', {
+            'puppetcore_gem_source' => $nest::base::puppet::puppetcore_gem_source,
+          }),
         }
       }
 

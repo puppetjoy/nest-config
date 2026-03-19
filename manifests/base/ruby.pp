@@ -1,15 +1,13 @@
 class nest::base::ruby {
+  include nest::base::puppet
+
   if $nest::puppet_forge_key {
-    $bundler_puppetcore_credentials = "forge-key:${$nest::puppet_forge_key.unwrap}"
     $gemrc_content = Sensitive(epp('nest/ruby/gemrc.epp', {
-      'puppet_forge_key' => $nest::puppet_forge_key.unwrap,
-    }))
-    $bundler_puppetcore_env_content = Sensitive(epp('nest/ruby/bundler-puppetcore-env.epp', {
-      'bundler_puppetcore_credentials' => $bundler_puppetcore_credentials,
+      'puppet_forge_key'      => $nest::puppet_forge_key.unwrap,
+      'puppetcore_gem_source' => $nest::base::puppet::puppetcore_gem_source,
     }))
   } else {
     $gemrc_content = undef
-    $bundler_puppetcore_env_content = undef
   }
 
   case $facts['os']['family'] {
@@ -37,8 +35,6 @@ class nest::base::ruby {
 
       $gemrc_path = '/etc/gemrc'
       $gemrc_require = []
-
-      $bundler_puppetcore_env_path = '/etc/profile.d/puppetcore-bundler.sh'
     }
 
     'Darwin': {
@@ -59,25 +55,6 @@ class nest::base::ruby {
 
       $gemrc_path = '/opt/homebrew/opt/ruby@3.4/etc/gemrc'
       $gemrc_require = [Package['ruby@3.4']]
-
-      file { '/etc/profile.d':
-        ensure => directory,
-        mode   => '0755',
-      }
-
-      file_line { 'macos-profile-source-profile-d-puppetcore-bundler':
-        path  => '/etc/profile',
-        line  => '[ -r /etc/profile.d/puppetcore-bundler.sh ] && . /etc/profile.d/puppetcore-bundler.sh',
-        match => 'puppetcore-bundler\.sh',
-      }
-
-      file_line { 'macos-zprofile-source-profile-d-puppetcore-bundler':
-        path  => '/etc/zprofile',
-        line  => '[ -r /etc/profile.d/puppetcore-bundler.sh ] && . /etc/profile.d/puppetcore-bundler.sh',
-        match => 'puppetcore-bundler\.sh',
-      }
-
-      $bundler_puppetcore_env_path = '/etc/profile.d/puppetcore-bundler.sh'
     }
 
     'windows': {
@@ -96,8 +73,6 @@ class nest::base::ruby {
         Package['ruby'],
         Package['rubygems'],
       ]
-
-      $bundler_puppetcore_env_path = 'C:/tools/cygwin/etc/profile.d/puppetcore-bundler.sh'
     }
   }
 
@@ -108,19 +83,6 @@ class nest::base::ruby {
       show_diff => false,
       content   => $gemrc_content,
       require   => $gemrc_require,
-    }
-  }
-
-  if $bundler_puppetcore_env_content {
-    file { $bundler_puppetcore_env_path:
-      ensure    => file,
-      mode      => '0644',
-      show_diff => false,
-      content   => $bundler_puppetcore_env_content,
-    }
-  } else {
-    file { $bundler_puppetcore_env_path:
-      ensure => absent,
     }
   }
 }

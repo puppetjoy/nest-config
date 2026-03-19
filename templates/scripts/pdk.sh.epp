@@ -1,3 +1,4 @@
+<%- | String $puppetcore_gem_source | -%>
 #!/bin/bash
 #
 # PDK container wrapper
@@ -13,7 +14,9 @@ exec podman run --rm -it -e TERM \
     -v "${PWD}:/module" \
     -v pdk-empty:/module/.resource_types:ro \
     -v /etc/eyaml:/etc/eyaml:ro \
-    -e BUNDLE_RUBYGEMS___PUPPETCORE__PUPPET__COM \
+    -e <%= nest::bundler_source_env($puppetcore_gem_source) %> \
+    -e GEM_SOURCE_PUPPETCORE \
+    -e PUPPET_FORGE_TOKEN \
     nest/tools/pdk \
     pdk "$@"
 

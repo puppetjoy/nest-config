@@ -43,6 +43,8 @@ class nest::tool::bolt (
       require => Package['bolt'],
     }
   } else {
+    require nest::base::puppet
+
     if $ca {
       $ca_content = $ca
     } elsif $settings::ssldir == '/etc/puppetlabs/puppet/ssl' {
@@ -93,8 +95,10 @@ class nest::tool::bolt (
     case $facts['os']['family'] {
       'Gentoo': {
         file { '/usr/local/bin/bolt':
-          mode   => '0755',
-          source => 'puppet:///modules/nest/scripts/bolt.sh',
+          mode    => '0755',
+          content => epp('nest/scripts/bolt.sh.epp', {
+            'puppetcore_gem_source' => $nest::base::puppet::puppetcore_gem_source,
+          }),
         }
       }
 

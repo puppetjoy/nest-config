@@ -1,4 +1,4 @@
-<%- | String $puppet_forge_key | -%>
+<%- | String $puppet_forge_key, String $puppetcore_gem_source | -%>
 :sources:
-  - "https://forge-key:<%= $puppet_forge_key %>@rubygems-puppetcore.puppet.com"
+  - "<%= regsubst($puppetcore_gem_source, '^([a-z][a-z0-9+.-]*://)(.*)$', "\\1forge-key:${$puppet_forge_key}@\\2") %>"
   - "https://rubygems.org"

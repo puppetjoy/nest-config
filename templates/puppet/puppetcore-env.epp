@@ -1,0 +1,4 @@
+<%- | String $puppet_forge_key, String $puppetcore_gem_source | -%>
+export <%= nest::bundler_source_env($puppetcore_gem_source) %>="forge-key:<%= $puppet_forge_key %>"
+export GEM_SOURCE_PUPPETCORE="<%= $puppetcore_gem_source %>"
+export PUPPET_FORGE_TOKEN="<%= $puppet_forge_key %>"

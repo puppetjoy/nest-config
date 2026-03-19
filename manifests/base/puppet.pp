@@ -1,6 +1,8 @@
 class nest::base::puppet {
   tag 'profile'
 
+  $puppetcore_gem_source = 'https://rubygems-puppetcore.puppet.com'
+
   if $nest::router {
     $dns_alt_names = $nest::openvpn_servers.filter |$s| { $s !~ Stdlib::IP::Address }
   } else {
@@ -11,8 +13,19 @@ class nest::base::puppet {
     'fqdn' => "${trusted['certname']}.nest",
   }.stdlib::to_yaml
 
+  if $nest::puppet_forge_key {
+    $puppetcore_env_content = Sensitive(epp('nest/puppet/puppetcore-env.epp', {
+      'puppet_forge_key'      => $nest::puppet_forge_key.unwrap,
+      'puppetcore_gem_source' => $puppetcore_gem_source,
+    }))
+  } else {
+    $puppetcore_env_content = undef
+  }
+
   case $facts['os']['family'] {
     'Gentoo': {
+      $puppetcore_env_path = '/etc/profile.d/puppetcore.sh'
+
       file { [
         '/etc/puppetlabs',
         '/etc/puppetlabs/facter',
@@ -100,6 +113,8 @@ class nest::base::puppet {
     }
 
     'Darwin': {
+      $puppetcore_env_path = '/etc/profile.d/puppetcore.sh'
+
       $facter_conf = @(FACTER_CONF)
         global : {
             external-dir : [ "/etc/puppetlabs/facter/facts.d" ]
@@ -126,6 +141,25 @@ class nest::base::puppet {
         ;
       }
 
+      file { '/etc/profile.d':
+        ensure => directory,
+        mode   => '0755',
+        owner  => 'root',
+        group  => 'wheel',
+      }
+
+      file_line { 'macos-profile-source-profile-d-puppetcore':
+        path  => '/etc/profile',
+        line  => '[ -r /etc/profile.d/puppetcore.sh ] && . /etc/profile.d/puppetcore.sh',
+        match => 'puppetcore\.sh',
+      }
+
+      file_line { 'macos-zprofile-source-profile-d-puppetcore':
+        path  => '/etc/zprofile',
+        line  => '[ -r /etc/profile.d/puppetcore.sh ] && . /etc/profile.d/puppetcore.sh',
+        match => 'puppetcore\.sh',
+      }
+
       if $nest::puppet {
         $puppet_runmode = 'service'
       } else {
@@ -144,6 +178,8 @@ class nest::base::puppet {
     }
 
     'windows': {
+      $puppetcore_env_path = 'C:/tools/cygwin/etc/profile.d/puppetcore.sh'
+
       $facter_conf = @(FACTER_CONF)
         global : {
             external-dir : [ "C:/ProgramData/PuppetLabs/facter/facts.d" ]
@@ -187,6 +223,19 @@ class nest::base::puppet {
         dns_alt_names => $dns_alt_names,
         runmode       => $puppet_runmode,
       }
+    }
+  }
+
+  if $puppetcore_env_content {
+    file { $puppetcore_env_path:
+      ensure    => file,
+      mode      => '0644',
+      show_diff => false,
+      content   => $puppetcore_env_content,
+    }
+  } else {
+    file { $puppetcore_env_path:
+      ensure => absent,
     }
   }
 }
