@@ -1,6 +1,6 @@
 class nest::tool::pdk {
   if $facts['build'] == 'pdk' {
-    $pdk_version        = '3.4.0'
+    $pdk_version        = '3.6.1'
     $ruby_minor_version = $facts['ruby']['version'].regsubst('^(\d+\.\d+).*', '\1')
     $pdk_gem_dir        = "/usr/local/lib64/ruby/gems/${ruby_minor_version}.0/gems/pdk-${pdk_version}"
 
