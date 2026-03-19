@@ -38,7 +38,15 @@ class nest::base::ruby {
         ensure => installed,
       }
 
-      $gemrc_path = '/opt/homebrew/etc/gemrc'
+      file { '/opt/homebrew/opt/ruby@3.4/etc':
+        ensure  => directory,
+        owner   => 'root',
+        group   => 'wheel',
+        mode    => '0755',
+        require => Package['ruby@3.4'],
+      }
+
+      $gemrc_path = '/opt/homebrew/opt/ruby@3.4/etc/gemrc'
       $gemrc_owner = 'root'
       $gemrc_group = 'wheel'
       $gemrc_require = [Package['ruby@3.4']]
