@@ -1,2 +1,0 @@
----
-puppet::agent_server_hostname: 'puppet.joyfullee.me'
