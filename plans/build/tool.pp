@@ -8,6 +8,7 @@
 # @param build Build the image
 # @param deploy Deploy the image
 # @param emerge_default_opts Override default emerge options (e.g. --jobs=4)
+# @param extra_volumes Additional volumes to mount into the build container
 # @param id Build ID
 # @param image_changes Additional image instruction (e.g. ENV=NAME=val,WORKDIR=/path)
 # @param init Initialize the build container
@@ -25,6 +26,7 @@ plan nest::build::tool (
   Boolean           $build                 = true,
   Boolean           $deploy                = false,
   Optional[String]  $emerge_default_opts   = undef,
+  Array[String]     $extra_volumes         = [],
   Optional[Numeric] $id                    = undef,
   Array[String]     $image_changes         = [],
   Boolean           $init                  = true,
@@ -38,6 +40,7 @@ plan nest::build::tool (
 ) {
   $repos_volume = "${container}-repos" # cached between builds
   $target = Target.new(name => $container, uri => "podman://${container}")
+  $extra_volume_args = $extra_volumes.map |$volume| { "--volume=${volume}" }.join(' ')
 
   if $deploy {
     if $registry_username {
@@ -73,6 +76,7 @@ plan nest::build::tool (
       --volume=/nest:/nest \
       ${qemu_user_targets.map |$arch| { "--volume=/usr/bin/qemu-${arch}:/usr/bin/qemu-${arch}:ro" }.join(' ')} \
       --volume=${repos_volume}:/var/db/repos \
+      ${extra_volume_args} \
       ${from_image} \
       sleep infinity
       | CREATE

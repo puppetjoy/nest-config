@@ -33,6 +33,7 @@ plan nest::build::pdk (
   String            $registry_password_var = 'NEST_REGISTRY_PASSWORD',
 ) {
   $target = Target.new(name => $container, uri => "podman://${container}")
+  $puppetcore_bundler_env = system::env('BUNDLE_RUBYGEMS___PUPPETCORE__PUPPET__COM')
 
   run_plan('nest::build::tool', {
     container             => $container,
@@ -41,6 +42,7 @@ plan nest::build::pdk (
     build                 => $build,
     deploy                => false,
     emerge_default_opts   => $emerge_default_opts,
+    extra_volumes         => ['/etc/gemrc:/etc/gemrc:ro'],
     id                    => $id,
     init                  => $init,
     makeopts              => $makeopts,
@@ -52,7 +54,9 @@ plan nest::build::pdk (
     run_command("podman start ${container}", 'localhost', 'Start build container')
 
     run_command('pdk new module --skip-interview build /module', $target, 'Create test module')
-    run_command('sh -c "cd /module && bundle install && pdk validate"', $target, 'Install gems and validate module')
+    run_command('sh -c "cd /module && bundle install && pdk validate"', $target, 'Install gems and validate module', _env_vars => {
+      'BUNDLE_RUBYGEMS___PUPPETCORE__PUPPET__COM' => $puppetcore_bundler_env,
+    })
     run_command('rm -rf /module && mkdir /module', $target, 'Clean up test module')
 
     run_command("podman stop ${container}", 'localhost', 'Stop build container')
