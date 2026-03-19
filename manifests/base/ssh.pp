@@ -132,6 +132,12 @@ class nest::base::ssh {
       require => $package_resource,
     ;
 
+    'sshd_config-HostKey-ed25519':
+      after => '^#?HostKey /etc/ssh/ssh_host_ecdsa_key$',
+      line  => 'HostKey /etc/ssh/ssh_host_ed25519_key',
+      match => '^#?HostKey /etc/ssh/ssh_host_ed25519_key$',
+    ;
+
     'sshd_config-ChallengeResponseAuthentication':
       line  => 'ChallengeResponseAuthentication no',
       match => '^#?ChallengeResponseAuthentication ',

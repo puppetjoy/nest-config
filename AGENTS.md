@@ -39,6 +39,7 @@
 ## Testing Guidelines
 - Prefer fast feedback: default to `pdk validate` during normal iteration.
 - Not every change needs tests. Do not add or update specs for straightforward manifest wiring, dependency, or ordering tweaks unless the user explicitly asks for coverage or the change fixes a demonstrated regression.
+- Do not add specs for private base class implementation details or internal resource/content changes. A private class change like a file line, package option, or service flag should stay untested unless the user explicitly asks for coverage or the change fixes a demonstrated regression in public behavior.
 - Be deliberate with unit tests: run focused specs for touched behavior using `--tests=...` instead of the full suite.
 - Discovery for this environment: `pdk test unit --parallel --tests=...` can still execute the full suite; for focused runs use `pdk test unit --tests=...` (without `--parallel`).
 - It is acceptable to rely on CI for full-suite coverage unless the user requests local full-suite execution.
@@ -47,13 +48,13 @@
 - Do not proactively replace lightweight class/relationship specs with deep resource/content assertions unless explicitly requested.
 - Add deeper resource/content assertions only when needed to lock down a real regression or critical ordering dependency.
 - Base classes under `manifests/base/` are private; prefer validating them via `nest` class inclusion/relationship tests.
-- If a private base class has fact-driven branching/guard behavior that needs direct assertions, add a dedicated class spec (for example `spec/classes/nest_base_<name>_spec.rb`) with focused expectations only.
 - For `on_supported_os`-driven example groups, use targeted RuboCop disables only when required (for example `RSpec/EmptyExampleGroup`).
 
 ## Private Base Classes
 - Classes under `manifests/base/` are private implementation details of `nest`.
 - Private base classes should not expose parameters.
 - If configurability is needed, expose it sparingly on `class nest` (`manifests/init.pp`) and let `nest` wire private classes internally.
+- Do not add direct specs for private base classes just to validate their internal resources; prefer testing public `nest` behavior and class relationships instead.
 
 ## Custom Facts
 - Custom facts do not need project namespacing; simple fact names are preferred.
