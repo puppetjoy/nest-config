@@ -22,6 +22,8 @@ lookup_options:
     merge: 'hash'
   nest::package_keywords:
     merge: 'hash'
+  nest::puppet_forge_key:
+    convert_to: 'Sensitive'
   nest::reset_filter_rules:
     merge: 'unique'
   nest::ssh_private_keys:

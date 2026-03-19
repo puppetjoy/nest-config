@@ -7,6 +7,7 @@ class nest (
   # Keys and user configuration
   String               $eyaml_public_key,
   Optional[Sensitive]  $eyaml_private_key = undef,
+  Optional[Sensitive]  $puppet_forge_key  = undef,
   Optional[String]     $pw_hash           = undef,
   Hash[String, String] $ssh_host_keys     = {},
   Hash[String, String] $ssh_private_keys  = {},

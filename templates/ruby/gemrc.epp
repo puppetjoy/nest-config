@@ -1,0 +1,4 @@
+<%- | String $puppet_forge_key | -%>
+:sources:
+  - "https://forge-key:<%= $puppet_forge_key %>@rubygems-puppetcore.puppet.com"
+  - "https://rubygems.org"

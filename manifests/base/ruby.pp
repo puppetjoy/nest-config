@@ -1,4 +1,12 @@
 class nest::base::ruby {
+  if $nest::puppet_forge_key {
+    $gemrc_content = Sensitive(epp('nest/ruby/gemrc.epp', {
+      'puppet_forge_key' => $nest::puppet_forge_key.unwrap,
+    }))
+  } else {
+    $gemrc_content = undef
+  }
+
   case $facts['os']['family'] {
     'Gentoo': {
       # Workaround ruby-lsp issue calling bundle with version argument
@@ -18,12 +26,22 @@ class nest::base::ruby {
           exec('/usr/bin/bundle.real', *args)
           | WRAPPER
       }
+
+      $gemrc_path = '/etc/gemrc'
+      $gemrc_owner = 'root'
+      $gemrc_group = 'root'
+      $gemrc_require = []
     }
 
     'Darwin': {
       package { 'ruby@3.4':
         ensure => installed,
       }
+
+      $gemrc_path = '/opt/homebrew/etc/gemrc'
+      $gemrc_owner = 'root'
+      $gemrc_group = 'wheel'
+      $gemrc_require = [Package['ruby@3.4']]
     }
 
     'windows': {
@@ -31,6 +49,26 @@ class nest::base::ruby {
         ensure   => installed,
         provider => 'cygwin',
       }
+
+      $gemrc_path = 'C:/tools/cygwin/etc/gemrc'
+      $gemrc_owner = 'Administrators'
+      $gemrc_group = 'None'
+      $gemrc_require = [
+        Package['ruby'],
+        Package['rubygems'],
+      ]
+    }
+  }
+
+  if $gemrc_content {
+    file { $gemrc_path:
+      ensure    => file,
+      owner     => $gemrc_owner,
+      group     => $gemrc_group,
+      mode      => '0644',
+      show_diff => false,
+      content   => $gemrc_content,
+      require   => $gemrc_require,
     }
   }
 }
