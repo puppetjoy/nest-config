@@ -63,7 +63,10 @@ class nest::gui::firefox {
     }
 
     'Darwin': {
-      package { 'firefox':
+      package { [
+        'firefox',
+        'firefoxpwa',
+      ]:
         ensure => installed,
       }
 

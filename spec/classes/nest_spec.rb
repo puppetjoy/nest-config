@@ -72,6 +72,7 @@ describe 'nest' do
     'nest::base::users',
     'nest::gui::firefox',
     'nest::gui::fonts',
+    'nest::gui::packages',
     'nest::gui::terminals',
     'nest::gui::vscode',
     'nest::tool::bolt',
