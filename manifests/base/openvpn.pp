@@ -115,8 +115,9 @@ class nest::base::openvpn {
         $openvpn_config = epp('nest/openvpn/config.epp')
       }
 
-      $openvpn_config_file  = "/etc/openvpn/${mode}/nest.conf"
-      $openvpn_service      = "openvpn-${mode}@nest"
+      $openvpn_config_file      = "/etc/openvpn/${mode}/nest.conf"
+      $openvpn_service_name     = "openvpn-${mode}@nest"
+      $openvpn_service_provider = undef
 
       file { "/etc/openvpn/${mode}":
         ensure  => directory,
@@ -126,19 +127,21 @@ class nest::base::openvpn {
     }
 
     'Darwin': {
-      $openvpn_package_name = 'openvpn'
-      $openvpn_package_opts = undef
-      $openvpn_config_file  = '/opt/homebrew/etc/openvpn/openvpn.conf'
-      $openvpn_config       = epp('nest/openvpn/config.epp')
-      $openvpn_service      = undef # XXX pending brew service provider
+      $openvpn_package_name     = 'openvpn'
+      $openvpn_package_opts     = undef
+      $openvpn_config_file      = '/opt/homebrew/etc/openvpn/openvpn.conf'
+      $openvpn_config           = epp('nest/openvpn/config.epp')
+      $openvpn_service_name     = 'openvpn'
+      $openvpn_service_provider = 'homebrew'
     }
 
     'windows': {
-      $openvpn_package_name = 'openvpn'
-      $openvpn_package_opts = ['--package-parameters', '"', '/Service', '/TapDriver', '"']
-      $openvpn_config_file  = 'C:/Program Files/OpenVPN/config-auto/nest.ovpn'
-      $openvpn_config       = epp('nest/openvpn/config.epp')
-      $openvpn_service      = 'OpenVPNService'
+      $openvpn_package_name     = 'openvpn'
+      $openvpn_package_opts     = ['--package-parameters', '"', '/Service', '/TapDriver', '"']
+      $openvpn_config_file      = 'C:/Program Files/OpenVPN/config-auto/nest.ovpn'
+      $openvpn_config           = epp('nest/openvpn/config.epp')
+      $openvpn_service_name     = 'OpenVPNService'
+      $openvpn_service_provider = undef
     }
   }
 
@@ -151,11 +154,9 @@ class nest::base::openvpn {
     mode    => '0644',
     content => $openvpn_config,
   }
-
-  if $openvpn_service {
-    service { $openvpn_service:
-      enable    => $nest::vpn or $nest::router,
-      subscribe => File[$openvpn_config_file],
-    }
+  ~>
+  service { $openvpn_service_name:
+    enable   => $nest::vpn or $nest::router,
+    provider => $openvpn_service_provider,
   }
 }
