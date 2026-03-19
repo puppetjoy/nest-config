@@ -13,6 +13,8 @@ exec podman run --rm -it -e TERM \
     -v "${PWD}:/module" \
     -v pdk-empty:/module/.resource_types:ro \
     -v /etc/eyaml:/etc/eyaml:ro \
+    -v /etc/gemrc:/etc/gemrc:ro \
+    -e BUNDLE_RUBYGEMS___PUPPETCORE__PUPPET__COM \
     nest/tools/pdk \
     pdk "$@"
 
