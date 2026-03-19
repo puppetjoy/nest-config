@@ -3,21 +3,28 @@ class nest::tool::codex {
     'Gentoo': {
       include 'nodejs'
 
-      file { '/opt/codex':
+      $codex_package = '@openai/codex'
+      $codex_target = '/opt/codex'
+
+      file { $codex_target:
         ensure => directory,
         mode   => '0755',
         owner  => 'root',
         group  => 'root',
       }
       ->
-      nodejs::npm { '@openai/codex':
-        ensure => 'latest',
-        target => '/opt/codex',
+      exec { 'npm_install_codex':
+        command     => "${nodejs::npm_path} install ${codex_package}@latest",
+        unless      => "${nodejs::npm_path} ls ${codex_package} --depth=0 >/dev/null 2>&1 && ${nodejs::npm_path} outdated ${codex_package} --depth=0 >/dev/null 2>&1",
+        cwd         => $codex_target,
+        environment => ['HOME=/root'],
+        provider    => shell,
+        require     => Class['nodejs'],
       }
       ->
       file { '/usr/local/bin/codex':
         ensure => link,
-        target => '/opt/codex/node_modules/@openai/codex/bin/codex.js',
+        target => "${codex_target}/node_modules/@openai/codex/bin/codex.js",
       }
 
       # Common utilities invoked by codex
