@@ -13,8 +13,8 @@ mod 'puppetlabs-sshkeys_core', '2.4.0'
 mod 'puppetlabs-zfs_core', '1.4.0'
 
 # Bolt modules
-#mod 'jtl-kubecm', '0.1.1'
-mod 'kubecm', :git => 'https://gitlab.joyfullee.me/joy/kubecm.git', :branch => 'main'
+mod 'joy-kubecm', '0.2.0'
+# mod 'kubecm', :git => 'https://gitlab.joyfullee.me/joy/kubecm.git', :branch => 'main'
 mod 'reboot', :git => 'https://gitlab.joyfullee.me/nest/forks/puppet-reboot.git', :branch => 'main'
 mod 'puppetlabs-ruby_task_helper', '0.6.1'
 
