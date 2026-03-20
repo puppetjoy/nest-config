@@ -44,6 +44,20 @@ class nest::tool::pdk {
         match => 'bundle\.update_lock!\(with: gem_overrides, local: all_deps_available\)',
       ;
 
+      # rubygems-puppetcore omits some gems from its compact index, so use the
+      # full index when PDK writes or refreshes Gemfile.lock.
+      'pdk-bundler-lock-full-index':
+        path  => "${pdk_gem_dir}/lib/pdk/util/bundler.rb",
+        line  => "            argv = ['lock', '--full-index']",
+        match => "argv = \\['lock'\\]",
+      ;
+
+      'pdk-bundler-update-lock-full-index':
+        path  => "${pdk_gem_dir}/lib/pdk/util/bundler.rb",
+        line  => "          argv = ['lock', \"--lockfile=#{gemfile_lock}\", '--update', '--full-index']",
+        match => "argv = \\['lock', .*'--update'\\]",
+      ;
+
       # Keep Bundler source credentials before with_unbundled_env clears them
       'pdk-bundler-source-env':
         path  => "${pdk_gem_dir}/lib/pdk/cli/exec/command.rb",
