@@ -18,11 +18,14 @@ mod 'joy-kubecm', '0.2.0'
 mod 'reboot', :git => 'https://gitlab.joyfullee.me/nest/forks/puppet-reboot.git', :branch => 'main'
 mod 'puppetlabs-ruby_task_helper', '0.6.1'
 
-# My modules
+# Nest modules
 mod 'nest', :git => 'https://gitlab.joyfullee.me/nest/config.git', :branch => :control_branch, :default_branch => 'main'
 mod 'private', :git => 'git@gitlab.joyfullee.me:nest/private.git', :branch => 'main'
 
 # Required by nest
+mod 'joy-homebrew', '0.1.0'
+# mod 'homebrew', :git => 'https://gitlab.joyfullee.me/joy/puppet-homebrew.git', :branch => 'main'
+mod 'portage', :git => 'https://gitlab.joyfullee.me/nest/forks/puppet-portage.git', :branch => 'main'
 mod 'puppet-archive', '7.1.0'
 mod 'puppet-dnsquery', '5.0.1'
 mod 'puppet-augeasproviders_sysctl', '3.1.0'
@@ -37,8 +40,6 @@ mod 'puppet-systemd', '7.1.0'
 mod 'puppetlabs-windows_env', '5.0.0'
 mod 'puppet-windows_firewall', '4.1.0'
 mod 'theforeman-puppet', '18.0.0'
-mod 'homebrew', :git => 'https://gitlab.joyfullee.me/joy/puppet-homebrew.git', :branch => 'main'
-mod 'portage', :git => 'https://gitlab.joyfullee.me/nest/forks/puppet-portage.git', :branch => 'main'
 
 # Required by puppetlabs-chocolatey and puppet-windows_firewall
 mod 'puppetlabs-registry', '5.0.1'
