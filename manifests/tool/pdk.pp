@@ -1,6 +1,11 @@
 class nest::tool::pdk {
+  $pdk_version               = '3.6.1'
+  $pdk_private_ruby_version  = '3.2.8'
+  $pdk_bundler_command_rb    = "/opt/puppetlabs/pdk/private/ruby/${pdk_private_ruby_version}/lib/ruby/gems/3.2.0/gems/pdk-${pdk_version}/lib/pdk/cli/exec/command.rb"
+  $pdk_private_ruby_etc_dir  = "/opt/puppetlabs/pdk/private/ruby/${pdk_private_ruby_version}/etc"
+  $pdk_private_ruby_gemrc    = "${pdk_private_ruby_etc_dir}/gemrc"
+
   if $facts['build'] == 'pdk' {
-    $pdk_version        = '3.6.1'
     $ruby_minor_version = $facts['ruby']['version'].regsubst('^(\d+\.\d+).*', '\1')
     $pdk_gem_dir        = "/usr/local/lib64/ruby/gems/${ruby_minor_version}.0/gems/pdk-${pdk_version}"
 
@@ -82,16 +87,52 @@ class nest::tool::pdk {
       }
 
       'Darwin': {
-        # Load the managed Puppet Core profile so Homebrew can pick up
-        # PUPPET_FORGE_TOKEN during the first Puppet run.
-        require nest::base::puppet
+        include nest::base::ruby
 
         homebrew::tap { 'nest/tap':
           source => 'https://gitlab.joyfullee.me/nest/tap.git',
         }
         ->
         package { 'pdk':
-          ensure => installed,
+          ensure  => installed,
+          require => Class['nest::base::puppet'], # for puppetcore profile
+        }
+
+        file { $pdk_private_ruby_etc_dir:
+          ensure  => directory,
+          mode    => '0755',
+          owner   => 'root',
+          group   => 'wheel',
+          require => Package['pdk'],
+        }
+
+        file { $pdk_private_ruby_gemrc:
+          ensure => link,
+          owner  => 'root',
+          group  => 'wheel',
+          target => $nest::base::ruby::gemrc_path,
+        }
+
+        file_line {
+          default:
+            require => Package['pdk'];
+
+          # PDK clears the environment before exec'ing Bundler. Preserve Bundler's
+          # authenticated source variables first so private gem sources still work.
+          'macos-pdk-bundler-source-env':
+            path  => $pdk_bundler_command_rb,
+            line  => "          bundler_source_env = ENV.select { |name, _value| name.start_with?('BUNDLE_RUBYGEMS_') }",
+            match => '# Bundler 2\.1\.0 or greater',
+          ;
+
+          # Restore those authenticated source variables inside with_unbundled_env so
+          # Bundler can still reach rubygems-puppetcore after PDK sanitizes ENV.
+          'macos-pdk-restore-bundler-unbundled-env':
+            path               => $pdk_bundler_command_rb,
+            line               => '            bundler_source_env.each { |name, value| ENV[name] = value }',
+            after              => '::Bundler\.with_unbundled_env do',
+            append_on_no_match => false,
+          ;
         }
       }
     }
