@@ -2,8 +2,6 @@ class nest::tool::pdk {
   $pdk_version               = '3.6.1'
   $pdk_private_ruby_version  = '3.2.8'
   $pdk_bundler_command_rb    = "/opt/puppetlabs/pdk/private/ruby/${pdk_private_ruby_version}/lib/ruby/gems/3.2.0/gems/pdk-${pdk_version}/lib/pdk/cli/exec/command.rb"
-  $pdk_private_ruby_etc_dir  = "/opt/puppetlabs/pdk/private/ruby/${pdk_private_ruby_version}/etc"
-  $pdk_private_ruby_gemrc    = "${pdk_private_ruby_etc_dir}/gemrc"
 
   if $facts['build'] == 'pdk' {
     $ruby_minor_version = $facts['ruby']['version'].regsubst('^(\d+\.\d+).*', '\1')
@@ -87,8 +85,6 @@ class nest::tool::pdk {
       }
 
       'Darwin': {
-        include nest::base::ruby
-
         homebrew::tap { 'nest/tap':
           source => 'https://gitlab.joyfullee.me/nest/tap.git',
         }
@@ -96,21 +92,6 @@ class nest::tool::pdk {
         package { 'pdk':
           ensure  => installed,
           require => Class['nest::base::puppet'], # for puppetcore profile
-        }
-
-        file { $pdk_private_ruby_etc_dir:
-          ensure  => directory,
-          mode    => '0755',
-          owner   => 'root',
-          group   => 'wheel',
-          require => Package['pdk'],
-        }
-
-        file { $pdk_private_ruby_gemrc:
-          ensure => link,
-          owner  => 'root',
-          group  => 'wheel',
-          target => $nest::base::ruby::gemrc_path,
         }
 
         file_line {
