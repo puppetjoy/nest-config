@@ -74,3 +74,57 @@ def ensure_module_defined(module_name)
 end
 
 # 'spec_overrides' from sync.yml will appear below this line
+require 'fileutils'
+require 'json'
+
+def self_fixture_module_name
+  JSON.parse(File.read(File.expand_path('../metadata.json', __dir__)))['name'].split('-').last
+end
+
+def prepare_filtered_self_fixture
+  repo_root = File.expand_path('..', __dir__)
+  fixtures_root = File.expand_path('fixtures', __dir__)
+  filtered_modules_root = File.join(fixtures_root, 'self_modules')
+  filtered_module_root = File.join(filtered_modules_root, self_fixture_module_name)
+
+  # Puppet treats .resource_types/*.pp as manifests when the module
+  # fixture is a plain symlink to the repo root. Build a minimal self
+  # fixture that only exposes real module content so rspec-puppet ignores
+  # generated Bolt stubs.
+  module_entries = %w[
+    data
+    environment.conf
+    files
+    functions
+    hiera.yaml
+    lib
+    manifests
+    metadata.json
+    plans
+    site.pp
+    tasks
+    templates
+    types
+  ]
+
+  FileUtils.rm_rf(filtered_module_root)
+  FileUtils.mkdir_p(filtered_module_root)
+
+  module_entries.each do |entry|
+    source = File.join(repo_root, entry)
+    target = File.join(filtered_module_root, entry)
+    next unless File.exist?(source)
+
+    FileUtils.ln_sf(source, target)
+  end
+
+  filtered_modules_root
+end
+
+RSpec.configure do |c|
+  c.module_path = [
+    prepare_filtered_self_fixture,
+    File.expand_path(File.join(__dir__, 'fixtures', 'modules')),
+  ].join(File::PATH_SEPARATOR)
+end
+
