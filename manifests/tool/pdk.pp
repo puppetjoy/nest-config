@@ -7,6 +7,8 @@ class nest::tool::pdk {
   if $facts['build'] == 'pdk' {
     $ruby_minor_version = $facts['ruby']['version'].regsubst('^(\d+\.\d+).*', '\1')
     $pdk_gem_dir        = "/usr/local/lib64/ruby/gems/${ruby_minor_version}.0/gems/pdk-${pdk_version}"
+    $build_bundler_rb   = "${pdk_gem_dir}/lib/pdk/util/bundler.rb"
+    $build_command_rb   = "${pdk_gem_dir}/lib/pdk/cli/exec/command.rb"
 
     package { 'pdk':
       ensure          => $pdk_version,
@@ -22,53 +24,19 @@ class nest::tool::pdk {
         ensure => file;
     }
 
-    file_line {
-      default:
-        require => Package['pdk'];
+    # PDK derives its packaged gem path from bundler_basedir/../../.., but
+    # our gem-installed layout already puts the active gem root at
+    # bundler_basedir. Without this, later PDK file lookups miss their target.
+    file_line { 'pdk-gem-path':
+      path    => "${pdk_gem_dir}/lib/pdk/util/ruby_version.rb",
+      line    => '[bundler_basedir]',
+      match   => 'absolute_path.*join.*bundler_basedir',
+      require => Package['pdk'];
+    }
 
-      # PDK derives its packaged gem path from bundler_basedir/../../.., but
-      # our gem-installed layout already puts the active gem root at
-      # bundler_basedir. Without this, later PDK file lookups miss their target.
-      'pdk-gem-path':
-        path  => "${pdk_gem_dir}/lib/pdk/util/ruby_version.rb",
-        line  => '[bundler_basedir]',
-        match => 'absolute_path.*join.*bundler_basedir',
-      ;
-
-      # PDK assumes its initial lock refresh can stay local because packaged
-      # installs should already have everything cached. That assumption breaks in
-      # this image, so allow the bootstrap json refresh to resolve remotely.
-      'pdk-bundler-install-remote':
-        path  => "${pdk_gem_dir}/lib/pdk/util/bundler.rb",
-        line  => 'update_lock!(only: { json: nil }, local: false)',
-        match => 'update_lock.*json.*local',
-      ;
-
-      # PDK later re-runs bundle lock --update --local during ensure_bundle!.
-      # That can fail even after bundle install has already fetched the needed
-      # gems, so force this lock refresh to resolve remotely as well.
-      'pdk-bundler-update-lock-remote':
-        path  => "${pdk_gem_dir}/lib/pdk/util/bundler.rb",
-        line  => '        bundle.update_lock!(with: gem_overrides, local: false)',
-        match => 'bundle\.update_lock!\(with: gem_overrides, local: all_deps_available\)',
-      ;
-
-      # PDK clears the environment before exec'ing Bundler. Preserve Bundler's
-      # authenticated source variables first so private gem sources still work.
-      'pdk-bundler-source-env':
-        path  => "${pdk_gem_dir}/lib/pdk/cli/exec/command.rb",
-        line  => "          bundler_source_env = ENV.select { |name, _value| name.start_with?('BUNDLE_RUBYGEMS_') }",
-        match => '# Bundler 2\.1\.0 or greater',
-      ;
-
-      # Restore those authenticated source variables inside with_unbundled_env so
-      # Bundler can still reach rubygems-puppetcore after PDK sanitizes ENV.
-      'pdk-restore-bundler-unbundled-env':
-        path               => "${pdk_gem_dir}/lib/pdk/cli/exec/command.rb",
-        line               => '            bundler_source_env.each { |name, value| ENV[name] = value }',
-        after              => '::Bundler\.with_unbundled_env do',
-        append_on_no_match => false,
-      ;
+    nest::tool::pdk::packaged_patch { 'pdk':
+      bundler_rb => $build_bundler_rb,
+      command_rb => $build_command_rb,
     }
   } else {
     require nest::base::puppet
@@ -95,44 +63,9 @@ class nest::tool::pdk {
           require => Class['nest::base::puppet'], # for puppetcore profile
         }
 
-        file_line {
-          default:
-            require => Package['pdk'];
-
-          # PDK assumes its initial lock refresh can stay local because packaged
-          # installs should already have everything cached. That assumption
-          # breaks once the active cache drifts ahead of the packaged bundle.
-          'macos-pdk-bundler-install-remote':
-            path  => $pdk_bundler_rb,
-            line  => 'update_lock!(only: { json: nil }, local: false)',
-            match => 'update_lock.*json.*local',
-          ;
-
-          # PDK later re-runs bundle lock --update --local during ensure_bundle!.
-          # That can fail even after bundle check succeeds, so force this lock
-          # refresh to resolve remotely as well.
-          'macos-pdk-bundler-update-lock-remote':
-            path  => $pdk_bundler_rb,
-            line  => '        bundle.update_lock!(with: gem_overrides, local: false)',
-            match => 'bundle\.update_lock!\(with: gem_overrides, local: all_deps_available\)',
-          ;
-
-          # PDK clears the environment before exec'ing Bundler. Preserve Bundler's
-          # authenticated source variables first so private gem sources still work.
-          'macos-pdk-bundler-source-env':
-            path  => $pdk_bundler_command_rb,
-            line  => "          bundler_source_env = ENV.select { |name, _value| name.start_with?('BUNDLE_RUBYGEMS_') }",
-            match => '# Bundler 2\.1\.0 or greater',
-          ;
-
-          # Restore those authenticated source variables inside with_unbundled_env so
-          # Bundler can still reach rubygems-puppetcore after PDK sanitizes ENV.
-          'macos-pdk-restore-bundler-unbundled-env':
-            path               => $pdk_bundler_command_rb,
-            line               => '            bundler_source_env.each { |name, value| ENV[name] = value }',
-            after              => '::Bundler\.with_unbundled_env do',
-            append_on_no_match => false,
-          ;
+        nest::tool::pdk::packaged_patch { 'macos-pdk':
+          bundler_rb => $pdk_bundler_rb,
+          command_rb => $pdk_bundler_command_rb,
         }
       }
     }
