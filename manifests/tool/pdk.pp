@@ -22,36 +22,43 @@ class nest::tool::pdk {
       default:
         require => Package['pdk'];
 
-      # The default path is bundler_basedir/../../.. which doesn't work
+      # PDK derives its packaged gem path from bundler_basedir/../../.., but
+      # our gem-installed layout already puts the active gem root at
+      # bundler_basedir. Without this, later PDK file lookups miss their target.
       'pdk-gem-path':
         path  => "${pdk_gem_dir}/lib/pdk/util/ruby_version.rb",
         line  => '[bundler_basedir]',
         match => 'absolute_path.*join.*bundler_basedir',
       ;
 
-      # Yes, install missing gems into the container image
+      # PDK assumes its initial lock refresh can stay local because packaged
+      # installs should already have everything cached. That assumption breaks in
+      # this image, so allow the bootstrap json refresh to resolve remotely.
       'pdk-bundler-install-remote':
         path  => "${pdk_gem_dir}/lib/pdk/util/bundler.rb",
         line  => 'update_lock!(only: { json: nil }, local: false)',
         match => 'update_lock.*json.*local',
       ;
 
-      # bundle check can succeed here even though bundle lock --local fails to
-      # resolve gems installed by the preceding bundle install.
+      # PDK later re-runs bundle lock --update --local during ensure_bundle!.
+      # That can fail even after bundle install has already fetched the needed
+      # gems, so force this lock refresh to resolve remotely as well.
       'pdk-bundler-update-lock-remote':
         path  => "${pdk_gem_dir}/lib/pdk/util/bundler.rb",
         line  => '        bundle.update_lock!(with: gem_overrides, local: false)',
         match => 'bundle\.update_lock!\(with: gem_overrides, local: all_deps_available\)',
       ;
 
-      # Keep Bundler source credentials before with_unbundled_env clears them
+      # PDK clears the environment before exec'ing Bundler. Preserve Bundler's
+      # authenticated source variables first so private gem sources still work.
       'pdk-bundler-source-env':
         path  => "${pdk_gem_dir}/lib/pdk/cli/exec/command.rb",
         line  => "          bundler_source_env = ENV.select { |name, _value| name.start_with?('BUNDLE_RUBYGEMS_') }",
         match => '# Bundler 2\.1\.0 or greater',
       ;
 
-      # Restore Bundler source credentials inside the unbundled_env block
+      # Restore those authenticated source variables inside with_unbundled_env so
+      # Bundler can still reach rubygems-puppetcore after PDK sanitizes ENV.
       'pdk-restore-bundler-unbundled-env':
         path               => "${pdk_gem_dir}/lib/pdk/cli/exec/command.rb",
         line               => '            bundler_source_env.each { |name, value| ENV[name] = value }',
