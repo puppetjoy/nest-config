@@ -67,11 +67,9 @@ define nest::lib::gitlab_runner (
 
   if $puppetcore {
     require nest::base::puppet
-    $puppetcore_bundler_env_name = nest::bundler_source_env($nest::base::puppet::puppetcore_gem_source)
-    $bundler_puppetcore_env_arg = "${puppetcore_bundler_env_name}=forge-key:${nest::puppet_forge_key.unwrap}"
 
     $puppetcore_args = [
-      '--env', $bundler_puppetcore_env_arg,
+      '--env', "BUNDLE_RUBYGEMS___PUPPETCORE__PUPPET__COM=forge-key:${nest::puppet_forge_key.unwrap}",
       '--env', "GEM_SOURCE_PUPPETCORE=${$nest::base::puppet::puppetcore_gem_source}",
       '--env', "PUPPET_FORGE_TOKEN=${nest::puppet_forge_key.unwrap}",
     ]

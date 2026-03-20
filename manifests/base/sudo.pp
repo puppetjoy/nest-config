@@ -22,6 +22,7 @@ class nest::base::sudo {
   $sudoer_content = @("SUDO")
     Defaults env_keep -= "HOME"
     Defaults env_keep += "KUBECONFIG SSH_AUTH_SOCK SSH_CLIENT SSH_CONNECTION TMUX TMUX_PANE XAUTHORITY"
+    Defaults env_keep += "BUNDLE_RUBYGEMS___PUPPETCORE__PUPPET__COM GEM_SOURCE_PUPPETCORE PUPPET_FORGE_TOKEN"
     ${sudoer_id} ALL=(ALL) NOPASSWD: ALL
     | SUDO
 

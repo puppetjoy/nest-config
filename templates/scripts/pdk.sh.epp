@@ -14,7 +14,7 @@ exec podman run --rm -it -e TERM \
     -v "${PWD}:/module" \
     -v pdk-empty:/module/.resource_types:ro \
     -v /etc/eyaml:/etc/eyaml:ro \
-    -e <%= nest::bundler_source_env($puppetcore_gem_source) %> \
+    -e BUNDLE_RUBYGEMS___PUPPETCORE__PUPPET__COM \
     -e GEM_SOURCE_PUPPETCORE \
     -e PUPPET_FORGE_TOKEN \
     nest/tools/pdk \
