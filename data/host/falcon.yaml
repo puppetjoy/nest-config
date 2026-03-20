@@ -60,6 +60,7 @@ nest::service::gitlab_runner::instances:
   runner:
     bolt: true
     podman: true
+    puppetcore: true
     qemu: true
 
   builder:
