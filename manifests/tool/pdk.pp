@@ -59,7 +59,6 @@ class nest::tool::pdk {
         append_on_no_match => false,
       ;
     }
-
   } else {
     require nest::base::puppet
 
