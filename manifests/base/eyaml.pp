@@ -26,7 +26,7 @@ class nest::base::eyaml {
           ],
         }
       } else {
-        $eyaml_private_key = ''
+        $eyaml_private_key = undef
       }
     }
 
@@ -48,7 +48,17 @@ class nest::base::eyaml {
         group => 'wheel',
       }
 
-      $eyaml_private_key = $nest::eyaml_private_key
+      if $nest::eyaml_private_key {
+        $eyaml_private_key = $nest::eyaml_private_key
+
+        exec { 'make-eyaml-key-readable':
+          command => "/bin/chmod +a 'user:${nest::user} allow read' /etc/eyaml/keys/private_key.pkcs7.pem",
+          unless  => "/bin/ls -le /etc/eyaml/keys/private_key.pkcs7.pem | /usr/bin/grep -F 'user:${nest::user} allow read'",
+          require => File['/etc/eyaml/keys/private_key.pkcs7.pem'],
+        }
+      } else {
+        $eyaml_private_key = undef
+      }
     }
 
     'windows': {
