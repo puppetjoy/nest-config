@@ -82,7 +82,13 @@ class nest::tool::pdk {
       }
 
       'Darwin': {
-        homebrew::tap { 'puppetlabs/puppet': }
+        # Load the managed Puppet Core profile so Homebrew can pick up
+        # PUPPET_FORGE_TOKEN during the first Puppet run.
+        require nest::base::puppet
+
+        homebrew::tap { 'nest/tap':
+          source => 'https://gitlab.joyfullee.me/nest/tap.git',
+        }
         ->
         package { 'pdk':
           ensure => installed,
