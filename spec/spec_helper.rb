@@ -82,9 +82,11 @@ def self_fixture_module_name
 end
 
 def prepare_filtered_self_fixture
+  return @prepared_filtered_self_fixture if @prepared_filtered_self_fixture
+
   repo_root = File.expand_path('..', __dir__)
   fixtures_root = File.expand_path('fixtures', __dir__)
-  filtered_modules_root = File.join(fixtures_root, 'self_modules')
+  filtered_modules_root = File.join(fixtures_root, 'self_modules', Process.pid.to_s)
   filtered_module_root = File.join(filtered_modules_root, self_fixture_module_name)
 
   # Puppet treats .resource_types/*.pp as manifests when the module
@@ -107,7 +109,6 @@ def prepare_filtered_self_fixture
     'types',
   ]
 
-  FileUtils.rm_rf(filtered_module_root)
   FileUtils.mkdir_p(filtered_module_root)
 
   module_entries.each do |entry|
@@ -118,7 +119,11 @@ def prepare_filtered_self_fixture
     FileUtils.ln_sf(source, target)
   end
 
-  filtered_modules_root
+  at_exit do
+    FileUtils.rm_rf(filtered_modules_root) if File.directory?(filtered_modules_root)
+  end
+
+  @prepared_filtered_self_fixture = filtered_modules_root
 end
 
 RSpec.configure do |c|
