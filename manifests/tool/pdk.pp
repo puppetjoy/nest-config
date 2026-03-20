@@ -36,6 +36,14 @@ class nest::tool::pdk {
         match => 'update_lock.*json.*local',
       ;
 
+      # bundle check can succeed here even though bundle lock --local fails to
+      # resolve gems installed by the preceding bundle install.
+      'pdk-bundler-update-lock-remote':
+        path  => "${pdk_gem_dir}/lib/pdk/util/bundler.rb",
+        line  => '        bundle.update_lock!(with: gem_overrides, local: false)',
+        match => 'bundle\.update_lock!\(with: gem_overrides, local: all_deps_available\)',
+      ;
+
       # Keep Bundler source credentials before with_unbundled_env clears them
       'pdk-bundler-source-env':
         path  => "${pdk_gem_dir}/lib/pdk/cli/exec/command.rb",
@@ -51,6 +59,7 @@ class nest::tool::pdk {
         append_on_no_match => false,
       ;
     }
+
   } else {
     require nest::base::puppet
 
