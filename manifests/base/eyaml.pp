@@ -30,6 +30,27 @@ class nest::base::eyaml {
       }
     }
 
+    'Darwin': {
+      $conf_dir = '/etc/eyaml'
+
+      package { 'hiera-eyaml':
+        ensure          => installed,
+        provider        => gem,
+        command         => '/opt/homebrew/bin/gem',
+        install_options => ['--bindir', '/opt/homebrew/bin'],
+        require         => Class['nest::base::ruby'],
+        before          => File[$conf_dir],
+      }
+
+      File {
+        mode  => '0644',
+        owner => 'root',
+        group => 'wheel',
+      }
+
+      $eyaml_private_key = $nest::eyaml_private_key
+    }
+
     'windows': {
       $conf_dir = 'C:/tools/cygwin/etc/eyaml'
 

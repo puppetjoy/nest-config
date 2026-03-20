@@ -38,6 +38,7 @@
 
 ## Testing Guidelines
 - Prefer fast feedback: default to `pdk validate` during normal iteration.
+- Never run multiple `pdk` commands at the same time. Run `pdk validate` and `pdk test ...` serially, and do not use tool-level parallelism for `pdk`.
 - Not every change needs tests. Do not add or update specs for straightforward manifest wiring, dependency, or ordering tweaks unless the user explicitly asks for coverage or the change fixes a demonstrated regression.
 - Do not add specs for private base class implementation details or internal resource/content changes. A private class change like a file line, package option, or service flag should stay untested unless the user explicitly asks for coverage or the change fixes a demonstrated regression in public behavior.
 - Be deliberate with unit tests: run focused specs for touched behavior using `--tests=...` instead of the full suite.

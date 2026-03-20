@@ -62,6 +62,7 @@ describe 'nest' do
   darwin = [
     'nest::base::autofs',
     'nest::base::certs',
+    'nest::base::eyaml',
     'nest::base::homebrew',
     'nest::base::openvpn',
     'nest::base::packages',
