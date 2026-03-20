@@ -91,20 +91,20 @@ def prepare_filtered_self_fixture
   # fixture is a plain symlink to the repo root. Build a minimal self
   # fixture that only exposes real module content so rspec-puppet ignores
   # generated Bolt stubs.
-  module_entries = %w[
-    data
-    environment.conf
-    files
-    functions
-    hiera.yaml
-    lib
-    manifests
-    metadata.json
-    plans
-    site.pp
-    tasks
-    templates
-    types
+  module_entries = [
+    'data',
+    'environment.conf',
+    'files',
+    'functions',
+    'hiera.yaml',
+    'lib',
+    'manifests',
+    'metadata.json',
+    'plans',
+    'site.pp',
+    'tasks',
+    'templates',
+    'types',
   ]
 
   FileUtils.rm_rf(filtered_module_root)
@@ -127,4 +127,3 @@ RSpec.configure do |c|
     File.expand_path(File.join(__dir__, 'fixtures', 'modules')),
   ].join(File::PATH_SEPARATOR)
 end
-

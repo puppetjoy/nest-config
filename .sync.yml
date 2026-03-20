@@ -56,7 +56,7 @@ spec/default_facts.yml:
 spec/spec_helper.rb:
   hiera_config_ruby: "File.expand_path(File.join(__FILE__, '../fixtures/hiera.yaml'))"
   spec_overrides:
-    - |
+    - |-
       require 'fileutils'
       require 'json'
 
@@ -74,20 +74,20 @@ spec/spec_helper.rb:
         # fixture is a plain symlink to the repo root. Build a minimal self
         # fixture that only exposes real module content so rspec-puppet ignores
         # generated Bolt stubs.
-        module_entries = %w[
-          data
-          environment.conf
-          files
-          functions
-          hiera.yaml
-          lib
-          manifests
-          metadata.json
-          plans
-          site.pp
-          tasks
-          templates
-          types
+        module_entries = [
+          'data',
+          'environment.conf',
+          'files',
+          'functions',
+          'hiera.yaml',
+          'lib',
+          'manifests',
+          'metadata.json',
+          'plans',
+          'site.pp',
+          'tasks',
+          'templates',
+          'types',
         ]
 
         FileUtils.rm_rf(filtered_module_root)
