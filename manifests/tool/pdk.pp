@@ -17,21 +17,38 @@ class nest::tool::pdk {
       '/usr/local/bin/pdk':
         ensure => file;
     }
-    ->
-    file_line {
-      # The default path is bundler_basedir/../../.. which doesn't work
-      'pdk-gem-path':
-        path  => "${pdk_gem_dir}/lib/pdk/util/ruby_version.rb",
-        line  => '[bundler_basedir]',
-        match => 'absolute_path.*join.*bundler_basedir',
-      ;
 
-      # Yes, install missing gems into the container image
-      'pdk-bundler-install-remote':
-        path  => "${pdk_gem_dir}/lib/pdk/util/bundler.rb",
-        line  => 'update_lock!(only: { json: nil }, local: false)',
-        match => 'update_lock.*json.*local',
-      ;
+    # The default path is bundler_basedir/../../.. which doesn't work
+    file_line { 'pdk-gem-path':
+      path    => "${pdk_gem_dir}/lib/pdk/util/ruby_version.rb",
+      line    => '[bundler_basedir]',
+      match   => 'absolute_path.*join.*bundler_basedir',
+      require => Package['pdk'],
+    }
+
+    # Yes, install missing gems into the container image
+    file_line { 'pdk-bundler-install-remote':
+      path    => "${pdk_gem_dir}/lib/pdk/util/bundler.rb",
+      line    => 'update_lock!(only: { json: nil }, local: false)',
+      match   => 'update_lock.*json.*local',
+      require => Package['pdk'],
+    }
+
+    # Keep Bundler source credentials before with_unbundled_env clears them
+    file_line { 'pdk-bundler-source-env':
+      path    => "${pdk_gem_dir}/lib/pdk/cli/exec/command.rb",
+      line    => "          bundler_source_env = ENV.select { |name, _value| name.start_with?('BUNDLE_RUBYGEMS_') }",
+      match   => '# Bundler 2\.1\.0 or greater',
+      require => Package['pdk'],
+    }
+    ->
+    # Restore Bundler source credentials inside the unbundled_env block
+    file_line { 'pdk-restore-bundler-unbundled-env':
+      path               => "${pdk_gem_dir}/lib/pdk/cli/exec/command.rb",
+      line               => '            bundler_source_env.each { |name, value| ENV[name] = value }',
+      after              => '::Bundler\.with_unbundled_env do',
+      append_on_no_match => false,
+      require            => Package['pdk'],
     }
   } else {
     require nest::base::puppet

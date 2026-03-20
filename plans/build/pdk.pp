@@ -34,12 +34,13 @@ plan nest::build::pdk (
 ) {
   $target = Target.new(name => $container, uri => "podman://${container}")
 
-  $puppetcore_gem_source = system::env('GEM_SOURCE_PUPPETCORE')
-  $puppet_forge_token    = system::env('PUPPET_FORGE_TOKEN')
-  $puppetcore_env_vars   = {
-    'BUNDLE_RUBYGEMS___PUPPETCORE__PUPPET__COM' => "forge-key:${puppet_forge_token}",
-    'GEM_SOURCE_PUPPETCORE'                     => $puppetcore_gem_source,
-    'PUPPET_FORGE_TOKEN'                        => $puppet_forge_token,
+  $puppetcore_gem_source       = system::env('GEM_SOURCE_PUPPETCORE')
+  $puppetcore_bundler_env_name = nest::bundler_source_env($puppetcore_gem_source)
+  $puppet_forge_token          = system::env('PUPPET_FORGE_TOKEN')
+  $puppetcore_env_vars         = {
+    $puppetcore_bundler_env_name => "forge-key:${puppet_forge_token}",
+    'GEM_SOURCE_PUPPETCORE'      => $puppetcore_gem_source,
+    'PUPPET_FORGE_TOKEN'         => $puppet_forge_token,
   }
 
   run_plan('nest::build::tool', {
@@ -60,7 +61,6 @@ plan nest::build::pdk (
   if $build {
     run_command("podman start ${container}", 'localhost', 'Start build container')
 
-    run_command('env', $target, 'Show Puppet Core environment', _env_vars => $puppetcore_env_vars)
     run_command('pdk new module --skip-interview build /module', $target, 'Create test module', _env_vars => $puppetcore_env_vars)
     run_command('sh -c "cd /module && bundle install && pdk validate"', $target, 'Install gems and validate module', _env_vars => $puppetcore_env_vars)
     run_command('rm -rf /module && mkdir /module', $target, 'Clean up test module')
