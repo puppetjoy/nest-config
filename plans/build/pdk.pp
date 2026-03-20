@@ -60,10 +60,7 @@ plan nest::build::pdk (
   if $build {
     run_command("podman start ${container}", 'localhost', 'Start build container')
 
-    # Only smoke-test module generation here. Let the next explicit bundle
-    # install/validate step own dependency resolution instead of PDK's implicit
-    # ensure_bundle! path during module creation.
-    run_command('pdk new module --skip-interview --skip-bundle-install build /module', $target, 'Create test module', _env_vars => $puppetcore_env_vars)
+    run_command('pdk new module --skip-interview build /module', $target, 'Create test module', _env_vars => $puppetcore_env_vars)
     run_command('sh -c "cd /module && bundle install && pdk validate"', $target, 'Install gems and validate module', _env_vars => $puppetcore_env_vars)
     run_command('rm -rf /module && mkdir /module', $target, 'Clean up test module')
 
