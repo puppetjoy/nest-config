@@ -47,7 +47,10 @@ class nest::tool::codex {
       }
 
       # Development tooling for projects built in codex
-      package { 'uv':
+      package { [
+        'node',
+        'uv',
+      ]:
         ensure => installed,
       }
     }
