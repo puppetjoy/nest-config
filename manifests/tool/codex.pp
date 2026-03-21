@@ -26,11 +26,13 @@ class nest::tool::codex {
         target => "${codex_target}/node_modules/@openai/codex/bin/codex.js",
       }
 
-      # Common utilities invoked by codex
-      nest::lib::package { [
-        'dev-python/uv',
-        'sys-apps/ripgrep',
-      ]:
+      # Common utility invoked by codex
+      nest::lib::package { 'sys-apps/ripgrep':
+        ensure => present,
+      }
+
+      # Development tooling for projects built in codex
+      nest::lib::package { 'dev-python/uv':
         ensure => present,
       }
     }
@@ -42,6 +44,11 @@ class nest::tool::codex {
 
       package { 'codex-app':
         ensure => installed, # auto updates
+      }
+
+      # Development tooling for projects built in codex
+      package { 'uv':
+        ensure => installed,
       }
     }
   }
