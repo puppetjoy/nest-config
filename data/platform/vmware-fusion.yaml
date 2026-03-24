@@ -1,4 +1,5 @@
 ---
+nest::kernel_tag: 'stable/v6.18.19'
 nest::kernel_config:
   CONFIG_VSOCKETS: m
   CONFIG_VMWARE_VMCI_VSOCKETS: m
