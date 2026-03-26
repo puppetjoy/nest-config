@@ -161,7 +161,9 @@ class nest::base::puppet {
       }
 
       if $nest::puppet {
-        $puppet_runmode = 'service'
+        # macOS 26.x can crash the long-lived agent's forked child during DNS resolution.
+        # Use the module's cron runmode so each agent run starts in a fresh process.
+        $puppet_runmode = 'cron'
       } else {
         $puppet_runmode = 'none'
       }
