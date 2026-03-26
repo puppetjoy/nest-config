@@ -9,6 +9,7 @@ class nest::base::ssh {
       $package_name     = 'net-misc/openssh'
       $package_provider = undef
       $sshdir           = '/etc/ssh'
+      $sshdir_unix      = '/etc/ssh'
       $ssh_config_file  = "${sshdir}/ssh_config.d/10-nest.conf"
       $service_name     = 'sshd'
       $service_ensure   = undef
@@ -53,6 +54,7 @@ class nest::base::ssh {
       $package_name     = undef
       $package_provider = undef
       $sshdir           = '/etc/ssh'
+      $sshdir_unix      = '/etc/ssh'
       $ssh_config_file  = "${sshdir}/ssh_config.d/10-nest.conf"
       $service_name     = 'com.openssh.sshd'
       $service_ensure   = running
@@ -68,6 +70,7 @@ class nest::base::ssh {
       $package_name     = 'openssh'
       $package_provider = 'cygwin'
       $sshdir           = 'C:/tools/cygwin/etc'
+      $sshdir_unix      = '/etc'
       $ssh_config_file  = "${sshdir}/ssh_config"
       $service_name     = 'cygsshd'
       $service_ensure   = running
@@ -133,9 +136,9 @@ class nest::base::ssh {
     ;
 
     'sshd_config-HostKey-ed25519':
-      after => '^#?HostKey /etc/ssh/ssh_host_ecdsa_key$',
-      line  => 'HostKey /etc/ssh/ssh_host_ed25519_key',
-      match => '^#?HostKey /etc/ssh/ssh_host_ed25519_key$',
+      after => '^#?HostKey /etc(?:/ssh)?/ssh_host_ecdsa_key$',
+      line  => "HostKey ${sshdir_unix}/ssh_host_ed25519_key",
+      match => '^#?HostKey /etc(?:/ssh)?/ssh_host_ed25519_key$',
     ;
 
     'sshd_config-ChallengeResponseAuthentication':
