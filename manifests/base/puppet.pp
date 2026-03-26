@@ -174,6 +174,7 @@ class nest::base::puppet {
         client_package       => 'openvox8-agent',
         package_provider     => 'homebrew',
         dns_alt_names        => $dns_alt_names,
+        cron_cmd             => '/usr/bin/env LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 /opt/puppetlabs/bin/puppet agent --config /etc/puppetlabs/puppet/puppet.conf --onetime --no-daemonize',
         runmode              => $puppet_runmode,
         unavailable_runmodes => ['systemd.timer'],
       }
