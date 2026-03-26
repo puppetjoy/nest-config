@@ -136,9 +136,9 @@ class nest::base::ssh {
     ;
 
     'sshd_config-HostKey-ed25519':
-      after => '^#?HostKey /etc(?:/ssh)?/ssh_host_ecdsa_key$',
+      after => "^#?HostKey ${sshdir_unix}/ssh_host_ecdsa_key$",
       line  => "HostKey ${sshdir_unix}/ssh_host_ed25519_key",
-      match => '^#?HostKey /etc(?:/ssh)?/ssh_host_ed25519_key$',
+      match => "^#?HostKey ${sshdir_unix}/ssh_host_ed25519_key$",
     ;
 
     'sshd_config-ChallengeResponseAuthentication':
