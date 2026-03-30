@@ -113,7 +113,6 @@ describe 'nest' do
     'nest::gui::fonts',
     'nest::gui::gnome',
     'nest::gui::greetd',
-    'nest::gui::input',
     'nest::gui::media',
     'nest::gui::packages',
     'nest::gui::plasma',
