@@ -40,14 +40,10 @@ nest::service::gitlab_runner::instances:
     qemu: true
 
   chromium:
-    bolt: true
-    podman: true
-    qemu: true
+    ensure: absent
 
   ghc:
-    bolt: true
-    podman: true
-    qemu: true
+    ensure: absent
 
 nest::service::llama_server::instances:
   util:

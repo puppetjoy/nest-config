@@ -1,6 +1,4 @@
 ---
 nest::service::gitlab_runner::instances:
   chromium:
-    bolt: true
-    podman: true
-    qemu: true
+    ensure: absent

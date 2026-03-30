@@ -37,7 +37,7 @@ case $build in
         puppet_environment=${branch//[^a-zA-Z0-9_]/_}
         extra_args=("hostname=${name}" "puppet_environment=${puppet_environment}")
         ;;
-    bolt|chromium|pdk)
+    bolt|pdk)
         extra_args=("cpu=${name}")
         ;;
     llama.cpp|r10k)
