@@ -1,4 +1,0 @@
----
-nest::service::gitlab_runner::instances:
-  chromium:
-    ensure: absent

@@ -39,12 +39,6 @@ nest::service::gitlab_runner::instances:
     puppetcore: true
     qemu: true
 
-  chromium:
-    ensure: absent
-
-  ghc:
-    ensure: absent
-
 nest::service::llama_server::instances:
   util:
     # https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512-GGUF

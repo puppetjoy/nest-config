@@ -70,9 +70,6 @@ nest::service::gitlab_runner::instances:
     puppetcore: true
     qemu: true
 
-  chromium:
-    ensure: absent
-
   ghc:
     bolt: true
     podman: true
