@@ -26,8 +26,11 @@ class nest::tool::codex {
         target => "${codex_target}/node_modules/@openai/codex/bin/codex.js",
       }
 
-      # Common utility invoked by codex
-      nest::lib::package { 'sys-apps/ripgrep':
+      # Codex dependencies
+      nest::lib::package { [
+        'sys-apps/bubblewrap',
+        'sys-apps/ripgrep',
+      ]:
         ensure => present,
       }
 
