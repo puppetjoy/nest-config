@@ -178,6 +178,7 @@ class nest::base::portage {
   # Package environments and properties
   #
 
+  # Used by nest::lib::package
   file { '/etc/portage/env/no-buildpkg.conf':
     mode    => '0644',
     owner   => 'root',
@@ -185,19 +186,19 @@ class nest::base::portage {
     content => "FEATURES=\"-buildpkg\"\n",
   }
 
-  # Workaround build problems when using distcc
-  file { '/etc/portage/env/no-distcc.conf':
-    mode    => '0644',
-    owner   => 'root',
-    group   => 'root',
-    content => "FEATURES=\"-distcc\"\n",
-  }
-  ->
-  package_env { [
-    'sci-libs/lapack',  # fails to verify fortran
-    'sys-apps/systemd', # fails to build systemd-boot
-  ]:
-    env => 'no-distcc.conf',
+  # Use lighter debug flags on big packages
+  $cflags_light_debug = regsubst($facts['portage_cflags'], '(\s?)(-g(gdb\d?)?)(\s|$)', '\1\21\4')
+  if $cflags_light_debug != $facts['portage_cflags'] {
+    file { '/etc/portage/env/light-debug.conf':
+      mode    => '0644',
+      owner   => 'root',
+      group   => 'root',
+      content => "CFLAGS=\"${cflags_light_debug}\"\nCXXFLAGS=\"\${CFLAGS}\"\n",
+    }
+    ->
+    package_env { 'net-libs/webkit-gtk':
+      env => 'light-debug.conf',
+    }
   }
 
   # xvid incorrectly passes `-mcpu` as `-mtune` which doesn't accept `+crypto`
@@ -212,39 +213,6 @@ class nest::base::portage {
     ->
     package_env { 'media-libs/xvid':
       env => 'no-crypto.conf',
-    }
-  }
-
-  # Workaround https://bugs.gentoo.org/918897
-  # Also force crypto extensions off (which should be the default)
-  if $facts['profile']['architecture'] == 'arm64' {
-    $cflags_disable_crypto = regsubst($facts['portage_cflags'], '(cortex-a72)', '\\1+nocrypto')
-
-    nest::lib::package_env { 'www-client/chromium':
-      env => {
-        'CFLAGS'   => "${cflags_disable_crypto} -fuse-ld=lld",
-        'CXXFLAGS' => '${CFLAGS}', # lint:ignore:single_quote_string_with_variables
-        'LDFLAGS'  => "${facts['portage_ldflags']} -fuse-ld=lld -Wl,--undefined-version",
-      },
-    }
-  }
-
-  # Workaround https://bugs.gentoo.org/666560
-  if $facts['is_container'] and !$facts['profile']['architecture'] == 'amd64' {
-    file { '/etc/portage/env/no-sandbox.conf':
-      mode    => '0644',
-      owner   => 'root',
-      group   => 'root',
-      content => "FEATURES=\"-sandbox\"\n",
-    }
-    ->
-    package_env { [
-      'app-containers/conmon',
-      'app-containers/podman',
-      'sys-cluster/kubectl',
-      'sys-libs/glibc',
-    ]:
-      env => 'no-sandbox.conf',
     }
   }
 
