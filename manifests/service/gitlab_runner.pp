@@ -57,11 +57,10 @@ class nest::service::gitlab_runner (
       before  => $runner_before,
       notify  => $runner_notify,
       *       => {
-        dns  => $dns,
-        host => $host,
-      } + $attributes + {
+        dns    => $dns,
         ensure => $runner_ensure,
-      },
+        host   => $host,
+      } + $attributes,
     }
   }
 

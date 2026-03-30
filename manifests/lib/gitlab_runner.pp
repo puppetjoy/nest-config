@@ -120,30 +120,27 @@ define nest::lib::gitlab_runner (
     | CMD
 
   unless $facts['is_container'] {
+    unless defined(Exec['gitlab-runner-unregister-all']) {
+      exec { 'gitlab-runner-unregister-all':
+        command     => $unregister_command,
+        refreshonly => true,
+      }
+    }
+
+    file { "/srv/gitlab-runner/.register-${name}.sh":
+      ensure  => $ensure,
+      mode    => '0600',
+      owner   => 'root',
+      group   => 'root',
+      content => "${register_command}\n",
+      notify  => Exec['gitlab-runner-unregister-all'],
+    }
+
     if $ensure == present {
-      unless defined(Exec['gitlab-runner-unregister-all']) {
-        exec { 'gitlab-runner-unregister-all':
-          command     => $unregister_command,
-          refreshonly => true,
-        }
-      }
-
-      file { "/srv/gitlab-runner/.register-${name}.sh":
-        mode    => '0600',
-        owner   => 'root',
-        group   => 'root',
-        content => "${register_command}\n",
-        notify  => Exec['gitlab-runner-unregister-all'],
-      }
-
       exec { "gitlab-runner-register-${name}":
         command     => "/bin/sh /srv/gitlab-runner/.register-${name}.sh",
         refreshonly => true,
         subscribe   => Exec['gitlab-runner-unregister-all'],
-      }
-    } else {
-      exec { 'gitlab-runner-unregister-all':
-        command => "${unregister_command}; rm -f /srv/gitlab-runner/.register-${name}.sh",
       }
     }
   }
