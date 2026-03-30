@@ -1,0 +1,3 @@
+---
+nest::classes:
+  - '--nest::gui::gnome'

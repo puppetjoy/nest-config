@@ -154,11 +154,6 @@ class nest::base::systemd {
     }
   }
 
-  $suspend_state = $facts['profile']['platform'] ? {
-    'pinebookpro' => 'SuspendState=freeze',   # TF-A doesn't support deep sleep yet
-    default       => '#SuspendState=mem standby freeze',
-  }
-
   file_line {
     default:
       notify => Nest::Lib::Systemd_reload['systemd'],
@@ -177,12 +172,6 @@ class nest::base::systemd {
       path  => '/etc/systemd/sleep.conf',
       line  => 'AllowHibernation=no',
       match => '^#?AllowHibernation=',
-    ;
-
-    'sleep.conf-SuspendState':
-      path  => '/etc/systemd/sleep.conf',
-      line  => $suspend_state,
-      match => '^#?SuspendState',
     ;
   }
 

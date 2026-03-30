@@ -4,9 +4,7 @@ class nest::base::zfs {
 
   if $nest::zfs {
     if $nest::zfs == 'fork' {
-      $zfs_kmod_ensure = absent
-      $zfs_binpkg      = false
-      $zfs_env         = {
+      $zfs_env = {
         'EGIT_OVERRIDE_REPO_OPENZFS_ZFS'   => 'https://gitlab.joyfullee.me/nest/forks/zfs.git',
         'EGIT_OVERRIDE_BRANCH_OPENZFS_ZFS' => 'main',
       }
@@ -16,26 +14,19 @@ class nest::base::zfs {
         before          => Nest::Lib::Package['sys-fs/zfs'],
       }
     } else {
-      $zfs_kmod_ensure = latest
-      $zfs_binpkg      = true
-      $zfs_env         = undef
+      $zfs_env = undef
 
       package_accept_keywords { ['sys-fs/zfs', 'sys-fs/zfs-kmod']:
         accept_keywords => '~*',
-        before          => Nest::Lib::Package['sys-fs/zfs-kmod'],
+        before          => Nest::Lib::Package['sys-fs/zfs'],
       }
     }
 
-    nest::lib::package { 'sys-fs/zfs-kmod':
-      ensure  => $zfs_kmod_ensure,
-      binpkg  => false,
-      require => Class['nest::base::kernel'],
-    }
-    ->
     nest::lib::package { 'sys-fs/zfs':
-      ensure => latest,
-      binpkg => $zfs_binpkg,
-      env    => $zfs_env,
+      ensure  => latest,
+      binpkg  => false,
+      env     => $zfs_env,
+      require => Class['nest::base::kernel'],
     }
 
     $zfs_mount_activate_be_override = @(EOF)

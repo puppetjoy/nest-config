@@ -24,8 +24,7 @@ This module defines three main stages to progressively build server and workstat
 | ARM64  | [Cortex-A53](https://en.wikipedia.org/wiki/ARM_Cortex-A53)               | [Pine64](https://pine64.org/)                                                       |
 |        |                                                                          | [Radxa Zero](https://wiki.radxa.com/Zero)                                           |
 |        |                                                                          | [SOPINE](https://pine64.org/devices/sopine/)                                        |
-|        | [Cortex-A72](https://en.wikipedia.org/wiki/ARM_Cortex-A72)               | [Pinebook Pro](https://pine64.org/devices/pinebook_pro/)                            |
-|        |                                                                          | [Raspberry Pi 4 / 400](https://www.raspberrypi.com/products/raspberry-pi-400-unit/) |
+|        | [Cortex-A72](https://en.wikipedia.org/wiki/ARM_Cortex-A72)               | [Raspberry Pi 4 / 400](https://www.raspberrypi.com/products/raspberry-pi-400-unit/) |
 |        |                                                                          | [Raspberry Pi 5 / 500](https://www.raspberrypi.com/products/raspberry-pi-500-plus/) |
 |        |                                                                          | [Rock 4](https://wiki.radxa.com/Rock4)                                              |
 |        |                                                                          | [Rock 5](https://wiki.radxa.com/Rock5)                                              |

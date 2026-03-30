@@ -6,6 +6,7 @@ nest::classes:
   - 'nest::gui::dunst'
   - 'nest::gui::firefox'
   - 'nest::gui::fonts'
+  - 'nest::gui::gnome'
   - 'nest::gui::greetd'
   - 'nest::gui::input'
   - 'nest::gui::media'
@@ -17,7 +18,6 @@ nest::classes:
   - 'nest::gui::vscode'
   - 'nest::gui::xmonad'
   - 'nest::gui::xorg'
-  - 'nest::gui::zoom'
   - 'nest::service::bluetooth'
   - 'nest::service::pipewire'
   - 'nest::tool::bolt'
@@ -33,7 +33,6 @@ nest::package_keywords:
   gui-libs/greetd: {}
   gui-libs/wlroots: {}
   gui-wm/sway: {}
-  net-im/zoom: {}
   www-client/firefox: {}
   x11-terms/alacritty: {}
 

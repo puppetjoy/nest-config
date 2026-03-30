@@ -1,0 +1,11 @@
+---
+nest::classes:
+  - '--nest::gui::bitwarden'
+  - '--nest::gui::cursor'
+  - '--nest::gui::dunst'
+  - '--nest::gui::greetd'
+  - '--nest::gui::plasma'
+  - '--nest::gui::sway'
+  - '--nest::gui::terminals'
+  - '--nest::gui::xmonad'
+  - '--nest::gui::xorg'
