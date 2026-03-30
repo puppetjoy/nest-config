@@ -229,6 +229,10 @@ nest::package_keywords:
   dev-ruby/tty-command:
     version: '~0.10.1'
 
+  # Patched for terminfo regression
+  sys-libs/ncurses:
+    version: '~6.5_p20251220'
+
 nest::arm_firmware_tag: 'arm/v2.12.0'
 nest::opensbi_tag: 'riscv-software-src/v1.7'
 nest::uboot_tag: 'u-boot/v2025.10'
