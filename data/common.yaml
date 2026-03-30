@@ -229,6 +229,14 @@ nest::package_keywords:
   dev-ruby/tty-command:
     version: '~0.10.1'
 
+  # Workaround build failure in current stable
+  net-fs/samba:
+    version: '~4.23.6'
+  sys-libs/tdb:
+    version: '~1.4.15'
+  sys-libs/tevent:
+    version: '~0.17.1'
+
   # Patched for terminfo regression
   sys-libs/ncurses:
     version: '~6.5_p20251220'
