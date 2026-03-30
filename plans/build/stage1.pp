@@ -122,7 +122,7 @@ plan nest::build::stage1 (
     # Resolve circular dependencies
     if $variant == 'workstation' and !$refresh {
       run_command('emerge --oneshot --verbose media-libs/harfbuzz media-libs/freetype media-libs/mesa media-libs/tiff', $target, 'Resolve media circular dependencies', _env_vars => {
-        'USE' => '-cairo -harfbuzz -truetype -vaapi -webp',
+        'USE' => '-avif -cairo -gdk-pixbuf -harfbuzz -sysprof -truetype -vaapi -webp',
       })
       run_command('emerge --oneshot --verbose x11-misc/xdg-utils', $target, 'Resolve Plasma circular dependencies', _env_vars => {
         'USE' => '-plasma',
