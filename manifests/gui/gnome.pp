@@ -1,4 +1,6 @@
 class nest::gui::gnome {
+  contain nest::gui::keyboard
+
   # Mutter has an unexpressed dependency on rst2man
   nest::lib::package { 'dev-python/docutils':
     ensure => installed,
@@ -29,12 +31,6 @@ class nest::gui::gnome {
     system-db:local
     | END
 
-  $gdm_profile_content = @("END")
-    user-db:user
-    system-db:gdm
-    file-db:/usr/share/gdm/greeter-dconf-defaults
-    | END
-
   exec { 'dconf-update':
     command     => '/usr/bin/dconf update',
     refreshonly => true,
@@ -59,14 +55,12 @@ class nest::gui::gnome {
       mode   => '0755',
     ;
 
-    '/etc/dconf/db/gdm.d':
-      ensure => directory,
-      mode   => '0755',
+    '/etc/dconf/db/gdm.d/00-input-sources':
+      ensure => absent,
     ;
 
-    '/etc/dconf/db/gdm.d/00-input-sources':
-      mode    => '0644',
-      content => $input_sources_content,
+    '/etc/dconf/db/gdm.d':
+      ensure => absent,
     ;
 
     '/etc/dconf/db/local.d':
@@ -85,8 +79,7 @@ class nest::gui::gnome {
     ;
 
     '/etc/dconf/profile/gdm':
-      mode    => '0644',
-      content => $gdm_profile_content,
+      ensure => absent,
     ;
 
     '/etc/dconf/profile/user':
