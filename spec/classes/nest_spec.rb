@@ -146,6 +146,8 @@ describe 'nest' do
     'nest::tool::qemu',
   ]
 
+  mobile_should_not = workstation + ['nest::base::wifi']
+
   on_supported_os.each do |os, facts|
     case os
     when %r{^gentoo-}
@@ -169,7 +171,7 @@ describe 'nest' do
             facts.merge({ profile: { variant: 'mobile' } })
           end
 
-          it_should_and_should_not_contain_classes(mobile, workstation)
+          it_should_and_should_not_contain_classes(mobile, mobile_should_not)
         end
 
         context 'building stage0' do # rubocop:disable RSpec/EmptyExampleGroup
@@ -200,7 +202,7 @@ describe 'nest' do
               facts.merge({ build: 'stage1', profile: { variant: 'mobile' } })
             end
 
-            it_should_and_should_not_contain_classes(mobile, workstation)
+            it_should_and_should_not_contain_classes(mobile, mobile_should_not)
           end
         end
 
@@ -224,7 +226,7 @@ describe 'nest' do
               facts.merge({ build: 'stage2', profile: { variant: 'mobile' } })
             end
 
-            it_should_and_should_not_contain_classes(mobile, workstation)
+            it_should_and_should_not_contain_classes(mobile, mobile_should_not)
           end
         end
 
@@ -252,7 +254,7 @@ describe 'nest' do
               facts.merge({ build: 'stage3', profile: { variant: 'mobile' } })
             end
 
-            it_should_and_should_not_contain_classes(mobile, workstation)
+            it_should_and_should_not_contain_classes(mobile, mobile_should_not)
           end
         end
 
