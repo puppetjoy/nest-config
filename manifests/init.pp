@@ -81,10 +81,11 @@ class nest (
   Boolean $swap_alt_win = false,
 
   # Output settings
-  Float            $gui_scaling_factor  = 1.0,
-  Float            $text_scaling_factor = $gui_scaling_factor,
-  Array[String]    $monitor_layout      = [],
-  Optional[String] $primary_monitor     = undef,
+  Float                   $gui_scaling_factor  = 1.0,
+  Optional[String]        $primary_monitor     = undef,
+  Nest::SubpixelRendering $subpixel_rendering  = rgb,
+  Float                   $text_scaling_factor = $gui_scaling_factor,
+  Array[String]           $monitor_layout      = [],
 
   # Other nest classes
   Array[String] $classes = [],

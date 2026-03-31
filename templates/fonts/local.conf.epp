@@ -3,11 +3,13 @@
 <fontconfig>
   <match target="font">
     <edit name="rgba" mode="assign">
-      <const>rgb</const>
+      <const><%= $subpixel_rendering %></const>
     </edit>
+<% if $subpixel_rendering != 'none' { -%>
 
     <edit name="lcdfilter" mode="assign">
       <const>lcddefault</const>
     </edit>
+<% } -%>
   </match>
 </fontconfig>

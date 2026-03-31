@@ -20,6 +20,7 @@ class nest::gui::fonts {
 
       nest::lib::package { [
         'media-fonts/fontawesome',
+        'media-fonts/hack',
         'media-fonts/liberation-fonts', # primarily for GitHub, tbh
         'media-fonts/noto-emoji',
       ]:
@@ -55,13 +56,14 @@ class nest::gui::fonts {
   }
 
   # The intention here is to express configurations that are related to the
-  # system, not necessarily my preference.  In this case, all of my systems are
-  # RGB LCDs; however, this could be made configurable in Hiera with some
-  # module parameters.  User preference type configurations, like hinting,
-  # belong in the user's home directory (~/.config/fontconfig/fonts.conf)
+  # system, not necessarily my preference. User preference type
+  # configurations, like hinting, belong in the user's home directory
+  # (~/.config/fontconfig/fonts.conf)
   if $fontconfig_local_conf {
     file { $fontconfig_local_conf:
-      source => 'puppet:///modules/nest/fonts/local.conf',
+      content => epp('nest/fonts/local.conf.epp', {
+        subpixel_rendering => $nest::subpixel_rendering,
+      }),
     }
   }
 }
