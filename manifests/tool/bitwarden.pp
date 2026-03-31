@@ -1,4 +1,4 @@
-class nest::gui::bitwarden {
+class nest::tool::bitwarden {
   include 'nodejs'
 
   # Don't prune USE flags config set by nodejs module

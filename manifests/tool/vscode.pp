@@ -1,4 +1,4 @@
-class nest::gui::vscode {
+class nest::tool::vscode {
   case $facts['os']['family'] {
     'Gentoo': {
       if $facts['profile']['architecture'] in ['amd64', 'arm64'] {

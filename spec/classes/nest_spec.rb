@@ -75,10 +75,10 @@ describe 'nest' do
     'nest::gui::fonts',
     'nest::gui::packages',
     'nest::gui::terminals',
-    'nest::gui::vscode',
     'nest::tool::bolt',
     'nest::tool::codex',
     'nest::tool::pdk',
+    'nest::tool::vscode',
   ]
 
   windows = [
@@ -105,7 +105,6 @@ describe 'nest' do
   ]
 
   workstation = [
-    'nest::gui::bitwarden',
     'nest::gui::cups',
     'nest::gui::cursor',
     'nest::gui::dunst',
@@ -117,15 +116,16 @@ describe 'nest' do
     'nest::gui::plasma',
     'nest::gui::sway',
     'nest::gui::terminals',
-    'nest::gui::vscode',
     'nest::gui::xmonad',
     'nest::gui::xorg',
     'nest::service::bluetooth',
     'nest::service::pipewire',
+    'nest::tool::bitwarden',
     'nest::tool::bolt',
     'nest::tool::minicom',
     'nest::tool::pdk',
     'nest::tool::qemu',
+    'nest::tool::vscode',
   ]
 
   mobile = [
@@ -136,13 +136,8 @@ describe 'nest' do
     'nest::gui::media',
     'nest::gui::packages',
     'nest::gui::terminals',
-    'nest::gui::vscode',
     'nest::service::bluetooth',
     'nest::service::pipewire',
-    'nest::tool::bolt',
-    'nest::tool::minicom',
-    'nest::tool::pdk',
-    'nest::tool::qemu',
   ]
 
   mobile_should_not = workstation + ['nest::base::wifi']

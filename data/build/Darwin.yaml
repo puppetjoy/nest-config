@@ -14,9 +14,9 @@ nest::classes:
   - 'nest::gui::fonts'
   - 'nest::gui::packages'
   - 'nest::gui::terminals'
-  - 'nest::gui::vscode'
   - 'nest::tool::bolt'
   - 'nest::tool::codex'
   - 'nest::tool::pdk'
+  - 'nest::tool::vscode'
 
 nest::vpn: true

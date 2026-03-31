@@ -1,6 +1,5 @@
 ---
 nest::classes:
-  - 'nest::gui::bitwarden'
   - 'nest::gui::cups'
   - 'nest::gui::cursor'
   - 'nest::gui::dunst'
@@ -12,18 +11,19 @@ nest::classes:
   - 'nest::gui::plasma'
   - 'nest::gui::sway'
   - 'nest::gui::terminals'
-  - 'nest::gui::vscode'
   - 'nest::gui::xmonad'
   - 'nest::gui::xorg'
   - 'nest::service::bluetooth'
   - 'nest::service::pipewire'
+  - 'nest::tool::bitwarden'
   - 'nest::tool::bolt'
   - 'nest::tool::minicom'
   - 'nest::tool::pdk'
   - 'nest::tool::qemu'
+  - 'nest::tool::vscode'
 
 nest::package_keywords:
-  # I always want the latest of these
+  # Install latest
   app-editors/vscode: {}
   gui-apps/gtkgreet: {}
   gui-apps/waybar: {}

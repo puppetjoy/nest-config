@@ -189,7 +189,7 @@ nest::ssh_host_keys:
   gateway.home: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOxXStSLn3YEuZuyAJdUZBZLmWMjqP49FUkOd2r7R29w
 
 nest::package_keywords:
-  # I always want the latest of these
+  # Install latest
   app-admin/puppet: {}
   app-emulation/qemu: {}
   app-misc/tmux: {}

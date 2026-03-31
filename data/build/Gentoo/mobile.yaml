@@ -8,17 +8,13 @@ nest::classes:
   - 'nest::gui::media'
   - 'nest::gui::packages'
   - 'nest::gui::terminals'
-  - 'nest::gui::vscode'
   - 'nest::service::bluetooth'
   - 'nest::service::pipewire'
-  - 'nest::tool::bolt'
-  - 'nest::tool::minicom'
-  - 'nest::tool::pdk'
-  - 'nest::tool::qemu'
+
+nest::vpn: true
 
 nest::package_keywords:
-  # I always want the latest of these
-  app-editors/vscode: {}
+  # Install latest
   www-client/firefox: {}
   x11-terms/ghostty: {}
   x11-terms/ghostty-terminfo: {}

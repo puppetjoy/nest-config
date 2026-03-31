@@ -1,10 +1,19 @@
 ---
 nest::classes:
+  - 'nest::tool::bolt'
   - 'nest::tool::codex'
+  - 'nest::tool::minicom'
+  - 'nest::tool::pdk'
+  - 'nest::tool::qemu'
+  - 'nest::tool::vscode'
 
 nest::dvorak: true
 nest::subpixel_rendering: none
 nest::text_scaling_factor: 2.0
+
+nest::package_keywords:
+  # Install latest
+  app-editors/vscode: {}
 
 nest::kernel_config:
   # WiFi / Bluetooth
