@@ -1,9 +1,12 @@
 class nest::gui::media {
-  nest::lib::package { [
-    'media-sound/playerctl',
-    'media-video/mpv',
-  ]:
+  nest::lib::package { 'media-video/mpv':
     ensure => installed,
+  }
+
+  if $facts['profile']['variant'] == 'workstation' {
+    nest::lib::package { 'media-sound/playerctl':
+      ensure => installed,
+    }
   }
 
   $vaapi_enabled = 'vaapi' in $facts['portage_use'].split(' ')
