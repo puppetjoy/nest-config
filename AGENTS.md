@@ -41,6 +41,8 @@
 - Never run multiple `pdk` commands at the same time. Run `pdk validate` and `pdk test ...` serially, and do not use tool-level parallelism for `pdk`.
 - Not every change needs tests. Do not add or update specs for straightforward manifest wiring, dependency, or ordering tweaks unless the user explicitly asks for coverage or the change fixes a demonstrated regression.
 - Do not add specs for private base class implementation details or internal resource/content changes. A private class change like a file line, package option, or service flag should stay untested unless the user explicitly asks for coverage or the change fixes a demonstrated regression in public behavior.
+- This suite is intentionally lightweight. Most specs verify `nest` class inclusion/exclusion, a few important ordering/notification relationships, and selected integration boundaries for helper classes/providers.
+- Do not add specs for minor leaf-resource behavior such as package `ensure` flips, small fact-driven package lists, internal file content changes, or other implementation details that do not change the public class graph or a critical dependency edge.
 - Be deliberate with unit tests: run focused specs for touched behavior using `--tests=...` instead of the full suite.
 - Discovery for this environment: `pdk test unit --parallel --tests=...` can still execute the full suite; for focused runs use `pdk test unit --tests=...` (without `--parallel`).
 - It is acceptable to rely on CI for full-suite coverage unless the user requests local full-suite execution.
@@ -48,6 +50,7 @@
 - Follow the existing pattern in `spec/classes/nest_spec.rb` and `spec/spec_helper_local.rb` (`it_should_and_should_not_contain_classes`) when adding coverage.
 - Do not proactively replace lightweight class/relationship specs with deep resource/content assertions unless explicitly requested.
 - Add deeper resource/content assertions only when needed to lock down a real regression or critical ordering dependency.
+- Add or update unit tests only when the change affects one of the patterns the current suite is protecting: class selection across OS/build/variant states, key ordering/subscription/notification edges, helper/provider integration contracts, or a bug that has already proven it needs a regression spec.
 - Base classes under `manifests/base/` are private; prefer validating them via `nest` class inclusion/relationship tests.
 - For `on_supported_os`-driven example groups, use targeted RuboCop disables only when required (for example `RSpec/EmptyExampleGroup`).
 
@@ -59,7 +62,7 @@
 
 ## Custom Facts
 - Custom facts do not need project namespacing; simple fact names are preferred.
-- When a custom fact controls branching behavior, add spec coverage for the key states so expected resources are explicitly enforced.
+- A custom fact only needs spec coverage when it changes public class selection or a critical ordering/integration contract. Do not add specs just because a fact toggles minor internal resources or package presence.
 
 ## Commit & Pull Request Guidelines
 - Follow observed commit style: `<scope>: <imperative summary>`.
