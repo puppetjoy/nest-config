@@ -120,13 +120,18 @@ plan nest::build::stage1 (
     run_command('emerge --info', $target, 'Show Portage configuration')
 
     # Resolve circular dependencies
-    if $variant == 'workstation' and !$refresh {
-      run_command('emerge --oneshot --verbose media-libs/harfbuzz media-libs/freetype media-libs/mesa media-libs/tiff', $target, 'Resolve media circular dependencies', _env_vars => {
-        'USE' => '-avif -cairo -gdk-pixbuf -harfbuzz -sysprof -truetype -vaapi -webp',
-      })
-      run_command('emerge --oneshot --verbose x11-misc/xdg-utils', $target, 'Resolve Plasma circular dependencies', _env_vars => {
-        'USE' => '-plasma',
-      })
+    if !$refresh {
+      if $variant in ['workstation', 'mobile'] {
+        run_command('emerge --oneshot --verbose media-libs/harfbuzz media-libs/freetype media-libs/mesa media-libs/tiff', $target, 'Resolve media circular dependencies', _env_vars => {
+          'USE' => '-avif -cairo -gdk-pixbuf -harfbuzz -sysprof -truetype -vaapi -webp',
+        })
+      }
+
+      if $variant == 'workstation' {
+        run_command('emerge --oneshot --verbose x11-misc/xdg-utils', $target, 'Resolve Plasma circular dependencies', _env_vars => {
+          'USE' => '-plasma',
+        })
+      }
     }
 
     # Make the system consistent with the profile
