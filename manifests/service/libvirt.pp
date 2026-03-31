@@ -11,6 +11,12 @@ class nest::service::libvirt {
     use    => $use,
   }
 
+  if $facts['profile']['variant'] in ['mobile', 'workstation'] {
+    nest::lib::package { 'app-emulation/virt-manager':
+      ensure => installed,
+    }
+  }
+
   file { '/etc/libvirt/libvirt-guests.conf':
     ensure  => file,
     mode    => '0644',

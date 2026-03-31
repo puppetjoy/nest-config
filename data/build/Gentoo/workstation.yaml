@@ -12,7 +12,6 @@ nest::classes:
   - 'nest::gui::plasma'
   - 'nest::gui::sway'
   - 'nest::gui::terminals'
-  - 'nest::gui::virtualization'
   - 'nest::gui::vscode'
   - 'nest::gui::xmonad'
   - 'nest::gui::xorg'
