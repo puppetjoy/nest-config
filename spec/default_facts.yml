@@ -24,6 +24,7 @@ portage_use: X a52 aac acl acpi activities alsa arm64 bluetooth branding bzip2 c
   semantic-desktop sound spell ssl startup-notification svg systemd test-rust tiff
   truetype udev udisks unicode upower usb vorbis vulkan wayland widgets wxwidgets
   x264 xattr xcb xft xml xv xvid zlib zsh-completion
+portage_video_cards: intel
 processors:
   count: 8
 rpool: test/crypt

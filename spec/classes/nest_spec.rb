@@ -111,7 +111,6 @@ describe 'nest' do
     'nest::gui::dunst',
     'nest::gui::firefox',
     'nest::gui::fonts',
-    'nest::gui::gnome',
     'nest::gui::greetd',
     'nest::gui::media',
     'nest::gui::packages',
@@ -130,6 +129,23 @@ describe 'nest' do
     'nest::tool::qemu',
   ]
 
+  mobile = [
+    'nest::gui::cups',
+    'nest::gui::firefox',
+    'nest::gui::fonts',
+    'nest::gui::gnome',
+    'nest::gui::media',
+    'nest::gui::packages',
+    'nest::gui::virtualization',
+    'nest::gui::vscode',
+    'nest::service::bluetooth',
+    'nest::service::pipewire',
+    'nest::tool::bolt',
+    'nest::tool::minicom',
+    'nest::tool::pdk',
+    'nest::tool::qemu',
+  ]
+
   on_supported_os.each do |os, facts|
     case os
     when %r{^gentoo-}
@@ -138,14 +154,22 @@ describe 'nest' do
           facts
         end
 
-        it_should_and_should_not_contain_classes(stage1 + stage2 + stage3, windows + workstation)
+        it_should_and_should_not_contain_classes(stage1 + stage2 + stage3, windows + workstation + mobile)
 
         context 'and variant => workstation' do # rubocop:disable RSpec/EmptyExampleGroup
           let(:facts) do
             facts.merge({ profile: { variant: 'workstation' } })
           end
 
-          it_should_and_should_not_contain_classes(workstation)
+          it_should_and_should_not_contain_classes(workstation, mobile)
+        end
+
+        context 'and variant => mobile' do # rubocop:disable RSpec/EmptyExampleGroup
+          let(:facts) do
+            facts.merge({ profile: { variant: 'mobile' } })
+          end
+
+          it_should_and_should_not_contain_classes(mobile, workstation)
         end
 
         context 'building stage0' do # rubocop:disable RSpec/EmptyExampleGroup
@@ -153,7 +177,7 @@ describe 'nest' do
             facts.merge({ build: 'stage0' })
           end
 
-          it_should_and_should_not_contain_classes(stage0, stage1 + stage2 + stage3 + windows + workstation - stage0)
+          it_should_and_should_not_contain_classes(stage0, stage1 + stage2 + stage3 + windows + workstation + mobile - stage0)
         end
 
         context 'building stage1' do
@@ -161,14 +185,22 @@ describe 'nest' do
             facts.merge({ build: 'stage1' })
           end
 
-          it_should_and_should_not_contain_classes(stage1, stage2 + stage3 + windows + workstation)
+          it_should_and_should_not_contain_classes(stage1, stage2 + stage3 + windows + workstation + mobile)
 
           context 'and variant => workstation' do # rubocop:disable RSpec/EmptyExampleGroup
             let(:facts) do
               facts.merge({ build: 'stage1', profile: { variant: 'workstation' } })
             end
 
-            it_should_and_should_not_contain_classes(workstation)
+            it_should_and_should_not_contain_classes(workstation, mobile)
+          end
+
+          context 'and variant => mobile' do # rubocop:disable RSpec/EmptyExampleGroup
+            let(:facts) do
+              facts.merge({ build: 'stage1', profile: { variant: 'mobile' } })
+            end
+
+            it_should_and_should_not_contain_classes(mobile, workstation)
           end
         end
 
@@ -177,19 +209,27 @@ describe 'nest' do
             facts.merge({ build: 'stage2' })
           end
 
-          it_should_and_should_not_contain_classes(stage1 + stage2, stage3 + windows + workstation)
+          it_should_and_should_not_contain_classes(stage1 + stage2, stage3 + windows + workstation + mobile)
 
           context 'and variant => workstation' do # rubocop:disable RSpec/EmptyExampleGroup
             let(:facts) do
               facts.merge({ build: 'stage2', profile: { variant: 'workstation' } })
             end
 
-            it_should_and_should_not_contain_classes(workstation)
+            it_should_and_should_not_contain_classes(workstation, mobile)
+          end
+
+          context 'and variant => mobile' do # rubocop:disable RSpec/EmptyExampleGroup
+            let(:facts) do
+              facts.merge({ build: 'stage2', profile: { variant: 'mobile' } })
+            end
+
+            it_should_and_should_not_contain_classes(mobile, workstation)
           end
         end
 
         shared_examples 'stage3' do
-          it_should_and_should_not_contain_classes(stage1 + stage2 + stage3, windows + workstation)
+          it_should_and_should_not_contain_classes(stage1 + stage2 + stage3, windows + workstation + mobile)
         end
 
         context 'building stage3' do
@@ -204,7 +244,15 @@ describe 'nest' do
               facts.merge({ build: 'stage3', profile: { variant: 'workstation' } })
             end
 
-            it_should_and_should_not_contain_classes(workstation)
+            it_should_and_should_not_contain_classes(workstation, mobile)
+          end
+
+          context 'and variant => mobile' do # rubocop:disable RSpec/EmptyExampleGroup
+            let(:facts) do
+              facts.merge({ build: 'stage3', profile: { variant: 'mobile' } })
+            end
+
+            it_should_and_should_not_contain_classes(mobile, workstation)
           end
         end
 
@@ -221,7 +269,7 @@ describe 'nest' do
             facts.merge({ build: 'bolt' })
           end
 
-          it_should_and_should_not_contain_classes(stage1 + ['nest::tool::bolt'], stage2 + stage3 + windows + workstation)
+          it_should_and_should_not_contain_classes(stage1 + ['nest::tool::bolt'], stage2 + stage3 + windows + workstation + mobile)
         end
 
         context 'building pdk' do # rubocop:disable RSpec/EmptyExampleGroup
@@ -229,7 +277,7 @@ describe 'nest' do
             facts.merge({ build: 'pdk' })
           end
 
-          it_should_and_should_not_contain_classes(stage1 + ['nest::tool::pdk'], stage2 + stage3 + windows + workstation)
+          it_should_and_should_not_contain_classes(stage1 + ['nest::tool::pdk'], stage2 + stage3 + windows + workstation + mobile)
         end
 
         context 'building r10k' do # rubocop:disable RSpec/EmptyExampleGroup
@@ -237,7 +285,7 @@ describe 'nest' do
             facts.merge({ build: 'r10k' })
           end
 
-          it_should_and_should_not_contain_classes(stage1 + ['nest::tool::r10k'], stage2 + stage3 + windows + workstation)
+          it_should_and_should_not_contain_classes(stage1 + ['nest::tool::r10k'], stage2 + stage3 + windows + workstation + mobile)
         end
       end
 
@@ -258,7 +306,7 @@ describe 'nest' do
           )
         end
 
-        it_should_and_should_not_contain_classes(darwin, stage1 + stage2 + stage3 + workstation)
+        it_should_and_should_not_contain_classes(darwin, stage1 + stage2 + stage3 + workstation + mobile)
       end
 
     when %r{^windows-}
@@ -267,7 +315,7 @@ describe 'nest' do
           facts
         end
 
-        it_should_and_should_not_contain_classes(windows, stage1 + stage2 + stage3 + workstation)
+        it_should_and_should_not_contain_classes(windows, stage1 + stage2 + stage3 + workstation + mobile)
       end
     end
   end

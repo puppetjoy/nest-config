@@ -2,6 +2,7 @@ class nest::base::branding {
   tag 'profile'
 
   $variant = $facts['profile']['variant'] ? {
+    'mobile'      => 'Mobile',
     'server'      => 'Server',
     'workstation' => 'Workstation',
     default       => fail("Unhandled variant ${facts['profile']['variant']}"),
