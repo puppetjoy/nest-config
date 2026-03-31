@@ -1,38 +1,44 @@
 class nest::gui::terminals {
   case $facts['os']['family'] {
     'Gentoo': {
-      nest::lib::package { 'x11-terms/rxvt-unicode':
-        ensure => installed,
-        use    => [
-          '256-color',
-          'alt-font-width',
-          'fading-colors', # required for 'perl'
-          'perl',
-          'secondary-wheel',
-          'sgrmouse',
-          'unicode3',
-          '-vanilla',
-          'xft',
-        ],
-      }
+      if $facts['profile']['variant'] == 'mobile' {
+        nest::lib::package { 'x11-terms/ghostty':
+          ensure => installed,
+        }
+      } else {
+        nest::lib::package { 'x11-terms/rxvt-unicode':
+          ensure => installed,
+          use    => [
+            '256-color',
+            'alt-font-width',
+            'fading-colors', # required for 'perl'
+            'perl',
+            'secondary-wheel',
+            'sgrmouse',
+            'unicode3',
+            '-vanilla',
+            'xft',
+          ],
+        }
 
-      nest::lib::package { 'x11-terms/xterm':
-        ensure => installed,
-        env    => { 'EXTRA_ECONF' => '--enable-double-buffer' },
-      }
+        nest::lib::package { 'x11-terms/xterm':
+          ensure => installed,
+          env    => { 'EXTRA_ECONF' => '--enable-double-buffer' },
+        }
 
-      nest::lib::package { [
-        'gui-apps/foot',
-        'x11-terms/alacritty',
-      ]:
-        ensure => installed,
-      }
+        nest::lib::package { [
+          'gui-apps/foot',
+          'x11-terms/alacritty',
+        ]:
+          ensure => installed,
+        }
 
-      nest::lib::package { [
-        'x11-misc/urxvt-font-size',
-        'x11-misc/urxvt-perls',
-      ]:
-        require => Nest::Lib::Package['x11-terms/rxvt-unicode'],
+        nest::lib::package { [
+          'x11-misc/urxvt-font-size',
+          'x11-misc/urxvt-perls',
+        ]:
+          require => Nest::Lib::Package['x11-terms/rxvt-unicode'],
+        }
       }
     }
 

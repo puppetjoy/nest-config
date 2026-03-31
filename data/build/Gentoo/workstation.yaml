@@ -37,10 +37,6 @@ nest::package_keywords:
   dev-libs/nspr: {}
   dev-libs/nss: {}
 
-  # Fix Gentoo packaging/dependency mismatch
-  media-plugins/grilo-plugins:
-    version: '~0.3.18'
-
 nest::kernel_cmdline:
   - 'preempt=full' # prioritize interactivity
 

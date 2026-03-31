@@ -135,6 +135,7 @@ describe 'nest' do
     'nest::gui::gnome',
     'nest::gui::media',
     'nest::gui::packages',
+    'nest::gui::terminals',
     'nest::gui::vscode',
     'nest::service::bluetooth',
     'nest::service::pipewire',
