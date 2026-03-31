@@ -124,6 +124,23 @@ class nest (
     $concurrency = 1
   }
 
+  if $facts['profile'] and $facts['profile']['variant'] == 'mobile' {
+    $wifi_lookup = lookup('nest::wifi', { default_value => '__nest_wifi_unset__' })
+    if $wifi_lookup != '__nest_wifi_unset__' {
+      fail('Do not set nest::wifi on mobile nodes. WiFi is managed by NetworkManager.')
+    }
+
+    $wifi_power_save_lookup = lookup('nest::wifi_power_save', { default_value => '__nest_wifi_power_save_unset__' })
+    if $wifi_power_save_lookup != '__nest_wifi_power_save_unset__' {
+      fail('Do not set nest::wifi_power_save on mobile nodes. WiFi is managed by NetworkManager.')
+    }
+
+    $gui_scaling_factor_lookup = lookup('nest::gui_scaling_factor', { default_value => '__nest_gui_scaling_factor_unset__' })
+    if $gui_scaling_factor_lookup != '__nest_gui_scaling_factor_unset__' {
+      fail('Do not set nest::gui_scaling_factor on mobile nodes. Graphical scaling is managed by GNOME.')
+    }
+  }
+
   # Resource defaults
   if $facts['os'] {
     case $facts['os']['family'] {
