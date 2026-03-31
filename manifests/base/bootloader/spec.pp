@@ -9,6 +9,7 @@ class nest::base::bootloader::spec {
     $loader_conf = @("LOADER_CONF")
       default ${facts['machine_id']}-${nest::kernel_version}.conf
       timeout ${nest::boot_menu_delay}
+      console-mode 0
       | LOADER_CONF
 
     file {
