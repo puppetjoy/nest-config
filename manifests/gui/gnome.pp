@@ -55,14 +55,6 @@ class nest::gui::gnome {
       mode   => '0755',
     ;
 
-    '/etc/dconf/db/gdm.d/00-input-sources':
-      ensure => absent,
-    ;
-
-    '/etc/dconf/db/gdm.d':
-      ensure => absent,
-    ;
-
     '/etc/dconf/db/local.d':
       ensure => directory,
       mode   => '0755',
@@ -76,10 +68,6 @@ class nest::gui::gnome {
     '/etc/dconf/profile':
       ensure => directory,
       mode   => '0755',
-    ;
-
-    '/etc/dconf/profile/gdm':
-      ensure => absent,
     ;
 
     '/etc/dconf/profile/user':
