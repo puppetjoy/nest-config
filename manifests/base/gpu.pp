@@ -1,4 +1,10 @@
 class nest::base::gpu {
+  if 'nvidia' in $facts['portage_video_cards'].split(' ') or 'video_cards_nvidia' in $nest::use {
+    User <| title == $nest::user |> {
+      groups +> 'video',
+    }
+  }
+
   if 'vulkan' in [$facts['portage_use'].split(' '), $nest::use].flatten {
     User <| title == $nest::user |> {
       groups +> 'render',
@@ -13,7 +19,7 @@ class nest::base::gpu {
     }
   }
 
-  if $facts['portage_video_cards'] and 'amdgpu' in $facts['portage_video_cards'].split(' ') {
+  if 'amdgpu' in $facts['portage_video_cards'].split(' ') {
     nest::lib::package { 'sys-apps/amdgpu_top':
       ensure   => installed,
       unstable => true,
