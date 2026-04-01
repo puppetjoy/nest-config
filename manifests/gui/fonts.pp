@@ -20,7 +20,6 @@ class nest::gui::fonts {
 
       nest::lib::package { [
         'media-fonts/fontawesome',
-        'media-fonts/hack',
         'media-fonts/liberation-fonts', # primarily for GitHub, tbh
         'media-fonts/noto-emoji',
       ]:
