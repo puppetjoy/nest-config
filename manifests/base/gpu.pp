@@ -5,6 +5,12 @@ class nest::base::gpu {
     }
   }
 
+  if $nest::kernel_config['CONFIG_VGA_SWITCHEROO'] {
+    service { 'switcheroo-control':
+      enable => true,
+    }
+  }
+
   if 'vulkan' in [$facts['portage_use'].split(' '), $nest::use].flatten {
     User <| title == $nest::user |> {
       groups +> 'render',

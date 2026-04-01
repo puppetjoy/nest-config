@@ -11,8 +11,7 @@ nest::dvorak: true
 nest::subpixel_rendering: none
 nest::swap_alt_win: true
 nest::text_scaling_factor: 2.0
-nest::video_cards:
-  - 'nvidia'
+nest::video_cards: ['nvidia']
 
 nest::package_keywords:
   # Install latest
@@ -32,6 +31,9 @@ nest::kernel_config:
   CONFIG_HID_MULTITOUCH: m
   CONFIG_I2C_HID_ACPI: m
   CONFIG_COMMON_CLK: y
+
+  # GPU switching
+  CONFIG_VGA_SWITCHEROO: y
 
   # Speaker amp
   CONFIG_SND_HDA_SCODEC_CS35L41_I2C: m
