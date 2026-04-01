@@ -88,8 +88,8 @@ class nest::gui::gnome {
   # Account avatar shown by GDM and GNOME Shell
   file {
     default:
-      owner   => 'root',
-      group   => 'root',
+      owner => 'root',
+      group => 'root',
     ;
 
     '/var/lib/AccountsService':
