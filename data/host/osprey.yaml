@@ -9,6 +9,7 @@ nest::classes:
 
 nest::dvorak: true
 nest::subpixel_rendering: none
+nest::swap_alt_win: true
 nest::text_scaling_factor: 2.0
 
 nest::package_keywords:
