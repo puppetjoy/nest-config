@@ -137,6 +137,12 @@ class nest::base::portage {
     }
   }
 
+  unless empty($nest::video_cards) {
+    portage::makeconf { 'video_cards':
+      content => $nest::video_cards.sort.join(' '),
+    }
+  }
+
   # Don't timeout rebuilding packages
   Exec <| title == 'changed_makeconf' |> {
     timeout => 0,
