@@ -131,15 +131,11 @@ class nest::base::portage {
     ;
   }
 
-  unless empty($nest::use) {
-    portage::makeconf { 'use':
-      content => $nest::use.sort.join(' '),
-    }
-  }
+  $use = ($nest::use + $nest::video_cards.map |$video_card| { "video_cards_${video_card}" }).sort.unique
 
-  unless empty($nest::video_cards) {
-    portage::makeconf { 'video_cards':
-      content => $nest::video_cards.sort.join(' '),
+  unless empty($use) {
+    portage::makeconf { 'use':
+      content => $use.join(' '),
     }
   }
 
