@@ -34,9 +34,9 @@ nest::service::reverse_proxy::hosts:
     destination: 'gitlab.eyrie'
     ip: ['45.77.156.204', '2001:19f0:1000:e1dc::204']
     serveraliases: ['gitlab.james.tl']
+    blocked_user_agents: ['meta-externalagent']
     encoded_slashes: true
     proxy_ssl: true
-    serve_local: true # for custom robots.txt
     timeout: 600
     websockets: true
 

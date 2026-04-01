@@ -1,21 +1,26 @@
 define nest::lib::reverse_proxy (
   Variant[String, Array[String]] $destination,
-  Boolean                  $encoded_slashes = false,
-  Hash[String, Any]        $extra_params    = {},
-  Optional[Nest::IPList]   $ip              = undef,
-  Optional[Integer]        $port            = undef,
-  Boolean                  $preserve_host   = false,
-  Optional[String]         $priority        = undef,
-  Boolean                  $proxy_ssl       = false,
-  String                   $servername      = $name,
-  Array[String]            $serveraliases   = [],
-  Boolean                  $serve_local     = false,
-  Boolean                  $ssl             = true,
-  Optional[Integer]        $timeout         = undef,
-  Variant[Boolean, String] $websockets      = false,
-  String                   $docroot         = "/srv/www/${servername}",
+  Array[String]            $blocked_user_agents = [],
+  Boolean                  $encoded_slashes     = false,
+  Hash[String, Any]        $extra_params        = {},
+  Optional[Nest::IPList]   $ip                  = undef,
+  Optional[Integer]        $port                = undef,
+  Boolean                  $preserve_host       = false,
+  Optional[String]         $priority            = undef,
+  Boolean                  $proxy_ssl           = false,
+  String                   $servername          = $name,
+  Array[String]            $serveraliases       = [],
+  Boolean                  $serve_local         = false,
+  Boolean                  $ssl                 = true,
+  Optional[Integer]        $timeout             = undef,
+  Variant[Boolean, String] $websockets          = false,
+  String                   $docroot             = "/srv/www/${servername}",
 ) {
   include 'apache::mod::proxy'
+
+  if $serve_local or $websockets or !empty($blocked_user_agents) {
+    include 'apache::mod::rewrite'
+  }
 
   if $proxy_ssl {
     $http_proto = 'https'
@@ -91,6 +96,17 @@ define nest::lib::reverse_proxy (
     } + $proxy_rewrites,
   ]
 
+  if empty($blocked_user_agents) {
+    $blocked_user_agent_rewrites = []
+  } else {
+    $blocked_user_agent_pattern = $blocked_user_agents.map |$agent| { "(${agent})" }.join('|')
+    $blocked_user_agent_rewrites = [{
+      'comment'      => 'Block unwanted crawlers before proxying',
+      'rewrite_cond' => ["%{HTTP_USER_AGENT} ${blocked_user_agent_pattern} [NC]"],
+      'rewrite_rule' => ['^ - [F,L]'],
+    }]
+  }
+
   if $websockets {
     include 'apache::mod::proxy_wstunnel'
 
@@ -106,6 +122,8 @@ define nest::lib::reverse_proxy (
   } else {
     $websocket_rewrites = []
   }
+
+  $vhost_rewrites = $blocked_user_agent_rewrites + $websocket_rewrites
 
   $certbot_exception = @(EOT)
     <Location "/.well-known">
@@ -129,7 +147,7 @@ define nest::lib::reverse_proxy (
       'directories'           => $directories,
       'proxy_pass'            => $proxy_pass,
       'proxy_preserve_host'   => $preserve_host,
-      'rewrites'              => $websocket_rewrites,
+      'rewrites'              => $vhost_rewrites,
       'ssl_proxyengine'       => $proxy_ssl,
       'custom_fragment'       => "${balancer}${certbot_exception}",
     } + $extra_params,
