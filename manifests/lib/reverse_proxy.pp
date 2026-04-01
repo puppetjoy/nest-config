@@ -101,7 +101,7 @@ define nest::lib::reverse_proxy (
   } else {
     $blocked_user_agent_pattern = $blocked_user_agents.map |$agent| { "(${agent})" }.join('|')
     $blocked_user_agent_rewrites = [{
-      'comment'      => 'Block unwanted crawlers before proxying',
+      'comment'      => ' Block unwanted crawlers before proxying',
       'rewrite_cond' => ["%{HTTP_USER_AGENT} ${blocked_user_agent_pattern} [NC]"],
       'rewrite_rule' => ['^ - [F,L]'],
     }]
