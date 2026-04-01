@@ -36,6 +36,7 @@ nest::service::reverse_proxy::hosts:
     serveraliases: ['gitlab.james.tl']
     encoded_slashes: true
     proxy_ssl: true
+    serve_local: true # for custom robots.txt
     timeout: 600
     websockets: true
 
