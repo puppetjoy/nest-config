@@ -1,5 +1,7 @@
 class nest::base::gpu {
-  if 'nvidia' in $facts['portage_video_cards'].split(' ') or 'video_cards_nvidia' in $nest::use {
+  $video_cards = $facts['portage_video_cards'].split(' ')
+
+  if 'nvidia' in $video_cards or 'video_cards_nvidia' in $nest::use {
     nest::lib::package { 'x11-drivers/nvidia-drivers':
       ensure  => installed,
       binpkg  => false,
@@ -12,16 +14,16 @@ class nest::base::gpu {
   }
 
   if $nest::kernel_config['CONFIG_VGA_SWITCHEROO'] {
+    nest::lib::package { 'sys-power/switcheroo-control':
+      ensure => installed,
+    }
+    ->
     service { 'switcheroo-control':
       enable => true,
     }
   }
 
   if 'vulkan' in [$facts['portage_use'].split(' '), $nest::use].flatten {
-    User <| title == $nest::user |> {
-      groups +> 'render',
-    }
-
     nest::lib::package { [
       'dev-util/vulkan-tools',
       'media-libs/mesa',
@@ -29,16 +31,22 @@ class nest::base::gpu {
     ]:
       ensure => installed,
     }
+
+    User <| title == $nest::user |> {
+      groups +> 'render',
+    }
   }
 
-  if 'amdgpu' in $facts['portage_video_cards'].split(' ') {
+  if 'amdgpu' in $video_cards {
     nest::lib::package { 'sys-apps/amdgpu_top':
       ensure   => installed,
       unstable => true,
     }
   }
 
-  nest::lib::package { 'sys-process/nvtop':
-    ensure => installed,
+  if ['amdgpu', 'intel', 'nvidia'].any |$video_card| { $video_card in $video_cards } {
+    nest::lib::package { 'sys-process/nvtop':
+      ensure => installed,
+    }
   }
 }
