@@ -1,0 +1,16 @@
+#!/bin/sh
+
+set -eu
+
+service='openvpn-client@nest'
+trusted_connection='Nest'
+
+if ! command -v nmcli >/dev/null 2>&1; then
+  exit 0
+fi
+
+if nmcli --terse --fields NAME connection show --active | grep -Fxq "${trusted_connection}"; then
+  exec /bin/systemctl stop "${service}"
+fi
+
+exec /bin/systemctl start "${service}"

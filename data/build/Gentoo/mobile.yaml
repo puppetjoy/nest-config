@@ -10,9 +10,6 @@ nest::classes:
   - 'nest::gui::terminals'
   - 'nest::service::bluetooth'
   - 'nest::service::pipewire'
-
-nest::vpn: true
-
 nest::package_keywords:
   # Install latest
   www-client/firefox: {}

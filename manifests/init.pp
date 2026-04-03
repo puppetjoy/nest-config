@@ -127,6 +127,11 @@ class nest (
   }
 
   if $facts['profile'] and $facts['profile']['variant'] == 'mobile' {
+    $vpn_lookup = lookup('nest::vpn', { default_value => '__nest_vpn_unset__' })
+    if $vpn_lookup != '__nest_vpn_unset__' or $vpn {
+      fail('Do not set nest::vpn on mobile nodes. VPN service state is managed by NetworkManager.')
+    }
+
     $wifi_lookup = lookup('nest::wifi', { default_value => '__nest_wifi_unset__' })
     if $wifi_lookup != '__nest_wifi_unset__' {
       fail('Do not set nest::wifi on mobile nodes. WiFi is managed by NetworkManager.')

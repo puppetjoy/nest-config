@@ -1,5 +1,19 @@
 class nest::base::network {
   if $facts['profile']['variant'] == 'mobile' {
+    file { '/etc/NetworkManager/dispatcher.d':
+      ensure => directory,
+      mode   => '0755',
+      owner  => 'root',
+      group  => 'root',
+    }
+    ->
+    file { '/etc/NetworkManager/dispatcher.d/50-openvpn-nest':
+      mode   => '0755',
+      owner  => 'root',
+      group  => 'root',
+      source => 'puppet:///modules/nest/networkmanager/50-openvpn-nest',
+    }
+    ->
     service { 'NetworkManager':
       enable => true,
     }
