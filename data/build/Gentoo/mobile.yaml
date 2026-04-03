@@ -19,8 +19,11 @@ nest::package_keywords:
   # For firefox
   dev-libs/nspr: {}
   dev-libs/nss: {}
+  www-client/firefox-l10n: {}
 
-  # For ghostty[wayland]
+  # For ghostty
+  dev-lang/zig:
+    version: '~0.15.2'
   gui-libs/gtk4-layer-shell:
     version: '~1.1.1'
 

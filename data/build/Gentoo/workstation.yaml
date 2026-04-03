@@ -36,6 +36,7 @@ nest::package_keywords:
   # For firefox
   dev-libs/nspr: {}
   dev-libs/nss: {}
+  www-client/firefox-l10n: {}
 
 nest::kernel_cmdline:
   - 'preempt=full' # prioritize interactivity
