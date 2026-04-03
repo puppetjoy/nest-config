@@ -9,7 +9,6 @@ nest::classes:
 
 nest::dvorak: true
 nest::subpixel_rendering: none
-nest::swap_alt_win: true
 nest::text_scaling_factor: 2.0
 nest::video_cards: ['nvidia']
 
@@ -17,6 +16,10 @@ nest::package_keywords:
   # Install latest
   app-editors/vscode: {}
   x11-drivers/nvidia-drivers: {}
+
+  # For sleep fix in amd_pmd
+  sys-kernel/linux-firmware:
+    version: '~20260309'
 
 nest::kernel_config:
   # WiFi / Bluetooth
