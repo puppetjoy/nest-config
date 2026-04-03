@@ -16,6 +16,7 @@ nest::video_cards: ['nvidia']
 nest::package_keywords:
   # Install latest
   app-editors/vscode: {}
+  x11-drivers/nvidia-drivers: {}
 
 nest::kernel_tag: 'torvalds/v7.0.0-rc6'
 nest::zfs: fork
@@ -42,6 +43,11 @@ nest::kernel_config:
   CONFIG_SND_HDA_SCODEC_CS35L41_I2C: m
   CONFIG_SND_SOC: m
   CONFIG_SERIAL_MULTI_INSTANTIATE: m
+
+  # Laptop specifics
+  CONFIG_HID_ASUS: m
+  CONFIG_ASUS_WMI: m
+  CONFIG_ASUS_NB_WMI: m
 
   # Unsupported in 7.0
   CONFIG_NFS_V4_1: null
