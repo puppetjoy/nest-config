@@ -1,5 +1,11 @@
 class nest::base::gpu {
   if 'nvidia' in $facts['portage_video_cards'].split(' ') or 'video_cards_nvidia' in $nest::use {
+    nest::lib::package { 'x11-drivers/nvidia-drivers':
+      ensure  => installed,
+      binpkg  => false,
+      require => Class['nest::base::kernel'],
+    }
+
     User <| title == $nest::user |> {
       groups +> 'video',
     }
