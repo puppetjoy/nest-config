@@ -1,12 +1,12 @@
 define nest::lib::package (
-  Boolean                  $binpkg   = true,
-  Boolean                  $build    = true,
-  String                   $ensure   = 'installed',
-  Hash                     $env      = {},
-  String                   $package  = $name,
-  Boolean                  $unstable = false,
-  Optional[Nest::UseFlags] $use      = undef,
-  Boolean                  $world    = true,
+  Boolean                            $binpkg   = true,
+  Boolean                            $build    = true,
+  String                             $ensure   = 'installed',
+  Hash                               $env      = {},
+  String                             $package  = $name,
+  Variant[Boolean, String[1]]        $unstable = false,
+  Optional[Nest::UseFlags]           $use      = undef,
+  Boolean                            $world    = true,
 ) {
   if !$binpkg and $ensure != 'absent' {
     if defined(Package_env[$name]) {
@@ -37,9 +37,15 @@ define nest::lib::package (
   }
 
   if $unstable {
+    $accept_keywords = $unstable ? {
+      true    => undef,
+      default => $unstable,
+    }
+
     package_accept_keywords { $package:
-      before => Package[$name],
-      tag    => 'profile',
+      accept_keywords => $accept_keywords,
+      before          => Package[$name],
+      tag             => 'profile',
     }
   }
 

@@ -8,25 +8,18 @@ class nest::base::zfs {
         'EGIT_OVERRIDE_REPO_OPENZFS_ZFS'   => 'https://gitlab.joyfullee.me/nest/forks/zfs.git',
         'EGIT_OVERRIDE_BRANCH_OPENZFS_ZFS' => 'main',
       }
-
-      package_accept_keywords { 'sys-fs/zfs':
-        accept_keywords => '**',
-        before          => Nest::Lib::Package['sys-fs/zfs'],
-      }
+      $zfs_unstable = '**'
     } else {
       $zfs_env = undef
-
-      package_accept_keywords { ['sys-fs/zfs', 'sys-fs/zfs-kmod']:
-        accept_keywords => '~*',
-        before          => Nest::Lib::Package['sys-fs/zfs'],
-      }
+      $zfs_unstable = true
     }
 
     nest::lib::package { 'sys-fs/zfs':
-      ensure  => latest,
-      binpkg  => false,
-      env     => $zfs_env,
-      require => Class['nest::base::kernel'],
+      ensure   => latest,
+      binpkg   => false,
+      env      => $zfs_env,
+      unstable => $zfs_unstable,
+      require  => Class['nest::base::kernel'],
     }
 
     $zfs_mount_activate_be_override = @(EOF)
