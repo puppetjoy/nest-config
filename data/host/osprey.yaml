@@ -18,9 +18,6 @@ nest::package_keywords:
   app-editors/vscode: {}
   x11-drivers/nvidia-drivers: {}
 
-nest::kernel_tag: 'torvalds/v7.0.0-rc6'
-nest::zfs: fork
-
 nest::kernel_config:
   # WiFi / Bluetooth
   CONFIG_BT_HCIBTUSB_MTK: y
@@ -48,6 +45,3 @@ nest::kernel_config:
   CONFIG_HID_ASUS: m
   CONFIG_ASUS_WMI: m
   CONFIG_ASUS_NB_WMI: m
-
-  # Unsupported in 7.0
-  CONFIG_NFS_V4_1: null
