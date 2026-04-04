@@ -1,7 +1,11 @@
 class nest::base::gpu {
-  $video_cards = $facts['portage_video_cards'].split(' ')
+  $video_cards = ($facts['portage_video_cards'].split(' ') + $nest::use.filter |$use_flag| {
+    $use_flag =~ /^video_cards_/
+  }.map |$use_flag| {
+    regsubst($use_flag, '^video_cards_', '')
+  }).sort.unique
 
-  if 'nvidia' in $video_cards or 'video_cards_nvidia' in $nest::use {
+  if 'nvidia' in $video_cards {
     nest::lib::package { 'x11-drivers/nvidia-drivers':
       ensure  => installed,
       binpkg  => false,

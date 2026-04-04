@@ -131,7 +131,7 @@ class nest::base::portage {
     ;
   }
 
-  $use = ($nest::use + $nest::video_cards.map |$video_card| { "video_cards_${video_card}" }).sort.unique
+  $use = $nest::use.sort.unique
 
   unless empty($use) {
     portage::makeconf { 'use':
