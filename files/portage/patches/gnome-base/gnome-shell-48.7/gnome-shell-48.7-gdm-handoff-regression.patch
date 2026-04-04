@@ -1,0 +1,36 @@
+From 58e76dc260bfe8d4e6d315e19144bf01904b2d67 Mon Sep 17 00:00:00 2001
+From: Joan Torres Lopez <joantolo@redhat.com>
+Date: Tue, 27 Jan 2026 13:35:34 +0100
+Subject: [PATCH] Revert "main: Register session with GDM on startup"
+
+This depends on GDM changes that are not in this release.
+
+This reverts commit 6703cacb559c74341ca88f2094d28973f323cde6.
+---
+ js/ui/main.js | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/js/ui/main.js b/js/ui/main.js
+index 0b8cbb8..b07acd5 100644
+--- a/js/ui/main.js
++++ b/js/ui/main.js
+@@ -329,8 +329,6 @@ async function _initializeUI() {
+     extensionManager = new ExtensionSystem.ExtensionManager();
+     extensionManager.init();
+ 
+-    LoginManager.registerSessionWithGDM();
+-
+     if (sessionMode.isGreeter && screenShield) {
+         layoutManager.connect('startup-prepared', () => {
+             screenShield.showDialog();
+@@ -377,6 +375,8 @@ async function _initializeUI() {
+             sessionMode.currentMode !== 'initial-setup')
+             _handleLockScreenWarning();
+ 
++        LoginManager.registerSessionWithGDM();
++
+         if (perfModule) {
+             let perfOutput = GLib.getenv('SHELL_PERF_OUTPUT');
+             Scripting.runPerfScript(perfModule, perfOutput);
+-- 
+2.52.0
