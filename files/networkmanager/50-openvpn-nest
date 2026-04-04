@@ -1,17 +1,7 @@
 #!/bin/sh
 
-set -eu
-
-vpn_service='openvpn-client@nest.service'
-bird_service='bird.service'
-trusted_connection='Nest'
-
-if ! command -v nmcli >/dev/null 2>&1; then
-  exit 0
-fi
-
-if nmcli --terse --fields NAME connection show --active | grep -Fxq "${trusted_connection}"; then
-  /bin/systemctl --no-block start "${bird_service}"
+if nmcli --terse --fields NAME connection show --active | grep -Fxq 'Nest'; then
+  /bin/systemctl --no-block start bird
 else
-  /bin/systemctl --no-block start "${vpn_service}"
+  /bin/systemctl --no-block start openvpn-client@nest
 fi
