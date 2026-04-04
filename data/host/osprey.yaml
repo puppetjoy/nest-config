@@ -15,11 +15,14 @@ nest::use: ['video_cards_nvidia']
 nest::package_keywords:
   # Install latest
   app-editors/vscode: {}
-  x11-drivers/nvidia-drivers: {}
 
   # For sleep fix in amd_pmd
   sys-kernel/linux-firmware:
     version: '~20260309'
+
+  # Use most recent drivers that work well with GNOME 48
+  x11-drivers/nvidia-drivers:
+    version: '<595'
 
 nest::package_use:
   # Deprioritize dGPU
