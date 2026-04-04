@@ -82,7 +82,7 @@ class nest::base::fstab {
         'set 6/opt[3] x-systemd.requires',
         'set 6/opt[3]/value cachefilesd.service',
 
-        $mobile_variant or $nest::vpn ? {
+        ($mobile_variant or $nest::vpn) ? {
           true    => [
             'set 6/opt[4] x-systemd.after',
             'set 6/opt[4]/value openvpn-client@nest.service',
@@ -99,7 +99,7 @@ class nest::base::fstab {
         'set 6/vfstype nfs',
         'set 6/opt[1] x-systemd.automount',
 
-        $mobile_variant or $nest::vpn ? {
+        ($mobile_variant or $nest::vpn) ? {
           true    => [
             'set 6/opt[2] x-systemd.after',
             'set 6/opt[2]/value openvpn-client@nest.service',
@@ -118,7 +118,7 @@ class nest::base::fstab {
       'set 7/vfstype nfs',
       'set 7/opt[1] x-systemd.automount',
 
-      $mobile_variant or $nest::vpn ? {
+      ($mobile_variant or $nest::vpn) ? {
         true    => [
           'set 7/opt[2] x-systemd.after',
           'set 7/opt[2]/value openvpn-client@nest.service',
