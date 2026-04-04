@@ -2,15 +2,19 @@
 
 set -eu
 
-service='openvpn-client@nest'
+vpn_service='openvpn-client@nest.service'
+bird_service='bird.service'
 trusted_connection='Nest'
 
 if ! command -v nmcli >/dev/null 2>&1; then
   exit 0
 fi
 
-if nmcli --terse --fields NAME connection show --active | grep -Fxq "${trusted_connection}"; then
-  exec /bin/systemctl stop "${service}"
-fi
+active_connection="$(nmcli --terse --fields NAME connection show --active)"
 
-exec /bin/systemctl start "${service}"
+if [ "${active_connection}" = "${trusted_connection}" ]; then
+  /bin/systemctl --no-block stop "${vpn_service}"
+  /bin/systemctl --no-block start "${bird_service}"
+else
+  /bin/systemctl --no-block start "${vpn_service}"
+fi

@@ -1,6 +1,7 @@
 class nest::base::fstab {
   $hostname  = regsubst($::trusted['certname'], '\..*', '')
   $labelname = nest::labelname($hostname)
+  $mobile_variant = $facts['profile'] and $facts['profile']['variant'] == 'mobile'
 
   $specs = {
     'boot'   => $facts['profile']['platform'] ? {
@@ -81,12 +82,10 @@ class nest::base::fstab {
         'set 6/opt[3] x-systemd.requires',
         'set 6/opt[3]/value cachefilesd.service',
 
-        $nest::vpn ? {
+        $mobile_variant or $nest::vpn ? {
           true    => [
-            'set 6/opt[4] x-systemd.requires',
+            'set 6/opt[4] x-systemd.after',
             'set 6/opt[4]/value openvpn-client@nest.service',
-            'set 6/opt[5] x-systemd.requires',
-            'set 6/opt[5]/value sys-subsystem-net-devices-tun0.device',
           ],
           default => [],
         },
@@ -100,12 +99,10 @@ class nest::base::fstab {
         'set 6/vfstype nfs',
         'set 6/opt[1] x-systemd.automount',
 
-        $nest::vpn ? {
+        $mobile_variant or $nest::vpn ? {
           true    => [
-            'set 6/opt[2] x-systemd.requires',
+            'set 6/opt[2] x-systemd.after',
             'set 6/opt[2]/value openvpn-client@nest.service',
-            'set 6/opt[3] x-systemd.requires',
-            'set 6/opt[3]/value sys-subsystem-net-devices-tun0.device',
           ],
           default => [],
         },
@@ -121,12 +118,10 @@ class nest::base::fstab {
       'set 7/vfstype nfs',
       'set 7/opt[1] x-systemd.automount',
 
-      $nest::vpn ? {
+      $mobile_variant or $nest::vpn ? {
         true    => [
-          'set 7/opt[2] x-systemd.requires',
+          'set 7/opt[2] x-systemd.after',
           'set 7/opt[2]/value openvpn-client@nest.service',
-          'set 7/opt[3] x-systemd.requires',
-          'set 7/opt[3]/value sys-subsystem-net-devices-tun0.device',
         ],
         default => [],
       },

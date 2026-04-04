@@ -32,17 +32,33 @@ class nest::base::openvpn {
         $ovpn_module = 'ovpn-dco-v2'
       }
 
-      if $nest::router or $nest::vpn {
-        file { '/etc/modules-load.d/openvpn.conf':
-          mode    => '0644',
-          owner   => 'root',
-          group   => 'root',
-          content => "${ovpn_module}\n",
-        }
-      } else {
-        file { '/etc/modules-load.d/openvpn.conf':
-          ensure => absent,
-        }
+      file { [
+        '/etc/systemd/system/openvpn-client@.service.d',
+        '/etc/systemd/system/openvpn-server@.service.d',
+      ]:
+        ensure => directory,
+        mode   => '0755',
+        owner  => 'root',
+        group  => 'root',
+      }
+      ->
+      file { [
+        '/etc/systemd/system/openvpn-client@.service.d/10-kmod.conf',
+        '/etc/systemd/system/openvpn-server@.service.d/10-kmod.conf',
+      ]:
+        mode    => '0644',
+        owner   => 'root',
+        group   => 'root',
+        content => epp('nest/openvpn/kmod.conf.epp', { 'ovpn_module' => $ovpn_module }),
+        notify  => Nest::Lib::Systemd_reload['openvpn'],
+      }
+
+      file { '/etc/systemd/system/openvpn-client@.service.d/20-bird.conf':
+        mode    => '0644',
+        owner   => 'root',
+        group   => 'root',
+        content => epp('nest/openvpn/bird.conf.epp'),
+        notify  => Nest::Lib::Systemd_reload['openvpn'],
       }
 
       if $nest::router {
@@ -114,6 +130,8 @@ class nest::base::openvpn {
         $mode = 'client'
         $openvpn_config = epp('nest/openvpn/config.epp')
       }
+
+      nest::lib::systemd_reload { 'openvpn': }
 
       $openvpn_config_file      = "/etc/openvpn/${mode}/nest.conf"
       $openvpn_service_name     = "openvpn-${mode}@nest"
