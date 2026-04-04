@@ -10,10 +10,7 @@ if ! command -v nmcli >/dev/null 2>&1; then
   exit 0
 fi
 
-active_connection="$(nmcli --terse --fields NAME connection show --active)"
-
-if [ "${active_connection}" = "${trusted_connection}" ]; then
-  /bin/systemctl --no-block stop "${vpn_service}"
+if nmcli --terse --fields NAME connection show --active | grep -Fxq "${trusted_connection}"; then
   /bin/systemctl --no-block start "${bird_service}"
 else
   /bin/systemctl --no-block start "${vpn_service}"
