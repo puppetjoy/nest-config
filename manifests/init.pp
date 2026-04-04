@@ -76,6 +76,7 @@ class nest (
   Hash[String, Hash] $package_env      = {},
   Hash[String, Hash] $package_keywords = {},
   Hash[String, Hash] $package_unmask   = {},
+  Hash[String, Hash] $package_use      = {},
 
   # Input settings
   Boolean $dvorak       = false,

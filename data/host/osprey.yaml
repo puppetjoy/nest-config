@@ -21,6 +21,11 @@ nest::package_keywords:
   sys-kernel/linux-firmware:
     version: '~20260309'
 
+nest::package_use:
+  # Deprioritize dGPU
+  x11-wm/mutter:
+    use: '-video_cards_nvidia'
+
 nest::kernel_config:
   # WiFi / Bluetooth
   CONFIG_BT_HCIBTUSB_MTK: y

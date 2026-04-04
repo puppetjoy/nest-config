@@ -239,6 +239,10 @@ class nest::base::portage {
   create_resources(package_unmask, $nest::package_unmask, {
     'before' => Class['portage']
   })
+  create_resources(package_use, $nest::package_use, {
+    'before' => Class['portage'],
+    'tag'    => 'profile',
+  })
 
   # Purge unmanaged portage package properties
   resources { [

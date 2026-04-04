@@ -22,6 +22,10 @@ lookup_options:
     merge: 'hash'
   nest::package_keywords:
     merge: 'hash'
+  nest::package_unmask:
+    merge: 'hash'
+  nest::package_use:
+    merge: 'hash'
   nest::puppet_forge_key:
     convert_to: 'Sensitive'
   nest::reset_filter_rules:
