@@ -1,6 +1,12 @@
 #!/bin/sh
 
-if nmcli --terse --fields NAME connection show --active | grep -Fxq 'Nest'; then
+active_connections="$(nmcli --terse --fields NAME connection show --active)"
+
+if [ "${active_connections}" = 'lo' ]; then
+  exit 0
+fi
+
+if printf '%s\n' "${active_connections}" | grep -Fxq 'Nest'; then
   /bin/systemctl --no-block start bird
 else
   /bin/systemctl --no-block start openvpn-client@nest
