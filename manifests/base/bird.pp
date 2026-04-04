@@ -46,7 +46,7 @@ class nest::base::bird {
     nest::lib::systemd_reload { 'bird': }
     ~>
     service { 'bird':
-      enable => true,
+      enable => $facts['profile']['variant'] != 'mobile',
     }
   } else {
     service { 'bird':
