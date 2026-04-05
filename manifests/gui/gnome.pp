@@ -26,6 +26,11 @@ class nest::gui::gnome {
     xkb-options=${xkb_options}
     | END
 
+  $input_sources_locks_content = @("END")
+    /org/gnome/desktop/input-sources/sources
+    /org/gnome/desktop/input-sources/xkb-options
+    | END
+
   $user_profile_content = @("END")
     user-db:user
     system-db:local
@@ -64,6 +69,16 @@ class nest::gui::gnome {
     '/etc/dconf/db/local.d/00-input-sources':
       mode    => '0644',
       content => $input_sources_content,
+    ;
+
+    '/etc/dconf/db/local.d/locks':
+      ensure => directory,
+      mode   => '0755',
+    ;
+
+    '/etc/dconf/db/local.d/locks/00-input-sources':
+      mode    => '0644',
+      content => $input_sources_locks_content,
     ;
 
     '/etc/dconf/profile':
