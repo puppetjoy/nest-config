@@ -1,0 +1,4 @@
+<%- | Array[String] $locks | -%>
+<% $locks.sort.each |$lock| { -%>
+<%= $lock %>
+<% } -%>

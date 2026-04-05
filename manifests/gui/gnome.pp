@@ -20,76 +20,14 @@ class nest::gui::gnome {
     default => "['ctrl:nocaps']",
   }
 
-  $input_sources_content = @("END")
-    [org/gnome/desktop/input-sources]
-    sources=[('xkb', '${keyboard_source}')]
-    xkb-options=${xkb_options}
-    | END
-
-  $input_sources_locks_content = @("END")
-    /org/gnome/desktop/input-sources/sources
-    /org/gnome/desktop/input-sources/xkb-options
-    | END
-
-  $user_profile_content = @("END")
-    user-db:user
-    system-db:local
-    | END
-
-  exec { 'dconf-update':
-    command     => '/usr/bin/dconf update',
-    refreshonly => true,
-    require     => Nest::Lib::Package['gnome-base/gnome'],
-  }
-
-  # System dconf defaults
-  file {
-    default:
-      owner   => 'root',
-      group   => 'root',
-      require => Nest::Lib::Package['gnome-base/gnome'],
-      notify  => Exec['dconf-update'],
-    ;
-
-    '/etc/dconf':
-      ensure => directory,
-      mode   => '0755',
-    ;
-
-    '/etc/dconf/db':
-      ensure => directory,
-      mode   => '0755',
-    ;
-
-    '/etc/dconf/db/local.d':
-      ensure => directory,
-      mode   => '0755',
-    ;
-
-    '/etc/dconf/db/local.d/00-input-sources':
-      mode    => '0644',
-      content => $input_sources_content,
-    ;
-
-    '/etc/dconf/db/local.d/locks':
-      ensure => directory,
-      mode   => '0755',
-    ;
-
-    '/etc/dconf/db/local.d/locks/00-input-sources':
-      mode    => '0644',
-      content => $input_sources_locks_content,
-    ;
-
-    '/etc/dconf/profile':
-      ensure => directory,
-      mode   => '0755',
-    ;
-
-    '/etc/dconf/profile/user':
-      mode    => '0644',
-      content => $user_profile_content,
-    ;
+  nest::lib::dconf { 'input-sources':
+    settings => {
+      'org/gnome/desktop/input-sources' => {
+        'sources'     => "[('xkb', '${keyboard_source}')]",
+        'xkb-options' => $xkb_options,
+      },
+    },
+    locks => true,
   }
 
   $accountsservice_icon = "/var/lib/AccountsService/icons/${nest::user}"

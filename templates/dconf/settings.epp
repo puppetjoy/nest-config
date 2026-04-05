@@ -1,0 +1,8 @@
+<%- | Hash[String, Hash[String, String]] $settings | -%>
+<% $settings.keys.sort.each |$section| { -%>
+[<%= $section %>]
+<% $settings[$section].keys.sort.each |$key| { -%>
+<%= $key %>=<%= $settings[$section][$key] %>
+<% } -%>
+
+<% } -%>
