@@ -27,7 +27,7 @@ class nest::gui::gnome {
         'xkb-options' => $xkb_options,
       },
     },
-    locks => true,
+    locks    => true,
   }
 
   $accountsservice_icon = "/var/lib/AccountsService/icons/${nest::user}"

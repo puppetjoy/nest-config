@@ -22,7 +22,7 @@ define nest::lib::dconf (
     owner   => 'root',
     group   => 'root',
     content => epp('nest/dconf/settings.epp', { 'settings' => $settings }),
-    notify  => Class['nest::base::dconf'],
+    notify  => Exec['dconf-update'],
   }
 
   unless empty($lock_paths) {
@@ -32,7 +32,7 @@ define nest::lib::dconf (
       owner   => 'root',
       group   => 'root',
       content => epp('nest/dconf/locks.epp', { 'locks' => $lock_paths }),
-      notify  => Class['nest::base::dconf'],
+      notify  => Exec['dconf-update'],
     }
   }
 }
