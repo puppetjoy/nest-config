@@ -1,12 +1,13 @@
+<%- | Optional[String] $autologin_session | -%>
 [terminal]
 vt = 7
 
 [default_session]
 command = "sway --config /etc/greetd/sway-config"
 user = "<%= $nest::user %>"
-<% if $nest::autologin != off { -%>
+<% if $autologin_session { -%>
 
 [initial_session]
-command = "<%= $nest::autologin %>"
+command = "<%= $autologin_session %>"
 user = "<%= $nest::user %>"
 <% } -%>

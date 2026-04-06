@@ -31,6 +31,33 @@ class nest::gui::gnome {
     locks    => true,
   }
 
+  if $nest::autologin == true {
+    $gdm_autologin_enable = 'True'
+    $gdm_autologin_ensure = 'present'
+  } else {
+    $gdm_autologin_enable = 'False'
+    $gdm_autologin_ensure = 'absent'
+  }
+
+  ini_setting {
+    default:
+      path    => '/etc/gdm/custom.conf',
+      section => 'daemon',
+      require => Nest::Lib::Package['gnome-base/gnome'],
+    ;
+
+    'gdm-custom.conf-AutomaticLoginEnable':
+      setting => 'AutomaticLoginEnable',
+      value   => $gdm_autologin_enable,
+    ;
+
+    'gdm-custom.conf-AutomaticLogin':
+      ensure  => $gdm_autologin_ensure,
+      setting => 'AutomaticLogin',
+      value   => $nest::user,
+    ;
+  }
+
   $accountsservice_icon = "/var/lib/AccountsService/icons/${nest::user}"
 
   $accountsservice_user_content = @("END")

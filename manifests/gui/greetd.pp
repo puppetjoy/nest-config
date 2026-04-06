@@ -4,6 +4,12 @@ class nest::gui::greetd {
     default => "xmonad\nsway\n",
   }
 
+  $autologin_session = $nest::autologin ? {
+    true    => 'xmonad',
+    false   => undef,
+    default => $nest::autologin,
+  }
+
   nest::lib::package { [
     'gui-libs/greetd',
     'gui-apps/gtkgreet',
@@ -19,7 +25,9 @@ class nest::gui::greetd {
     ;
 
     '/etc/greetd/config.toml':
-      content => epp('nest/greetd/config.toml.epp'),
+      content => epp('nest/greetd/config.toml.epp', {
+        'autologin_session' => $autologin_session,
+      }),
     ;
 
     '/etc/greetd/sway-config':
