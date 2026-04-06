@@ -33,12 +33,12 @@ class nest::gui::gnome {
 
   nest::lib::dconf { 'session':
     settings => {
-      'org/gnome/desktop/screensaver' => {
+      'org/gnome/desktop/screensaver'           => {
         'idle-activation-enabled' => 'false',
         'lock-enabled'            => 'false',
       },
-      'org/gnome/desktop/session' => {
-        'idle-delay' => 'uint32 0',
+      'org/gnome/desktop/session'               => {
+        'idle-delay'                  => 'uint32 0',
       },
       'org/gnome/settings-daemon/plugins/power' => {
         'sleep-inactive-battery-type' => "'nothing'",
