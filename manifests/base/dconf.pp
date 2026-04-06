@@ -11,36 +11,27 @@ class nest::base::dconf {
 
   file {
     default:
+      mode  => '0644',
       owner => 'root',
       group => 'root',
     ;
 
-    '/etc/dconf':
+    [
+      '/etc/dconf',
+      '/etc/dconf/db',
+      '/etc/dconf/profile',
+    ]:
       ensure => directory,
-      mode   => '0755',
     ;
 
-    '/etc/dconf/db':
-      ensure => directory,
-      mode   => '0755',
-    ;
-
-    '/etc/dconf/db/local.d':
+    [
+      '/etc/dconf/db/local.d',
+      '/etc/dconf/db/local.d/locks',
+    ]:
       ensure  => directory,
-      mode    => '0755',
       purge   => true,
       recurse => true,
       force   => true,
-    ;
-
-    '/etc/dconf/db/local.d/locks':
-      ensure => directory,
-      mode   => '0755',
-    ;
-
-    '/etc/dconf/profile':
-      ensure => directory,
-      mode   => '0755',
     ;
 
     '/etc/dconf/profile/user':
