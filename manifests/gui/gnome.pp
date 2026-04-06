@@ -21,7 +21,7 @@ class nest::gui::gnome {
     default => "['ctrl:nocaps']",
   }
 
-  nest::lib::dconf { 'input-sources':
+  nest::lib::dconf { 'keyboard':
     settings => {
       'org/gnome/desktop/input-sources' => {
         'sources'     => "[('xkb', '${keyboard_source}')]",
@@ -31,8 +31,23 @@ class nest::gui::gnome {
     locks    => true,
   }
 
+  nest::lib::dconf { 'session':
+    settings => {
+      'org/gnome/desktop/screensaver' => {
+        'idle-activation-enabled' => 'false',
+        'lock-enabled'            => 'false',
+      },
+      'org/gnome/desktop/session' => {
+        'idle-delay' => 'uint32 0',
+      },
+      'org/gnome/settings-daemon/plugins/power' => {
+        'sleep-inactive-battery-type' => "'nothing'",
+      },
+    },
+  }
+
   if $nest::idle_brightness != undef {
-    nest::lib::dconf { 'power':
+    nest::lib::dconf { 'idle-brightness':
       settings => {
         'org/gnome/settings-daemon/plugins/power' => {
           'idle-brightness' => String($nest::idle_brightness),
