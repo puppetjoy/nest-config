@@ -55,5 +55,6 @@ nest::kernel_config:
 
   # Laptop specifics
   CONFIG_HID_ASUS: m
+  CONFIG_LEDS_BRIGHTNESS_HW_CHANGED: y
   CONFIG_ASUS_WMI: m
   CONFIG_ASUS_NB_WMI: m
