@@ -31,6 +31,17 @@ class nest::gui::gnome {
     locks    => true,
   }
 
+  if $nest::idle_brightness != undef {
+    nest::lib::dconf { 'power':
+      settings => {
+        'org/gnome/settings-daemon/plugins/power' => {
+          'idle-brightness' => String($nest::idle_brightness),
+        },
+      },
+      locks    => true,
+    }
+  }
+
   if $nest::autologin == true {
     $gdm_autologin_enable = 'True'
     $gdm_autologin_ensure = 'present'

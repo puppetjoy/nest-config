@@ -82,11 +82,12 @@ class nest (
   Boolean $swap_alt_win = false,
 
   # Output settings
-  Float                   $gui_scaling_factor  = 1.0,
-  Optional[String]        $primary_monitor     = undef,
-  Nest::SubpixelRendering $subpixel_rendering  = rgb,
-  Float                   $text_scaling_factor = $gui_scaling_factor,
-  Array[String]           $monitor_layout      = [],
+  Float                     $gui_scaling_factor  = 1.0,
+  Optional[Integer[0, 100]] $idle_brightness     = undef,
+  Optional[String]          $primary_monitor     = undef,
+  Nest::SubpixelRendering   $subpixel_rendering  = rgb,
+  Float                     $text_scaling_factor = $gui_scaling_factor,
+  Array[String]             $monitor_layout      = [],
 
   # Other nest classes
   Array[String] $classes = [],
@@ -145,6 +146,11 @@ class nest (
     $gui_scaling_factor_lookup = lookup('nest::gui_scaling_factor', { default_value => '__nest_gui_scaling_factor_unset__' })
     if $gui_scaling_factor_lookup != '__nest_gui_scaling_factor_unset__' {
       fail('Do not set nest::gui_scaling_factor on mobile nodes. Graphical scaling is managed by GNOME.')
+    }
+  } else {
+    $idle_brightness_lookup = lookup('nest::idle_brightness', { default_value => '__nest_idle_brightness_unset__' })
+    if $idle_brightness_lookup != '__nest_idle_brightness_unset__' {
+      fail('Only set nest::idle_brightness on mobile nodes.')
     }
   }
 

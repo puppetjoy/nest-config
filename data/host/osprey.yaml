@@ -8,6 +8,7 @@ nest::classes:
   - 'nest::tool::vscode'
 
 nest::dvorak: true
+nest::idle_brightness: 15
 nest::subpixel_rendering: none
 nest::text_scaling_factor: 2.0
 nest::use: ['video_cards_nvidia']
