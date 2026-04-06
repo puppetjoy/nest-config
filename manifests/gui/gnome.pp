@@ -8,6 +8,7 @@ class nest::gui::gnome {
   ->
   nest::lib::package { 'gnome-base/gnome':
     ensure => installed,
+    before => Class['nest::base::dconf'],
   }
 
   $keyboard_source = $nest::dvorak ? {

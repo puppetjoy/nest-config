@@ -7,14 +7,12 @@ class nest::base::dconf {
   exec { 'dconf-update':
     command     => '/usr/bin/dconf update',
     refreshonly => true,
-    require     => Class['nest::gui::gnome'],
   }
 
   file {
     default:
-      owner   => 'root',
-      group   => 'root',
-      require => Class['nest::gui::gnome'],
+      owner => 'root',
+      group => 'root',
     ;
 
     '/etc/dconf':
