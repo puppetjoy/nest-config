@@ -7,6 +7,7 @@ fixtures:
     chocolatey: 'puppetlabs/chocolatey'
     cron_core: 'puppetlabs/cron_core'
     host_core: 'puppetlabs/host_core'
+    inifile: 'puppetlabs/inifile'
     sshkeys_core: 'puppetlabs/sshkeys_core'
     zfs_core: 'puppetlabs/zfs_core'
     dnsquery: 'puppet/dnsquery'
