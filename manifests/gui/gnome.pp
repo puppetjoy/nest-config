@@ -101,8 +101,8 @@ class nest::gui::gnome {
   nest::lib::dconf { 'console':
     settings => {
       'org/gnome/Console' => {
-        'custom-font'              => "'Monospace 10'",
-        'use-system-font'          => 'false',
+        'custom-font'     => "'Monospace 10'",
+        'use-system-font' => 'false',
       },
     },
   }
