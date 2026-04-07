@@ -40,6 +40,7 @@ class nest::gui::gnome {
     'org.freedesktop.IBus.Setup.desktop',
     'org.gnome.ColorProfileViewer.desktop',
     'org.gnome.Connections.desktop',
+    'org.gnome.Console.desktop',
     'org.gnome.Contacts.desktop',
     'org.gnome.Evince.desktop',
     'org.gnome.Evolution.desktop',
@@ -96,15 +97,6 @@ class nest::gui::gnome {
       },
     },
     locks    => true,
-  }
-
-  nest::lib::dconf { 'console':
-    settings => {
-      'org/gnome/Console' => {
-        'custom-font'     => "'Monospace 10'",
-        'use-system-font' => 'false',
-      },
-    },
   }
 
   nest::lib::dconf { 'session':
