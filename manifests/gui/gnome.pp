@@ -31,6 +31,15 @@ class nest::gui::gnome {
     locks    => true,
   }
 
+  nest::lib::dconf { 'console':
+    settings => {
+      'org/gnome/Console' => {
+        'custom-font'              => "'Adwaita Mono 10'",
+        'use-system-font'          => 'false',
+      },
+    },
+  }
+
   nest::lib::dconf { 'session':
     settings => {
       'org/gnome/desktop/screensaver'           => {
