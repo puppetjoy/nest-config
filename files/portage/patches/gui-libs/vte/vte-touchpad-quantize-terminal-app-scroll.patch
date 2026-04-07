@@ -1,31 +1,69 @@
 diff --git a/src/vte.cc b/src/vte.cc
-index 5f2c8f82..24247907 100644
+index 5f2c8f82..e73826ac 100644
 --- a/src/vte.cc
 +++ b/src/vte.cc
-@@ -10138,6 +10138,12 @@ Terminal::widget_mouse_scroll(vte::platform::ScrollEvent const& event)
+@@ -10138,26 +10138,76 @@ Terminal::widget_mouse_scroll(vte::platform::ScrollEvent const& event)
  	gdouble v;
          gint cnt_x, cnt_y, i;
  	int button;
-+        auto const quantise_surface_scroll = [](double* delta,
-+                                                double step) noexcept {
-+                auto const count = int(*delta / step);
-+                *delta -= count * step;
-+                return count;
++        /*
++         * Touchpad tuning for terminal-app scroll forwarding:
++         *
++         * GTK surface scroll events arrive as high-resolution deltas, but
++         * terminal applications only accept discrete wheel-style events.  Keep
++         * precise input on the same accumulator path as wheel input, but scale
++         * it down first and quantise it with a smaller first step so the motion
++         * feels closer to Ghostty's touchpad handling.
++         *
++         * If this patch needs to be forward-ported, the key call sites to
++         * preserve are:
++         *   - Widget::event_scroll()/scroll_event_from_gdk() tagging precise
++         *     versus discrete input
++         *   - Widget::event_scroll_begin()/event_scroll_end() resetting the
++         *     accumulator at gesture boundaries
++         *   - Terminal::widget_mouse_scroll() keeping precise input on the
++         *     existing accumulator path instead of per-row quantisation
++         *
++         * These values were tuned empirically against Ghostty on GNOME:
++         *   precise_scroll_multiplier: overall touchpad speed
++         *   first_step: motion needed for the first emitted line
++         */
++        auto const precise_scroll_multiplier = 0.07;
++        auto const quantise_precise_scroll = [](double* delta) noexcept {
++                auto const sign = *delta < 0 ? -1 : 1;
++                auto const magnitude = fabs(*delta);
++                auto const first_step = 0.35;
++                auto count = 0;
++
++                if (magnitude >= first_step) {
++                        count = 1 + int(magnitude - first_step);
++                        *delta = sign * (magnitude - (count - first_step));
++                        return sign * count;
++                }
++
++                return 0;
 +        };
++        auto scroll_dx = event.dx();
++        auto scroll_dy = event.dy();
++
++        if (event.is_precise()) {
++                scroll_dx *= precise_scroll_multiplier;
++                scroll_dy *= precise_scroll_multiplier;
++        }
  
          m_modifiers = event.modifiers();
-         m_mouse_smooth_scroll_x_delta += event.dx();
-@@ -10145,19 +10151,27 @@ Terminal::widget_mouse_scroll(vte::platform::ScrollEvent const& event)
+-        m_mouse_smooth_scroll_x_delta += event.dx();
+-        m_mouse_smooth_scroll_y_delta += event.dy();
++        m_mouse_smooth_scroll_x_delta += scroll_dx;
++        m_mouse_smooth_scroll_y_delta += scroll_dy;
  
          /* If we're running a mouse-aware application, map the scroll event to button presses on buttons 4-7. */
  	if (m_mouse_tracking_mode != MouseTrackingMode::eNONE) {
 -                cnt_x = m_mouse_smooth_scroll_x_delta;
 -                cnt_y = m_mouse_smooth_scroll_y_delta;
 +                if (event.is_precise()) {
-+                        cnt_x = quantise_surface_scroll(&m_mouse_smooth_scroll_x_delta,
-+                                                        MAX(1., double(m_cell_width)));
-+                        cnt_y = quantise_surface_scroll(&m_mouse_smooth_scroll_y_delta,
-+                                                        MAX(1., double(m_cell_height)));
++                        cnt_x = quantise_precise_scroll(&m_mouse_smooth_scroll_x_delta);
++                        cnt_y = quantise_precise_scroll(&m_mouse_smooth_scroll_y_delta);
 +                } else {
 +                        cnt_x = m_mouse_smooth_scroll_x_delta;
 +                        cnt_y = m_mouse_smooth_scroll_y_delta;
@@ -43,20 +81,19 @@ index 5f2c8f82..24247907 100644
  		_vte_debug_print(VTE_DEBUG_EVENTS,
 -                                 "Scroll application by %d lines, %d columns, smooth scroll delta set back to y=%f, x=%f\n",
 -                                 cnt_y, cnt_x, m_mouse_smooth_scroll_y_delta, m_mouse_smooth_scroll_x_delta);
-+                                 "Scroll application by %d lines, %d columns, precise=%d, smooth scroll delta set back to y=%f, x=%f\n",
-+                                 cnt_y, cnt_x, event.is_precise(),
++                                 "Scroll application by %d lines, %d columns, precise=%d, multiplier=%f, smooth scroll delta set back to y=%f, x=%f\n",
++                                 cnt_y, cnt_x, event.is_precise(), precise_scroll_multiplier,
 +                                 m_mouse_smooth_scroll_y_delta, m_mouse_smooth_scroll_x_delta);
  
                  button = cnt_y > 0 ? 5 : 4;
                  if (cnt_y < 0)
-@@ -10195,13 +10209,19 @@ Terminal::widget_mouse_scroll(vte::platform::ScrollEvent const& event)
+@@ -10195,13 +10245,18 @@ Terminal::widget_mouse_scroll(vte::platform::ScrollEvent const& event)
  		char *normal;
  		gsize normal_length;
  
 -                cnt_y = v * m_mouse_smooth_scroll_y_delta;
 +                if (event.is_precise()) {
-+                        cnt_y = quantise_surface_scroll(&m_mouse_smooth_scroll_y_delta,
-+                                                        MAX(1., double(m_cell_height)));
++                        cnt_y = quantise_precise_scroll(&m_mouse_smooth_scroll_y_delta);
 +                } else {
 +                        cnt_y = v * m_mouse_smooth_scroll_y_delta;
 +                        if (cnt_y != 0)
@@ -68,12 +105,12 @@ index 5f2c8f82..24247907 100644
  		_vte_debug_print(VTE_DEBUG_EVENTS,
 -                                "Scroll by %d lines, smooth scroll y_delta set back to %f\n",
 -                                cnt_y, m_mouse_smooth_scroll_y_delta);
-+                                "Scroll by %d lines, precise=%d, smooth scroll y_delta set back to %f\n",
-+                                cnt_y, event.is_precise(), m_mouse_smooth_scroll_y_delta);
++                                "Scroll by %d lines, precise=%d, multiplier=%f, smooth scroll y_delta set back to %f\n",
++                                cnt_y, event.is_precise(), precise_scroll_multiplier, m_mouse_smooth_scroll_y_delta);
  
                  /* In the alternate screen there is no scrolling, so fake a few cursor keystrokes (only vertically). */
  		_vte_keymap_map (
-@@ -10228,6 +10248,13 @@ Terminal::widget_mouse_scroll(vte::platform::ScrollEvent const& event)
+@@ -10228,6 +10283,13 @@ Terminal::widget_mouse_scroll(vte::platform::ScrollEvent const& event)
          return false;
  }
  
@@ -100,20 +137,21 @@ index 4d26a4f9..5ca77ee4 100644
          bool widget_key_modifiers(unsigned modifiers);
  #endif /* VTE_GTK == 4 */
 diff --git a/src/widget.cc b/src/widget.cc
-index 0daaed1e..d4559af7 100644
+index 0daaed1e..906295ef 100644
 --- a/src/widget.cc
 +++ b/src/widget.cc
-@@ -1245,7 +1245,8 @@ Widget::event_scroll_begin(GtkEventControllerScroll* controller)
+@@ -1245,7 +1245,9 @@ Widget::event_scroll_begin(GtkEventControllerScroll* controller)
  {
          _vte_debug_print(VTE_DEBUG_EVENTS, "Scroll begin\n");
  
 -        // FIXMEgtk4
++        /* Keep partial precise-scroll remainder from leaking across gestures. */
 +        if (gtk_event_controller_scroll_get_unit(controller) == GDK_SCROLL_UNIT_SURFACE)
 +                terminal()->reset_mouse_smooth_scroll();
  }
  
  bool
-@@ -1260,6 +1261,9 @@ Widget::event_scroll(GtkEventControllerScroll* controller,
+@@ -1260,6 +1262,9 @@ Widget::event_scroll(GtkEventControllerScroll* controller,
                  return false;
  
          return terminal()->widget_mouse_scroll({gdk_event_get_modifier_state(event),
@@ -123,17 +161,18 @@ index 0daaed1e..d4559af7 100644
                                                  dx, dy});
  }
  
-@@ -1268,7 +1272,8 @@ Widget::event_scroll_end(GtkEventControllerScroll* controller)
+@@ -1268,7 +1273,9 @@ Widget::event_scroll_end(GtkEventControllerScroll* controller)
  {
          _vte_debug_print(VTE_DEBUG_EVENTS, "Scroll end\n");
  
 -        // FIXMEgtk4
++        /* Keep partial precise-scroll remainder from leaking across gestures. */
 +        if (gtk_event_controller_scroll_get_unit(controller) == GDK_SCROLL_UNIT_SURFACE)
 +                terminal()->reset_mouse_smooth_scroll();
  }
  
  void
-@@ -1758,6 +1763,7 @@ Widget::scroll_event_from_gdk(GdkEvent* event) const
+@@ -1758,6 +1765,7 @@ Widget::scroll_event_from_gdk(GdkEvent* event) const
          if (gdk_event_get_pointer_emulated(event))
                  return std::nullopt;
  
@@ -141,7 +180,7 @@ index 0daaed1e..d4559af7 100644
          auto dx = double{}, dy = double{};
          if (!gdk_event_get_scroll_deltas(event, &dx, &dy)) {
                  auto dir = GdkScrollDirection{};
-@@ -1772,10 +1778,12 @@ Widget::scroll_event_from_gdk(GdkEvent* event) const
+@@ -1772,10 +1780,12 @@ Widget::scroll_event_from_gdk(GdkEvent* event) const
                  case GDK_SCROLL_SMOOTH:
                  default: __builtin_unreachable();
                  }
