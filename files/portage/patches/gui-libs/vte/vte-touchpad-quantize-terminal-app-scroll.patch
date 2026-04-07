@@ -1,8 +1,8 @@
 diff --git a/src/vte.cc b/src/vte.cc
-index 5f2c8f82..e73826ac 100644
+index 5f2c8f82..490057d6 100644
 --- a/src/vte.cc
 +++ b/src/vte.cc
-@@ -10138,26 +10138,76 @@ Terminal::widget_mouse_scroll(vte::platform::ScrollEvent const& event)
+@@ -10138,26 +10138,78 @@ Terminal::widget_mouse_scroll(vte::platform::ScrollEvent const& event)
  	gdouble v;
          gint cnt_x, cnt_y, i;
  	int button;
@@ -34,10 +34,12 @@ index 5f2c8f82..e73826ac 100644
 +                auto const magnitude = fabs(*delta);
 +                auto const first_step = 0.35;
 +                auto count = 0;
++                auto consumed = 0.;
 +
 +                if (magnitude >= first_step) {
 +                        count = 1 + int(magnitude - first_step);
-+                        *delta = sign * (magnitude - (count - first_step));
++                        consumed = first_step + (count - 1);
++                        *delta = sign * (magnitude - consumed);
 +                        return sign * count;
 +                }
 +
@@ -87,7 +89,7 @@ index 5f2c8f82..e73826ac 100644
  
                  button = cnt_y > 0 ? 5 : 4;
                  if (cnt_y < 0)
-@@ -10195,13 +10245,18 @@ Terminal::widget_mouse_scroll(vte::platform::ScrollEvent const& event)
+@@ -10195,13 +10247,18 @@ Terminal::widget_mouse_scroll(vte::platform::ScrollEvent const& event)
  		char *normal;
  		gsize normal_length;
  
@@ -110,7 +112,7 @@ index 5f2c8f82..e73826ac 100644
  
                  /* In the alternate screen there is no scrolling, so fake a few cursor keystrokes (only vertically). */
  		_vte_keymap_map (
-@@ -10228,6 +10283,13 @@ Terminal::widget_mouse_scroll(vte::platform::ScrollEvent const& event)
+@@ -10228,6 +10285,13 @@ Terminal::widget_mouse_scroll(vte::platform::ScrollEvent const& event)
          return false;
  }
  
