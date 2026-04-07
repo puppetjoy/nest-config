@@ -6,6 +6,12 @@ class nest::gui::firefox {
         use    => 'hwaccel',
       }
 
+      if $facts['profile']['variant'] == 'mobile' {
+        nest::lib::package { 'www-plugins/firefoxpwa':
+          ensure => installed,
+        }
+      }
+
       $webrender = $facts['profile']['platform'] ? {
         'raspberrypi4' => 0,
         default        => 1,
