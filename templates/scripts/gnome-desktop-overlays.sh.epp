@@ -1,0 +1,144 @@
+<%- | Array[String] $desktop_entries | -%>
+#!/bin/sh
+set -eu
+
+mode="${1:-}"
+if [ "$mode" != "--check" ] && [ "$mode" != "--apply" ]; then
+  echo "usage: $0 --check|--apply" >&2
+  exit 2
+fi
+
+dst_dir='/usr/local/share/applications'
+state_file="${dst_dir}/.nest-hidden-desktop-entries"
+
+desired_entries() {
+<% $desktop_entries.each |$desktop_entry| { -%>
+  printf '%s\n' '<%= $desktop_entry %>'
+<% } -%>
+}
+
+transform_desktop_file() {
+  awk '
+    BEGIN {
+      in_desktop_entry = 0
+      wrote_nodisplay = 0
+    }
+
+    /^\[Desktop Entry\]$/ {
+      in_desktop_entry = 1
+      print
+      next
+    }
+
+    /^\[/ {
+      if (in_desktop_entry && !wrote_nodisplay) {
+        print "NoDisplay=true"
+        wrote_nodisplay = 1
+      }
+
+      in_desktop_entry = 0
+      print
+      next
+    }
+
+    in_desktop_entry && /^NoDisplay=/ {
+      print "NoDisplay=true"
+      wrote_nodisplay = 1
+      next
+    }
+
+    {
+      print
+    }
+
+    END {
+      if (in_desktop_entry && !wrote_nodisplay) {
+        print "NoDisplay=true"
+      }
+    }
+  ' "$1"
+}
+
+copy_if_changed() {
+  src=$1
+  dst=$2
+  tmp=$(mktemp)
+  transform_desktop_file "$src" >"$tmp"
+
+  if [ ! -f "$dst" ] || ! cmp -s "$tmp" "$dst"; then
+    if [ "$mode" = "--check" ]; then
+      rm -f "$tmp"
+      return 1
+    fi
+
+    install -Dm0644 "$tmp" "$dst"
+  fi
+
+  rm -f "$tmp"
+  return 0
+}
+
+remove_if_present() {
+  dst=$1
+
+  if [ -f "$dst" ]; then
+    if [ "$mode" = "--check" ]; then
+      return 1
+    fi
+
+    rm -f "$dst"
+  fi
+
+  return 0
+}
+
+if [ "$mode" = "--apply" ]; then
+  mkdir -p "$dst_dir"
+elif [ ! -d "$dst_dir" ]; then
+  exit 1
+fi
+
+old_entries=$(mktemp)
+new_entries=$(mktemp)
+trap 'rm -f "$old_entries" "$new_entries"' EXIT
+
+if [ -f "$state_file" ]; then
+  cat "$state_file" >"$old_entries"
+fi
+
+desired_entries >"$new_entries"
+
+while IFS= read -r desktop_entry; do
+  [ -n "$desktop_entry" ] || continue
+
+  if ! grep -Fx -- "$desktop_entry" "$new_entries" >/dev/null 2>&1; then
+    if ! remove_if_present "${dst_dir}/${desktop_entry}"; then
+      exit 1
+    fi
+  fi
+done <"$old_entries"
+
+while IFS= read -r desktop_entry; do
+  [ -n "$desktop_entry" ] || continue
+
+  src="/usr/share/applications/${desktop_entry}"
+  dst="${dst_dir}/${desktop_entry}"
+
+  if [ -f "$src" ]; then
+    if ! copy_if_changed "$src" "$dst"; then
+      exit 1
+    fi
+  else
+    if ! remove_if_present "$dst"; then
+      exit 1
+    fi
+  fi
+done <"$new_entries"
+
+if [ ! -f "$state_file" ] || ! cmp -s "$new_entries" "$state_file"; then
+  if [ "$mode" = "--check" ]; then
+    exit 1
+  fi
+
+  install -m0644 "$new_entries" "$state_file"
+fi

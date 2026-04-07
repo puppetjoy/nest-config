@@ -11,6 +11,69 @@ class nest::gui::gnome {
     before => Class['nest::base::dconf'],
   }
 
+  # Hide launchers that GNOME would otherwise surface prominently while
+  # leaving their underlying desktop entry metadata available in overlay
+  # copies under /usr/local/share/applications.
+  $hidden_desktop_entries = [
+    'Gentoo-system-config-printer.desktop',
+    'amdgpu_top-tui.desktop',
+    'amdgpu_top.desktop',
+    'assistant.desktop',
+    'bssh.desktop',
+    'bvnc.desktop',
+    'ca.desrt.dconf-editor.desktop',
+    'cups.desktop',
+    'distccmon-gnome.desktop',
+    'firewall-config.desktop',
+    'gnome-system-monitor-kde.desktop',
+    'htop.desktop',
+    'linguist.desktop',
+    'mpv.desktop',
+    'mupdf.desktop',
+    'nm-connection-editor.desktop',
+    'nvidia-settings.desktop',
+    'nvtop.desktop',
+    'org.freedesktop.IBus.Setup.desktop',
+    'org.gnome.ColorProfileViewer.desktop',
+    'org.gnome.Connections.desktop',
+    'org.gnome.Contacts.desktop',
+    'org.gnome.Evince.desktop',
+    'org.gnome.Evolution.desktop',
+    'org.gnome.Sysprof.desktop',
+    'org.gnome.Vte.App.Gtk4.desktop',
+    'org.gnome.font-viewer.desktop',
+    'org.gnome.seahorse.Application.desktop',
+    'qdbusviewer.desktop',
+    'qv4l2.desktop',
+    'qvidcap.desktop',
+    'vim.desktop',
+    'yelp.desktop',
+  ]
+
+  file {
+    '/usr/local/bin/nest-gnome-desktop-overlays':
+      ensure  => file,
+      mode    => '0755',
+      owner   => 'root',
+      group   => 'root',
+      content => epp('nest/scripts/gnome-desktop-overlays.sh.epp', { 'desktop_entries' => $hidden_desktop_entries }),
+    ;
+
+    '/usr/local/share/applications':
+      ensure => directory,
+      mode   => '0755',
+      owner  => 'root',
+      group  => 'root',
+    ;
+  }
+  ->
+  exec { 'sync-gnome-desktop-overlays':
+    command => '/usr/local/bin/nest-gnome-desktop-overlays --apply',
+    unless  => '/usr/local/bin/nest-gnome-desktop-overlays --check',
+  }
+
+  Package <||> -> Exec['sync-gnome-desktop-overlays']
+
   $keyboard_source = $nest::dvorak ? {
     true    => 'us+dvorak',
     default => 'us',
