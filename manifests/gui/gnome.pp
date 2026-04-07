@@ -11,6 +11,10 @@ class nest::gui::gnome {
     before => Class['nest::base::dconf'],
   }
 
+  nest::lib::package { 'gnome-extra/gnome-browser-connector':
+    ensure => installed,
+  }
+
   # Hide launchers that GNOME would otherwise surface prominently while
   # leaving their underlying desktop entry metadata available in overlay
   # copies under /usr/local/share/applications.
