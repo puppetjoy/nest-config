@@ -1,5 +1,5 @@
 diff --git a/src/vte.cc b/src/vte.cc
-index 5f2c8f82..490057d6 100644
+index 5f2c8f82..a62913fb 100644
 --- a/src/vte.cc
 +++ b/src/vte.cc
 @@ -10138,26 +10138,78 @@ Terminal::widget_mouse_scroll(vte::platform::ScrollEvent const& event)
@@ -32,7 +32,7 @@ index 5f2c8f82..490057d6 100644
 +        auto const quantise_precise_scroll = [](double* delta) noexcept {
 +                auto const sign = *delta < 0 ? -1 : 1;
 +                auto const magnitude = fabs(*delta);
-+                auto const first_step = 0.35;
++                auto const first_step = 0.25;
 +                auto count = 0;
 +                auto consumed = 0.;
 +
