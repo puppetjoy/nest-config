@@ -11,10 +11,17 @@ class nest::gui::gnome {
     before => Class['nest::base::dconf'],
   }
 
+  # For installing GNOME extensions
   nest::lib::package { 'gnome-extra/gnome-browser-connector':
     ensure => installed,
   }
 
+  # On-screen keyboard autocomplete
+  nest::lib::package { 'app-i18n/ibus-typing-booster':
+    ensure => installed,
+  }
+
+  # Support accelerometer and light sensor
   if $nest::kernel_config['CONFIG_HID_SENSOR_HUB'] in ['Y', 'y', 'm'] {
     nest::lib::package { 'gnome-extra/iio-sensor-proxy':
       ensure => installed,
