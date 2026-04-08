@@ -8,6 +8,7 @@ nest::classes:
   - 'nest::tool::qemu'
   - 'nest::tool::vscode'
 
+nest::ambient_enabled: false
 nest::dvorak: true
 nest::idle_brightness: 15
 nest::subpixel_rendering: none

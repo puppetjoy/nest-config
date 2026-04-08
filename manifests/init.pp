@@ -82,6 +82,7 @@ class nest (
   Boolean $swap_alt_win = false,
 
   # Output settings
+  Optional[Boolean]         $ambient_enabled     = undef,
   Float                     $gui_scaling_factor  = 1.0,
   Optional[Integer[0, 100]] $idle_brightness     = undef,
   Optional[String]          $primary_monitor     = undef,
@@ -148,6 +149,11 @@ class nest (
       fail('Do not set nest::gui_scaling_factor on mobile nodes. Graphical scaling is managed by GNOME.')
     }
   } else {
+    $ambient_enabled_lookup = lookup('nest::ambient_enabled', { default_value => '__nest_ambient_enabled_unset__' })
+    if $ambient_enabled_lookup != '__nest_ambient_enabled_unset__' {
+      fail('Only set nest::ambient_enabled on mobile nodes.')
+    }
+
     $idle_brightness_lookup = lookup('nest::idle_brightness', { default_value => '__nest_idle_brightness_unset__' })
     if $idle_brightness_lookup != '__nest_idle_brightness_unset__' {
       fail('Only set nest::idle_brightness on mobile nodes.')

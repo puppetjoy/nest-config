@@ -131,6 +131,17 @@ class nest::gui::gnome {
     }
   }
 
+  if $nest::ambient_enabled != undef {
+    nest::lib::dconf { 'ambient-enabled':
+      settings => {
+        'org/gnome/settings-daemon/plugins/power' => {
+          'ambient-enabled' => String($nest::ambient_enabled),
+        },
+      },
+      locks    => true,
+    }
+  }
+
   if $nest::autologin == true {
     $gdm_autologin_enable = 'True'
     $gdm_autologin_ensure = 'present'
