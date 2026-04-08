@@ -17,7 +17,10 @@ class nest::gui::gnome {
   }
 
   # On-screen keyboard autocomplete
-  nest::lib::package { 'app-i18n/ibus-typing-booster':
+  nest::lib::package { [
+    'app-i18n/ibus-typing-booster',
+    'app-dicts/myspell-en',
+  ]:
     ensure => installed,
   }
 
