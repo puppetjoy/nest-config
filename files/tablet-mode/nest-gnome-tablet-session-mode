@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import os
 import subprocess
 import sys
 
@@ -18,6 +19,19 @@ GSETTINGS_KEY = 'orientation-lock'
 
 def log(message: str) -> None:
   print(f'nest-gnome-tablet-session-mode: {message}', flush=True)
+
+
+def get_session_bus_connection() -> Gio.DBusConnection:
+  address = os.environ.get('DBUS_SESSION_BUS_ADDRESS')
+  if not address:
+    raise RuntimeError('DBUS_SESSION_BUS_ADDRESS is not set')
+
+  return Gio.DBusConnection.new_for_address_sync(
+    address,
+    Gio.DBusConnectionFlags.AUTHENTICATION_CLIENT | Gio.DBusConnectionFlags.MESSAGE_BUS_CONNECTION,
+    None,
+    None,
+  )
 
 
 def set_orientation_lock(locked: bool) -> None:
@@ -42,8 +56,8 @@ def set_orientation_lock(locked: bool) -> None:
 
 
 def reset_builtin_orientation() -> None:
-  proxy = Gio.DBusProxy.new_for_bus_sync(
-    Gio.BusType.SESSION,
+  proxy = Gio.DBusProxy.new_sync(
+    get_session_bus_connection(),
     Gio.DBusProxyFlags.NONE,
     None,
     DISPLAY_CONFIG_DEST,
@@ -115,7 +129,10 @@ def main() -> int:
 
   mode = sys.argv[1]
   if mode == 'laptop':
-    reset_builtin_orientation()
+    try:
+      reset_builtin_orientation()
+    except Exception as error:
+      log(f'could not reset builtin display orientation: {error}')
     set_orientation_lock(True)
     log('reset builtin display orientation and locked rotation')
   else:

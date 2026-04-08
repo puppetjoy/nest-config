@@ -10,6 +10,7 @@ import signal
 import subprocess
 import struct
 import sys
+import time
 from typing import Iterable, Optional
 
 
@@ -24,6 +25,8 @@ EV_SW = 0x05
 INPUT_EVENT_FORMAT = 'llHHi'
 INPUT_EVENT_SIZE = struct.calcsize(INPUT_EVENT_FORMAT)
 SW_IOCTL_SIZE = 8
+MODE_DEBOUNCE_SECONDS = 2.0
+SESSION_RETRY_SECONDS = 10.0
 
 _IOC_NRBITS = 8
 _IOC_TYPEBITS = 8
@@ -209,14 +212,28 @@ def main() -> int:
   signal.signal(signal.SIGTERM, stop)
 
   try:
-    tablet_mode = read_switch_state(fd)
-    apply_backlight(tablet_mode)
-    synced_users = apply_sessions(users, tablet_mode, set())
+    applied_tablet_mode = read_switch_state(fd)
+    target_tablet_mode = applied_tablet_mode
+    target_changed_at = time.monotonic()
+    last_session_retry = 0.0
+
+    apply_backlight(applied_tablet_mode)
+    synced_users = apply_sessions(users, applied_tablet_mode, set())
 
     while not should_exit:
-      readable, _, _ = select.select([fd], [], [], 10)
+      readable, _, _ = select.select([fd], [], [], 1)
+      now = time.monotonic()
+
+      if target_tablet_mode != applied_tablet_mode and now - target_changed_at >= MODE_DEBOUNCE_SECONDS:
+        applied_tablet_mode = target_tablet_mode
+        apply_backlight(applied_tablet_mode)
+        synced_users = apply_sessions(users, applied_tablet_mode, set())
+
+      if now - last_session_retry >= SESSION_RETRY_SECONDS:
+        synced_users = apply_sessions(users, applied_tablet_mode, synced_users)
+        last_session_retry = now
+
       if not readable:
-        synced_users = apply_sessions(users, tablet_mode, synced_users)
         continue
 
       data = os.read(fd, INPUT_EVENT_SIZE * 32)
@@ -233,12 +250,11 @@ def main() -> int:
           continue
 
         new_tablet_mode = bool(value)
-        if new_tablet_mode == tablet_mode:
+        if new_tablet_mode == target_tablet_mode:
           continue
 
-        tablet_mode = new_tablet_mode
-        apply_backlight(tablet_mode)
-        synced_users = apply_sessions(users, tablet_mode, set())
+        target_tablet_mode = new_tablet_mode
+        target_changed_at = now
 
     return 0
   finally:
