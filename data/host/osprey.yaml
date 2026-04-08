@@ -30,6 +30,9 @@ nest::package_use:
   x11-wm/mutter:
     use: '-video_cards_nvidia'
 
+nest::kernel_cmdline:
+  - 'asus_nb_wmi.tablet_mode_sw=3' # lid-flip-rog
+
 nest::kernel_config:
   # WiFi / Bluetooth
   CONFIG_BT_HCIBTUSB_MTK: y
@@ -58,3 +61,10 @@ nest::kernel_config:
   CONFIG_LEDS_BRIGHTNESS_HW_CHANGED: y
   CONFIG_ASUS_WMI: m
   CONFIG_ASUS_NB_WMI: m
+
+  # Sensors
+  CONFIG_HID_SENSOR_HUB: m
+  CONFIG_IIO: m
+  CONFIG_HID_SENSOR_ACCEL_3D: m
+  CONFIG_HID_SENSOR_GYRO_3D: m
+
