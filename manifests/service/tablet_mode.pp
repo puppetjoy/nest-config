@@ -39,6 +39,20 @@ class nest::service::tablet_mode {
         | END
       notify  => Nest::Lib::Systemd_reload['tablet-mode'],
     ;
+
+    '/etc/polkit-1/rules.d/20-sensor-proxy-gdm.rules':
+      ensure  => file,
+      mode    => '0644',
+      owner   => 'root',
+      group   => 'polkitd',
+      content => @("END"),
+        polkit.addRule(function(action, subject) {
+            if (action.id == "net.hadess.SensorProxy.claim-sensor" && subject.user == "gdm") {
+                return polkit.Result.YES;
+            }
+        });
+        | END
+    ;
   }
 
   nest::lib::systemd_reload { 'tablet-mode': }
