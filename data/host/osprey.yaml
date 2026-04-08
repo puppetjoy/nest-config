@@ -31,7 +31,7 @@ nest::package_use:
     use: '-video_cards_nvidia'
 
 nest::kernel_cmdline:
-  - 'asus_nb_wmi.tablet_mode_sw=3' # lid-flip-rog
+  - 'asus_nb_wmi.tablet_mode_sw=2' # lid-flip
 
 nest::kernel_config:
   # WiFi / Bluetooth
@@ -67,4 +67,3 @@ nest::kernel_config:
   CONFIG_IIO: m
   CONFIG_HID_SENSOR_ACCEL_3D: m
   CONFIG_HID_SENSOR_GYRO_3D: m
-
