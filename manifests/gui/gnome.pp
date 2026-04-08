@@ -44,6 +44,7 @@ class nest::gui::gnome {
     'ca.desrt.dconf-editor.desktop',
     'cups.desktop',
     'distccmon-gnome.desktop',
+    'emoji-picker.desktop',
     'firewall-config.desktop',
     'gnome-system-monitor-kde.desktop',
     'htop.desktop',
