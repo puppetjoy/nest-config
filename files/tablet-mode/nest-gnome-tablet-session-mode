@@ -1,0 +1,129 @@
+#!/usr/bin/env python3
+
+import subprocess
+import sys
+
+import gi
+
+gi.require_version('Gio', '2.0')
+from gi.repository import Gio, GLib
+
+
+DISPLAY_CONFIG_DEST = 'org.gnome.Mutter.DisplayConfig'
+DISPLAY_CONFIG_PATH = '/org/gnome/Mutter/DisplayConfig'
+DISPLAY_CONFIG_INTERFACE = 'org.gnome.Mutter.DisplayConfig'
+GSETTINGS_SCHEMA = 'org.gnome.settings-daemon.peripherals.touchscreen'
+GSETTINGS_KEY = 'orientation-lock'
+
+
+def log(message: str) -> None:
+  print(f'nest-gnome-tablet-session-mode: {message}', flush=True)
+
+
+def set_orientation_lock(locked: bool) -> None:
+  result = subprocess.run(
+    [
+      'gsettings',
+      'set',
+      GSETTINGS_SCHEMA,
+      GSETTINGS_KEY,
+      'true' if locked else 'false',
+    ],
+    check=False,
+    stdout=subprocess.DEVNULL,
+    stderr=subprocess.PIPE,
+    text=True,
+    timeout=10,
+  )
+
+  if result.returncode != 0:
+    error = result.stderr.strip()
+    raise RuntimeError(error or 'gsettings set failed')
+
+
+def reset_builtin_orientation() -> None:
+  proxy = Gio.DBusProxy.new_for_bus_sync(
+    Gio.BusType.SESSION,
+    Gio.DBusProxyFlags.NONE,
+    None,
+    DISPLAY_CONFIG_DEST,
+    DISPLAY_CONFIG_PATH,
+    DISPLAY_CONFIG_INTERFACE,
+    None,
+  )
+
+  serial, monitors, logical_monitors, _properties = proxy.call_sync(
+    'GetCurrentState',
+    None,
+    Gio.DBusCallFlags.NONE,
+    -1,
+    None,
+  ).unpack()
+
+  current_mode_ids = {}
+  builtin_monitor_specs = set()
+  for monitor_spec, modes, monitor_properties in monitors:
+    if monitor_properties.get('is-builtin'):
+      builtin_monitor_specs.add(monitor_spec)
+
+    for mode_id, _width, _height, _refresh, _preferred_scale, _supported_scales, mode_properties in modes:
+      if mode_properties.get('is-current'):
+        current_mode_ids[monitor_spec] = mode_id
+        break
+
+  if not builtin_monitor_specs:
+    return
+
+  apply_logical_monitors = []
+  for x, y, scale, transform, primary, monitor_specs, _logical_monitor_properties in logical_monitors:
+    if any(monitor_spec in builtin_monitor_specs for monitor_spec in monitor_specs):
+      transform = 0
+
+    monitor_entries = []
+    for monitor_spec in monitor_specs:
+      if monitor_spec not in current_mode_ids:
+        continue
+      connector = monitor_spec[0]
+      monitor_entries.append((connector, current_mode_ids[monitor_spec], {}))
+
+    if not monitor_entries:
+      continue
+
+    apply_logical_monitors.append((x, y, scale, transform, primary, monitor_entries))
+
+  if not apply_logical_monitors:
+    return
+
+  parameters = GLib.Variant(
+    '(uua(iiduba(ssa{sv}))a{sv})',
+    (serial, 1, apply_logical_monitors, {}),
+  )
+
+  proxy.call_sync(
+    'ApplyMonitorsConfig',
+    parameters,
+    Gio.DBusCallFlags.NONE,
+    -1,
+    None,
+  )
+
+
+def main() -> int:
+  if len(sys.argv) != 2 or sys.argv[1] not in ['laptop', 'tablet']:
+    print(f'usage: {sys.argv[0]} laptop|tablet', file=sys.stderr)
+    return 2
+
+  mode = sys.argv[1]
+  if mode == 'laptop':
+    reset_builtin_orientation()
+    set_orientation_lock(True)
+    log('reset builtin display orientation and locked rotation')
+  else:
+    set_orientation_lock(False)
+    log('unlocked rotation for tablet mode')
+
+  return 0
+
+
+if __name__ == '__main__':
+  sys.exit(main())

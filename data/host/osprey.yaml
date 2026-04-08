@@ -1,5 +1,6 @@
 ---
 nest::classes:
+  - 'nest::service::tablet_mode'
   - 'nest::tool::bolt'
   - 'nest::tool::codex'
   - 'nest::tool::minicom'

@@ -1,0 +1,249 @@
+#!/usr/bin/env python3
+
+import array
+import fcntl
+import os
+import pathlib
+import pwd
+import select
+import signal
+import subprocess
+import struct
+import sys
+from typing import Iterable, Optional
+
+
+ASUS_WMI_EVENT = pathlib.Path('/dev/input/by-path/platform-asus-nb-wmi-event')
+KBD_BACKLIGHT = pathlib.Path('/sys/class/leds/asus::kbd_backlight')
+STATE_DIR = pathlib.Path('/run/nest')
+STATE_FILE = STATE_DIR / 'tablet-mode-kbd-backlight'
+RUNUSER = '/usr/sbin/runuser'
+SESSION_HELPER = '/usr/local/bin/nest-gnome-tablet-session-mode'
+SW_TABLET_MODE = 1
+EV_SW = 0x05
+INPUT_EVENT_FORMAT = 'llHHi'
+INPUT_EVENT_SIZE = struct.calcsize(INPUT_EVENT_FORMAT)
+SW_IOCTL_SIZE = 8
+
+_IOC_NRBITS = 8
+_IOC_TYPEBITS = 8
+_IOC_SIZEBITS = 14
+_IOC_DIRBITS = 2
+_IOC_NRSHIFT = 0
+_IOC_TYPESHIFT = _IOC_NRSHIFT + _IOC_NRBITS
+_IOC_SIZESHIFT = _IOC_TYPESHIFT + _IOC_TYPEBITS
+_IOC_DIRSHIFT = _IOC_SIZESHIFT + _IOC_SIZEBITS
+_IOC_READ = 2
+
+
+def log(message: str) -> None:
+  print(f'nest-tablet-mode-monitor: {message}', flush=True)
+
+
+def ioc(direction: int, ioctl_type: int, number: int, size: int) -> int:
+  return (
+    (direction << _IOC_DIRSHIFT)
+    | (ioctl_type << _IOC_TYPESHIFT)
+    | (number << _IOC_NRSHIFT)
+    | (size << _IOC_SIZESHIFT)
+  )
+
+
+def eviocgsw(size: int) -> int:
+  return ioc(_IOC_READ, ord('E'), 0x1B, size)
+
+
+def find_event_device() -> pathlib.Path:
+  if ASUS_WMI_EVENT.exists():
+    return ASUS_WMI_EVENT
+
+  for event in sorted(pathlib.Path('/sys/class/input').glob('event*')):
+    name_file = event / 'device' / 'name'
+    sw_file = event / 'device' / 'capabilities' / 'sw'
+    if not name_file.is_file() or not sw_file.is_file():
+      continue
+
+    if name_file.read_text().strip() != 'Asus WMI hotkeys':
+      continue
+
+    try:
+      switch_mask = int(sw_file.read_text().strip(), 16)
+    except ValueError:
+      continue
+
+    if switch_mask & (1 << SW_TABLET_MODE):
+      return pathlib.Path('/dev/input') / event.name
+
+  raise FileNotFoundError('could not find Asus WMI tablet-mode event device')
+
+
+def read_switch_state(fd: int) -> bool:
+  bits = array.array('B', [0] * SW_IOCTL_SIZE)
+  fcntl.ioctl(fd, eviocgsw(len(bits)), bits, True)
+  byte = bits[SW_TABLET_MODE // 8]
+  return bool(byte & (1 << (SW_TABLET_MODE % 8)))
+
+
+def read_backlight() -> Optional[int]:
+  brightness = KBD_BACKLIGHT / 'brightness'
+  if not brightness.is_file():
+    return None
+
+  try:
+    return int(brightness.read_text().strip())
+  except ValueError:
+    return None
+
+
+def write_backlight(value: int) -> None:
+  (KBD_BACKLIGHT / 'brightness').write_text(f'{value}\n')
+
+
+def load_saved_backlight() -> Optional[int]:
+  if not STATE_FILE.is_file():
+    return None
+
+  try:
+    return int(STATE_FILE.read_text().strip())
+  except ValueError:
+    return None
+
+
+def save_backlight(value: int) -> None:
+  STATE_DIR.mkdir(parents=True, exist_ok=True)
+  STATE_FILE.write_text(f'{value}\n')
+
+
+def clear_saved_backlight() -> None:
+  if STATE_FILE.exists():
+    STATE_FILE.unlink()
+
+
+def apply_backlight(tablet_mode: bool) -> None:
+  current = read_backlight()
+  if current is None:
+    return
+
+  if tablet_mode:
+    if load_saved_backlight() is None:
+      save_backlight(current)
+    if current != 0:
+      write_backlight(0)
+      log('disabled keyboard backlight for tablet mode')
+    return
+
+  saved = load_saved_backlight()
+  if saved is None:
+    return
+
+  if current != saved:
+    write_backlight(saved)
+    log(f'restored keyboard backlight to {saved}')
+  clear_saved_backlight()
+
+
+def apply_sessions(users: Iterable[str], tablet_mode: bool, synced_users: set[str]) -> set[str]:
+  mode = 'tablet' if tablet_mode else 'laptop'
+  updated_synced_users = set()
+
+  for user in dict.fromkeys(users):
+    try:
+      uid = pwd.getpwnam(user).pw_uid
+    except KeyError:
+      continue
+
+    runtime_dir = pathlib.Path(f'/run/user/{uid}')
+    bus_path = runtime_dir / 'bus'
+    if not bus_path.exists():
+      continue
+
+    if user in synced_users:
+      updated_synced_users.add(user)
+      continue
+
+    result = subprocess.run(
+      [
+        RUNUSER,
+        '-u',
+        user,
+        '--',
+        'env',
+        f'DBUS_SESSION_BUS_ADDRESS=unix:path={bus_path}',
+        f'XDG_RUNTIME_DIR={runtime_dir}',
+        SESSION_HELPER,
+        mode,
+      ],
+      check=False,
+      stdout=subprocess.DEVNULL,
+      stderr=subprocess.PIPE,
+      text=True,
+      timeout=15,
+    )
+
+    if result.returncode == 0:
+      updated_synced_users.add(user)
+      continue
+
+    error = result.stderr.strip()
+    if error:
+      log(f'failed to apply {mode} mode for {user}: {error}')
+
+  return updated_synced_users
+
+
+def main() -> int:
+  if len(sys.argv) < 2:
+    print(f'usage: {sys.argv[0]} USER [USER ...]', file=sys.stderr)
+    return 2
+
+  users = sys.argv[1:]
+  device = find_event_device()
+  fd = os.open(device, os.O_RDONLY | os.O_CLOEXEC)
+  should_exit = False
+
+  def stop(_signum: int, _frame: object) -> None:
+    nonlocal should_exit
+    should_exit = True
+
+  signal.signal(signal.SIGINT, stop)
+  signal.signal(signal.SIGTERM, stop)
+
+  try:
+    tablet_mode = read_switch_state(fd)
+    apply_backlight(tablet_mode)
+    synced_users = apply_sessions(users, tablet_mode, set())
+
+    while not should_exit:
+      readable, _, _ = select.select([fd], [], [], 10)
+      if not readable:
+        synced_users = apply_sessions(users, tablet_mode, synced_users)
+        continue
+
+      data = os.read(fd, INPUT_EVENT_SIZE * 32)
+      if not data:
+        continue
+
+      for offset in range(0, len(data), INPUT_EVENT_SIZE):
+        event = data[offset:offset + INPUT_EVENT_SIZE]
+        if len(event) != INPUT_EVENT_SIZE:
+          continue
+
+        _sec, _usec, event_type, code, value = struct.unpack(INPUT_EVENT_FORMAT, event)
+        if event_type != EV_SW or code != SW_TABLET_MODE:
+          continue
+
+        new_tablet_mode = bool(value)
+        if new_tablet_mode == tablet_mode:
+          continue
+
+        tablet_mode = new_tablet_mode
+        apply_backlight(tablet_mode)
+        synced_users = apply_sessions(users, tablet_mode, set())
+
+    return 0
+  finally:
+    os.close(fd)
+
+
+if __name__ == '__main__':
+  sys.exit(main())
