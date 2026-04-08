@@ -15,6 +15,12 @@ class nest::gui::gnome {
     ensure => installed,
   }
 
+  if $nest::kernel_config['CONFIG_HID_SENSOR_HUB'] in ['Y', 'y', 'm'] {
+    nest::lib::package { 'gnome-extra/iio-sensor-proxy':
+      ensure => installed,
+    }
+  }
+
   # Hide launchers that GNOME would otherwise surface prominently while
   # leaving their underlying desktop entry metadata available in overlay
   # copies under /usr/local/share/applications.
