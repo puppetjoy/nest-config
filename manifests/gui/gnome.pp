@@ -97,6 +97,13 @@ class nest::gui::gnome {
     default => 'us',
   }
 
+  # Keep the normal XKB layout first while exposing Typing Booster as a
+  # selectable IBus source for GNOME's on-screen keyboard suggestions.
+  $keyboard_sources = [
+    "('xkb', '${keyboard_source}')",
+    "('ibus', 'typing-booster')",
+  ]
+
   $xkb_options = $nest::swap_alt_win ? {
     true    => "['ctrl:nocaps', 'altwin:swap_alt_win']",
     default => "['ctrl:nocaps']",
@@ -105,7 +112,7 @@ class nest::gui::gnome {
   nest::lib::dconf { 'keyboard':
     settings => {
       'org/gnome/desktop/input-sources' => {
-        'sources'     => "[('xkb', '${keyboard_source}')]",
+        'sources'     => "[${keyboard_sources.join(', ')}]",
         'xkb-options' => $xkb_options,
       },
     },
