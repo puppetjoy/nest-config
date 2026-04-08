@@ -54,7 +54,7 @@ class nest::firmware::uboot {
       $build_options = 'OPENSBI=../opensbi/build/platform/generic/firmware/fw_dynamic.bin'
     }
 
-    /^(rockpro64|rock4|rock5)$/: {
+    /^(rock4|rock5)$/: {
       $build_options = $facts['profile']['platform'] ? {
         'rock5' => "BL31=../rkbin/bin/rk35/rk3588_bl31_v1.47.elf \
                     ROCKCHIP_TPL=../rkbin/bin/rk35/rk3588_ddr_lp4_2112MHz_lp5_2400MHz_v1.18.bin",

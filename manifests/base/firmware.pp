@@ -81,7 +81,7 @@ class nest::base::firmware {
   $files = {
     'linux/rtl_bt/rtl8723bs_config.bin'            => ['pine64'],
     'plugable/brcm/BCM20702A1-0a5c-21e8.hcd'       => ['wellsburg'],
-    'raspberrypi/brcm/BCM4345C0.hcd'               => ['raspberrypi3', 'raspberrypi5', 'rockpro64', 'rock4'],
+    'raspberrypi/brcm/BCM4345C0.hcd'               => ['raspberrypi3', 'raspberrypi5', 'rock4'],
     'raspberrypi/brcm/BCM4345C5.hcd'               => ['radxazero', 'raspberrypi4'],
     'raspberrypi/brcm/brcmfmac43456-sdio.bin'      => ['radxazero', 'raspberrypi4'],
     'raspberrypi/brcm/brcmfmac43456-sdio.clm_blob' => ['radxazero', 'raspberrypi4'],
