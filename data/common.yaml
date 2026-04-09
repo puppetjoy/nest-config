@@ -177,6 +177,7 @@ nest::host_records:
   # Compute services
   ingress-compute.eyrie: '172.21.3.0'
   pe.eyrie: '172.21.3.1'
+  pe-compiler.eyrie: '172.21.3.2'
 
 nest::hosts:
   unifi.home:
