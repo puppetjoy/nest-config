@@ -80,6 +80,7 @@ nest::cnames:
   grafana.eyrie: 'ingress.eyrie'
   kubernetes.eyrie: 'ingress.eyrie'
   portfolio.eyrie: 'ingress.eyrie'
+  puppet.eyrie: 'ingress-compute.eyrie'
   registry.eyrie: 'ingress-workstations.eyrie'
   registry.gitlab.eyrie: 'ingress-workstations.eyrie'
   thestaticvoid.eyrie: 'ingress.eyrie'
@@ -175,6 +176,7 @@ nest::host_records:
 
   # Compute services
   ingress-compute.eyrie: '172.21.3.0'
+  pe.eyrie: '172.21.3.1'
 
 nest::hosts:
   unifi.home:
