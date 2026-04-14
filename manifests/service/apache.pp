@@ -1,16 +1,18 @@
 class nest::service::apache (
   Boolean $manage_firewall = false,
-  Array[String[1]] $requires_mounts_for = [],
+  Array[String[1]] $service_after = [],
+  Array[String[1]] $service_requires = [],
 ) {
   nest::lib::srv { 'www': }
 
   include 'apache'
   $apache_service_name = $apache::params::service_name
 
-  if !empty($requires_mounts_for) {
-    $apache_requires_mounts_for = @("END_UNIT")
+  if !empty($service_after) or !empty($service_requires) {
+    $apache_service_unit_dropin = @("END_UNIT")
       [Unit]
-      ${$requires_mounts_for.map |$mount| { "RequiresMountsFor=${mount}" }.join("\n")}
+      ${$service_requires.map |$unit| { "Requires=${unit}" }.join("\n")}
+      ${$service_after.map |$unit| { "After=${unit}" }.join("\n")}
       | END_UNIT
 
     file { "/etc/systemd/system/${apache_service_name}.service.d":
@@ -24,7 +26,7 @@ class nest::service::apache (
       mode    => '0644',
       owner   => 'root',
       group   => 'root',
-      content => $apache_requires_mounts_for,
+      content => $apache_service_unit_dropin,
       notify  => Nest::Lib::Systemd_reload['apache'],
     }
 
