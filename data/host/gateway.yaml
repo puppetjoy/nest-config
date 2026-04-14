@@ -13,6 +13,8 @@ nest::reset_filter_rules:
   - 'P /etc/letsencrypt/**'
 
 nest::service::apache::manage_firewall: true
+nest::service::apache::requires_mounts_for:
+  - '/nest'
 
 nest::service::gateway::port_forwards:
   git:

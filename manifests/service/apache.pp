@@ -1,9 +1,37 @@
 class nest::service::apache (
   Boolean $manage_firewall = false,
+  Array[String[1]] $requires_mounts_for = [],
 ) {
   nest::lib::srv { 'www': }
 
   include 'apache'
+  $apache_service_name = $apache::params::service_name
+
+  if !empty($requires_mounts_for) {
+    $apache_requires_mounts_for = @("END_UNIT")
+      [Unit]
+      ${$requires_mounts_for.map |$mount| { "RequiresMountsFor=${mount}" }.join("\n")}
+      | END_UNIT
+
+    file { "/etc/systemd/system/${apache_service_name}.service.d":
+      ensure => directory,
+      mode   => '0755',
+      owner  => 'root',
+      group  => 'root',
+    }
+
+    file { "/etc/systemd/system/${apache_service_name}.service.d/10-requires-mounts-for.conf":
+      mode    => '0644',
+      owner   => 'root',
+      group   => 'root',
+      content => $apache_requires_mounts_for,
+      notify  => Nest::Lib::Systemd_reload['apache'],
+    }
+
+    nest::lib::systemd_reload { 'apache': }
+
+    Nest::Lib::Systemd_reload['apache'] ~> Class['apache::service']
+  }
 
   # I don't use this command, and it doesn't work on systemd systems, but the
   # apache_version fact depends on being able to run this with the `-v`
