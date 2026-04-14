@@ -6,7 +6,6 @@ class nest::tool::vscode {
           #!/bin/bash
           exec /opt/vscode/bin/code \
               --force-device-scale-factor=${nest::gui_scaling_factor} \
-              --ignore-gpu-blocklist \
               --reuse-window \
               "$@"
           | WRAPPER
