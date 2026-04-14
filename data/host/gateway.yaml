@@ -13,10 +13,6 @@ nest::reset_filter_rules:
   - 'P /etc/letsencrypt/**'
 
 nest::service::apache::manage_firewall: true
-nest::service::apache::service_after:
-  - 'nest.automount'
-nest::service::apache::service_requires:
-  - 'nest.automount'
 
 nest::service::gateway::port_forwards:
   git:
