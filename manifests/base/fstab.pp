@@ -91,6 +91,8 @@ class nest::base::fstab {
             true    => [
               'set 6/opt[4] x-systemd.requires',
               'set 6/opt[4]/value openvpn-client@nest.service',
+              'set 6/opt[5] x-systemd.requires',
+              'set 6/opt[5]/value sys-subsystem-net-devices-tun0.device',
             ],
             default => [],
           },
@@ -114,6 +116,8 @@ class nest::base::fstab {
             true    => [
               'set 6/opt[2] x-systemd.requires',
               'set 6/opt[2]/value openvpn-client@nest.service',
+              'set 6/opt[3] x-systemd.requires',
+              'set 6/opt[3]/value sys-subsystem-net-devices-tun0.device',
             ],
             default => [],
           },
@@ -139,6 +143,8 @@ class nest::base::fstab {
           true    => [
             'set 7/opt[2] x-systemd.requires',
             'set 7/opt[2]/value openvpn-client@nest.service',
+            'set 7/opt[3] x-systemd.requires',
+            'set 7/opt[3]/value sys-subsystem-net-devices-tun0.device',
           ],
           default => [],
         },
