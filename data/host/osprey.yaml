@@ -11,7 +11,6 @@ nest::classes:
 nest::ambient_enabled: false
 nest::dvorak: true
 nest::idle_brightness: 15
-nest::idle_delay: 300
 nest::subpixel_rendering: none
 nest::text_scaling_factor: 2.0
 nest::use: ['video_cards_nvidia']
