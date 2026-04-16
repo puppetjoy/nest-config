@@ -43,7 +43,10 @@ class nest::gui::terminals {
     }
 
     'Darwin': {
-      package { 'kitty':
+      package { [
+        'ghostty',
+        'kitty',
+      ]:
         ensure => installed,
       }
     }
