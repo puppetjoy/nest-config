@@ -1,0 +1,29 @@
+From 3912c331299fd517aa1587b99aa83d710ee586b6 Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Thu, 16 Apr 2026 03:08:00 -0400
+Subject: [PATCH] power: increase idle dim delay when blanking is disabled
+
+When org.gnome.desktop.session idle-delay is set to 0, GNOME falls back
+to a hardcoded dim timeout so laptops still dim while screen blanking is
+disabled. Raise that fallback from one minute to five minutes.
+---
+ plugins/power/gsd-power-constants.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/plugins/power/gsd-power-constants.h b/plugins/power/gsd-power-constants.h
+index 6a4e9df..d6f5a4c 100644
+--- a/plugins/power/gsd-power-constants.h
++++ b/plugins/power/gsd-power-constants.h
+@@ -22,7 +22,7 @@
+ #define SCREENSAVER_TIMEOUT_BLANK                       30 /* seconds */
+ 
+ /* The dim delay when dimming on idle is requested but idle-delay
+- * is set to "Never" */
+-#define IDLE_DIM_BLANK_DISABLED_MIN                     60 /* seconds */
++ * is set to "Never" */
++#define IDLE_DIM_BLANK_DISABLED_MIN                    300 /* seconds */
+ 
+ /* Which fraction of the idle-delay is the idle-dim delay */
+ #define IDLE_DELAY_TO_IDLE_DIM_MULTIPLIER                1.0/2.0
+-- 
+2.52.0
