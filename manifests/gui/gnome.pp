@@ -131,6 +131,7 @@ class nest::gui::gnome {
         'sleep-inactive-battery-type' => "'nothing'",
       },
     },
+    locks    => true,
   }
 
   if $nest::idle_brightness != undef {
