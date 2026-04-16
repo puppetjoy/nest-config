@@ -1,4 +1,9 @@
 class nest::gui::gnome {
+  $session_idle_delay = $nest::idle_delay ? {
+    undef   => 'uint32 0',
+    default => "uint32 ${nest::idle_delay}",
+  }
+
   contain nest::gui::keyboard
 
   # Mutter has an unexpressed dependency on rst2man
@@ -120,7 +125,7 @@ class nest::gui::gnome {
         'lock-enabled'            => 'false',
       },
       'org/gnome/desktop/session'               => {
-        'idle-delay'                  => 'uint32 0',
+        'idle-delay'                  => $session_idle_delay,
       },
       'org/gnome/settings-daemon/plugins/power' => {
         'sleep-inactive-battery-type' => "'nothing'",

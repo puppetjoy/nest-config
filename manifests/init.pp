@@ -85,6 +85,7 @@ class nest (
   Optional[Boolean]         $ambient_enabled     = undef,
   Float                     $gui_scaling_factor  = 1.0,
   Optional[Integer[0, 100]] $idle_brightness     = undef,
+  Optional[Integer[0]]      $idle_delay          = undef,
   Optional[String]          $primary_monitor     = undef,
   Nest::SubpixelRendering   $subpixel_rendering  = rgb,
   Float                     $text_scaling_factor = $gui_scaling_factor,
@@ -157,6 +158,11 @@ class nest (
     $idle_brightness_lookup = lookup('nest::idle_brightness', { default_value => '__nest_idle_brightness_unset__' })
     if $idle_brightness_lookup != '__nest_idle_brightness_unset__' {
       fail('Only set nest::idle_brightness on mobile nodes.')
+    }
+
+    $idle_delay_lookup = lookup('nest::idle_delay', { default_value => '__nest_idle_delay_unset__' })
+    if $idle_delay_lookup != '__nest_idle_delay_unset__' {
+      fail('Only set nest::idle_delay on mobile nodes.')
     }
   }
 
