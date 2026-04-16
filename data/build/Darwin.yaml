@@ -1,6 +1,8 @@
 nest::classes:
-  - 'nest::base::certs'
+  - 'nest::app::codex'
+  - 'nest::app::vscode'
   - 'nest::base::autofs'
+  - 'nest::base::certs'
   - 'nest::base::eyaml'
   - 'nest::base::homebrew'
   - 'nest::base::openvpn'
@@ -15,8 +17,6 @@ nest::classes:
   - 'nest::gui::packages'
   - 'nest::gui::terminals'
   - 'nest::tool::bolt'
-  - 'nest::tool::codex'
   - 'nest::tool::pdk'
-  - 'nest::tool::vscode'
 
 nest::vpn: true

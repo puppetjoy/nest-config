@@ -1,11 +1,11 @@
 ---
 nest::classes:
+  - 'nest::app::codex'
   - 'nest::host::hawk'
   - 'nest::service::gateway'
   - 'nest::service::gitlab'
   - 'nest::service::gitlab_runner'
   - 'nest::service::libvirt'
-  - 'nest::tool::codex'
 
 nest::dvorak: true
 nest::gui_scaling_factor: 2.0

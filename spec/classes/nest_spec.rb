@@ -60,6 +60,8 @@ describe 'nest' do
   ]
 
   darwin = [
+    'nest::app::codex',
+    'nest::app::vscode',
     'nest::base::autofs',
     'nest::base::certs',
     'nest::base::eyaml',
@@ -76,9 +78,7 @@ describe 'nest' do
     'nest::gui::packages',
     'nest::gui::terminals',
     'nest::tool::bolt',
-    'nest::tool::codex',
     'nest::tool::pdk',
-    'nest::tool::vscode',
   ]
 
   windows = [
@@ -105,6 +105,8 @@ describe 'nest' do
   ]
 
   workstation = [
+    'nest::app::bitwarden',
+    'nest::app::vscode',
     'nest::gui::cups',
     'nest::gui::cursor',
     'nest::gui::dunst',
@@ -120,12 +122,10 @@ describe 'nest' do
     'nest::gui::xorg',
     'nest::service::bluetooth',
     'nest::service::pipewire',
-    'nest::tool::bitwarden',
     'nest::tool::bolt',
     'nest::tool::minicom',
     'nest::tool::pdk',
     'nest::tool::qemu',
-    'nest::tool::vscode',
   ]
 
   mobile = [

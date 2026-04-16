@@ -1,13 +1,13 @@
 ---
 nest::classes:
+  - 'nest::app::codex'
+  - 'nest::app::vscode'
   - 'nest::host::osprey'
   - 'nest::service::tablet_mode'
   - 'nest::tool::bolt'
-  - 'nest::tool::codex'
   - 'nest::tool::minicom'
   - 'nest::tool::pdk'
   - 'nest::tool::qemu'
-  - 'nest::tool::vscode'
 
 nest::ambient_enabled: false
 nest::dvorak: true

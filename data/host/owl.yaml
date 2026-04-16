@@ -1,9 +1,9 @@
 ---
 nest::classes:
+  - 'nest::app::codex'
   - 'nest::service::gitlab_runner'
   - 'nest::service::kubernetes'
   - 'nest::tool::bolt'
-  - 'nest::tool::codex'
 
 nest::bird_role: worker
 nest::distcc_server: true
