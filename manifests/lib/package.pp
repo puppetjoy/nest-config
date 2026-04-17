@@ -31,8 +31,8 @@ define nest::lib::package (
 
   unless $env.empty {
     nest::lib::package_env { $name:
-      name => $package,
-      env  => $env,
+      package => $package,
+      env     => $env,
     }
   }
 
@@ -55,9 +55,9 @@ define nest::lib::package (
   }
 
   nest::lib::package_use { $name:
-    ensure => $use_ensure,
-    name   => $package,
-    use    => $use,
+    ensure  => $use_ensure,
+    package => $package,
+    use     => $use,
   }
 
   if $world {
