@@ -1,0 +1,57 @@
+#!/bin/bash
+set -euo pipefail
+
+mode="${1:---apply}"
+api_url='https://api.github.com/repos/pingdotgg/t3code/releases/latest'
+appimage='<%= $appimage %>'
+icon='<%= $icon %>'
+install_dir='<%= $install_dir %>'
+
+if [[ "${mode}" == '--check' ]]; then
+  if [[ -x "${appimage}" ]]; then
+    exit 0
+  fi
+
+  exit 1
+fi
+
+if [[ -x "${appimage}" ]]; then
+  exit 0
+fi
+
+release_json=$(/usr/bin/curl -fsSL "${api_url}")
+metadata_json=$(
+  printf '%s' "${release_json}" | /usr/bin/node -e 'const fs = require("fs"); const release = JSON.parse(fs.readFileSync(0, "utf8")); const asset = (release.assets || []).find((entry) => entry.name.endsWith("x86_64.AppImage")); if (!asset) { process.stderr.write("Failed to find the Linux AppImage in the latest T3 Code release.\n"); process.exit(1); } const digest = typeof asset.digest === "string" ? asset.digest.replace(/^sha256:/, "") : ""; process.stdout.write(JSON.stringify({ digest, url: asset.browser_download_url }));'
+)
+download_url="$(printf '%s' "${metadata_json}" | /usr/bin/node -e 'const fs = require("fs"); const meta = JSON.parse(fs.readFileSync(0, "utf8")); process.stdout.write(meta.url || "");')"
+expected_digest="$(printf '%s' "${metadata_json}" | /usr/bin/node -e 'const fs = require("fs"); const meta = JSON.parse(fs.readFileSync(0, "utf8")); process.stdout.write(meta.digest || "");')"
+
+tmpdir="$(/bin/mktemp -d)"
+cleanup() {
+  /bin/rm -rf "${tmpdir}"
+}
+trap cleanup EXIT
+
+download_path="${tmpdir}/t3code.AppImage"
+
+/usr/bin/curl -fsSL "${download_url}" -o "${download_path}"
+
+if [[ -n "${expected_digest}" ]]; then
+  printf '%s  %s\n' "${expected_digest}" "${download_path}" | /usr/bin/sha256sum -c -
+fi
+
+/bin/chmod 0755 "${download_path}"
+
+(
+  cd "${tmpdir}"
+  "${download_path}" --appimage-extract >/dev/null 2>&1
+)
+
+icon_source="${tmpdir}/squashfs-root/usr/share/icons/hicolor/1024x1024/apps/t3code.png"
+if [[ ! -f "${icon_source}" ]]; then
+  icon_source="${tmpdir}/squashfs-root/.DirIcon"
+fi
+
+/usr/bin/install -Dm0755 "${download_path}" "${appimage}"
+/usr/bin/install -Dm0644 "${icon_source}" "${icon}"
+/bin/mkdir -p "${install_dir}"
