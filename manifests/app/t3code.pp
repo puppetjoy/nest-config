@@ -12,9 +12,9 @@ class nest::app::t3code {
       $desktop_dir = "${home}/.local/share/applications"
       $desktop_file = "${desktop_dir}/t3code.desktop"
 
-      nest::lib::package { 'fuse2':
-        ensure  => installed,
-        package => 'sys-fs/fuse:0',
+      package { 'fuse2':
+        ensure => installed,
+        name   => 'sys-fs/fuse:0',
       }
 
       file {
@@ -68,7 +68,7 @@ class nest::app::t3code {
           Class['nest::app::codex'],
           File['/usr/local/bin/nest-t3code-update'],
           File[$install_dir],
-          Nest::Lib::Package['fuse2'],
+          Package['fuse2'],
         ],
       }
 
