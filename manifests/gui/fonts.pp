@@ -22,6 +22,7 @@ class nest::gui::fonts {
         'media-fonts/fontawesome',
         'media-fonts/liberation-fonts', # primarily for GitHub, tbh
         'media-fonts/noto-emoji',
+        'media-fonts/source-serif',
       ]:
         ensure => installed,
       }
