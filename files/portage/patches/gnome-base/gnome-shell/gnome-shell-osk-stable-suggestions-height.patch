@@ -1,0 +1,54 @@
+diff --git a/js/ui/keyboard.js b/js/ui/keyboard.js
+index 18147dc7..4110f6cb 100644
+--- a/js/ui/keyboard.js
++++ b/js/ui/keyboard.js
+@@ -127,9 +127,41 @@ class Suggestions extends St.BoxLayout {
+             orientation: Clutter.Orientation.HORIZONTAL,
+             x_align: Clutter.ActorAlign.CENTER,
+         });
++        this._stableHeight = 0;
++        this._syncHeightIdleId = 0;
++
++        this.connect('style-changed', () => this._queueSyncHeight());
++        this.connect('destroy', () => this._clearSyncHeight());
+         this.show();
+     }
+ 
++    _clearSyncHeight() {
++        if (!this._syncHeightIdleId)
++            return;
++
++        GLib.source_remove(this._syncHeightIdleId);
++        this._syncHeightIdleId = 0;
++    }
++
++    _queueSyncHeight() {
++        if (this._syncHeightIdleId || this.get_children().length === 0)
++            return;
++
++        this._syncHeightIdleId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
++            this._syncHeightIdleId = 0;
++
++            const [, natHeight] = this.get_preferred_height(-1);
++            if (natHeight > 0 && natHeight !== this._stableHeight) {
++                this._stableHeight = natHeight;
++                this.height = natHeight;
++            }
++
++            return GLib.SOURCE_REMOVE;
++        });
++        GLib.Source.set_name_by_id(this._syncHeightIdleId,
++            '[gnome-shell] Suggestions._queueSyncHeight');
++    }
++
+     add(word, callback) {
+         let button = new St.Button({label: word});
+         button.connect('button-press-event', () => {
+@@ -144,6 +176,7 @@ class Suggestions extends St.BoxLayout {
+             return Clutter.EVENT_STOP;
+         });
+         this.add_child(button);
++        this._queueSyncHeight();
+     }
+ 
+     clear() {
