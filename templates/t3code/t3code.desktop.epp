@@ -1,9 +1,0 @@
-[Desktop Entry]
-Name=T3 Code (Alpha)
-Exec=<%= $appimage %> --no-sandbox %U
-Terminal=false
-Type=Application
-Icon=<%= $icon %>
-StartupWMClass=t3code
-Comment=T3 Code desktop build
-Categories=Development;
