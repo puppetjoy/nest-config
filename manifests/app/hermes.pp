@@ -18,12 +18,13 @@ class nest::app::hermes (
         default => "${venv_python} -c \"import importlib.metadata as m; raise SystemExit(0 if m.version('hermes-agent') == '${version}' else 1)\"",
       }
 
-      nest::lib::package { [
-        'dev-python/virtualenv',
-        'sys-apps/ripgrep',
-      ]:
+      nest::lib::package { 'dev-python/virtualenv':
         ensure => present,
       }
+
+      ensure_resource('nest::lib::package', 'sys-apps/ripgrep', {
+        'ensure' => 'present',
+      })
 
       file { $install_dir:
         ensure => directory,
