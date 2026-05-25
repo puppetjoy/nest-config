@@ -25,6 +25,7 @@
 
 ## Coding Style & Naming Conventions
 - Use 2-space indentation in Puppet and Ruby files; avoid unrelated formatting churn.
+- For parameterized Puppet classes/defines, align parameters like existing manifests: pad the type column so variable names line up, then pad variable/default spacing so `=` signs line up. Example: `Optional[String]  $foo = undef` next to `Boolean           $bar = false`.
 - Keep class/file mapping consistent: `manifests/base/console.pp` defines `nest::base::console`.
 - Name specs by target: `spec/classes/<class_path>_spec.rb`, `spec/defines/<define_name>_spec.rb`.
 - Follow `.rubocop.yml` for Ruby (`TargetRubyVersion: 2.6`, max line length 200).
