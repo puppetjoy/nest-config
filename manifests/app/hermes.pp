@@ -58,39 +58,6 @@ class nest::app::hermes (
       nest::lib::package { 'media-video/ffmpeg':
         ensure => present,
       }
-
-      include 'nodejs'
-
-      $browser_dir  = "${install_dir}/browser"
-      $browser_home = "/home/${nest::user}"
-
-      file { $browser_dir:
-        ensure => directory,
-        mode   => '0755',
-        owner  => 'root',
-        group  => 'root',
-      }
-      ->
-      exec { 'npm_install_hermes_browser':
-        command     => "${nodejs::npm_path} install agent-browser@^0.26.0 @askjo/camofox-browser@^1.5.2",
-        unless      => "${nodejs::npm_path} ls agent-browser @askjo/camofox-browser --depth=0 >/dev/null 2>&1",
-        cwd         => $browser_dir,
-        environment => ['HOME=/root'],
-        require     => Class['nodejs'],
-      }
-      ->
-      file { '/usr/local/bin/agent-browser':
-        ensure => link,
-        target => "${browser_dir}/node_modules/.bin/agent-browser",
-      }
-      ->
-      exec { 'install_hermes_browser_binaries':
-        command     => '/usr/local/bin/agent-browser install',
-        unless      => '/usr/local/bin/agent-browser doctor >/dev/null 2>&1',
-        user        => $nest::user,
-        environment => ["HOME=${browser_home}"],
-        timeout     => 900,
-      }
     }
   }
 }
