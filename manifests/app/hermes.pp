@@ -61,7 +61,8 @@ class nest::app::hermes (
 
       include 'nodejs'
 
-      $browser_dir = "${install_dir}/browser"
+      $browser_dir  = "${install_dir}/browser"
+      $browser_home = "/home/${nest::user}"
 
       file { $browser_dir:
         ensure => directory,
@@ -81,6 +82,14 @@ class nest::app::hermes (
       file { '/usr/local/bin/agent-browser':
         ensure => link,
         target => "${browser_dir}/node_modules/.bin/agent-browser",
+      }
+      ->
+      exec { 'install_hermes_browser_binaries':
+        command     => '/usr/local/bin/agent-browser install',
+        unless      => '/usr/local/bin/agent-browser doctor >/dev/null 2>&1',
+        user        => $nest::user,
+        environment => ["HOME=${browser_home}"],
+        timeout     => 900,
       }
     }
   }
