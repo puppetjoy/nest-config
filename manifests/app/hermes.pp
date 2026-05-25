@@ -73,6 +73,12 @@ class nest::app::hermes (
           require => Nest::Lib::Package_use['media-libs/freetype'],
         }
 
+        file { '/usr/local/bin/google-chrome':
+          ensure  => link,
+          target  => '/usr/bin/google-chrome-stable',
+          require => Nest::Lib::Package['www-client/google-chrome'],
+        }
+
         exec { 'install_hermes_agent_browser':
           command     => "${nodejs::npm_path} install --global agent-browser@latest",
           unless      => "${nodejs::npm_path} list --global agent-browser --depth=0 >/dev/null 2>&1 && ${nodejs::npm_path} outdated --global agent-browser --depth=0 >/dev/null 2>&1",
