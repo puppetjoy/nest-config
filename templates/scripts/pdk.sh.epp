@@ -10,6 +10,10 @@
 # See: https://gitlab.joyfullee.me/nest/conifg/-/blob/main/manifests/tool/pdk.pp
 #
 
+if [[ -r /etc/profile.d/puppetcore.sh ]]; then
+    . /etc/profile.d/puppetcore.sh
+fi
+
 exec podman run --rm -it -e TERM \
     -v "${PWD}:/module" \
     -v /etc/eyaml:/etc/eyaml:ro \
