@@ -4,10 +4,11 @@ class nest::app::hermes (
 ) {
   case $facts['os']['family'] {
     'Gentoo': {
-      $venv_dir     = "${install_dir}/venv"
-      $venv_python  = "${venv_dir}/bin/python"
-      $venv_pip     = "${venv_dir}/bin/pip"
-      $package_spec = $version ? {
+      $venv_dir                   = "${install_dir}/venv"
+      $venv_python                = "${venv_dir}/bin/python"
+      $venv_pip                   = "${venv_dir}/bin/pip"
+      $hermes_gateway_dropin_dir  = "/home/${nest::user}/.config/systemd/user/hermes-gateway.service.d"
+      $package_spec               = $version ? {
         undef   => 'hermes-agent',
         default => "hermes-agent==${version}",
       }
@@ -57,6 +58,27 @@ class nest::app::hermes (
 
       nest::lib::package { 'media-video/ffmpeg':
         ensure => present,
+      }
+
+      file { $hermes_gateway_dropin_dir:
+        ensure => directory,
+        mode   => '0755',
+        owner  => $nest::user,
+        group  => $nest::user,
+      }
+      ->
+      file { "${hermes_gateway_dropin_dir}/10-ssh-agent.conf":
+        ensure  => file,
+        mode    => '0644',
+        owner   => $nest::user,
+        group   => $nest::user,
+        content => "[Service]\nEnvironment=SSH_AUTH_SOCK=%t/ssh-agent.socket\n",
+      }
+      ~>
+      exec { 'hermes-gateway-systemd-user-daemon-reload':
+        command     => '/bin/sh -c "XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user daemon-reload"',
+        user        => $nest::user,
+        refreshonly => true,
       }
     }
   }
