@@ -64,8 +64,13 @@ class nest::app::hermes (
       if $facts['profile']['architecture'] == 'amd64' {
         include 'nodejs'
 
+        nest::lib::package_use { 'media-libs/freetype':
+          use => ['harfbuzz'],
+        }
+
         nest::lib::package { 'www-client/google-chrome':
-          ensure => present,
+          ensure  => present,
+          require => Nest::Lib::Package_use['media-libs/freetype'],
         }
 
         exec { 'install_hermes_agent_browser':
