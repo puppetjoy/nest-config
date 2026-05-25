@@ -61,6 +61,21 @@ class nest::app::hermes (
         ensure => present,
       }
 
+      if $facts['profile']['architecture'] == 'amd64' {
+        include 'nodejs'
+
+        nest::lib::package { 'www-client/google-chrome':
+          ensure => present,
+        }
+
+        exec { 'install_hermes_agent_browser':
+          command     => "${nodejs::npm_path} install --global agent-browser@latest",
+          unless      => "${nodejs::npm_path} list --global agent-browser --depth=0 >/dev/null 2>&1 && ${nodejs::npm_path} outdated --global agent-browser --depth=0 >/dev/null 2>&1",
+          environment => ['HOME=/root'],
+          require     => Class['nodejs'],
+        }
+      }
+
       file { $hermes_gateway_dropin_dir:
         ensure => directory,
         mode   => '0755',
