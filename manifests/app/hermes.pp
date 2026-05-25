@@ -83,13 +83,36 @@ class nest::app::hermes (
         ensure => link,
         target => "${browser_dir}/node_modules/.bin/agent-browser",
       }
-      ->
-      exec { 'install_hermes_browser_binaries':
-        command     => '/usr/local/bin/agent-browser install',
-        unless      => '/usr/local/bin/agent-browser doctor >/dev/null 2>&1',
-        user        => $nest::user,
-        environment => ["HOME=${browser_home}"],
-        timeout     => 900,
+
+      if $facts['os']['architecture'] in ['aarch64', 'arm64'] {
+        nest::lib::package { 'www-client/chromium':
+          ensure => present,
+        }
+        ->
+        file { "${browser_home}/.agent-browser":
+          ensure => directory,
+          mode   => '0755',
+          owner  => $nest::user,
+          group  => $nest::user,
+        }
+        ->
+        file { "${browser_home}/.agent-browser/config.json":
+          ensure  => file,
+          mode    => '0644',
+          owner   => $nest::user,
+          group   => $nest::user,
+          content => "{\n  \"executablePath\": \"/usr/bin/chromium\"\n}\n",
+        }
+      } else {
+        File['/usr/local/bin/agent-browser']
+        ->
+        exec { 'install_hermes_browser_binaries':
+          command     => '/usr/local/bin/agent-browser install',
+          unless      => '/usr/local/bin/agent-browser doctor >/dev/null 2>&1',
+          user        => $nest::user,
+          environment => ["HOME=${browser_home}"],
+          timeout     => 900,
+        }
       }
     }
   }
