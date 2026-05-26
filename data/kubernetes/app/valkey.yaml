@@ -1,0 +1,25 @@
+---
+node_role: workstation
+storage_class: data-crypt
+storage_size: 8Gi
+
+values:
+  fullnameOverride: "%{nest::kubernetes::service}"
+  auth:
+    enabled: true
+    usersExistingSecret: "%{nest::kubernetes::parent}-redis-secret"
+    aclUsers:
+      default:
+        permissions: "~* &* +@all"
+        passwordKey: secret
+  dataStorage:
+    enabled: true
+    requestedSize: "%{lookup('storage_size')}"
+    className: "%{lookup('storage_class')}"
+    keepPvc: true
+  nodeSelector:
+    "node-role.kubernetes.io/%{lookup('node_role')}": ''
+  tolerations:
+    - key: "node-role.kubernetes.io/%{lookup('node_role')}"
+      operator: Exists
+      effect: NoSchedule

@@ -57,6 +57,12 @@ steps:
       chart: 'gitlab/gitlab'
       repo_url: 'https://charts.gitlab.io/'
       version: '9.11.4' # https://docs.gitlab.com/charts/installation/version_mappings/
+      subcharts:
+        - service: "${service}-valkey"
+          app: 'valkey'
+          chart: 'valkey/valkey'
+          repo_url: 'https://valkey.io/valkey-helm/'
+          version: '0.9.4'
       deploy: $deploy and $gitlab
       init: $init
       wait: $init
