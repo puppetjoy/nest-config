@@ -2,3 +2,31 @@
 bucket_storage_class: "ceph-%{nest::kubernetes::namespace}-bucket"
 ceph_namespace: "%{nest::kubernetes::namespace}"
 ceph_object_store: "ceph-%{nest::kubernetes::namespace}-objectstore"
+postgres_storage_class: data-crypt
+postgres_storage_size: 16Gi
+postgres_image: ghcr.io/cloudnative-pg/postgresql:17.6
+
+resources:
+  postgres-cluster:
+    apiVersion: postgresql.cnpg.io/v1
+    kind: Cluster
+    metadata:
+      name: "%{nest::kubernetes::main_service}-cnpg"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      instances: 1
+      imageName: "%{lookup('postgres_image')}"
+      bootstrap:
+        initdb:
+          database: gitlabhq_production
+          owner: gitlab
+      storage:
+        storageClass: "%{lookup('postgres_storage_class')}"
+        size: "%{lookup('postgres_storage_size')}"
+      affinity:
+        nodeSelector:
+          "node-role.kubernetes.io/%{lookup('node_role')}": ''
+        tolerations:
+          - key: "node-role.kubernetes.io/%{lookup('node_role')}"
+            operator: Exists
+            effect: NoSchedule

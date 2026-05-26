@@ -39,11 +39,6 @@ steps:
     parameters:
       deploy: $system
 
-  - description: 'Deploy test database operators'
-    plan: nest::eyrie::test::deploy_database
-    parameters:
-      deploy: $system
-
   # Test applications
   - description: 'Deploy test registry'
     plan: nest::eyrie::deploy_registry
