@@ -12,6 +12,16 @@ values:
   global:
     hosts:
       ssh: "ssh.%{nest::kubernetes::fqdn}"
+    psql:
+      host: "%{nest::kubernetes::main_service}-cnpg-rw"
+      port: 5432
+      username: gitlab
+      database: gitlabhq_production
+      password:
+        secret: "%{nest::kubernetes::main_service}-cnpg-app"
+        key: password
+  postgresql:
+    install: false
   prometheus:
     server:
       clusterRoleNameOverride: "%{nest::kubernetes::service}-%{nest::kubernetes::namespace}-prometheus-server"
