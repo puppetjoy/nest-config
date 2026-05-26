@@ -1,12 +1,16 @@
 class nest::app::hermes (
-  Optional[String[1]]  $version     = undef,
-  Stdlib::Absolutepath $install_dir = '/opt/hermes-agent',
+  Optional[String[1]]            $version      = undef,
+  Stdlib::Absolutepath           $install_dir  = '/opt/hermes-agent',
+  String[1]                      $gitlab_url   = 'https://gitlab.joyfullee.me',
+  Optional[Sensitive[String[1]]] $gitlab_token = undef,
 ) {
   case $facts['os']['family'] {
     'Gentoo': {
       $venv_dir                   = "${install_dir}/venv"
       $venv_python                = "${venv_dir}/bin/python"
       $venv_pip                   = "${venv_dir}/bin/pip"
+      $hermes_config_dir          = "/home/${nest::user}/.config/hermes"
+      $hermes_gitlab_env_path     = "${hermes_config_dir}/gitlab.env"
       $hermes_gateway_dropin_dir  = "/home/${nest::user}/.config/systemd/user/hermes-gateway.service.d"
       $package_spec               = $version ? {
         undef   => 'hermes-agent',
@@ -87,6 +91,33 @@ class nest::app::hermes (
         }
       }
 
+      if $gitlab_token {
+        $gitlab_env_content = Sensitive(epp('nest/hermes/gitlab.env.epp', {
+          'gitlab_url'   => $gitlab_url,
+          'gitlab_token' => $gitlab_token.unwrap,
+        }))
+
+        file { $hermes_config_dir:
+          ensure => directory,
+          mode   => '0700',
+          owner  => $nest::user,
+          group  => $nest::user,
+        }
+        ->
+        file { $hermes_gitlab_env_path:
+          ensure    => file,
+          mode      => '0600',
+          owner     => $nest::user,
+          group     => $nest::user,
+          show_diff => false,
+          content   => $gitlab_env_content,
+        }
+      } else {
+        file { $hermes_gitlab_env_path:
+          ensure => absent,
+        }
+      }
+
       file { $hermes_gateway_dropin_dir:
         ensure => directory,
         mode   => '0755',
@@ -101,7 +132,30 @@ class nest::app::hermes (
         group   => $nest::user,
         content => "[Service]\nEnvironment=SSH_AUTH_SOCK=%t/ssh-agent.socket\n",
       }
+
+      if $gitlab_token {
+        file { "${hermes_gateway_dropin_dir}/20-gitlab-env.conf":
+          ensure  => file,
+          mode    => '0644',
+          owner   => $nest::user,
+          group   => $nest::user,
+          content => "[Service]\nEnvironmentFile=${hermes_gitlab_env_path}\n",
+          require => File[$hermes_gitlab_env_path],
+        }
+      } else {
+        file { "${hermes_gateway_dropin_dir}/20-gitlab-env.conf":
+          ensure => absent,
+        }
+      }
+
+      File["${hermes_gateway_dropin_dir}/10-ssh-agent.conf"]
       ~>
+      Exec['hermes-gateway-systemd-user-daemon-reload']
+
+      File["${hermes_gateway_dropin_dir}/20-gitlab-env.conf"]
+      ~>
+      Exec['hermes-gateway-systemd-user-daemon-reload']
+
       exec { 'hermes-gateway-systemd-user-daemon-reload':
         command     => '/bin/sh -c "XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user daemon-reload"',
         user        => $nest::user,
