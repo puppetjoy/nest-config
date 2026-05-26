@@ -5,11 +5,65 @@ include:
 bucket_storage_class: ceph-bucket
 ceph_namespace: rook-ceph
 ceph_object_store: ceph-objectstore
+node_role: workstation
+postgres_storage_class: data-crypt
+postgres_storage_size: 16Gi
+postgres_image: ghcr.io/cloudnative-pg/postgresql:17.6
 
 resources:
   registry_auths: {}
   backup: {}
   restore: {}
+
+  postgres-cluster:
+    apiVersion: postgresql.cnpg.io/v1
+    kind: Cluster
+    metadata:
+      name: "%{nest::kubernetes::main_service}-cnpg"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      instances: 1
+      imageName: "%{lookup('postgres_image')}"
+      managed:
+        roles:
+          - name: registry
+            ensure: present
+            login: true
+            passwordSecret:
+              name: "%{nest::kubernetes::main_service}-registry-database-password"
+      bootstrap:
+        initdb:
+          database: gitlabhq_production
+          owner: gitlab
+          postInitSQL:
+            - CREATE EXTENSION IF NOT EXISTS pg_trgm;
+            - CREATE EXTENSION IF NOT EXISTS btree_gist;
+            - CREATE EXTENSION IF NOT EXISTS plpgsql;
+            - CREATE EXTENSION IF NOT EXISTS amcheck;
+            - CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+      storage:
+        storageClass: "%{lookup('postgres_storage_class')}"
+        size: "%{lookup('postgres_storage_size')}"
+      affinity:
+        nodeSelector:
+          "node-role.kubernetes.io/%{lookup('node_role')}": ''
+        tolerations:
+          - key: "node-role.kubernetes.io/%{lookup('node_role')}"
+            operator: Exists
+            effect: NoSchedule
+
+  registry-database:
+    apiVersion: postgresql.cnpg.io/v1
+    kind: Database
+    metadata:
+      name: "%{nest::kubernetes::main_service}-cnpg-registry"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      cluster:
+        name: "%{nest::kubernetes::main_service}-cnpg"
+      name: registry
+      owner: registry
+      databaseReclaimPolicy: retain
 
   # The gitlab chart looks for Secrets as part of a helm install hook. Our
   # secrets need to exist first.
