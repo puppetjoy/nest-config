@@ -73,6 +73,21 @@ values:
         secretName: "%{nest::kubernetes::service}-certs"
     minio:
       enabled: false
+    psql:
+      host: "%{nest::kubernetes::service}-cnpg-rw"
+      port: 5432
+      username: gitlab
+      database: gitlabhq_production
+      password:
+        secret: "%{nest::kubernetes::service}-cnpg-app"
+        key: password
+    redis:
+      host: "%{nest::kubernetes::service}-valkey"
+      port: 6379
+      auth:
+        enabled: true
+        secret: "%{nest::kubernetes::service}-redis-secret"
+        key: secret
     appConfig:
       artifacts:
         bucket: "%{nest::service::gitlab::artifacts_bucket_config.BUCKET_NAME}"
@@ -104,6 +119,10 @@ values:
     server:
       persistentVolume:
         storageClass: data-crypt
+  postgresql:
+    install: false
+  redis:
+    install: false
   gitlab:
     gitaly:
       persistence:
