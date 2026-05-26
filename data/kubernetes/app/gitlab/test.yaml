@@ -20,7 +20,16 @@ values:
       password:
         secret: "%{nest::kubernetes::main_service}-cnpg-app"
         key: password
+    redis:
+      host: "%{nest::kubernetes::main_service}-valkey"
+      port: 6379
+      auth:
+        enabled: true
+        secret: "%{nest::kubernetes::main_service}-redis-secret"
+        key: secret
   postgresql:
+    install: false
+  redis:
     install: false
   prometheus:
     server:
