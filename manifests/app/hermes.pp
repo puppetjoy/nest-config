@@ -11,7 +11,9 @@ class nest::app::hermes (
       $venv_pip                   = "${venv_dir}/bin/pip"
       $hermes_config_dir          = "/home/${nest::user}/.config/hermes"
       $hermes_gitlab_env_path     = "${hermes_config_dir}/gitlab.env"
-      $hermes_gateway_dropin_dir  = "/home/${nest::user}/.config/systemd/user/hermes-gateway.service.d"
+      $systemd_user_dir           = "/home/${nest::user}/.config/systemd/user"
+      $hermes_gateway_dropin_dir  = "${systemd_user_dir}/hermes-gateway.service.d"
+      $hermes_environment_unit    = 'hermes-environment.service'
       $package_spec               = $version ? {
         undef   => 'hermes-agent',
         default => "hermes-agent==${version}",
@@ -118,11 +120,41 @@ class nest::app::hermes (
         }
       }
 
+      file { $systemd_user_dir:
+        ensure => directory,
+        mode   => '0755',
+        owner  => $nest::user,
+        group  => $nest::user,
+      }
+      ->
+      file { "${systemd_user_dir}/${hermes_environment_unit}":
+        ensure  => file,
+        mode    => '0644',
+        owner   => $nest::user,
+        group   => $nest::user,
+        content => @("UNIT"),
+          [Unit]
+          Description=Import shell environment for Hermes Agent Gateway
+
+          [Service]
+          Type=oneshot
+          ExecStart=/home/${nest::user}/bin/reset-systemd-environment
+          | UNIT
+      }
+
       file { $hermes_gateway_dropin_dir:
         ensure => directory,
         mode   => '0755',
         owner  => $nest::user,
         group  => $nest::user,
+      }
+      ->
+      file { "${hermes_gateway_dropin_dir}/10-shell-environment.conf":
+        ensure  => file,
+        mode    => '0644',
+        owner   => $nest::user,
+        group   => $nest::user,
+        content => "[Unit]\nRequires=${hermes_environment_unit}\nAfter=${hermes_environment_unit}\n",
       }
       ->
       file { "${hermes_gateway_dropin_dir}/10-ssh-agent.conf":
@@ -147,6 +179,14 @@ class nest::app::hermes (
           ensure => absent,
         }
       }
+
+      File["${systemd_user_dir}/${hermes_environment_unit}"]
+      ~>
+      Exec['hermes-gateway-systemd-user-daemon-reload']
+
+      File["${hermes_gateway_dropin_dir}/10-shell-environment.conf"]
+      ~>
+      Exec['hermes-gateway-systemd-user-daemon-reload']
 
       File["${hermes_gateway_dropin_dir}/10-ssh-agent.conf"]
       ~>
