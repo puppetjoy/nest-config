@@ -6,6 +6,7 @@ users_existing_secret: ''
 
 values:
   fullnameOverride: "%{nest::kubernetes::service}"
+  deploymentStrategy: Recreate
   auth:
     enabled: true
     usersExistingSecret: "%{lookup('users_existing_secret')}"
