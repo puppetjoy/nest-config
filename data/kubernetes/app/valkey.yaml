@@ -2,12 +2,13 @@
 node_role: workstation
 storage_class: data-crypt
 storage_size: 8Gi
+users_existing_secret: ''
 
 values:
   fullnameOverride: "%{nest::kubernetes::service}"
   auth:
     enabled: true
-    usersExistingSecret: gitlab-redis-secret
+    usersExistingSecret: "%{lookup('users_existing_secret')}"
     aclUsers:
       default:
         permissions: "~* &* +@all"
