@@ -4,8 +4,30 @@ node_role: workstation
 resources:
   registry_auths: {}
   backup: {}
+  cert_manager:
+    apiVersion: cert-manager.io/v1
+    kind: Certificate
+    metadata:
+      name: cnpg-webhook-cert
+      namespace: cnpg-system
+    spec:
+      secretName: cnpg-webhook-cert
+      dnsNames:
+        - cnpg-webhook-service.cnpg-system.svc
+      issuerRef:
+        name: eyrie-ca
+        kind: ClusterIssuer
+      privateKey:
+        algorithm: ECDSA
+        size: 256
+      usages:
+        - digital signature
+        - key encipherment
+        - server auth
 
 values:
+  commonAnnotations:
+    cert-manager.io/inject-ca-from: cnpg-system/cnpg-webhook-cert
   crds:
     create: true
   nodeSelector:
