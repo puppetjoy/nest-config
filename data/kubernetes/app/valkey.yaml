@@ -4,6 +4,9 @@ storage_class: data-crypt
 storage_size: 8Gi
 users_existing_secret: ''
 
+resources:
+  backup: {}
+
 values:
   fullnameOverride: "%{nest::kubernetes::service}"
   deploymentStrategy: Recreate
