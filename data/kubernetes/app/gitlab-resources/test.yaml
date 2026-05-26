@@ -16,6 +16,13 @@ resources:
     spec:
       instances: 1
       imageName: "%{lookup('postgres_image')}"
+      managed:
+        roles:
+          - name: registry
+            ensure: present
+            login: true
+            passwordSecret:
+              name: "%{nest::kubernetes::main_service}-registry-database-password"
       bootstrap:
         initdb:
           database: gitlabhq_production
@@ -36,3 +43,16 @@ resources:
           - key: "node-role.kubernetes.io/%{lookup('node_role')}"
             operator: Exists
             effect: NoSchedule
+
+  registry-database:
+    apiVersion: postgresql.cnpg.io/v1
+    kind: Database
+    metadata:
+      name: "%{nest::kubernetes::main_service}-cnpg-registry"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      cluster:
+        name: "%{nest::kubernetes::main_service}-cnpg"
+      name: registry
+      owner: registry
+      databaseReclaimPolicy: retain
