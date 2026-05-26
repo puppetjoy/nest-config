@@ -7,7 +7,7 @@ values:
   fullnameOverride: "%{nest::kubernetes::service}"
   auth:
     enabled: true
-    usersExistingSecret: "%{nest::kubernetes::parent}-redis-secret"
+    usersExistingSecret: gitlab-redis-secret
     aclUsers:
       default:
         permissions: "~* &* +@all"
