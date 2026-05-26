@@ -1,0 +1,21 @@
+---
+node_role: workstation
+watch_namespace: default
+
+resources:
+  registry_auths: {}
+  backup: {}
+
+values:
+  config:
+    clusterWide: false
+    data:
+      WATCH_NAMESPACE: "%{lookup('watch_namespace')}"
+  crds:
+    create: true
+  nodeSelector:
+    "node-role.kubernetes.io/%{lookup('node_role')}": ''
+  tolerations:
+    - key: "node-role.kubernetes.io/%{lookup('node_role')}"
+      operator: Exists
+      effect: NoSchedule

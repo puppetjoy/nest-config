@@ -65,3 +65,6 @@ steps:
 
   - description: 'Deploy Ceph'
     plan: nest::kubernetes::deploy_ceph
+
+  - description: 'Deploy database operators'
+    plan: nest::eyrie::deploy_database

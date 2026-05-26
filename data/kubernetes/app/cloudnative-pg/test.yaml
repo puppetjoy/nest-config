@@ -1,0 +1,14 @@
+---
+watch_namespace: test
+
+resources:
+  restore: {}
+
+values:
+  crds:
+    create: false
+  webhook:
+    mutating:
+      create: false
+    validating:
+      create: false

@@ -1,0 +1,27 @@
+---
+description: 'Deploy Eyrie database operators'
+
+parameters:
+  deploy:
+    description: 'Run or skip the deployment'
+    type: Boolean
+    default: true
+
+  render_to:
+    description: 'Just render the template'
+    type: String
+    default: ''
+
+steps:
+  - description: 'Deploy CloudNativePG operator'
+    plan: 'nest::kubernetes::deploy'
+    parameters:
+      service: 'cloudnative-pg'
+      app: 'cloudnative-pg'
+      chart: 'cnpg/cloudnative-pg'
+      namespace: 'cnpg-system'
+      repo_url: 'https://cloudnative-pg.github.io/charts'
+      version: '0.28.2'
+      wait: true
+      deploy: $deploy
+      render_to: $render_to

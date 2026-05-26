@@ -1,0 +1,27 @@
+---
+description: 'Deploy Eyrie test database operators'
+
+parameters:
+  deploy:
+    description: 'Run or skip the deployment'
+    type: Boolean
+    default: true
+
+  render_to:
+    description: 'Just render the template'
+    type: String
+    default: ''
+
+steps:
+  - description: 'Deploy test CloudNativePG operator'
+    plan: 'nest::kubernetes::deploy'
+    parameters:
+      service: 'cloudnative-pg-test'
+      app: 'cloudnative-pg'
+      chart: 'cnpg/cloudnative-pg'
+      namespace: 'test'
+      repo_url: 'https://cloudnative-pg.github.io/charts'
+      version: '0.28.2'
+      wait: true
+      deploy: $deploy
+      render_to: $render_to
