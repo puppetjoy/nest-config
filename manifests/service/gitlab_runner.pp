@@ -37,7 +37,7 @@ class nest::service::gitlab_runner (
 
   nest::lib::srv { 'gitlab-runner':
     ensure => $runner_ensure,
-    ignore => ['config.toml', '.*'],
+    ignore => ['config.toml', '.runner_system_id'],
     purge  => true,
     notify => $srv_notify, # unregister purged instances
   }
@@ -49,6 +49,23 @@ class nest::service::gitlab_runner (
     group   => 'root',
     source  => 'puppet:///modules/nest/scripts/gitlab-runner.sh',
     require => Class['nest::base::containers'],
+  }
+
+  if $runner_ensure == present and !$facts['is_container'] {
+    $register_script_excludes = $instances.keys.map |$instance| {
+      ['!', '-name', ".register-${instance}.sh"]
+    }
+    $stale_register_script_args = [
+      '/usr/bin/find', '/srv/gitlab-runner', '-maxdepth', '1', '-type', 'f',
+      '-name', '.register-*.sh', $register_script_excludes,
+    ].flatten.shellquote
+
+    exec { 'gitlab-runner-purge-stale-register-scripts':
+      command => "${stale_register_script_args} -delete",
+      onlyif  => "/usr/bin/test -n \"$(${stale_register_script_args} -print -quit)\"",
+      require => Nest::Lib::Srv['gitlab-runner'],
+      notify  => Exec['gitlab-runner-unregister-all'],
+    }
   }
 
   $instances.each |$instance, $attributes| {
