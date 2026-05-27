@@ -64,16 +64,11 @@ class nest::service::gitlab_runner (
     }
   }
 
-  # Use Apline image like official GitLab image
-  # See: https://gitlab.alpinelinux.org/alpine/infra/docker/gitlab-runner/-/blob/master/Dockerfile
-  # See: https://gitlab.com/gitlab-org/gitlab-runner/-/blob/main/dockerfiles/runner/ubuntu/Dockerfile
   nest::lib::container { 'gitlab-runner':
-    ensure     => $ensure,
-    dns        => $dns,
-    image      => 'alpinelinux/gitlab-runner',
-    entrypoint => '/usr/bin/gitlab-runner', # avoid entrypoint that manages registrations
-    command    => ['run', '--user=gitlab-runner', '--working-directory=/var/lib/gitlab-runner'],
-    volumes    => [
+    ensure  => $ensure,
+    dns     => $dns,
+    image   => 'gitlab/gitlab-runner:alpine-v19.0.0',
+    volumes => [
       '/srv/gitlab-runner:/etc/gitlab-runner',
       '/run/podman/podman.sock:/var/run/docker.sock',
     ],

@@ -96,7 +96,6 @@ define nest::lib::gitlab_runner (
     $limit_args,
     '--output-limit', '524288',
     '--executor', 'docker',
-    '--docker-helper-image', 'alpinelinux/gitlab-runner-helper',
     '--docker-image', $default_image,
     '--env', "CI_HOST_EMERGE_DEFAULT_OPTS=${nest::base::portage::emerge_default_opts}",
     '--env', "CI_HOST_MAKEOPTS=${nest::base::portage::makeopts}",
