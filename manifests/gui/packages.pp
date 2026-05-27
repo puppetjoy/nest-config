@@ -4,9 +4,15 @@ class nest::gui::packages {
       nest::lib::package { [
         'media-gfx/gimp',
         'media-gfx/inkscape',
-        'net-im/telegram-desktop',
       ]:
         ensure => installed,
+      }
+
+      nest::lib::package { 'net-im/telegram-desktop':
+        ensure => installed,
+        env    => {
+          'FEATURES' => '-distcc',
+        },
       }
     }
 
