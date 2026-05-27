@@ -115,6 +115,8 @@ values:
         secret: "%{nest::kubernetes::service}-shell-host-keys"
     storageClass: data-crypt
   installCertmanager: false
+  certmanager-issuer:
+    email: gitlab@joyfullee.me
   prometheus:
     server:
       persistentVolume:
