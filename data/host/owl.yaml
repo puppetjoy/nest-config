@@ -13,6 +13,7 @@ nest::dvorak: true
 nest::text_scaling_factor: 1.5
 
 nest::app::hermes::install_from_git: true
+nest::app::hermes::git_ref: '5deb384b53fc47c2b9821ba87dee89d778ee1cb7'
 
 nest::kernel_cmdline:
   # Max VRAM allocation (112 GiB)
