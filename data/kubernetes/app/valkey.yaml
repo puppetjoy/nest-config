@@ -6,6 +6,7 @@ users_existing_secret: ''
 
 resources:
   backup: {}
+  restore: {}
 
 values:
   fullnameOverride: "%{nest::kubernetes::service}"
