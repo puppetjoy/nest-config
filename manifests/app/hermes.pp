@@ -62,6 +62,7 @@ class nest::app::hermes (
           command     => "${venv_pip} install --upgrade --force-reinstall ${source_dir} && git -C ${source_dir} rev-parse HEAD > ${git_revision_file}",
           unless      => "test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent')\"",
           environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
+          path        => ['/bin', '/usr/bin'],
           require     => [
             Exec['create_hermes_venv'],
             Vcsrepo[$source_dir],
