@@ -65,7 +65,12 @@ values:
       registry:
         name: "registry.%{lookup('external_name')}"
       ssh: "%{lookup('external_name')}"
+    gatewayApi:
+      enabled: false
+      installEnvoy: false
+      configureCertmanager: false
     ingress:
+      enabled: true
       configureCertmanager: false
       class: "%{lookup('ingress_class')}"
       provider: contour # default 'nginx' affects default annotations
