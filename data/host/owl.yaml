@@ -12,6 +12,8 @@ nest::distcc_server: true
 nest::dvorak: true
 nest::text_scaling_factor: 1.5
 
+nest::app::hermes::install_from_git: true
+
 nest::kernel_cmdline:
   # Max VRAM allocation (112 GiB)
   # https://knowledgebase.frame.work/changing-memory-allocation-amd-ryzen-ai-max-300-series-By1LG5Yrll

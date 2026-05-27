@@ -1,28 +1,24 @@
 class nest::app::hermes (
-  Optional[String[1]]            $version      = undef,
-  Stdlib::Absolutepath           $install_dir  = '/opt/hermes-agent',
-  String[1]                      $gitlab_url   = 'https://gitlab.joyfullee.me',
-  Optional[Sensitive[String[1]]] $gitlab_token = undef,
+  Optional[String[1]]            $version          = undef,
+  Stdlib::Absolutepath           $install_dir      = '/opt/hermes-agent',
+  Boolean                        $install_from_git = false,
+  String[1]                      $git_url          = 'https://github.com/NousResearch/hermes-agent.git',
+  String[1]                      $git_ref          = 'main',
+  String[1]                      $gitlab_url       = 'https://gitlab.joyfullee.me',
+  Optional[Sensitive[String[1]]] $gitlab_token     = undef,
 ) {
   case $facts['os']['family'] {
     'Gentoo': {
       $venv_dir                   = "${install_dir}/venv"
       $venv_python                = "${venv_dir}/bin/python"
       $venv_pip                   = "${venv_dir}/bin/pip"
+      $source_dir                 = "${install_dir}/src"
+      $git_revision_file          = "${install_dir}/.installed-git-revision"
       $hermes_config_dir          = "/home/${nest::user}/.config/hermes"
       $hermes_gitlab_env_path     = "${hermes_config_dir}/gitlab.env"
       $systemd_user_dir           = "/home/${nest::user}/.config/systemd/user"
       $hermes_gateway_dropin_dir  = "${systemd_user_dir}/hermes-gateway.service.d"
       $hermes_environment_unit    = 'hermes-environment.service'
-      $package_spec               = $version ? {
-        undef   => 'hermes-agent',
-        default => "hermes-agent==${version}",
-      }
-
-      $install_unless = $version ? {
-        undef   => "${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent')\"",
-        default => "${venv_python} -c \"import importlib.metadata as m; raise SystemExit(0 if m.version('hermes-agent') == '${version}' else 1)\"",
-      }
 
       nest::lib::package { 'dev-python/virtualenv':
         ensure => present,
@@ -38,22 +34,62 @@ class nest::app::hermes (
         owner  => 'root',
         group  => 'root',
       }
-      ->
+
       exec { 'create_hermes_venv':
         command => "/usr/bin/python3 -m virtualenv ${venv_dir}",
         creates => $venv_python,
-        require => Nest::Lib::Package['dev-python/virtualenv'],
+        require => [
+          File[$install_dir],
+          Nest::Lib::Package['dev-python/virtualenv'],
+        ],
       }
-      ->
-      exec { 'install_hermes_agent':
-        command     => "${venv_pip} install ${package_spec}",
-        unless      => $install_unless,
-        environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
+
+      if $install_from_git {
+        include 'nest::base::git'
+
+        vcsrepo { $source_dir:
+          ensure   => latest,
+          provider => git,
+          source   => $git_url,
+          revision => $git_ref,
+          require  => [
+            File[$install_dir],
+            Class['nest::base::git'],
+          ],
+        }
+
+        exec { 'install_hermes_agent':
+          command     => "${venv_pip} install --upgrade --force-reinstall ${source_dir} && git -C ${source_dir} rev-parse HEAD > ${git_revision_file}",
+          unless      => "test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent')\"",
+          environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
+          require     => [
+            Exec['create_hermes_venv'],
+            Vcsrepo[$source_dir],
+          ],
+        }
+      } else {
+        $package_spec = $version ? {
+          undef   => 'hermes-agent',
+          default => "hermes-agent==${version}",
+        }
+
+        $install_unless = $version ? {
+          undef   => "${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent')\"",
+          default => "${venv_python} -c \"import importlib.metadata as m; raise SystemExit(0 if m.version('hermes-agent') == '${version}' else 1)\"",
+        }
+
+        exec { 'install_hermes_agent':
+          command     => "${venv_pip} install ${package_spec}",
+          unless      => $install_unless,
+          environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
+          require     => Exec['create_hermes_venv'],
+        }
       }
-      ->
+
       file { '/usr/local/bin/hermes':
-        ensure => link,
-        target => "${venv_dir}/bin/hermes",
+        ensure  => link,
+        target  => "${venv_dir}/bin/hermes",
+        require => Exec['install_hermes_agent'],
       }
 
       exec { 'install_hermes_telegram_deps':
