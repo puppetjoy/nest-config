@@ -61,6 +61,7 @@ nest::service::reverse_proxy::hosts:
     destination: 'bitwarden.eyrie'
     ip: ['45.77.156.204', '2001:19f0:1000:e1dc::204']
     proxy_ssl: true
+    websockets: true
 
   # Wordpress sites
   www.joyfullee.me:

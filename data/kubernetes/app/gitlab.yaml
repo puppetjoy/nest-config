@@ -150,6 +150,7 @@ values:
       ingress:
         annotations:
           projectcontour.io/response-timeout: infinity
+          projectcontour.io/websocket-routes: /
       workhorse:
         image: "%{lookup('registry')}/nest/forks/gitlab-workhorse"
   gitlab-runner:

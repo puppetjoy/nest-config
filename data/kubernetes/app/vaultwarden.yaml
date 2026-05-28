@@ -59,6 +59,8 @@ values:
     enabled: true
     class: "%{lookup('ingress_class')}"
     hostname: "%{nest::kubernetes::fqdn}"
+    additionalAnnotations:
+      projectcontour.io/websocket-routes: /
     tlsSecret: "%{nest::kubernetes::service}-certs"
 
 patches:
