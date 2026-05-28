@@ -36,7 +36,7 @@ resources:
 
 values:
   image:
-    tag: '1.35.4'
+    tag: '1.36.0'
   adminToken:
     value: "%{nest::service::bitwarden::admin_token_hash}"
   storage:
