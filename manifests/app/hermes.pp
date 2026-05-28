@@ -13,6 +13,7 @@ class nest::app::hermes (
       $venv_dir                   = "${install_dir}/venv"
       $venv_python                = "${venv_dir}/bin/python"
       $venv_pip                   = "${venv_dir}/bin/pip"
+      $venv_site_packages         = "${venv_dir}/lib/python3.13/site-packages"
       $source_dir                 = "${install_dir}/src"
       $git_revision_file          = "${install_dir}/.installed-git-revision"
       $hermes_config_dir          = "/home/${nest::user}/.config/hermes"
@@ -101,6 +102,31 @@ class nest::app::hermes (
         unless      => "${venv_python} -c \"import importlib.metadata as m; raise SystemExit(0 if m.version('python-telegram-bot') == '22.6' else 1)\"",
         environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
         require     => Exec['install_hermes_agent'],
+      }
+
+      $hermes_web_plugin_providers = [
+        'brave_free',
+        'ddgs',
+        'exa',
+        'firecrawl',
+        'parallel',
+        'searxng',
+        'tavily',
+        'xai',
+      ]
+
+      $hermes_web_plugin_providers.each |String[1] $provider| {
+        file { "${venv_site_packages}/plugins/web/${provider}/plugin.yaml":
+          ensure  => file,
+          mode    => '0644',
+          owner   => 'root',
+          group   => 'root',
+          content => @("YAML"),
+            name: ${provider}
+            kind: backend
+            | YAML
+          require => Exec['install_hermes_agent'],
+        }
       }
 
       nest::lib::package { 'media-video/ffmpeg':
@@ -198,8 +224,8 @@ class nest::app::hermes (
         }
 
         exec { 'configure_hermes_tavily_search_backend':
-          command     => "${venv_dir}/bin/hermes config set web.search_backend tavily",
-          unless      => "${venv_python} -c \"import pathlib, sys, yaml; p = pathlib.Path('${hermes_config_path}'); cfg = yaml.safe_load(p.read_text()) if p.exists() else {}; sys.exit(0 if (cfg or {}).get('web', {}).get('search_backend') == 'tavily' else 1)\"",
+          command     => "${venv_dir}/bin/hermes config set web.backend tavily && ${venv_dir}/bin/hermes config set web.search_backend tavily",
+          unless      => "${venv_python} -c \"import pathlib, sys, yaml; p = pathlib.Path('${hermes_config_path}'); cfg = yaml.safe_load(p.read_text()) if p.exists() else {}; web = (cfg or {}).get('web', {}); sys.exit(0 if web.get('backend') == 'tavily' and web.get('search_backend') == 'tavily' else 1)\"",
           user        => $nest::user,
           environment => ["HOME=/home/${nest::user}"],
           require     => Exec['install_hermes_agent'],
