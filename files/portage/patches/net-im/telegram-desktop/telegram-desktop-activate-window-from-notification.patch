@@ -1,0 +1,84 @@
+diff --git a/Telegram/SourceFiles/window/notifications_manager.cpp b/Telegram/SourceFiles/window/notifications_manager.cpp
+index 3ef706f..b53e62e 100644
+--- a/Telegram/SourceFiles/window/notifications_manager.cpp
++++ b/Telegram/SourceFiles/window/notifications_manager.cpp
+@@ -42,6 +42,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
+ #include "ui/text/text_utilities.h"
+ #include "platform/platform_specific.h"
+ 
++#ifndef DESKTOP_APP_DISABLE_X11_INTEGRATION
++#include "base/platform/linux/base_linux_xcb_utilities.h"
++#endif // !DESKTOP_APP_DISABLE_X11_INTEGRATION
++
+ #include <QtGui/QWindow>
+ #include <QtGui/QGuiApplication>
+ #include <QtGui/QScreen>
+@@ -67,6 +71,52 @@ constexpr auto kSystemAlertDuration = crl::time(1000);
+ constexpr auto kSystemAlertDuration = crl::time(0);
+ #endif // Q_OS_MAC
+ 
++void ActivateWindowFromNotification(QWindow *window) {
++#ifndef DESKTOP_APP_DISABLE_X11_INTEGRATION
++	if (!window) {
++		return;
++	}
++
++	const base::Platform::XCB::Connection connection;
++	if (!connection || xcb_connection_has_error(connection)) {
++		return;
++	}
++
++	const auto root = base::Platform::XCB::GetRootWindow(connection);
++	if (!root) {
++		return;
++	}
++
++	const auto activeWindowAtom = base::Platform::XCB::GetAtom(
++		connection,
++		"_NET_ACTIVE_WINDOW");
++	if (!activeWindowAtom) {
++		return;
++	}
++
++	xcb_client_message_event_t event = {};
++	event.response_type = XCB_CLIENT_MESSAGE;
++	event.type = activeWindowAtom;
++	event.window = window->winId();
++	event.format = 32;
++	event.data.data32[0] = 1; // source indication: application
++	event.data.data32[1] = XCB_CURRENT_TIME;
++	event.data.data32[2] = 0;
++
++	free(
++		xcb_request_check(
++			connection,
++			xcb_send_event_checked(
++				connection,
++				false,
++				root,
++				XCB_EVENT_MASK_SUBSTRUCTURE_REDIRECT
++					| XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY,
++				reinterpret_cast<const char*>(&event))));
++	xcb_flush(connection);
++#endif // !DESKTOP_APP_DISABLE_X11_INTEGRATION
++}
++
+ [[nodiscard]] QString PlaceholderReactionText() {
+ 	static const auto result = QString::fromUtf8("\xf0\x9f\x92\xad");
+ 	return result;
+@@ -1278,6 +1328,7 @@ Window::SessionController *Manager::openNotificationMessage(
+ 		const auto window = history->session().tryResolveWindow();
+ 		if (window) {
+ 			window->widget()->showFromTray();
++			ActivateWindowFromNotification(window->widget()->windowHandle());
+ 			window->widget()->setInnerFocus();
+ 			system()->clearAll();
+ 		}
+@@ -1347,6 +1398,7 @@ Window::SessionController *Manager::openNotificationMessage(
+ 		: history->session().tryResolveWindow();
+ 	if (window) {
+ 		window->widget()->showFromTray();
++		ActivateWindowFromNotification(window->widget()->windowHandle());
+ 		if (topic) {
+ 			window->showTopic(topic, itemId, SectionShow::Way::Forward);
+ 		} else if (sublist) {
