@@ -6,6 +6,7 @@ class nest::app::hermes (
   String[1]                      $git_ref          = 'main',
   String[1]                      $gitlab_url       = 'https://gitlab.joyfullee.me',
   Optional[Sensitive[String[1]]] $gitlab_token     = undef,
+  Optional[Sensitive[String[1]]] $tavily_api_key   = undef,
 ) {
   case $facts['os']['family'] {
     'Gentoo': {
@@ -15,7 +16,10 @@ class nest::app::hermes (
       $source_dir                 = "${install_dir}/src"
       $git_revision_file          = "${install_dir}/.installed-git-revision"
       $hermes_config_dir          = "/home/${nest::user}/.config/hermes"
+      $hermes_home_dir            = "/home/${nest::user}/.hermes"
+      $hermes_config_path         = "${hermes_home_dir}/config.yaml"
       $hermes_gitlab_env_path     = "${hermes_config_dir}/gitlab.env"
+      $hermes_web_env_path        = "${hermes_config_dir}/web.env"
       $systemd_user_dir           = "/home/${nest::user}/.config/systemd/user"
       $hermes_gateway_dropin_dir  = "${systemd_user_dir}/hermes-gateway.service.d"
       $hermes_environment_unit    = 'hermes-environment.service'
@@ -130,19 +134,19 @@ class nest::app::hermes (
         }
       }
 
+      file { $hermes_config_dir:
+        ensure => directory,
+        mode   => '0700',
+        owner  => $nest::user,
+        group  => $nest::user,
+      }
+
       if $gitlab_token {
         $gitlab_env_content = Sensitive(epp('nest/hermes/gitlab.env.epp', {
           'gitlab_url'   => $gitlab_url,
           'gitlab_token' => $gitlab_token.unwrap,
         }))
 
-        file { $hermes_config_dir:
-          ensure => directory,
-          mode   => '0700',
-          owner  => $nest::user,
-          group  => $nest::user,
-        }
-        ->
         file { $hermes_gitlab_env_path:
           ensure    => file,
           mode      => '0600',
@@ -150,9 +154,38 @@ class nest::app::hermes (
           group     => $nest::user,
           show_diff => false,
           content   => $gitlab_env_content,
+          require   => File[$hermes_config_dir],
         }
       } else {
         file { $hermes_gitlab_env_path:
+          ensure => absent,
+        }
+      }
+
+      if $tavily_api_key {
+        $web_env_content = Sensitive(epp('nest/hermes/web.env.epp', {
+          'tavily_api_key' => $tavily_api_key.unwrap,
+        }))
+
+        file { $hermes_web_env_path:
+          ensure    => file,
+          mode      => '0600',
+          owner     => $nest::user,
+          group     => $nest::user,
+          show_diff => false,
+          content   => $web_env_content,
+          require   => File[$hermes_config_dir],
+        }
+
+        exec { 'configure_hermes_tavily_search_backend':
+          command     => "${venv_dir}/bin/hermes config set web.search_backend tavily",
+          unless      => "${venv_python} -c \"import pathlib, sys, yaml; p = pathlib.Path('${hermes_config_path}'); cfg = yaml.safe_load(p.read_text()) if p.exists() else {}; sys.exit(0 if (cfg or {}).get('web', {}).get('search_backend') == 'tavily' else 1)\"",
+          user        => $nest::user,
+          environment => ["HOME=/home/${nest::user}"],
+          require     => Exec['install_hermes_agent'],
+        }
+      } else {
+        file { $hermes_web_env_path:
           ensure => absent,
         }
       }
@@ -217,6 +250,21 @@ class nest::app::hermes (
         }
       }
 
+      if $tavily_api_key {
+        file { "${hermes_gateway_dropin_dir}/30-web-env.conf":
+          ensure  => file,
+          mode    => '0644',
+          owner   => $nest::user,
+          group   => $nest::user,
+          content => "[Service]\nEnvironmentFile=${hermes_web_env_path}\n",
+          require => File[$hermes_web_env_path],
+        }
+      } else {
+        file { "${hermes_gateway_dropin_dir}/30-web-env.conf":
+          ensure => absent,
+        }
+      }
+
       File["${systemd_user_dir}/${hermes_environment_unit}"]
       ~>
       Exec['hermes-gateway-systemd-user-daemon-reload']
@@ -230,6 +278,10 @@ class nest::app::hermes (
       Exec['hermes-gateway-systemd-user-daemon-reload']
 
       File["${hermes_gateway_dropin_dir}/20-gitlab-env.conf"]
+      ~>
+      Exec['hermes-gateway-systemd-user-daemon-reload']
+
+      File["${hermes_gateway_dropin_dir}/30-web-env.conf"]
       ~>
       Exec['hermes-gateway-systemd-user-daemon-reload']
 
