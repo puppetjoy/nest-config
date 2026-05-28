@@ -270,7 +270,7 @@ class nest::app::hermes (
               "dialecticCadence": 2,
               "hosts": {
                 "hermes": {
-                  "workspace": "talon",
+                  "workspace": "hermes",
                   "peerName": "joy",
                   "aiPeer": "talon",
                   "enabled": true,
