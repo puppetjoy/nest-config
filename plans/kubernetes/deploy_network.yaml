@@ -21,7 +21,7 @@ steps:
       chart: 'projectcalico/tigera-operator'
       namespace: 'tigera-operator'
       repo_url: 'https://docs.tigera.io/calico/charts'
-      version: '3.31.2'
+      version: '3.32.0'
       wait: true
       deploy: $calico
 
