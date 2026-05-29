@@ -36,7 +36,7 @@ steps:
       app: 'vaultwarden'
       chart: 'guerzon/vaultwarden'
       repo_url: 'https://guerzon.github.io/vaultwarden'
-      version: '0.37.0'
+      version: '0.38.0'
       subcharts:
         - service: "${service}-mariadb"
           app: 'mariadb'
