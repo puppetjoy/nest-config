@@ -29,10 +29,6 @@ steps:
     parameters:
       deploy: $system
 
-  - description: 'Deploy test Kubernetes Dashboard'
-    plan: nest::eyrie::test::deploy_dashboard
-    parameters:
-      deploy: $system
 
   - description: 'Deploy test Ceph'
     plan: nest::eyrie::test::deploy_ceph

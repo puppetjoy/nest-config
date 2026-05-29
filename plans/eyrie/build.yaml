@@ -60,8 +60,6 @@ steps:
   - description: 'Deploy monitoring'
     plan: nest::kubernetes::deploy_monitoring
 
-  - description: 'Deploy Kubernetes Dashboard'
-    plan: nest::kubernetes::deploy_dashboard
 
   - description: 'Deploy Ceph'
     plan: nest::kubernetes::deploy_ceph
