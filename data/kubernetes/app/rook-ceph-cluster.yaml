@@ -75,7 +75,7 @@ values:
 
   cephImage:
     repository: quay.io/ceph/ceph
-    tag: v19.2.3
+    tag: v20.2.1-20260402
 
   # Expose resources for prometheus
   monitoring:
