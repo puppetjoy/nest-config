@@ -73,14 +73,15 @@ resources:
 values:
   clusterName: "%{lookup('service_name')}"
 
+  cephImage:
+    repository: quay.io/ceph/ceph
+    tag: v19.2.3
+
   # Expose resources for prometheus
   monitoring:
     enabled: true
 
   cephClusterSpec:
-    cephVersion:
-      image: quay.io/ceph/ceph:v19.2.3
-
     # Run on specified node_role
     placement:
       all: *placement

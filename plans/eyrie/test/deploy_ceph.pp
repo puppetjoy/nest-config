@@ -12,7 +12,7 @@ plan nest::eyrie::test::deploy_ceph (
     'chart'     => 'rook-release/rook-ceph-cluster',
     'namespace' => 'test',
     'repo_url'  => 'https://charts.rook.io/release',
-    'version'   => '1.18.7',
+    'version'   => '1.19.6',
     'subcharts' => [
       {
         'service'  => 'ceph-monitoring',
