@@ -13,16 +13,6 @@ resources:
     apiVersion: v1
     kind: Secret
     metadata:
-      name: nest-registry-auths
-      namespace: "%{nest::kubernetes::namespace}"
-    data:
-      .dockerconfigjson: "%{nest::kubernetes::registry_auths_base64}"
-    type: kubernetes.io/dockerconfigjson
-
-  registry_auths:
-    apiVersion: v1
-    kind: Secret
-    metadata:
       name: "%{nest::kubernetes::service}-registry-auths"
       namespace: "%{nest::kubernetes::namespace}"
     data:
@@ -72,7 +62,7 @@ resources:
                       mountPath: '/root/.ssh/id_ed25519'
                       readOnly: true
               imagePullSecrets:
-                - name: nest-registry-auths
+                - name: "%{nest::kubernetes::service}-registry-auths"
               restartPolicy: Never
               volumes:
                 - name: nest
@@ -208,7 +198,7 @@ patches:
         - op: replace
           path: '/spec/template/spec/imagePullSecrets'
           value:
-            - name: nest-registry-auths
+            - name: "%{nest::kubernetes::service}-registry-auths"
         - op: add
           path: '/spec/template/spec/volumes/-'
           value:
