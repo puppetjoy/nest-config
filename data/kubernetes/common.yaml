@@ -9,6 +9,16 @@ registry: 'registry.eyrie'
 restore_registry: "%{lookup('registry')}"
 
 resources:
+  nest_registry_auths:
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: nest-registry-auths
+      namespace: "%{nest::kubernetes::namespace}"
+    data:
+      .dockerconfigjson: "%{nest::kubernetes::registry_auths_base64}"
+    type: kubernetes.io/dockerconfigjson
+
   registry_auths:
     apiVersion: v1
     kind: Secret
@@ -62,7 +72,7 @@ resources:
                       mountPath: '/root/.ssh/id_ed25519'
                       readOnly: true
               imagePullSecrets:
-                - name: "%{nest::kubernetes::service}-registry-auths"
+                - name: nest-registry-auths
               restartPolicy: Never
               volumes:
                 - name: nest
@@ -198,7 +208,7 @@ patches:
         - op: replace
           path: '/spec/template/spec/imagePullSecrets'
           value:
-            - name: "%{nest::kubernetes::service}-registry-auths"
+            - name: nest-registry-auths
         - op: add
           path: '/spec/template/spec/volumes/-'
           value:

@@ -68,7 +68,7 @@ resources:
                       mountPath: '/root/.ssh/id_ed25519'
                       readOnly: true
               imagePullSecrets:
-                - name: "%{nest::kubernetes::service}-registry-auths"
+                - name: nest-registry-auths
               restartPolicy: Never
               tolerations: *tolerations
               volumes:
