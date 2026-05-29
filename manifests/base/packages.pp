@@ -87,11 +87,6 @@ class nest::base::packages {
       ]:
         ensure => installed,
       }
-
-      package { 'telegram-desktop':
-        ensure          => installed,
-        install_options => ['--cask'],
-      }
     }
 
     'windows': {

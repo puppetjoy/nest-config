@@ -20,6 +20,10 @@ class nest::gui::packages {
       package { 'chatgpt':
         ensure => installed,
       }
+
+      package { 'telegram-desktop':
+        ensure => installed,
+      }
     }
   }
 }
