@@ -29,6 +29,14 @@ groups:
             name: certname
             uri: facts.fqdn
 
+  - name: 'macs'
+    targets:
+      - _plugin: puppetdb
+        query: "inventory[certname] { facts.osfamily = 'Darwin' }"
+        target_mapping:
+          name: certname
+          uri: facts.fqdn
+
   - name: 'windows'
     targets:
       - _plugin: puppetdb
