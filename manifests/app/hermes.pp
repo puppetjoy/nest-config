@@ -252,6 +252,30 @@ class nest::app::hermes (
         }
       }
 
+      exec { 'configure_hermes_web_extract_auxiliary':
+        command     => @("SH"),
+          ${venv_dir}/bin/hermes config set auxiliary.web_extract.provider openai-codex && \
+            ${venv_dir}/bin/hermes config set auxiliary.web_extract.model gpt-5.4-mini
+          | SH
+        unless      => @("SH"),
+          ${venv_python} - <<'PY'
+          import pathlib
+          import sys
+          import yaml
+
+          p = pathlib.Path('${hermes_config_path}')
+          cfg = yaml.safe_load(p.read_text()) if p.exists() else {}
+          auxiliary = (cfg or {}).get('auxiliary', {}) or {}
+          web_extract = auxiliary.get('web_extract', {}) or {}
+          sys.exit(0 if web_extract.get('provider') == 'openai-codex'
+                   and web_extract.get('model') == 'gpt-5.4-mini' else 1)
+          PY
+          | SH
+        user        => $nest::user,
+        environment => ["HOME=/home/${nest::user}"],
+        require     => Exec['install_hermes_agent'],
+      }
+
       if $honcho_api_key {
         file_line { 'hermes-env-honcho-api-key':
           path    => $hermes_env_path,
