@@ -34,6 +34,7 @@ steps:
       service: $service
       app: 'wordpress'
       chart: 'oci://registry-1.docker.io/bitnamicharts/wordpress'
+      version: '31.0.1'
       deploy: $deploy
       init: $init
       wait: $init
