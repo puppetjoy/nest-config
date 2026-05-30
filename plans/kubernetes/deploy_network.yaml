@@ -41,7 +41,7 @@ steps:
       chart: 'metallb/metallb'
       namespace: 'metallb-system'
       repo_url: 'https://metallb.github.io/metallb'
-      version: '0.15.2'
+      version: '0.16.1'
       wait: true
       deploy: $metallb
 
