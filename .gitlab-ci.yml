@@ -62,6 +62,10 @@ stages:
   tags: ['r10k']
   script:
     - 'r10k deploy environment "$CI_COMMIT_BRANCH" --modules --verbose'
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "ci-debug-bolt-module-install"'
+      when: never
+    - when: always
 
 'Deploy image':
   stage: 'Deploy'
@@ -77,3 +81,7 @@ stages:
     - 'podman manifest add "$IMAGE" "${CI_REGISTRY}/${IMAGE}:sifive-u74"'
     - 'podman manifest push --all "$IMAGE" "${CI_REGISTRY}/${IMAGE}"'
     - 'podman manifest push --all "$IMAGE" "registry.eyrie/${IMAGE}"'
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "ci-debug-bolt-module-install"'
+      when: never
+    - when: always
