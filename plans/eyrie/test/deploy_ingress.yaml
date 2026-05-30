@@ -48,7 +48,7 @@ steps:
       app: 'cert-manager'
       chart: 'oci://quay.io/jetstack/charts/cert-manager'
       namespace: 'test'
-      version: '1.19.1'
+      version: '1.20.2'
       wait: true
       deploy: $deploy and $certmanager
       render_to: $render_to
