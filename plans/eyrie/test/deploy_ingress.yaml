@@ -36,7 +36,7 @@ steps:
       chart: 'contour/contour'
       namespace: 'test'
       repo_url: 'https://projectcontour.github.io/helm-charts/'
-      version: '0.1.0'
+      version: '0.6.0'
       wait: true
       deploy: $deploy and $contour
       render_to: $render_to
