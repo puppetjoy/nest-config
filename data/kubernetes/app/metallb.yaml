@@ -12,3 +12,12 @@ values:
       - key: node-role.kubernetes.io/compute
         operator: Exists
         effect: NoSchedule
+  frr-k8s:
+    frrk8s:
+      tolerations:
+        - key: node-role.kubernetes.io/workstation
+          operator: Exists
+          effect: NoSchedule
+        - key: node-role.kubernetes.io/compute
+          operator: Exists
+          effect: NoSchedule
