@@ -5,5 +5,7 @@ ARG REPOSITORY
 
 ENV BOLT_PROJECT=/opt/nest
 RUN git clone -b "$BRANCH" "$REPOSITORY" "$BOLT_PROJECT"
+RUN mkdir -p /root/.ssh && \
+    printf '%s\n' 'gitlab.joyfullee.me ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL8IV6XOFkcGWKuvfpbEixC7KPDKpfxPGGownlkEVWzw' >> /root/.ssh/known_hosts
 RUN --mount=type=secret,id=ssh_private_key zsh -c 'eval $(ssh-agent -s) && ssh-add /run/secrets/ssh_private_key && bolt module install'
 RUN ln -s "${BOLT_PROJECT}/bin/build" /usr/local/bin/build
