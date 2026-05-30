@@ -14,7 +14,6 @@ class nest::app::hermes (
       $venv_dir                   = "${install_dir}/venv"
       $venv_python                = "${venv_dir}/bin/python"
       $venv_pip                   = "${venv_dir}/bin/pip"
-      $venv_site_packages         = "${venv_dir}/lib/python3.13/site-packages"
       $source_dir                 = "${install_dir}/src"
       $git_revision_file          = "${install_dir}/.installed-git-revision"
       $hermes_config_dir          = "/home/${nest::user}/.config/hermes"
@@ -112,31 +111,6 @@ class nest::app::hermes (
           unless      => "${venv_python} -c \"import honcho\"",
           environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
           require     => Exec['install_hermes_agent'],
-        }
-      }
-
-      $hermes_web_plugin_providers = [
-        'brave_free',
-        'ddgs',
-        'exa',
-        'firecrawl',
-        'parallel',
-        'searxng',
-        'tavily',
-        'xai',
-      ]
-
-      $hermes_web_plugin_providers.each |String[1] $provider| {
-        file { "${venv_site_packages}/plugins/web/${provider}/plugin.yaml":
-          ensure  => file,
-          mode    => '0644',
-          owner   => 'root',
-          group   => 'root',
-          content => @("YAML"),
-            name: ${provider}
-            kind: backend
-            | YAML
-          require => Exec['install_hermes_agent'],
         }
       }
 
