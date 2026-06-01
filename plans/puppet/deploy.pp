@@ -1,7 +1,7 @@
 # Deploy the Puppet control repo during the OpenVox migration
 plan nest::puppet::deploy (
-  Enum['legacy', 'test', 'both'] $backend = 'both',
-  Optional[String[1]]             $environment = undef,
+  Enum['legacy', 'test', 'both'] $backend     = 'both',
+  Optional[String[1]]            $environment = undef,
 ) {
   $environment_args = $environment ? {
     undef   => [],
