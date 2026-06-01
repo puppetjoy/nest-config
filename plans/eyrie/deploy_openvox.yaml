@@ -45,6 +45,7 @@ steps:
       service: "${service}-resources"
       app: 'openvox-resources'
       deploy: $deploy and $resources or $init
+      init: $init
       wait: $render_to == ''
       render_to: $render_to
 
