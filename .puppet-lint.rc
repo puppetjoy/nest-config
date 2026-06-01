@@ -1,4 +1,5 @@
 --fail-on-warnings
+--load=lib/puppet-lint/plugins/check_parameter_list_alignment.rb
 --relative
 --no-80chars-check
 --no-140chars-check

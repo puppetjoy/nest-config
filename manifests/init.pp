@@ -66,9 +66,9 @@ class nest (
   Boolean                           $zswap               = true,
 
   # Mail settings
-  Optional[String] $gmail_username   = undef,
-  Optional[String] $gmail_password   = undef,
-  Enum['nullmailer', 'postfix'] $mta = nullmailer,
+  Optional[String]              $gmail_username = undef,
+  Optional[String]              $gmail_password = undef,
+  Enum['nullmailer', 'postfix'] $mta            = nullmailer,
 
   # Package resources
   Array[String]      $packages         = [],
