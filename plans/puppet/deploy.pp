@@ -1,22 +1,44 @@
 # Deploy the Puppet control repo during the OpenVox migration
 plan nest::puppet::deploy (
-  Enum['legacy', 'test', 'both'] $backend     = 'both',
-  Optional[String[1]]            $environment = undef,
+  Enum['legacy', 'test', 'prod', 'kubernetes', 'both', 'all'] $backend     = 'all',
+  Optional[String[1]]                                         $environment = undef,
 ) {
   $environment_args = $environment ? {
     undef   => [],
     default => [$environment],
   }
 
-  if $backend in ['legacy', 'both'] {
+  if $backend in ['legacy', 'both', 'all'] {
     $legacy_cmd = (['/srv/puppet/bin/r10k', 'deploy', 'environment'] + $environment_args + ['-pv']).shellquote
 
     run_command($legacy_cmd, 'puppet-server', 'Deploy Puppet code to legacy puppet-server', '_run_as' => 'root')
   }
 
-  if $backend in ['test', 'both'] {
-    $namespace  = 'test'
-    $deployment = 'deploy/puppet-puppetserver-puppetserver-master'
+  $openvox_backends = {
+    'test' => {
+      namespace   => 'test',
+      description => 'test OpenVox',
+    },
+    'prod' => {
+      namespace   => 'default',
+      description => 'prod OpenVox',
+    },
+  }
+
+  $selected_openvox_backends = $backend ? {
+    'test'       => ['test'],
+    'prod'       => ['prod'],
+    'kubernetes' => ['test', 'prod'],
+    'both'       => ['test', 'prod'],
+    'all'        => ['test', 'prod'],
+    default      => [],
+  }
+
+  $selected_openvox_backends.each |$openvox_backend| {
+    $openvox     = $openvox_backends[$openvox_backend]
+    $namespace   = $openvox['namespace']
+    $description = $openvox['description']
+    $deployment  = 'deploy/puppet-puppetserver-puppetserver-master'
 
     $deploy_cmd = ([
       'kubectl', 'exec', '-n', $namespace, $deployment,
@@ -27,7 +49,7 @@ plan nest::puppet::deploy (
       '--puppetfile',
     ]).shellquote
 
-    run_command($deploy_cmd, 'localhost', 'Deploy Puppet code to test OpenVox')
+    run_command($deploy_cmd, 'localhost', "Deploy Puppet code to ${description}")
 
     if $environment =~ String[1] {
       $verify_cmd = [
@@ -45,6 +67,6 @@ plan nest::puppet::deploy (
       ].shellquote
     }
 
-    run_command($verify_cmd, 'localhost', 'Verify test OpenVox Puppet code deployment')
+    run_command($verify_cmd, 'localhost', "Verify ${description} Puppet code deployment")
   }
 }
