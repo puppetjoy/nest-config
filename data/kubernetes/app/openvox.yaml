@@ -312,14 +312,14 @@ values:
           certname="%{lookup('puppet_server_certname')}"
           alt_names="puppet,%{nest::kubernetes::service}-puppetserver,%{lookup('puppet_server_alt_names')}"
 
-          puppet config set --section server certname "${certname}"
-          puppet config set --section server dns_alt_names "${alt_names}"
-
           if [ ! -f "/etc/puppetlabs/puppet/ssl/certs/${certname}.pem" ]; then
             puppetserver ca generate \
               --certname "${certname}" \
               --subject-alt-names "${alt_names}"
           fi
+
+          puppet config set --section server certname "${certname}"
+          puppet config set --section server dns_alt_names "${alt_names}"
 
         10-set-main-environment.sh: |-
           #!/bin/sh
