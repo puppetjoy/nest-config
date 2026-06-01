@@ -146,3 +146,47 @@ values:
         - secretName: "%{nest::kubernetes::service}-puppetboard-certs"
           hosts:
             - "%{nest::kubernetes::fqdn}"
+
+patches:
+  10-bootstrap-puppet-code:
+    patch:
+      - op: add
+        path: /spec/template/spec/initContainers/-
+        value:
+          name: r10k-code-bootstrap
+          image: ghcr.io/voxpupuli/r10k:5.0.0-main
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -ec
+            - >-
+              /container-entrypoint.sh deploy environment
+              --config /etc/puppetlabs/puppet/r10k_code.yaml
+              --puppetfile
+          env:
+            - name: GIT_SSH_COMMAND
+              value: >-
+                ssh -o HostName=ssh.gitlab.eyrie.
+                -o HostKeyAlias=gitlab.joyfullee.me
+                -o IdentityFile=/home/puppet/.ssh/id_rsa
+                -o UserKnownHostsFile=/home/puppet/.ssh/known_hosts
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - all
+            runAsGroup: 999
+            runAsNonRoot: true
+            runAsUser: 999
+          volumeMounts:
+            - name: r10k-code-ssh
+              mountPath: /home/puppet/.ssh
+            - name: puppet-code-storage
+              mountPath: /etc/puppetlabs/code/
+            - name: puppet-puppet-storage
+              mountPath: /etc/puppetlabs/puppet/
+    target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: "%{nest::kubernetes::service}-puppetserver-puppetserver-master"
