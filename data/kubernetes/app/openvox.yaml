@@ -10,6 +10,7 @@ puppet_load_balancer_ip: '172.21.3.0'
 node_role: compute
 storage_class: owl-crypt
 puppet_server_alt_names: puppet.eyrie,puppet-test.eyrie
+puppetboard_certname: "%{nest::kubernetes::service}-puppetboard.%{nest::kubernetes::namespace}.svc"
 
 resources:
   registry_auths: {}
@@ -29,6 +30,121 @@ resources:
         kind: "%{lookup('cert_issuer_kind')}"
       dnsNames:
         - "%{nest::kubernetes::fqdn}"
+
+  puppetboard-deployment:
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: "%{nest::kubernetes::service}-puppetboard"
+      namespace: "%{nest::kubernetes::namespace}"
+      labels: &puppetboard_labels
+        app.kubernetes.io/name: puppetboard
+        app.kubernetes.io/instance: "%{nest::kubernetes::service}"
+        app.kubernetes.io/component: puppetboard
+    spec:
+      replicas: 1
+      selector:
+        matchLabels: *puppetboard_labels
+      template:
+        metadata:
+          labels: *puppetboard_labels
+        spec:
+          nodeSelector:
+            "node-role.kubernetes.io/%{lookup('node_role')}": ''
+          tolerations:
+            - key: "node-role.kubernetes.io/%{lookup('node_role')}"
+              operator: Exists
+              effect: NoSchedule
+          containers:
+            - name: puppetboard
+              image: ghcr.io/voxpupuli/puppetboard:7.0.2
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: PUPPETDB_HOST
+                  value: "%{nest::kubernetes::service}-puppetserver-puppetdb"
+                - name: PUPPETDB_PORT
+                  value: '8081'
+                - name: PUPPETDB_PROTO
+                  value: https
+                - name: PUPPETDB_SSL_VERIFY
+                  value: /etc/puppetboard/puppetdb/ca.pem
+                - name: PUPPETDB_CERT
+                  value: /etc/puppetboard/puppetdb/cert.pem
+                - name: PUPPETDB_KEY
+                  value: /etc/puppetboard/puppetdb/key.pem
+                - name: PUPPETBOARD_PORT
+                  value: '9090'
+                - name: DEFAULT_ENVIRONMENT
+                  value: main
+                - name: ENABLE_CATALOG
+                  value: 'True'
+                - name: UNRESPONSIVE_HOURS
+                  value: '8760'
+              envFrom:
+                - secretRef:
+                    name: "%{nest::kubernetes::main_service}-puppetboard-secrets"
+              ports:
+                - name: puppetboard
+                  containerPort: 9090
+              volumeMounts:
+                - name: puppetdb-client-certs
+                  mountPath: /etc/puppetboard/puppetdb
+                  readOnly: true
+              readinessProbe:
+                httpGet:
+                  path: /
+                  port: puppetboard
+                initialDelaySeconds: 5
+                periodSeconds: 10
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                    - all
+                runAsGroup: 999
+                runAsNonRoot: true
+                runAsUser: 999
+          volumes:
+            - name: puppetdb-client-certs
+              secret:
+                secretName: "%{nest::kubernetes::service}-puppetboard-puppetdb-client"
+
+  puppetboard-service:
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: "%{nest::kubernetes::service}-puppetboard"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      ports:
+        - name: puppetboard
+          port: 9090
+          targetPort: puppetboard
+      selector: *puppetboard_labels
+
+  puppetboard-ingress:
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: "%{nest::kubernetes::service}-puppetboard"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      ingressClassName: "%{lookup('ingress_class')}"
+      rules:
+        - host: "%{nest::kubernetes::fqdn}"
+          http:
+            paths:
+              - path: /
+                pathType: ImplementationSpecific
+                backend:
+                  service:
+                    name: "%{nest::kubernetes::service}-puppetboard"
+                    port:
+                      number: 9090
+      tls:
+        - secretName: "%{nest::kubernetes::service}-puppetboard-certs"
+          hosts:
+            - "%{nest::kubernetes::fqdn}"
 
 values:
   nodeSelector:
@@ -98,6 +214,63 @@ values:
           existingSecret: "%{nest::kubernetes::main_service}-r10k-code-creds"
   puppetdb:
     tag: 8-latest
+    customconfigs:
+      enabled: true
+      configmaps:
+        auth.conf: |-
+          authorization: {
+              version: 1
+              rules: [
+                  {
+                      match-request: {
+                          path: "/status/v1/services"
+                          type: path
+                          method: get
+                      }
+                      allow-unauthenticated: true
+                      sort-order: 500
+                      name: "puppetlabs status service - full"
+                  },
+                  {
+                      match-request: {
+                          path: "/status/v1/simple"
+                          type: path
+                          method: get
+                      }
+                      allow-unauthenticated: true
+                      sort-order: 500
+                      name: "puppetlabs status service - simple"
+                  },
+                  {
+                      match-request: {
+                          path: "/pdb/query"
+                          type: path
+                      }
+                      allow: ["%{lookup('puppetboard_certname')}"]
+                      sort-order: 500
+                      name: "puppetboard PuppetDB queries"
+                  },
+                  {
+                      match-request: {
+                          path: "/metrics"
+                          type: path
+                          method: [get, post]
+                      }
+                      allow: "*"
+                      sort-order: 500
+                      name: "puppetlabs puppetdb metrics"
+                  },
+                  {
+                      match-request: {
+                          path: "/"
+                          type: path
+                      }
+                      deny: "*"
+                      sort-order: 999
+                      name: "puppetlabs deny all"
+                  }
+              ]
+          }
     extraInitContainers:
       - name: create-puppetdb-log-dir
         image: docker.io/library/busybox:1.37
@@ -131,21 +304,7 @@ values:
   postgresql:
     enabled: false
   puppetboard:
-    enabled: true
-    extraEnv:
-      ENABLE_CATALOG: 'True'
-      DEFAULT_ENVIRONMENT: main
-      UNRESPONSIVE_HOURS: '8760'
-    extraEnvSecret: "%{nest::kubernetes::main_service}-puppetboard-secrets"
-    ingress:
-      enabled: true
-      ingressClassName: "%{lookup('ingress_class')}"
-      hosts:
-        - "%{nest::kubernetes::fqdn}"
-      tls:
-        - secretName: "%{nest::kubernetes::service}-puppetboard-certs"
-          hosts:
-            - "%{nest::kubernetes::fqdn}"
+    enabled: false
 
 patches:
   10-bootstrap-puppet-code:
