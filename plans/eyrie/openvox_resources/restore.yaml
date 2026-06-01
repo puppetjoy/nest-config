@@ -27,5 +27,5 @@ steps:
     plan: nest::openvox_resources::restore
     parameters:
       kubernetes_namespace: $namespace
-      service: $service
+      service: $service_name
       restore: $restore
