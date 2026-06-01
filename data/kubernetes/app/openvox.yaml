@@ -302,8 +302,6 @@ values:
         loadBalancerIP: "%{lookup('puppet_load_balancer_ip')}"
       ingress:
         enabled: false
-      extraEnv:
-        OPENVOXSERVER_HOSTNAME: "%{nest::kubernetes::fqdn}"
     customentrypoints:
       enabled: true
       configmaps:
@@ -484,6 +482,9 @@ patches:
 
   08-use-clean-puppetserver-service-name:
     patch:
+      - op: replace
+        path: /spec/template/spec/containers/0/env/0/value
+        value: "%{lookup('puppet_server_certname')}"
       - op: replace
         path: /spec/template/spec/containers/0/env/2/value
         value: "puppet,%{nest::kubernetes::service}-puppetserver,%{lookup('puppet_server_alt_names')}"
