@@ -1,6 +1,7 @@
 # Install or upgrade a service
 #
 # Wrapper around KubeCM for Nest compatibility
+# nest-lint: allow-deploy-pp-plan - central KubeCM adapter normalizes YAML-plan inputs
 #
 # @param service    Installation name (what is this deployment called)
 # @param app        Chart name, or your name for this deployment and set `chart_source`

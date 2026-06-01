@@ -3,7 +3,7 @@
 ## Project Structure & Module Organization
 - `manifests/`: Puppet classes by domain (`base/`, `gui/`, `service/`, `host/`, `lib/`, `tool/`, `firmware/`).
 - `data/`: Hiera data by scope (`host/`, `platform/`, `cluster/`, `kubernetes/`, `build/`, `arch/`).
-- `plans/`: Bolt plans (`.pp` and `.yaml`) for build and deploy tasks.
+- `plans/`: Bolt plans (`.pp` and `.yaml`) for build and deploy tasks. Deployment wrappers whose plan names contain `deploy` should be YAML plans so they stay declarative/simple; any remaining Puppet-language deploy plan must carry a `nest-lint: allow-deploy-pp-plan - <reason>` control comment.
 - `functions/` and `lib/`: Puppet functions and Ruby extensions (`lib/facter/`, `lib/puppet/provider/`).
 - `templates/` and `files/`: config templates (EPP/ERB) and static assets/scripts.
 - `spec/`: RSpec-Puppet tests and fixtures.
@@ -16,6 +16,7 @@
 - Do not substitute validation/testing commands (for example `bundle exec rake ...` or `pdk bundle exec rspec`) unless explicitly requested by the user for troubleshooting.
 
 ## Shipping Workflow
+- Deployment wrappers should remain declarative YAML plans that compose `nest::kubernetes::deploy`/KubeCM. Do not put stack initialization, cert generation, data migration, or readiness repair scripts in Bolt deploy plans; implement that work in Helm resources, init containers, hooks, or Kubernetes Jobs. For general admin init containers, pods, or Jobs that need tools such as `kubectl`, prefer `registry.eyrie/nest/stage1/server` because it is the same OS family as this environment and is normally pre-pulled in the cluster.
 - When the user says "ship it", run this sequence unless they explicitly request otherwise:
 - Do not run local validation or tests by default.
 - Only run `pdk validate` and/or unit tests if the user explicitly requests them.

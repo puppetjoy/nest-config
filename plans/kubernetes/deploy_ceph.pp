@@ -1,4 +1,5 @@
 # Configure Ceph
+# nest-lint: allow-deploy-pp-plan - existing Ceph workaround commands need migration into chart resources
 #
 # @param rook Deploy Rook
 # @param ceph Deploy Ceph

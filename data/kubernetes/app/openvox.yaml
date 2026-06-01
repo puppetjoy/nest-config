@@ -4,6 +4,45 @@ resources:
   backup: {}
   restore: {}
 
+  puppetboard-client-cert-serviceaccount:
+    apiVersion: v1
+    kind: ServiceAccount
+    metadata:
+      name: "%{nest::kubernetes::service}-puppetboard-client-cert"
+      namespace: "%{nest::kubernetes::namespace}"
+
+  puppetboard-client-cert-role:
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: Role
+    metadata:
+      name: "%{nest::kubernetes::service}-puppetboard-client-cert"
+      namespace: "%{nest::kubernetes::namespace}"
+    rules:
+      - apiGroups: ['']
+        resources: [pods]
+        verbs: [get, list, watch]
+      - apiGroups: ['']
+        resources: [pods/exec]
+        verbs: [create]
+      - apiGroups: [apps]
+        resources: [deployments]
+        verbs: [get, list, watch]
+
+  puppetboard-client-cert-rolebinding:
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: RoleBinding
+    metadata:
+      name: "%{nest::kubernetes::service}-puppetboard-client-cert"
+      namespace: "%{nest::kubernetes::namespace}"
+    subjects:
+      - kind: ServiceAccount
+        name: "%{nest::kubernetes::service}-puppetboard-client-cert"
+        namespace: "%{nest::kubernetes::namespace}"
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: Role
+      name: "%{nest::kubernetes::service}-puppetboard-client-cert"
+
   puppetboard-certs:
     apiVersion: cert-manager.io/v1
     kind: Certificate
@@ -36,12 +75,60 @@ resources:
         metadata:
           labels: *puppetboard_labels
         spec:
+          serviceAccountName: "%{nest::kubernetes::service}-puppetboard-client-cert"
           nodeSelector:
             "node-role.kubernetes.io/%{lookup('node_role')}": ''
           tolerations:
             - key: "node-role.kubernetes.io/%{lookup('node_role')}"
               operator: Exists
               effect: NoSchedule
+          initContainers:
+            - name: puppetdb-client-cert
+              image: registry.eyrie/nest/stage1/server
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: CERTNAME
+                  value: "%{lookup('puppetboard_certname')}"
+                - name: NAMESPACE
+                  value: "%{nest::kubernetes::namespace}"
+                - name: SERVICE
+                  value: "%{nest::kubernetes::service}"
+              command:
+                - /bin/sh
+                - -ec
+                - |
+                  kubectl rollout status -n "${NAMESPACE}" "deploy/${SERVICE}-puppetserver" --timeout=240s
+
+                  pod=$(kubectl get pod -n "${NAMESPACE}" \
+                    -l "app.kubernetes.io/component=puppetserver,app.kubernetes.io/instance=${SERVICE}" \
+                    --sort-by=.metadata.creationTimestamp \
+                    -o name | tail -n 1 | cut -d / -f 2)
+                  container=$(kubectl get deploy -n "${NAMESPACE}" "${SERVICE}-puppetserver" \
+                    -o jsonpath='{.spec.template.spec.containers[0].name}')
+
+                  kubectl exec -n "${NAMESPACE}" "${pod}" -c "${container}" -- \
+                    /bin/sh -ec '
+                      certname="$1"
+                      if [ ! -f "/etc/puppetlabs/puppet/ssl/certs/${certname}.pem" ]; then
+                        puppetserver ca generate --certname "${certname}"
+                      fi
+                    ' sh "${CERTNAME}"
+
+                  kubectl exec -n "${NAMESPACE}" "${pod}" -c "${container}" -- \
+                    cat /etc/puppetlabs/puppet/ssl/certs/ca.pem > /etc/puppetboard/puppetdb/ca.pem
+                  kubectl exec -n "${NAMESPACE}" "${pod}" -c "${container}" -- \
+                    cat "/etc/puppetlabs/puppet/ssl/certs/${CERTNAME}.pem" > /etc/puppetboard/puppetdb/cert.pem
+                  kubectl exec -n "${NAMESPACE}" "${pod}" -c "${container}" -- \
+                    cat "/etc/puppetlabs/puppet/ssl/private_keys/${CERTNAME}.pem" > /etc/puppetboard/puppetdb/key.pem
+                  chmod 0444 /etc/puppetboard/puppetdb/ca.pem /etc/puppetboard/puppetdb/cert.pem /etc/puppetboard/puppetdb/key.pem
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                    - all
+              volumeMounts:
+                - name: puppetdb-client-certs
+                  mountPath: /etc/puppetboard/puppetdb
           containers:
             - name: puppetboard
               image: ghcr.io/voxpupuli/puppetboard:7.0.2
@@ -93,8 +180,7 @@ resources:
                 runAsUser: 999
           volumes:
             - name: puppetdb-client-certs
-              secret:
-                secretName: "%{nest::kubernetes::service}-puppetboard-puppetdb-client"
+              emptyDir: {}
 
   puppetboard-service:
     apiVersion: v1

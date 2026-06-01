@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative 'plugins/check_deploy_plan_boundary'
 require_relative 'plugins/check_parameter_list_alignment'
 
 # Shared PuppetLint policy used by both generated Rake tasks and PDK.
