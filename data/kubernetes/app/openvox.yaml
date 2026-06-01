@@ -84,6 +84,8 @@ values:
           puppet config set --section server environment main
   r10k:
     code:
+      cronJob:
+        enabled: false
       extraEnv:
         GIT_SSH_COMMAND: >-
           ssh -o HostName=ssh.gitlab.eyrie.

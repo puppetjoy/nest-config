@@ -1,8 +1,0 @@
----
-description: 'Deploy Puppet'
-
-steps:
-  - description: 'r10k deploy environment'
-    command: '/srv/puppet/bin/r10k deploy environment -pv'
-    run_as: root
-    targets: puppet-server
