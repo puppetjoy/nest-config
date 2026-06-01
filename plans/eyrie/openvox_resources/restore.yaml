@@ -1,0 +1,31 @@
+---
+description: 'Restore OpenVox Puppet resources'
+
+parameters:
+  namespace:
+    description: 'Kubernetes namespace'
+    type: String
+    default: 'test'
+
+  service:
+    description: 'Puppet service to restore'
+    type: String
+    default: 'puppet'
+
+  service_name:
+    description: 'Service name'
+    type: String
+    default: 'puppet-test'
+
+  restore:
+    description: 'Safety gate'
+    type: Boolean
+    default: false
+
+steps:
+  - description: "Restore ${service} OpenVox resources"
+    plan: nest::openvox_resources::restore
+    parameters:
+      kubernetes_namespace: $namespace
+      service: $service
+      restore: $restore

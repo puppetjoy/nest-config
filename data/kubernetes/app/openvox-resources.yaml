@@ -6,6 +6,7 @@ node_role: compute
 postgres_image: ghcr.io/cloudnative-pg/postgresql:17.6
 postgres_storage_class: owl-crypt
 postgres_storage_size: 16Gi
+plan_base: nest::eyrie::openvox_resources
 
 resources:
   registry_auths: {}
