@@ -1,17 +1,4 @@
 ---
-include:
-  - 'nest::service::puppet'
-
-service_name: "%{nest::kubernetes::service}"
-cert_issuer: eyrie-ca
-cert_issuer_kind: ClusterIssuer
-ingress_class: contour
-puppet_load_balancer_ip: '172.21.3.0'
-node_role: compute
-storage_class: owl-crypt
-puppet_server_alt_names: puppet.eyrie,puppet-test.eyrie
-puppetboard_certname: "%{nest::kubernetes::service}-puppetboard.%{nest::kubernetes::namespace}.svc"
-
 resources:
   registry_auths: {}
   backup: {}
