@@ -61,7 +61,7 @@ resources:
               imagePullPolicy: IfNotPresent
               env:
                 - name: PUPPETDB_HOST
-                  value: "%{nest::kubernetes::service}-puppetserver-puppetdb"
+                  value: "%{nest::kubernetes::service}-puppetdb"
                 - name: PUPPETDB_PORT
                   value: '8081'
                 - name: PUPPETDB_PROTO
@@ -307,6 +307,26 @@ values:
     enabled: false
 
 patches:
+  03-rename-puppetdb-service:
+    patch:
+      - op: replace
+        path: /metadata/name
+        value: "%{nest::kubernetes::service}-puppetdb"
+    target:
+      version: v1
+      kind: Service
+      name: "%{nest::kubernetes::service}-puppetserver-puppetdb"
+
+  04-rename-puppetserver-service:
+    patch:
+      - op: replace
+        path: /metadata/name
+        value: "%{nest::kubernetes::service}-puppetserver"
+    target:
+      version: v1
+      kind: Service
+      name: "%{nest::kubernetes::service}-puppetserver-puppet"
+
   05-rename-puppetdb-deployment:
     patch:
       - op: replace
@@ -328,6 +348,42 @@ patches:
       version: v1
       kind: Deployment
       name: "%{nest::kubernetes::service}-puppetserver-puppetserver-master"
+
+  07-use-clean-puppetdb-service-name:
+    patch:
+      - op: replace
+        path: /spec/template/spec/initContainers/1/command/2
+        value: |
+          echo 'Waiting for puppetserver to become ready...'
+          until printf "." && curl --silent --fail --insecure 'https://%{nest::kubernetes::service}-puppetserver:8140/status/v1/simple' | grep -q '^running$'; do
+            sleep 2;
+          done;
+          echo 'Puppetserver OK ✓'
+      - op: replace
+        path: /spec/template/spec/containers/0/env/0/value
+        value: "%{nest::kubernetes::service}-puppetserver"
+      - op: replace
+        path: /spec/template/spec/containers/0/env/2/value
+        value: "openvoxdb,puppetdb,%{nest::kubernetes::service}-puppetdb"
+    target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: "%{nest::kubernetes::service}-puppetdb"
+
+  08-use-clean-puppetserver-service-name:
+    patch:
+      - op: replace
+        path: /spec/template/spec/containers/0/env/2/value
+        value: "puppet,%{nest::kubernetes::service}-puppetserver,%{lookup('puppet_server_alt_names')}"
+      - op: replace
+        path: /spec/template/spec/containers/0/env/3/value
+        value: "https://%{nest::kubernetes::service}-puppetdb:8081"
+    target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: "%{nest::kubernetes::service}-puppetserver"
 
   10-bootstrap-puppet-code:
     patch:
