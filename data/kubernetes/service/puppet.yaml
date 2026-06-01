@@ -5,7 +5,7 @@ include:
 service_name: "%{nest::kubernetes::service}"
 cert_issuer: eyrie-ca
 cert_issuer_kind: ClusterIssuer
-ingress_class: contour
+ingress_class: contour-compute
 puppet_load_balancer_ip: '172.21.3.0'
 node_role: compute
 storage_class: owl-crypt
