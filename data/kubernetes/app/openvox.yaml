@@ -219,6 +219,44 @@ resources:
           hosts:
             - "%{nest::kubernetes::fqdn}"
 
+  puppetdb-certs:
+    apiVersion: cert-manager.io/v1
+    kind: Certificate
+    metadata:
+      name: "%{nest::kubernetes::service}-puppetdb-certs"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      secretName: "%{nest::kubernetes::service}-puppetdb-certs"
+      issuerRef:
+        name: "%{lookup('cert_issuer')}"
+        kind: "%{lookup('cert_issuer_kind')}"
+      dnsNames:
+        - "%{lookup('puppetdb_fqdn')}"
+
+  puppetdb-ingress:
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: "%{nest::kubernetes::service}-puppetdb"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      ingressClassName: "%{lookup('ingress_class')}"
+      rules:
+        - host: "%{lookup('puppetdb_fqdn')}"
+          http:
+            paths:
+              - path: /
+                pathType: ImplementationSpecific
+                backend:
+                  service:
+                    name: "%{nest::kubernetes::service}-puppetdb"
+                    port:
+                      number: 8080
+      tls:
+        - secretName: "%{nest::kubernetes::service}-puppetdb-certs"
+          hosts:
+            - "%{lookup('puppetdb_fqdn')}"
+
 values:
   nodeSelector:
     "node-role.kubernetes.io/%{lookup('node_role')}": ''

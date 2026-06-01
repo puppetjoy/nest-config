@@ -4,3 +4,4 @@ cert_issuer_kind: Issuer
 ingress_class: "contour-%{nest::kubernetes::namespace}"
 puppet_load_balancer_ip: '172.21.1.0'
 service_name: "%{nest::kubernetes::service}-%{nest::kubernetes::namespace}"
+puppetdb_fqdn: puppetdb-test.eyrie
