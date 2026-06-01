@@ -1,6 +1,5 @@
 # Deploy the Puppet control repo during the OpenVox migration
-# nest-lint: allow-deploy-pp-plan - code rollout plan, not Kubernetes stack initialization
-plan nest::puppet::deploy (
+plan nest::puppet::deploy ( # lint:ignore:deploy_plan_boundary -- code rollout plan, not Kubernetes stack initialization
   Enum['legacy', 'test', 'prod', 'kubernetes', 'both', 'all'] $backend     = 'all',
   Optional[String[1]]                                         $environment = undef,
 ) {

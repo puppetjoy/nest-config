@@ -1,9 +1,8 @@
 # Configure Ceph
-# nest-lint: allow-deploy-pp-plan - existing Ceph workaround commands need migration into chart resources
 #
 # @param rook Deploy Rook
 # @param ceph Deploy Ceph
-plan nest::kubernetes::deploy_ceph (
+plan nest::kubernetes::deploy_ceph ( # lint:ignore:deploy_plan_boundary -- existing Ceph workaround commands need migration into chart resources
   Boolean $rook = true,
   Boolean $ceph = true,
 ) {

@@ -3,7 +3,7 @@
 ## Project Structure & Module Organization
 - `manifests/`: Puppet classes by domain (`base/`, `gui/`, `service/`, `host/`, `lib/`, `tool/`, `firmware/`).
 - `data/`: Hiera data by scope (`host/`, `platform/`, `cluster/`, `kubernetes/`, `build/`, `arch/`).
-- `plans/`: Bolt plans (`.pp` and `.yaml`) for build and deploy tasks. Deployment wrappers whose plan names contain `deploy` should be YAML plans so they stay declarative/simple; any remaining Puppet-language deploy plan must carry a `nest-lint: allow-deploy-pp-plan - <reason>` control comment.
+- `plans/`: Bolt plans (`.pp` and `.yaml`) for build and deploy tasks. Deployment wrappers whose plan names contain `deploy` should be YAML plans so they stay declarative/simple; any remaining Puppet-language deploy plan must use puppet-lint's native `lint:ignore:deploy_plan_boundary` control comment with a reason.
 - `functions/` and `lib/`: Puppet functions and Ruby extensions (`lib/facter/`, `lib/puppet/provider/`).
 - `templates/` and `files/`: config templates (EPP/ERB) and static assets/scripts.
 - `spec/`: RSpec-Puppet tests and fixtures.

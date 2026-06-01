@@ -1,9 +1,8 @@
 # Deploy test Ceph
-# nest-lint: allow-deploy-pp-plan - existing test Ceph workaround commands need migration into chart resources
 #
 # @param deploy Run or skip the deployment
 # @param render_to Just render the template
-plan nest::eyrie::test::deploy_ceph (
+plan nest::eyrie::test::deploy_ceph ( # lint:ignore:deploy_plan_boundary -- existing test Ceph workaround commands need migration into chart resources
   Boolean $deploy    = true,
   String  $render_to = '',
 ) {

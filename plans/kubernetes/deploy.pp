@@ -1,7 +1,6 @@
 # Install or upgrade a service
 #
 # Wrapper around KubeCM for Nest compatibility
-# nest-lint: allow-deploy-pp-plan - central KubeCM adapter normalizes YAML-plan inputs
 #
 # @param service    Installation name (what is this deployment called)
 # @param app        Chart name, or your name for this deployment and set `chart_source`
@@ -16,7 +15,7 @@
 # @param version    Optional Helm chart version
 # @param wait       Wait for resources to become available
 # @param subcharts  Additional charts to deploy as part of this one
-plan nest::kubernetes::deploy (
+plan nest::kubernetes::deploy ( # lint:ignore:deploy_plan_boundary -- central KubeCM adapter normalizes YAML-plan inputs
   String           $service,
   String           $app       = $service,
   Optional[String] $chart     = undef,
