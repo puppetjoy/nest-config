@@ -23,8 +23,7 @@ mod 'nest', :git => 'https://gitlab.joyfullee.me/nest/config.git', :branch => :c
 mod 'private', :git => 'git@gitlab.joyfullee.me:nest/private.git', :branch => 'main'
 
 # Required by nest
-mod 'joy-homebrew', '0.1.0'
-# mod 'homebrew', :git => 'https://gitlab.joyfullee.me/joy/puppet-homebrew.git', :branch => 'main'
+mod 'homebrew', :git => 'https://gitlab.joyfullee.me/joy/puppet-homebrew.git', :branch => 'main'
 mod 'portage', :git => 'https://gitlab.joyfullee.me/nest/forks/puppet-portage.git', :branch => 'main'
 mod 'puppet-archive', '7.1.0'
 mod 'puppet-dnsquery', '5.0.1'
