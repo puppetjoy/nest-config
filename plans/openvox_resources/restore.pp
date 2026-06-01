@@ -11,34 +11,24 @@ plan nest::openvox_resources::restore (
   Boolean $restore              = false,
 ) {
   if $restore {
-    $script = @("SCRIPT"/L)
-      set -euo pipefail
+    $backup_dir   = "/nest/backup/${backup_service}"
+    $restore_pod  = "${service}-openvox-restore"
+    $cluster      = "${service}-cnpg"
+    $puppetboard  = "${service}-puppetboard"
+    $puppetdb     = "${service}-puppetdb"
+    $puppetserver = "${service}-puppetserver"
 
-      namespace=${kubernetes_namespace.shellquote}
-      service=${service.shellquote}
-      backup_service=${backup_service.shellquote}
-      backup_dir="/nest/backup/${backup_service}"
-      restore_pod="${service}-openvox-restore"
+    run_command("test -s ${backup_dir.shellquote}/puppetdb.dump && test -s ${backup_dir.shellquote}/puppet-ssl.tar.zst", 'localhost', 'Check OpenVox backup files')
+    run_command("kubectl scale -n ${kubernetes_namespace.shellquote} deploy/${puppetboard.shellquote} deploy/${puppetdb.shellquote} deploy/${puppetserver.shellquote} --replicas=0", 'localhost', 'Scale OpenVox test consumers down')
+    run_command("kubectl rollout status -n ${kubernetes_namespace.shellquote} deploy/${puppetboard.shellquote} --timeout=240s && kubectl rollout status -n ${kubernetes_namespace.shellquote} deploy/${puppetdb.shellquote} --timeout=240s && kubectl rollout status -n ${kubernetes_namespace.shellquote} deploy/${puppetserver.shellquote} --timeout=240s", 'localhost', 'Wait for OpenVox scale-down')
+    run_command("kubectl delete pod -n ${kubernetes_namespace.shellquote} ${restore_pod.shellquote} --ignore-not-found=true --wait=true", 'localhost', 'Remove old restore pod')
 
-      test -s "${backup_dir}/puppetdb.dump"
-      test -s "${backup_dir}/puppet-ssl.tar.zst"
-
-      kubectl scale -n "${namespace}" \
-        deploy/${service}-puppetboard \
-        deploy/${service}-puppetdb \
-        deploy/${service}-puppetserver \
-        --replicas=0
-      kubectl rollout status -n "${namespace}" "deploy/${service}-puppetboard" --timeout=240s
-      kubectl rollout status -n "${namespace}" "deploy/${service}-puppetdb" --timeout=240s
-      kubectl rollout status -n "${namespace}" "deploy/${service}-puppetserver" --timeout=240s
-
-      kubectl delete pod -n "${namespace}" "${restore_pod}" --ignore-not-found=true --wait=true
-      cat <<EOF | kubectl apply -f -
+    $restore_pod_yaml = @("YAML"/L)
       apiVersion: v1
       kind: Pod
       metadata:
         name: ${restore_pod}
-        namespace: ${namespace}
+        namespace: ${kubernetes_namespace}
       spec:
         restartPolicy: Never
         tolerations:
@@ -65,36 +55,24 @@ plan nest::openvox_resources::restore (
           - name: puppetserver-ca
             persistentVolumeClaim:
               claimName: ${service}-puppetserver-ca-claim
-      EOF
-      trap 'kubectl delete pod -n "${namespace}" "${restore_pod}" --ignore-not-found=true --wait=false >/dev/null 2>&1 || true' EXIT
-      kubectl wait -n "${namespace}" --for=condition=Ready "pod/${restore_pod}" --timeout=240s
+      | YAML
 
-      kubectl exec -n "${namespace}" "${restore_pod}" -- bash -lc \
-        "rm -rf /restore/etc/puppetlabs/puppet/ssl /restore/etc/puppetlabs/puppetserver/ca/* && \
-         mkdir -p /restore/etc/puppetlabs/puppet /restore/etc/puppetlabs/puppetserver/ca && \
-         zstd -dc /nest/backup/${backup_service}/puppet-ssl.tar.zst | \
-           tar -C /restore/etc/puppetlabs -xf -"
+    run_command("printf %s ${restore_pod_yaml.shellquote} | kubectl apply -f -", 'localhost', 'Create OpenVox restore pod')
+    run_command("kubectl wait -n ${kubernetes_namespace.shellquote} --for=condition=Ready pod/${restore_pod.shellquote} --timeout=240s", 'localhost', 'Wait for OpenVox restore pod')
+    run_command("kubectl exec -n ${kubernetes_namespace.shellquote} ${restore_pod.shellquote} -- bash -lc 'rm -rf /restore/etc/puppetlabs/puppet/ssl /restore/etc/puppetlabs/puppetserver/ca/* && mkdir -p /restore/etc/puppetlabs/puppet /restore/etc/puppetlabs/puppetserver/ca && zstd -dc ${backup_dir.shellquote}/puppet-ssl.tar.zst | tar -C /restore/etc/puppetlabs -xf -'", 'localhost', 'Restore Puppet SSL state')
+    run_command("kubectl delete pod -n ${kubernetes_namespace.shellquote} ${restore_pod.shellquote} --wait=true", 'localhost', 'Remove OpenVox restore pod')
 
-      primary=$(kubectl get pod -n "${namespace}" \
-        -l "cnpg.io/cluster=${service}-cnpg,cnpg.io/instanceRole=primary" \
-        -o jsonpath='{.items[0].metadata.name}')
-      kubectl exec -n "${namespace}" "${primary}" -c postgres -- \
-        dropdb -U postgres --if-exists openvoxdb
-      kubectl exec -n "${namespace}" "${primary}" -c postgres -- \
-        createdb -U postgres -O puppetdb openvoxdb
-      kubectl exec -i -n "${namespace}" "${primary}" -c postgres -- \
-        pg_restore -U postgres -d openvoxdb < "${backup_dir}/puppetdb.dump"
+    $primary_pod = run_command([
+      'kubectl', 'get', 'pod', '-n', $kubernetes_namespace,
+      '-l', "cnpg.io/cluster=${cluster},cnpg.io/instanceRole=primary",
+      '-o', 'jsonpath={.items[0].metadata.name}',
+    ].shellquote, 'localhost', 'Find CNPG primary').first.value['stdout'].chomp
 
-      kubectl scale -n "${namespace}" \
-        deploy/${service}-puppetserver \
-        deploy/${service}-puppetdb \
-        deploy/${service}-puppetboard \
-        --replicas=1
-      kubectl rollout status -n "${namespace}" "deploy/${service}-puppetserver" --timeout=300s
-      kubectl rollout status -n "${namespace}" "deploy/${service}-puppetdb" --timeout=300s
-      kubectl rollout status -n "${namespace}" "deploy/${service}-puppetboard" --timeout=300s
-    | SCRIPT
+    run_command("kubectl exec -n ${kubernetes_namespace.shellquote} ${primary_pod.shellquote} -c postgres -- dropdb -U postgres --if-exists openvoxdb", 'localhost', 'Drop test PuppetDB database')
+    run_command("kubectl exec -n ${kubernetes_namespace.shellquote} ${primary_pod.shellquote} -c postgres -- createdb -U postgres -O puppetdb openvoxdb", 'localhost', 'Create test PuppetDB database')
+    run_command("kubectl exec -i -n ${kubernetes_namespace.shellquote} ${primary_pod.shellquote} -c postgres -- pg_restore -U postgres -d openvoxdb < ${backup_dir.shellquote}/puppetdb.dump", 'localhost', 'Restore PuppetDB dump')
 
-    run_command("bash -lc ${script.shellquote}", 'localhost', 'Restore OpenVox resources')
+    run_command("kubectl scale -n ${kubernetes_namespace.shellquote} deploy/${puppetserver.shellquote} deploy/${puppetdb.shellquote} deploy/${puppetboard.shellquote} --replicas=1", 'localhost', 'Scale OpenVox test consumers up')
+    run_command("kubectl rollout status -n ${kubernetes_namespace.shellquote} deploy/${puppetserver.shellquote} --timeout=300s && kubectl rollout status -n ${kubernetes_namespace.shellquote} deploy/${puppetdb.shellquote} --timeout=300s && kubectl rollout status -n ${kubernetes_namespace.shellquote} deploy/${puppetboard.shellquote} --timeout=300s", 'localhost', 'Wait for OpenVox restore rollout')
   }
 }

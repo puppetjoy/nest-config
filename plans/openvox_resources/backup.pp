@@ -8,51 +8,45 @@ plan nest::openvox_resources::backup (
   String $service              = 'puppet',
   String $backup_service       = $service,
 ) {
-  $script = @("SCRIPT"/L)
-    set -euo pipefail
+  $backup_dir   = "/nest/backup/${backup_service}"
+  $tmp_dir      = "${backup_dir}/.tmp"
+  $cluster      = "${service}-cnpg"
+  $puppetserver = "${service}-puppetserver"
 
-    namespace=${kubernetes_namespace.shellquote}
-    service=${service.shellquote}
-    backup_service=${backup_service.shellquote}
-    backup_dir="/nest/backup/${backup_service}"
-    tmp_dir="${backup_dir}/.tmp"
+  run_command("mkdir -p ${backup_dir.shellquote} ${tmp_dir.shellquote}", 'localhost', 'Create backup directory')
 
-    mkdir -p "${backup_dir}" "${tmp_dir}"
+  $primary_pod = run_command([
+    'kubectl', 'get', 'pod', '-n', $kubernetes_namespace,
+    '-l', "cnpg.io/cluster=${cluster},cnpg.io/instanceRole=primary",
+    '-o', 'jsonpath={.items[0].metadata.name}',
+  ].shellquote, 'localhost', 'Find CNPG primary').first.value['stdout'].chomp
 
-    primary=$(kubectl get pod -n "${namespace}" \
-      -l "cnpg.io/cluster=${service}-cnpg,cnpg.io/instanceRole=primary" \
-      -o jsonpath='{.items[0].metadata.name}')
-    puppetserver=$(kubectl get pod -n "${namespace}" \
-      -l "app.kubernetes.io/component=puppetserver,app.kubernetes.io/instance=${service}" \
-      --sort-by=.metadata.creationTimestamp \
-      -o jsonpath='{.items[-1].metadata.name}')
-    container=$(kubectl get deploy -n "${namespace}" "${service}-puppetserver" \
-      -o jsonpath='{.spec.template.spec.containers[0].name}')
+  $puppetserver_pod = run_command([
+    'kubectl', 'get', 'pod', '-n', $kubernetes_namespace,
+    '-l', "app.kubernetes.io/component=puppetserver,app.kubernetes.io/instance=${service}",
+    '--sort-by=.metadata.creationTimestamp',
+    '-o', 'jsonpath={.items[-1].metadata.name}',
+  ].shellquote, 'localhost', 'Find Puppetserver pod').first.value['stdout'].chomp
 
-    kubectl exec -n "${namespace}" "${primary}" -c postgres -- \
-      pg_dump -U postgres -d openvoxdb --format=custom > "${tmp_dir}/puppetdb.dump"
+  $container = run_command([
+    'kubectl', 'get', 'deploy', '-n', $kubernetes_namespace, $puppetserver,
+    '-o', 'jsonpath={.spec.template.spec.containers[0].name}',
+  ].shellquote, 'localhost', 'Find Puppetserver container').first.value['stdout'].chomp
 
-    kubectl exec -n "${namespace}" "${puppetserver}" -c "${container}" -- \
-      tar -C /etc/puppetlabs -cf - puppet/ssl puppetserver/ca \
-      | zstd -T0 -19 -q > "${tmp_dir}/puppet-ssl.tar.zst"
+  run_command("kubectl exec -n ${kubernetes_namespace.shellquote} ${primary_pod.shellquote} -c postgres -- pg_dump -U postgres -d openvoxdb --format=custom > ${tmp_dir.shellquote}/puppetdb.dump", 'localhost', 'Dump PuppetDB')
+  run_command("kubectl exec -n ${kubernetes_namespace.shellquote} ${puppetserver_pod.shellquote} -c ${container.shellquote} -- tar -C /etc/puppetlabs -cf - puppet/ssl puppetserver/ca | zstd -T0 -19 -q > ${tmp_dir.shellquote}/puppet-ssl.tar.zst", 'localhost', 'Archive Puppet SSL state')
 
-    cat > "${tmp_dir}/metadata.json" <<EOF
+  $metadata = @("JSON"/L)
     {
-      "namespace": "${namespace}",
+      "namespace": "${kubernetes_namespace}",
       "service": "${service}",
-      "cnpg_primary": "${primary}",
-      "puppetserver_pod": "${puppetserver}",
+      "cnpg_primary": "${primary_pod}",
+      "puppetserver_pod": "${puppetserver_pod}",
       "created_at": "$(date --iso-8601=seconds)"
     }
-    EOF
+    | JSON
 
-    mv "${tmp_dir}/puppetdb.dump" "${backup_dir}/puppetdb.dump"
-    mv "${tmp_dir}/puppet-ssl.tar.zst" "${backup_dir}/puppet-ssl.tar.zst"
-    mv "${tmp_dir}/metadata.json" "${backup_dir}/metadata.json"
-    rmdir "${tmp_dir}"
-
-    ls -lh "${backup_dir}/puppetdb.dump" "${backup_dir}/puppet-ssl.tar.zst" "${backup_dir}/metadata.json"
-    | SCRIPT
-
-  run_command("bash -lc ${script.shellquote}", 'localhost', 'Backup OpenVox resources')
+  run_command("cat > ${tmp_dir.shellquote}/metadata.json <<'EOF'\n${metadata}\nEOF", 'localhost', 'Write backup metadata')
+  run_command("mv ${tmp_dir.shellquote}/puppetdb.dump ${backup_dir.shellquote}/puppetdb.dump && mv ${tmp_dir.shellquote}/puppet-ssl.tar.zst ${backup_dir.shellquote}/puppet-ssl.tar.zst && mv ${tmp_dir.shellquote}/metadata.json ${backup_dir.shellquote}/metadata.json && rmdir ${tmp_dir.shellquote}", 'localhost', 'Publish backup')
+  run_command("ls -lh ${backup_dir.shellquote}/puppetdb.dump ${backup_dir.shellquote}/puppet-ssl.tar.zst ${backup_dir.shellquote}/metadata.json", 'localhost', 'List backup files')
 }
