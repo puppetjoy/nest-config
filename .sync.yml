@@ -26,20 +26,7 @@
 
 Rakefile:
   requires:
-    - './lib/puppet-lint/plugins/check_parameter_list_alignment'
-  # I have my own style and that is OK
-  extra_disabled_lint_checks:
-    - arrow_on_right_operand_line
-    - autoloader_layout
-    - case_without_default
-    - documentation
-    - manifest_whitespace_closing_bracket_after
-    - manifest_whitespace_opening_brace_before
-    - manifest_whitespace_two_empty_lines
-    - nested_classes_or_defines
-    - parameter_documentation
-    - strict_indent
-    - variable_scope
+    - './lib/puppet-lint/nest_config'
 
 spec/default_facts.yml:
   extra_facts:

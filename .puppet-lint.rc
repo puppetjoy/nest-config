@@ -1,5 +1,5 @@
 --fail-on-warnings
---load=lib/puppet-lint/plugins/check_parameter_list_alignment.rb
+--load=lib/puppet-lint/nest_config.rb
 --relative
 --no-80chars-check
 --no-140chars-check
@@ -7,13 +7,4 @@
 --no-autoloader_layout-check
 --no-documentation-check
 --no-single_quote_string_with_variables-check
---no-arrow_on_right_operand_line-check
---no-case_without_default-check
---no-manifest_whitespace_closing_bracket_after-check
---no-manifest_whitespace_opening_brace_before-check
---no-manifest_whitespace_two_empty_lines-check
---no-nested_classes_or_defines-check
---no-parameter_documentation-check
---no-strict_indent-check
---no-variable_scope-check
 --ignore-paths=.vendor/**/*.pp,.bundle/**/*.pp,pkg/**/*.pp,spec/**/*.pp,tests/**/*.pp,types/**/*.pp,vendor/**/*.pp
