@@ -53,7 +53,7 @@ plan nest::eyrie::deploy_openvox (
       cert_secret="\$CERT_SECRET"
 
       kubectl rollout status -n "\$namespace" \
-        "deploy/\${service}-puppetserver-puppetserver-master" \
+        "deploy/\${service}-puppetserver" \
         --timeout=240s
 
       pod=\$(kubectl get pod -n "\$namespace" \
@@ -61,7 +61,7 @@ plan nest::eyrie::deploy_openvox (
         --sort-by=.metadata.creationTimestamp \
         -o name | tail -n 1 | cut -d / -f 2)
       container=\$(kubectl get deploy -n "\$namespace" \
-        "\${service}-puppetserver-puppetserver-master" \
+        "\${service}-puppetserver" \
         -o jsonpath='{.spec.template.spec.containers[0].name}')
 
       kubectl exec -n "\$namespace" "\$pod" -c "\$container" -- \

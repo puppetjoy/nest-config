@@ -38,7 +38,7 @@ plan nest::puppet::deploy (
     $openvox     = $openvox_backends[$openvox_backend]
     $namespace   = $openvox['namespace']
     $description = $openvox['description']
-    $deployment  = 'deploy/puppet-puppetserver-puppetserver-master'
+    $deployment  = 'deploy/puppet-puppetserver'
 
     $deploy_cmd = ([
       'kubectl', 'exec', '-n', $namespace, $deployment,
