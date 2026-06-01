@@ -314,6 +314,8 @@ values:
 
           if [ ! -f "/etc/puppetlabs/puppet/ssl/certs/${certname}.pem" ]; then
             puppetserver ca generate \
+              --ca-client \
+              --force \
               --certname "${certname}" \
               --subject-alt-names "${alt_names}"
           fi
