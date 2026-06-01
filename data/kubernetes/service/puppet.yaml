@@ -10,6 +10,6 @@ puppet_load_balancer_ip: '172.21.3.0'
 node_role: compute
 storage_class: owl-crypt
 puppet_server_certname: puppet.eyrie
-puppet_server_alt_names: puppet.eyrie,puppet-test.eyrie
+puppet_server_alt_names: puppet.eyrie
 puppetboard_certname: puppetboard
 puppetdb_fqdn: puppetdb.eyrie
