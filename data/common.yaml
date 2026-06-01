@@ -97,6 +97,7 @@ nest::cnames:
   gitlab-test.eyrie: 'ingress-test.eyrie'
   grafana-test.eyrie: 'ingress-test.eyrie'
   portfolio-test.eyrie: 'ingress-test.eyrie'
+  puppet-test.eyrie: 'ingress-test.eyrie'
   registry-test.eyrie: 'ingress-test.eyrie'
   registry.gitlab-test.eyrie: 'ingress-test.eyrie'
   thestaticvoid-test.eyrie: 'ingress-test.eyrie'

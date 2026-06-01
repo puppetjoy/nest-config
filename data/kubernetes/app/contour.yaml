@@ -25,5 +25,7 @@ values:
       failureThreshold: 30
   envoy:
     service:
+      annotations:
+        metallb.universe.tf/allow-shared-ip: "%{nest::kubernetes::load_balancer_ip}"
       externalTrafficPolicy: Cluster
       loadBalancerIP: "%{nest::kubernetes::load_balancer_ip}"

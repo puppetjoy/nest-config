@@ -1,0 +1,145 @@
+---
+include:
+  - 'nest::service::puppet'
+
+service_name: "%{nest::kubernetes::service}"
+cert_issuer: eyrie-ca
+cert_issuer_kind: ClusterIssuer
+ingress_class: contour
+puppet_load_balancer_ip: '172.21.3.0'
+node_role: compute
+storage_class: owl-crypt
+
+resources:
+  registry_auths: {}
+  backup: {}
+  restore: {}
+
+  puppetboard-certs:
+    apiVersion: cert-manager.io/v1
+    kind: Certificate
+    metadata:
+      name: "%{nest::kubernetes::service}-puppetboard-certs"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      secretName: "%{nest::kubernetes::service}-puppetboard-certs"
+      issuerRef:
+        name: "%{lookup('cert_issuer')}"
+        kind: "%{lookup('cert_issuer_kind')}"
+      dnsNames:
+        - "%{nest::kubernetes::fqdn}"
+
+values:
+  nodeSelector:
+    "node-role.kubernetes.io/%{lookup('node_role')}": ''
+  tolerations:
+    - key: "node-role.kubernetes.io/%{lookup('node_role')}"
+      operator: Exists
+      effect: NoSchedule
+  global:
+    curl:
+      image: docker.io/curlimages/curl
+    extraEnv:
+      PUPPETSERVER_ENVIRONMENT_TIMEOUT: '0'
+    postgresql:
+      auth:
+        database: openvoxdb
+        existingSecret: "%{nest::kubernetes::main_service}-cnpg-app"
+  storage:
+    storageClass: "%{lookup('storage_class')}"
+  puppetserver:
+    tag: 8-latest
+    puppeturl: 'git@gitlab.joyfullee.me:nest/config.git'
+    puppetbasedir: /etc/puppetlabs/code/environments
+    persistence:
+      ca:
+        storageClass: "%{lookup('storage_class')}"
+        accessModes: [ReadWriteOnce]
+        size: 1Gi
+      code:
+        storageClass: "%{lookup('storage_class')}"
+        accessModes: [ReadWriteMany]
+        size: 4Gi
+      data:
+        storageClass: "%{lookup('storage_class')}"
+        accessModes: [ReadWriteOnce]
+        size: 1Gi
+    masters:
+      fqdns:
+        alternateServerNames: "%{nest::kubernetes::fqdn}"
+      service:
+        type: LoadBalancer
+        annotations:
+          metallb.universe.tf/allow-shared-ip: "%{lookup('puppet_load_balancer_ip')}"
+        loadBalancerIP: "%{lookup('puppet_load_balancer_ip')}"
+      ingress:
+        enabled: false
+      extraEnv:
+        OPENVOXSERVER_HOSTNAME: "%{nest::kubernetes::fqdn}"
+    customentrypoints:
+      enabled: true
+      configmaps:
+        10-set-main-environment.sh: |-
+          #!/bin/sh
+          puppet config set --section server environment main
+  r10k:
+    code:
+      extraEnv:
+        GIT_SSH_COMMAND: >-
+          ssh -o HostName=ssh.gitlab.eyrie.
+          -o HostKeyAlias=gitlab.joyfullee.me
+          -o IdentityFile=/home/puppet/.ssh/id_rsa
+          -o UserKnownHostsFile=/home/puppet/.ssh/known_hosts
+      viaSsh:
+        credentials:
+          existingSecret: "%{nest::kubernetes::main_service}-r10k-code-creds"
+  puppetdb:
+    tag: 8-latest
+    extraInitContainers:
+      - name: create-puppetdb-log-dir
+        image: docker.io/library/busybox:1.37
+        command:
+          - sh
+          - -c
+          - |
+            mkdir -p /opt/puppetlabs/server/data/puppetdb/logs
+            chown 999:999 /opt/puppetlabs/server/data/puppetdb/logs
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsUser: 0
+          runAsGroup: 0
+          capabilities:
+            drop:
+              - all
+            add:
+              - CHOWN
+              - DAC_OVERRIDE
+              - FOWNER
+        volumeMounts:
+          - name: puppetdb-storage
+            mountPath: /opt/puppetlabs/server/data/puppetdb
+    extraEnv:
+      OPENVOXDB_POSTGRES_HOSTNAME: "%{nest::kubernetes::main_service}-cnpg-rw"
+      PUPPETDB_NODE_TTL: '0d'
+    persistence:
+      storageClass: "%{lookup('storage_class')}"
+      accessModes: [ReadWriteOnce]
+      size: 4Gi
+  postgresql:
+    enabled: false
+  puppetboard:
+    enabled: true
+    extraEnv:
+      ENABLE_CATALOG: 'True'
+      DEFAULT_ENVIRONMENT: main
+      UNRESPONSIVE_HOURS: '8760'
+    extraEnvSecret: "%{nest::kubernetes::main_service}-puppetboard-secrets"
+    ingress:
+      enabled: true
+      ingressClassName: "%{lookup('ingress_class')}"
+      hosts:
+        - "%{nest::kubernetes::fqdn}"
+      tls:
+        - secretName: "%{nest::kubernetes::service}-puppetboard-certs"
+          hosts:
+            - "%{nest::kubernetes::fqdn}"

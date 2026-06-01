@@ -17,6 +17,11 @@ parameters:
     type: Boolean
     default: true
 
+  puppet:
+    description: 'Deploy Puppet'
+    type: Boolean
+    default: true
+
   jump:
     description: 'Deploy jump'
     type: Boolean
@@ -63,6 +68,13 @@ steps:
     plan: nest::eyrie::deploy_gitlab
     parameters:
       deploy: $deploy and $gitlab
+      init: $init
+
+  - description: 'Deploy Puppet'
+    plan: nest::eyrie::deploy_openvox
+    parameters:
+      resources: true
+      deploy: $deploy and $puppet
       init: $init
 
   - description: 'Deploy jump'

@@ -50,6 +50,14 @@ steps:
       deploy: $apps
       init: $init
 
+  - description: 'Deploy test Puppet'
+    plan: nest::eyrie::deploy_openvox
+    parameters:
+      namespace: 'test'
+      resources: true
+      deploy: $apps
+      init: $init
+
   - description: 'Deploy test jump'
     plan: nest::eyrie::deploy_jump
     parameters:
