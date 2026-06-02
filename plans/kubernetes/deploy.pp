@@ -12,6 +12,7 @@
 # @param namespace  Kubernetes namespace to manage
 # @param render_to  Just save the fully-rendered chart to this yaml file
 # @param repo_url   Optional URL of the Helm repo to add
+# @param restore    Mask backup resources while running a restore
 # @param version    Optional Helm chart version
 # @param wait       Wait for resources to become available
 # @param subcharts  Additional charts to deploy as part of this one
@@ -39,12 +40,21 @@ plan nest::kubernetes::deploy ( # lint:ignore:deploy_plan_boundary -- central Ku
 
   # Initialize service and avoid conflicts with backup/restore jobs
   if $init {
-    $remove_resources = ['backup', 'restore']
-    $remove_patches   = []
+    $remove_init_resources = ['backup', 'restore']
+    $remove_patches        = []
   } else {
-    $remove_resources = []
-    $remove_patches   = ['20-nest-init', '30-nest-init']
+    $remove_init_resources = []
+    $remove_patches        = ['20-nest-init', '30-nest-init']
   }
+
+  # Don't trash backups while a restore is running
+  if $restore {
+    $remove_restore_resources = ['backup']
+  } else {
+    $remove_restore_resources = []
+  }
+
+  $remove_resources = unique($remove_init_resources + $remove_restore_resources)
 
   # Give extra time for any VIPs to propagate, claims to be satisfied, etc.
   if $wait and !$render_to_real {
