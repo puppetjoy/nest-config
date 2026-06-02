@@ -168,13 +168,21 @@ class nest::app::hermes::config (
     }
   }
 
+  file { "${install_dir}/bin":
+    ensure  => directory,
+    mode    => '0755',
+    owner   => 'root',
+    group   => 'root',
+    require => File[$install_dir],
+  }
+
   file { $hermes_config_manager_path:
     ensure  => file,
     mode    => '0755',
     owner   => 'root',
     group   => 'root',
     source  => 'puppet:///modules/nest/hermes/manage-config.py',
-    require => File[$install_dir],
+    require => File["${install_dir}/bin"],
   }
 
   file { $hermes_managed_config_path:
