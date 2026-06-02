@@ -1,4 +1,6 @@
 ---
+service_name: "%{nest::kubernetes::service}"
+
 resources:
   deployment:
     apiVersion: apps/v1
