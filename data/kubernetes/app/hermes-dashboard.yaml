@@ -46,7 +46,6 @@ resources:
     subsets:
       - addresses:
           - ip: "%{lookup('backend_ip')}"
-            hostname: "%{lookup('backend_host')}"
         ports:
           - name: http
             port: "%{alias('backend_port')}"
