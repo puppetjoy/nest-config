@@ -12,6 +12,29 @@ service_name: "%{nest::kubernetes::service}"
 resources:
   registry_auths: {}
 
+  init:
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: "%{nest::kubernetes::service}-init"
+      namespace: "%{nest::kubernetes::namespace}"
+      labels:
+        'james.tl/nest': 'stage1'
+    spec:
+      backoffLimit: 0
+      ttlSecondsAfterFinished: 21600
+      template:
+        spec:
+          restartPolicy: Never
+          imagePullSecrets: []
+          initContainers: []
+          containers:
+            - name: done
+              image: "%{lookup('registry')}/nest/stage1/server"
+              imagePullPolicy: IfNotPresent
+              command: ['true']
+          volumes: []
+
   postgres-cluster:
     apiVersion: postgresql.cnpg.io/v1
     kind: Cluster

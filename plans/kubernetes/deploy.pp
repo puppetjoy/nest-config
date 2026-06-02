@@ -8,7 +8,7 @@
 #                     a valid Puppet file source, or `undef` for no chart (just Hiera resources).
 # @param deploy     Run or skip the deployment
 # @param hooks      Enable or disable install hooks
-# @param init       Include init container and disable backup job
+# @param init       Include init resources/containers and disable backup/restore jobs
 # @param namespace  Kubernetes namespace to manage
 # @param render_to  Just save the fully-rendered chart to this yaml file
 # @param repo_url   Optional URL of the Helm repo to add
@@ -41,7 +41,7 @@ plan nest::kubernetes::deploy ( # lint:ignore:deploy_plan_boundary -- central Ku
     $remove_resources = ['backup', 'restore']
     $remove_patches   = []
   } else {
-    $remove_resources = []
+    $remove_resources = ['init']
     $remove_patches   = ['20-nest-init', '30-nest-init']
   }
 

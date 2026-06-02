@@ -1,0 +1,21 @@
+---
+description: 'Initialize OpenVox Puppet resources'
+
+parameters:
+  namespace:
+    description: 'Kubernetes namespace'
+    type: String
+    default: 'test'
+
+  service:
+    description: 'Puppet service to initialize'
+    type: String
+    default: 'puppet'
+
+steps:
+  - description: "Initialize ${service} OpenVox resources"
+    plan: nest::openvox::restore
+    parameters:
+      kubernetes_namespace: $namespace
+      service: $service
+      restore: true
