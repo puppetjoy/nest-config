@@ -89,145 +89,46 @@ define nest::lib::hermes (
     }
   }
 
+  $gitlab_env_lines = $gitlab_token ? {
+    undef   => [],
+    default => $gitlab_enabled ? {
+      true    => $gitlab_token =~ Sensitive[String[1]] ? {
+        true    => ["GITLAB_URL=${gitlab_url}", "GITLAB_TOKEN=${gitlab_token.unwrap}"],
+        default => ["GITLAB_URL=${gitlab_url}", "GITLAB_TOKEN=${gitlab_token}"],
+      },
+      default => [],
+    },
+  }
+
+  $tavily_env_lines = $tavily_api_key ? {
+    undef   => [],
+    default => $tavily_api_key =~ Sensitive[String[1]] ? {
+      true    => ["TAVILY_API_KEY=${tavily_api_key.unwrap}"],
+      default => ["TAVILY_API_KEY=${tavily_api_key}"],
+    },
+  }
+
+  $telegram_env_lines = $telegram_bot_token ? {
+    undef   => [],
+    default => $telegram_enabled ? {
+      true    => $telegram_bot_token =~ Sensitive[String[1]] ? {
+        true    => ["TELEGRAM_BOT_TOKEN=${telegram_bot_token.unwrap}", "TELEGRAM_ALLOWED_USERS=${telegram_allowed}", "TELEGRAM_HOME_CHANNEL=${telegram_home}"],
+        default => ["TELEGRAM_BOT_TOKEN=${telegram_bot_token}", "TELEGRAM_ALLOWED_USERS=${telegram_allowed}", "TELEGRAM_HOME_CHANNEL=${telegram_home}"],
+      },
+      default => [],
+    },
+  }
+
+  $env_content = [$gitlab_env_lines, $tavily_env_lines, $telegram_env_lines].flatten.join("\n")
+
   file { $hermes_env_path:
-    ensure  => file,
-    mode    => '0600',
-    owner   => $user,
-    group   => $user,
-    require => File[$profile_dir],
-  }
-
-  file { $hermes_config_path:
-    ensure  => file,
-    mode    => '0600',
-    owner   => $user,
-    group   => $user,
-    require => File[$profile_dir],
-  }
-
-  file { "${profile_dir}/SOUL.md":
-    ensure  => file,
-    mode    => '0600',
-    owner   => $user,
-    group   => $user,
-    content => $soul_seed,
-    replace => false,
-    require => File[$profile_dir],
-  }
-
-  file { "${profile_dir}/systemd.env":
-    ensure  => file,
-    mode    => '0600',
-    owner   => $user,
-    group   => $user,
-    content => @("ENV"),
-      HERMES_DASHBOARD_BIND_HOST=${dashboard_bind_host}
-      HERMES_DASHBOARD_PORT=${dashboard_port}
-      HERMES_DASHBOARD_PUBLIC_URL=${dashboard_public_url}
-      | ENV
-    require => File[$profile_dir],
-  }
-
-  if $gitlab_token {
-    if $gitlab_token =~ Sensitive[String[1]] {
-      $gitlab_token_value = $gitlab_token.unwrap
-    } else {
-      $gitlab_token_value = $gitlab_token
-    }
-
-    file_line { "hermes-env-${profile}-gitlab-url":
-      path    => $hermes_env_path,
-      line    => "GITLAB_URL=${gitlab_url}",
-      match   => '^GITLAB_URL=',
-      require => File[$hermes_env_path],
-    }
-
-    file_line { "hermes-env-${profile}-gitlab-token":
-      path    => $hermes_env_path,
-      line    => Sensitive("GITLAB_TOKEN=${gitlab_token_value}"),
-      match   => '^GITLAB_TOKEN=',
-      require => File[$hermes_env_path],
-    }
-  } elsif !$gitlab_enabled {
-    file_line { "hermes-env-${profile}-gitlab-url":
-      ensure            => absent,
-      path              => $hermes_env_path,
-      match             => '^GITLAB_URL=',
-      match_for_absence => true,
-      multiple          => true,
-      require           => File[$hermes_env_path],
-    }
-
-    file_line { "hermes-env-${profile}-gitlab-token":
-      ensure            => absent,
-      path              => $hermes_env_path,
-      match             => '^GITLAB_TOKEN=',
-      match_for_absence => true,
-      multiple          => true,
-      require           => File[$hermes_env_path],
-    }
-  }
-
-  if $tavily_api_key {
-    if $tavily_api_key =~ Sensitive[String[1]] {
-      $tavily_api_key_value = $tavily_api_key.unwrap
-    } else {
-      $tavily_api_key_value = $tavily_api_key
-    }
-
-    file_line { "hermes-env-${profile}-tavily-api-key":
-      path    => $hermes_env_path,
-      line    => Sensitive("TAVILY_API_KEY=${tavily_api_key_value}"),
-      match   => '^TAVILY_API_KEY=',
-      require => File[$hermes_env_path],
-    }
-  }
-
-  if $telegram_bot_token {
-    if $telegram_bot_token =~ Sensitive[String[1]] {
-      $telegram_bot_token_value = $telegram_bot_token.unwrap
-    } else {
-      $telegram_bot_token_value = $telegram_bot_token
-    }
-
-    file_line { "hermes-env-${profile}-telegram-bot-token":
-      path    => $hermes_env_path,
-      line    => Sensitive("TELEGRAM_BOT_TOKEN=${telegram_bot_token_value}"),
-      match   => '^TELEGRAM_BOT_TOKEN=',
-      require => File[$hermes_env_path],
-    }
-
-    file_line { "hermes-env-${profile}-telegram-allowed-users":
-      path    => $hermes_env_path,
-      line    => "TELEGRAM_ALLOWED_USERS=${telegram_allowed}",
-      match   => '^TELEGRAM_ALLOWED_USERS=',
-      require => File[$hermes_env_path],
-    }
-
-    file_line { "hermes-env-${profile}-telegram-home-channel":
-      path    => $hermes_env_path,
-      line    => "TELEGRAM_HOME_CHANNEL=${telegram_home}",
-      match   => '^TELEGRAM_HOME_CHANNEL=',
-      require => File[$hermes_env_path],
-    }
-  } elsif !$telegram_enabled {
-    file_line { "hermes-env-${profile}-telegram-bot-token":
-      ensure            => absent,
-      path              => $hermes_env_path,
-      match             => '^TELEGRAM_BOT_TOKEN=',
-      match_for_absence => true,
-      multiple          => true,
-      require           => File[$hermes_env_path],
-    }
-  }
-
-  file_line { "hermes-env-${profile}-honcho-api-key":
-    ensure            => absent,
-    path              => $hermes_env_path,
-    match             => '^HONCHO_API_KEY=',
-    match_for_absence => true,
-    multiple          => true,
-    require           => File[$hermes_env_path],
+    ensure    => file,
+    mode      => '0600',
+    owner     => $user,
+    group     => $user,
+    content   => Sensitive([$env_content, ''].join("\n")),
+    show_diff => false,
+    require   => File[$profile_dir],
   }
 
   file { $hermes_managed_config_path:
