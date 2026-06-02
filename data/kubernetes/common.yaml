@@ -45,7 +45,7 @@ resources:
                     - "%{lookup('plan_base')}::backup"
                     - "namespace=%{nest::kubernetes::namespace}"
                     - "service=%{nest::kubernetes::service}"
-                    - "service_name=%{lookup('service_name')}"
+                    - "service_name=%{nest::kubernetes::service_name}"
                   env:
                     - name: KUBECONFIG
                       value: '/nest/home/kubeconfigs/eyrie.conf'

@@ -78,7 +78,7 @@ resources:
                 - "%{lookup('plan_base')}::init"
                 - "namespace=%{nest::kubernetes::namespace}"
                 - "service=%{nest::kubernetes::service}"
-                - "service_name=%{lookup('service_name')}"
+                - "service_name=%{nest::kubernetes::service_name}"
               env:
                 - name: KUBECONFIG
                   value: '/nest/home/kubeconfigs/eyrie.conf'
@@ -320,7 +320,7 @@ resources:
       namespace: "%{nest::kubernetes::namespace}"
       labels:
         james.tl/fqdn: "%{nest::kubernetes::fqdn}"
-        james.tl/service_name: "%{lookup('service_name')}"
+        james.tl/service_name: "%{nest::kubernetes::service_name}"
     spec:
       type: ClusterIP
       selector:
