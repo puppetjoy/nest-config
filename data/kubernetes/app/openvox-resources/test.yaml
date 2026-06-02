@@ -1,80 +1,12 @@
 ---
-resources:
-  # Disable backups in test environment
-  backup: {}
-
-  restore:
-    apiVersion: batch/v1
-    kind: CronJob
-    metadata:
-      name: "%{nest::kubernetes::main_service}-restore"
-      namespace: "%{nest::kubernetes::namespace}"
-    spec:
-      concurrencyPolicy: Forbid
-      suspend: true
-      schedule: "%{nest::kubernetes::cron_job_offset} %{lookup('restore_hour')} * * *"
-      timeZone: 'America/New_York'
-      jobTemplate:
-        spec:
-          ttlSecondsAfterFinished: "%{alias('restore_job_ttl')}"
-          template:
-            spec:
-              affinity:
-                nodeAffinity:
-                  requiredDuringSchedulingIgnoredDuringExecution:
-                    nodeSelectorTerms:
-                      - matchExpressions:
-                        - key: "node-role.kubernetes.io/%{lookup('node_role')}"
-                          operator: Exists
-              containers:
-                - name: nest
-                  image: "%{lookup('restore_registry')}/nest/config/main"
-                  imagePullPolicy: Always
-                  command:
-                    - bolt
-                    - plan
-                    - run
-                    - "%{lookup('plan_base')}::restore"
-                    - "namespace=%{nest::kubernetes::namespace}"
-                    - "service=%{nest::kubernetes::main_service}"
-                    - "service_name=%{nest::kubernetes::main_service}"
-                    - 'restore=true'
-                  env:
-                    - name: KUBECONFIG
-                      value: '/nest/home/kubeconfigs/eyrie.conf'
-                  volumeMounts:
-                    - name: nest
-                      mountPath: '/nest'
-                    - name: bolt-config
-                      mountPath: '/etc/puppetlabs/bolt'
-                      readOnly: true
-                    - name: eyaml-config
-                      mountPath: '/etc/eyaml'
-                      readOnly: true
-                    - name: eyrie-ssh-key
-                      mountPath: '/root/.ssh/id_ed25519'
-                      readOnly: true
-              imagePullSecrets:
-                - name: "%{nest::kubernetes::service}-registry-auths"
-              restartPolicy: Never
-              tolerations:
-                - key: "node-role.kubernetes.io/%{lookup('node_role')}"
-                  operator: Exists
-                  effect: NoSchedule
-              volumes:
-                - name: nest
-                  hostPath:
-                    path: '/nest'
-                    type: Directory
-                - name: bolt-config
-                  hostPath:
-                    path: '/etc/puppetlabs/bolt'
-                    type: Directory
-                - name: eyaml-config
-                  hostPath:
-                    path: '/etc/eyaml'
-                    type: Directory
-                - name: eyrie-ssh-key
-                  hostPath:
-                    path: '/root/.ssh/id_ed25519_eyrie'
-                    type: File
+patches:
+  40-suspend-restore:
+    - patch:
+        - op: add
+          path: '/spec/suspend'
+          value: true
+      target:
+        group: batch
+        version: v1
+        kind: CronJob
+        name: "%{nest::kubernetes::service}-restore"

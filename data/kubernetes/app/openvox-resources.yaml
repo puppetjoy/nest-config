@@ -7,72 +7,10 @@ postgres_image: ghcr.io/cloudnative-pg/postgresql:17.6
 postgres_storage_class: owl-crypt
 postgres_storage_size: 16Gi
 plan_base: nest::eyrie::openvox_resources
+service_name: "%{nest::kubernetes::main_service}"
 
 resources:
   registry_auths: {}
-
-  backup:
-    apiVersion: batch/v1
-    kind: CronJob
-    metadata:
-      name: "%{nest::kubernetes::main_service}-backup"
-      namespace: "%{nest::kubernetes::namespace}"
-    spec:
-      concurrencyPolicy: Forbid
-      schedule: "%{nest::kubernetes::cron_job_offset} %{lookup('backup_hour')} * * *"
-      timeZone: 'America/New_York'
-      jobTemplate:
-        spec:
-          ttlSecondsAfterFinished: "%{alias('backup_job_ttl')}"
-          template:
-            spec:
-              containers:
-                - name: nest
-                  image: "%{lookup('restore_registry')}/nest/config/main"
-                  imagePullPolicy: Always
-                  command:
-                    - bolt
-                    - plan
-                    - run
-                    - "%{lookup('plan_base')}::backup"
-                    - "namespace=%{nest::kubernetes::namespace}"
-                    - "service=%{nest::kubernetes::main_service}"
-                    - "service_name=%{nest::kubernetes::main_service}"
-                  env:
-                    - name: KUBECONFIG
-                      value: '/nest/home/kubeconfigs/eyrie.conf'
-                  volumeMounts:
-                    - name: nest
-                      mountPath: '/nest'
-                    - name: bolt-config
-                      mountPath: '/etc/puppetlabs/bolt'
-                      readOnly: true
-                    - name: eyaml-config
-                      mountPath: '/etc/eyaml'
-                      readOnly: true
-                    - name: eyrie-ssh-key
-                      mountPath: '/root/.ssh/id_ed25519'
-                      readOnly: true
-              imagePullSecrets:
-                - name: "%{nest::kubernetes::service}-registry-auths"
-              restartPolicy: Never
-              volumes:
-                - name: nest
-                  hostPath:
-                    path: '/nest'
-                    type: Directory
-                - name: bolt-config
-                  hostPath:
-                    path: '/etc/puppetlabs/bolt'
-                    type: Directory
-                - name: eyaml-config
-                  hostPath:
-                    path: '/etc/eyaml'
-                    type: Directory
-                - name: eyrie-ssh-key
-                  hostPath:
-                    path: '/root/.ssh/id_ed25519_eyrie'
-                    type: File
 
   postgres-cluster:
     apiVersion: postgresql.cnpg.io/v1
