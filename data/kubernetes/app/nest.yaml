@@ -7,7 +7,7 @@ resources:
       name: "%{nest::kubernetes::service}"
       namespace: "%{nest::kubernetes::namespace}"
       labels:
-        'james.tl/nest': 'stage1'
+        'joyfullee.me/nest': 'stage1'
     spec:
       replicas: 1
       selector:
@@ -28,7 +28,7 @@ resources:
       name: "%{nest::kubernetes::service}"
       namespace: "%{nest::kubernetes::namespace}"
       labels:
-        'james.tl/nest': 'stage1'
+        'joyfullee.me/nest': 'stage1'
     spec:
       type: LoadBalancer
       selector:

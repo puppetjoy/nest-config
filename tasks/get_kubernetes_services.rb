@@ -7,7 +7,7 @@ require_relative '../../ruby_task_helper/files/task_helper.rb'
 # Fetch Kubernetes service names and URIs with kubectl
 class GetKubernetesServices < TaskHelper
   def task(_opts)
-    services = `kubectl get services -A -l 'james.tl/nest in (stage1, puppet)' -o json 2>/dev/null`
+    services = `kubectl get services -A -l 'joyfullee.me/nest in (stage1, puppet)' -o json 2>/dev/null`
     kube_env = ENV['KUBECONFIG']
     kubeconfig_missing = kube_env.nil? || kube_env.strip.empty? || kube_env.split(File::PATH_SEPARATOR).all? { |p| p.strip.empty? || !File.exist?(p) }
     unless $CHILD_STATUS.success?
@@ -23,7 +23,7 @@ class GetKubernetesServices < TaskHelper
 
     targets = services['items'].map { |service|
       if service['spec']['type'] == 'LoadBalancer'
-        uri = service['metadata']['labels']['james.tl/fqdn']
+        uri = service['metadata']['labels']['joyfullee.me/fqdn']
         config = {}
       else
         namespace = service['metadata']['namespace']
@@ -31,11 +31,11 @@ class GetKubernetesServices < TaskHelper
         jump_service = services['items'].find { |s| s['metadata']['name'] == 'jump' && s['metadata']['namespace'] == jump_namespace }
         next nil unless jump_service
         uri = "#{service['metadata']['name']}.#{namespace}.svc.cluster.local"
-        config = { ssh: { proxyjump: jump_service['metadata']['labels']['james.tl/fqdn'] } }
+        config = { ssh: { proxyjump: jump_service['metadata']['labels']['joyfullee.me/fqdn'] } }
       end
 
       {
-        name: service['metadata']['labels']['james.tl/service_name'],
+        name: service['metadata']['labels']['joyfullee.me/service_name'],
         uri: uri,
         config: config,
       }

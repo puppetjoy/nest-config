@@ -237,7 +237,7 @@ patches:
       metadata:
         name: "%{nest::kubernetes::service}"
         labels:
-          'james.tl/nest': 'init-only'
+          'joyfullee.me/nest': 'init-only'
       spec:
         template:
           spec:

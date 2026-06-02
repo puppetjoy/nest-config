@@ -248,7 +248,7 @@ patches:
   10-nest:
     patch:
       - op: add
-        path: '/metadata/labels/james.tl~1nest'
+        path: '/metadata/labels/joyfullee.me~1nest'
         value: 'init-only'
     target:
       kind: Job

@@ -139,7 +139,7 @@ patches:
         group: apps
         version: v1
         kind: Deployment
-        labelSelector: 'james.tl/nest'
+        labelSelector: 'joyfullee.me/nest'
     - patch:
         # Request a specific IP
         - op: add
@@ -147,10 +147,10 @@ patches:
           value: "%{nest::kubernetes::load_balancer_ip}"
         # Labels used especially by tasks/get_kubernetes_services.rb
         - op: add
-          path: '/metadata/labels/james.tl~1fqdn'
+          path: '/metadata/labels/joyfullee.me~1fqdn'
           value: "%{nest::kubernetes::fqdn}"
         - op: add
-          path: '/metadata/labels/james.tl~1service_name'
+          path: '/metadata/labels/joyfullee.me~1service_name'
           value: "%{lookup('service_name')}"
         - op: add
           path: '/spec/ports/-'
@@ -160,13 +160,13 @@ patches:
       target:
         version: v1
         kind: Service
-        labelSelector: 'james.tl/nest'
+        labelSelector: 'joyfullee.me/nest'
 
   # Shared Nest init injection for chart-integrated workloads.
   #
   # Use this when a Helm chart or existing KubeCM resource should run a Nest
   # Bolt init plan before its normal container starts.  The selected
-  # Deployment or Job must carry a james.tl/nest label and provide the list
+  # Deployment or Job must carry a joyfullee.me/nest label and provide the list
   # fields patched below.  App-specific 30-nest-init patches may extend this
   # injected initContainer with extra mounts.
   #
@@ -241,4 +241,4 @@ patches:
               type: File
       target:
         kind: (Deployment|Job)
-        labelSelector: 'james.tl/nest'
+        labelSelector: 'joyfullee.me/nest'

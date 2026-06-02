@@ -79,7 +79,7 @@ patches:
           name: "%{nest::kubernetes::service}-wordpress"
           namespace: "%{nest::kubernetes::namespace}"
           labels:
-            'james.tl/nest': 'stage1'
+            'joyfullee.me/nest': 'stage1'
     - patch:
         apiVersion: v1
         kind: Service
@@ -87,7 +87,7 @@ patches:
           name: "%{nest::kubernetes::service}-wordpress"
           namespace: "%{nest::kubernetes::namespace}"
           labels:
-            'james.tl/nest': 'stage1'
+            'joyfullee.me/nest': 'stage1'
 
   30-nest:
     patch:
@@ -100,7 +100,7 @@ patches:
       group: apps
       version: v1
       kind: Deployment
-      labelSelector: 'james.tl/nest'
+      labelSelector: 'joyfullee.me/nest'
 
   30-nest-init:
     patch:
@@ -111,4 +111,4 @@ patches:
       group: apps
       version: v1
       kind: Deployment
-      labelSelector: 'james.tl/nest'
+      labelSelector: 'joyfullee.me/nest'

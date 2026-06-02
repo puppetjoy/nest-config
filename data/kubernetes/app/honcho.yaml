@@ -56,7 +56,7 @@ resources:
 
   # Direct standalone init Job.  Honcho is a Nest-owned chartless app, so the
   # destructive restore command stays visible here instead of being injected
-  # indirectly through the shared james.tl/nest/20-nest-init patch path.
+  # indirectly through the shared joyfullee.me/nest/20-nest-init patch path.
   init:
     apiVersion: batch/v1
     kind: Job
@@ -326,8 +326,8 @@ resources:
       name: "%{nest::kubernetes::service}"
       namespace: "%{nest::kubernetes::namespace}"
       labels:
-        james.tl/fqdn: "%{nest::kubernetes::fqdn}"
-        james.tl/service_name: "%{nest::kubernetes::service_name}"
+        joyfullee.me/fqdn: "%{nest::kubernetes::fqdn}"
+        joyfullee.me/service_name: "%{nest::kubernetes::service_name}"
     spec:
       type: ClusterIP
       selector:
