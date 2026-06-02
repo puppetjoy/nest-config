@@ -1,10 +1,8 @@
-class nest::app::hermes::service (
-  Stdlib::Absolutepath $install_dir               = '/opt/hermes-agent',
-  Boolean              $dashboard_enabled         = false,
-  String[1]            $dashboard_bind_host       = '0.0.0.0',
-  Stdlib::Port         $dashboard_port            = 9119,
-  Optional[String[1]]  $dashboard_oauth_client_id = undef,
-) {
+class nest::app::hermes::service {
+  $install_dir               = $nest::app::hermes::install_dir
+  $dashboard_enabled         = $nest::app::hermes::dashboard_enabled
+  $dashboard_bind_host       = $nest::app::hermes::dashboard_bind_host
+  $dashboard_port            = $nest::app::hermes::dashboard_port
   $venv_dir                  = "${install_dir}/venv"
   $venv_python               = "${venv_dir}/bin/python"
   $hermes_home_dir           = "/home/${nest::user}/.hermes"
@@ -102,7 +100,7 @@ class nest::app::hermes::service (
     content => "[Service]\nEnvironment=SSL_CERT_FILE=\nEnvironment=SSL_CERT_DIR=/etc/ssl/certs\n",
   }
 
-  if $dashboard_enabled and ($dashboard_bind_host in ['127.0.0.1', 'localhost', '::1'] or $dashboard_oauth_client_id) {
+  if $dashboard_enabled {
     $dashboard_service_ensure = file
     $dashboard_enable_command = '/bin/sh -c "XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user enable --now hermes-dashboard.service"'
     $dashboard_enable_unless  = '/bin/sh -c "XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-enabled --quiet hermes-dashboard.service && XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-active --quiet hermes-dashboard.service"'
@@ -127,7 +125,7 @@ class nest::app::hermes::service (
 
       [Service]
       Type=simple
-      ExecStart=${venv_python} -m hermes_cli.main dashboard --host ${dashboard_bind_host} --port ${dashboard_port} --no-open --skip-build --tui
+      ExecStart=${venv_python} -m hermes_cli.main dashboard --host ${dashboard_bind_host} --port ${dashboard_port} --no-open --skip-build --tui --insecure
       WorkingDirectory=/home/${nest::user}
       Environment="PATH=${venv_dir}/bin:/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
       Environment="VIRTUAL_ENV=${venv_dir}"

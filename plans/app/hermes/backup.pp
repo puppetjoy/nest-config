@@ -9,7 +9,7 @@ plan nest::app::hermes::backup (
   String[1]           $user         = 'joy',
   Optional[String[1]] $namespace    = undef,
   Optional[String[1]] $service      = undef,
-  Optional[String[1]] $service_name = undef,
+  String[1]           $service_name = 'talon',
 ) {
   if $quick {
     $command = @("COMMAND"/L)
@@ -21,7 +21,7 @@ plan nest::app::hermes::backup (
   }
 
   $timestamp = run_command('date +%Y%m%d-%H%M%S', $target, 'Timestamp Hermes backup').first.value['stdout'].chomp
-  $archive   = "${backup_dir}/hermes-${timestamp}.zip"
+  $archive   = "${backup_dir}/${service_name}-hermes-${timestamp}.zip"
 
   $command = @("COMMAND"/L)
     set -euo pipefail

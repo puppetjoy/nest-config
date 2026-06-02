@@ -1,22 +1,21 @@
-class nest::app::hermes::config (
-  Stdlib::Absolutepath           $install_dir                = '/opt/hermes-agent',
-  String[1]                      $gitlab_url                 = 'https://gitlab.joyfullee.me',
-  Optional[Sensitive[String[1]]] $gitlab_token               = undef,
-  Optional[Sensitive[String[1]]] $tavily_api_key             = undef,
-  Optional[Sensitive[String[1]]] $telegram_bot_token         = undef,
-  String[1]                      $telegram_allowed           = '8756212310',
-  String[1]                      $telegram_home              = '8756212310',
-  String[1]                      $model_provider             = 'openai-codex',
-  String[1]                      $model_name                 = 'gpt-5.5',
-  String[1]                      $model_base_url             = 'https://chatgpt.com/backend-api/codex',
-  String[1]                      $auxiliary_provider         = 'openai-codex',
-  String[1]                      $auxiliary_mini_model       = 'gpt-5.4-mini',
-  Integer[1]                     $compression_timeout        = 120,
-  Integer[1]                     $web_extract_timeout        = 360,
-  String[1]                      $dashboard_public_url       = 'https://talon.eyrie',
-  Optional[String[1]]            $dashboard_oauth_client_id  = undef,
-  Optional[String[1]]            $dashboard_oauth_portal_url = undef,
-) {
+class nest::app::hermes::config {
+  $install_dir                      = $nest::app::hermes::install_dir
+  $gitlab_url                       = $nest::app::hermes::gitlab_url
+  $gitlab_token                     = $nest::app::hermes::gitlab_token
+  $tavily_api_key                   = $nest::app::hermes::tavily_api_key
+  $telegram_bot_token               = $nest::app::hermes::telegram_bot_token
+  $telegram_allowed                 = $nest::app::hermes::telegram_allowed
+  $telegram_home                    = $nest::app::hermes::telegram_home
+  $model_provider                   = $nest::app::hermes::model_provider
+  $model_name                       = $nest::app::hermes::model_name
+  $model_base_url                   = $nest::app::hermes::model_base_url
+  $auxiliary_provider               = $nest::app::hermes::auxiliary_provider
+  $auxiliary_mini_model             = $nest::app::hermes::auxiliary_mini_model
+  $compression_timeout              = $nest::app::hermes::compression_timeout
+  $web_extract_timeout              = $nest::app::hermes::web_extract_timeout
+  $dashboard_public_url             = $nest::app::hermes::dashboard_public_url
+  $dashboard_oauth_client_id        = $nest::app::hermes::dashboard_oauth_client_id
+  $dashboard_oauth_portal_url       = $nest::app::hermes::dashboard_oauth_portal_url
   $venv_dir                         = "${install_dir}/venv"
   $venv_python                      = "${venv_dir}/bin/python"
   $hermes_config_dir                = "/home/${nest::user}/.config/hermes"

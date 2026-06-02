@@ -1,8 +1,7 @@
-class nest::app::hermes::install (
-  Stdlib::Absolutepath $install_dir = '/opt/hermes-agent',
-  String[1]            $git_url     = 'https://github.com/NousResearch/hermes-agent.git',
-  String[1]            $git_ref     = 'main',
-) {
+class nest::app::hermes::install {
+  $install_dir       = $nest::app::hermes::install_dir
+  $git_url           = $nest::app::hermes::git_url
+  $git_ref           = $nest::app::hermes::git_ref
   $venv_dir          = "${install_dir}/venv"
   $venv_python       = "${venv_dir}/bin/python"
   $venv_pip          = "${venv_dir}/bin/pip"
