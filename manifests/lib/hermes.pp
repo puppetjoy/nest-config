@@ -131,6 +131,16 @@ define nest::lib::hermes (
     require   => File[$profile_dir],
   }
 
+  file { $hermes_config_path:
+    ensure  => file,
+    mode    => '0600',
+    owner   => $user,
+    group   => $user,
+    content => "--- {}\n",
+    replace => false,
+    require => File[$profile_dir],
+  }
+
   file { $hermes_managed_config_path:
     ensure  => file,
     mode    => '0600',
