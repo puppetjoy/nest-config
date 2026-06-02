@@ -162,6 +162,17 @@ patches:
         kind: Service
         labelSelector: 'james.tl/nest'
 
+  # Shared Nest init injection for chart-integrated workloads.
+  #
+  # Use this when a Helm chart or existing KubeCM resource should run a Nest
+  # Bolt init plan before its normal container starts.  The selected
+  # Deployment or Job must carry a james.tl/nest label and provide the list
+  # fields patched below.  App-specific 30-nest-init patches may extend this
+  # injected initContainer with extra mounts.
+  #
+  # Standalone Nest-owned restore/init jobs should usually define their Bolt
+  # job directly in the app data instead; that keeps destructive bootstrap
+  # commands visible at the resource definition site.
   20-nest-init:
     - patch:
         - op: add
@@ -177,6 +188,7 @@ patches:
               - "%{lookup('plan_base')}::init"
               - "namespace=%{nest::kubernetes::namespace}"
               - "service=%{nest::kubernetes::service}"
+              - "service_name=%{lookup('service_name')}"
             env:
               - name: KUBECONFIG
                 value: '/nest/home/kubeconfigs/eyrie.conf'

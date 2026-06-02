@@ -11,11 +11,16 @@ parameters:
     description: 'WordPress service to restore'
     type: String
 
+  service_name:
+    description: 'Kubernetes workload service name'
+    type: String
+    default: $service
+
 steps:
   - description: "Restore ${service} WordPress instance"
     plan: nest::wordpress::restore
     parameters:
       targets: 'localhost'
       service: $service
-      db_host: "${service}-mariadb"
+      db_host: "${service_name}-mariadb"
       restore: true

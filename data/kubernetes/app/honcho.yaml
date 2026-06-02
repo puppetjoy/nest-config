@@ -3,6 +3,7 @@ include:
   - 'nest::service::honcho'
 
 plan_base: 'nest::eyrie::ai::honcho'
+service_name: "%{nest::kubernetes::service}"
 
 cert_issuer: eyrie-ca
 cert_issuer_kind: ClusterIssuer
@@ -53,6 +54,9 @@ redis_storage_size: 1Gi
 resources:
   registry_auths: {}
 
+  # Direct standalone init Job.  Honcho is a Nest-owned chartless app, so the
+  # destructive restore command stays visible here instead of being injected
+  # indirectly through the shared james.tl/nest/20-nest-init patch path.
   init:
     apiVersion: batch/v1
     kind: Job
@@ -60,7 +64,7 @@ resources:
       name: "%{nest::kubernetes::service}-init"
       namespace: "%{nest::kubernetes::namespace}"
     spec:
-      backoffLimit: 1
+      backoffLimit: 0
       ttlSecondsAfterFinished: 21600
       template:
         spec:
@@ -78,10 +82,13 @@ resources:
                 - "%{lookup('plan_base')}::init"
                 - "namespace=%{nest::kubernetes::namespace}"
                 - "service=%{nest::kubernetes::service}"
-                - "service_name=%{nest::kubernetes::service_name}"
+                - "service_name=%{lookup('service_name')}"
               env:
                 - name: KUBECONFIG
                   value: '/nest/home/kubeconfigs/eyrie.conf'
+              securityContext:
+                runAsUser: 0
+                runAsGroup: 0
               volumeMounts:
                 - name: nest
                   mountPath: '/nest'

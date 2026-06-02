@@ -12,11 +12,16 @@ parameters:
     type: String
     default: 'bitwarden'
 
+  service_name:
+    description: 'Kubernetes workload service name'
+    type: String
+    default: $service
+
 steps:
   - description: "Restore Vaultwarden instance"
     plan: nest::vaultwarden::restore
     parameters:
       targets: 'localhost'
       service: $service
-      db_host: "${service}-mariadb"
+      db_host: "${service_name}-mariadb"
       restore: true

@@ -12,10 +12,16 @@ parameters:
     type: String
     default: 'puppet'
 
+  service_name:
+    description: 'Kubernetes workload service name'
+    type: String
+    default: $service
+
 steps:
   - description: "Initialize ${service} OpenVox resources"
     plan: nest::eyrie::openvox::restore
     parameters:
       namespace: $namespace
       service: $service
+      service_name: $service_name
       restore: true

@@ -12,10 +12,16 @@ parameters:
     type: String
     default: 'gitlab'
 
+  service_name:
+    description: 'Kubernetes workload service name'
+    type: String
+    default: $service
+
 steps:
   - description: "Restore GitLab instance"
     plan: nest::eyrie::gitlab::restore
     parameters:
       namespace: $namespace
       service: $service
+      service_name: $service_name
       restore: true
