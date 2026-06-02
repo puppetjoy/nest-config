@@ -67,6 +67,7 @@ define nest::lib::hermes (
   if $clone_from_default {
     exec { "bootstrap_hermes_profile_${profile}":
       command => @("COMMAND"/L),
+        /bin/sh -c '
         set -eu
         cd ${hermes_home_dir}
         for path in sessions memories skills cron logs; do
@@ -80,6 +81,7 @@ define nest::lib::hermes (
           fi
         done
         touch "profiles/${profile}/.profile-bootstrap-complete"
+        '
         | COMMAND
       creates => "${profile_dir}/.profile-bootstrap-complete",
       user    => $user,
