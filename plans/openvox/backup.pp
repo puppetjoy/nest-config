@@ -3,7 +3,7 @@
 # @param kubernetes_namespace Kubernetes namespace
 # @param service Puppet service
 # @param backup_service Backup directory name
-plan nest::openvox_resources::backup (
+plan nest::openvox::backup (
   String $kubernetes_namespace = 'default',
   String $service              = 'puppet',
   String $backup_service       = $service,

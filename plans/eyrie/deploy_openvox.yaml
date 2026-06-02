@@ -53,7 +53,7 @@ steps:
       render_to: $render_to
 
   - description: 'Restore initial OpenVox resources'
-    plan: nest::eyrie::openvox_resources::restore
+    plan: nest::eyrie::openvox::restore
     parameters:
       namespace: $namespace
       service: $service

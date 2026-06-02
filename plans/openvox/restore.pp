@@ -4,7 +4,7 @@
 # @param service Puppet service
 # @param backup_service Backup directory name
 # @param restore Safety gate
-plan nest::openvox_resources::restore (
+plan nest::openvox::restore (
   String  $kubernetes_namespace = 'test',
   String  $service              = 'puppet',
   String  $backup_service       = $service,

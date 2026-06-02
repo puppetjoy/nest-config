@@ -24,7 +24,7 @@ parameters:
 
 steps:
   - description: "Restore ${service} OpenVox resources"
-    plan: nest::openvox_resources::restore
+    plan: nest::openvox::restore
     parameters:
       kubernetes_namespace: $namespace
       service: $service_name

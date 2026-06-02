@@ -19,7 +19,7 @@ parameters:
 
 steps:
   - description: "Backup ${service} OpenVox resources"
-    plan: nest::openvox_resources::backup
+    plan: nest::openvox::backup
     parameters:
       kubernetes_namespace: $namespace
       service: $service_name
