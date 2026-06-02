@@ -25,7 +25,6 @@ plan nest::kubernetes::deploy ( # lint:ignore:deploy_plan_boundary -- central Ku
   Optional[String] $namespace = undef,
   Optional[String] $render_to = undef,
   Optional[String] $repo_url  = undef,
-  Boolean          $restore   = false,
   Optional[String] $version   = undef,
   Boolean          $wait      = false,
   Array[Hash]      $subcharts = [],
