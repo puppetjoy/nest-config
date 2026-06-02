@@ -14,6 +14,10 @@ lookup_options:
     convert_to: 'Sensitive'
   nest::app::hermes::telegram_bot_token:
     convert_to: 'Sensitive'
+  nest::app::hermes::instances:
+    merge: 'deep'
+  nest::app::hermes::instance_secrets:
+    merge: 'deep'
   nest::hosts:
     merge: 'hash'
   nest::host_records:
@@ -111,6 +115,7 @@ nest::cnames:
   honcho.eyrie: 'ingress-compute.eyrie'
   llm.eyrie: 'ingress-compute.eyrie'
   talon.eyrie: 'ingress-compute.eyrie'
+  tars.eyrie: 'ingress-compute.eyrie'
   llama-util.nest: 'kestrel.nest'
 
   # Local services

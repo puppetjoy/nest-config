@@ -15,22 +15,21 @@ class nest::app::hermes (
   String[1]                      $auxiliary_mini_model        = 'gpt-5.4-mini',
   Integer[1]                     $compression_timeout         = 120,
   Integer[1]                     $web_extract_timeout         = 360,
-  Boolean                        $dashboard_enabled           = false,
   String[1]                      $dashboard_bind_host         = '0.0.0.0',
-  Stdlib::Port                   $dashboard_port              = 9119,
-  String[1]                      $dashboard_public_url        = 'https://talon.eyrie',
   Optional[String[1]]            $dashboard_oauth_client_id   = undef,
   Optional[String[1]]            $dashboard_oauth_portal_url  = undef,
+  Hash[String[1], Hash]          $instances                   = {},
+  Hash[String[1], Hash]          $instance_secrets            = {},
 ) {
   case $facts['os']['family'] {
     'Gentoo': {
       contain nest::app::hermes::install
-      contain nest::app::hermes::config
       contain nest::app::hermes::service
+      contain nest::app::hermes::config
 
       Class['nest::app::hermes::install']
-      -> Class['nest::app::hermes::config']
       -> Class['nest::app::hermes::service']
+      -> Class['nest::app::hermes::config']
     }
   }
 }

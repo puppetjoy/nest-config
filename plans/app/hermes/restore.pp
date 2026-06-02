@@ -4,9 +4,10 @@
 # native Hermes import --force behavior.
 plan nest::app::hermes::restore (
   String[1]  $archive,
-  TargetSpec $target = 'owl',
-  Boolean    $force  = false,
-  String[1]  $user   = 'joy',
+  TargetSpec $target  = 'owl',
+  Boolean    $force   = false,
+  String[1]  $user    = 'joy',
+  String[1]  $profile = 'talon',
 ) {
   $force_flag = $force ? {
     true    => '--force',
@@ -16,11 +17,11 @@ plan nest::app::hermes::restore (
   $command = @("COMMAND"/L)
     set -euo pipefail
     test -f ${archive.shellquote}
-    systemctl --user -M ${user}@ stop hermes-gateway.service || true
-    systemctl --user -M ${user}@ stop hermes-dashboard.service || true
-    runuser -u ${user.shellquote} -- /opt/hermes-agent/venv/bin/hermes import ${force_flag} ${archive.shellquote}
-    systemctl --user -M ${user}@ start hermes-gateway.service || true
-    systemctl --user -M ${user}@ start hermes-dashboard.service || true
+    systemctl --user -M ${user}@ stop hermes-gateway@${profile}.service || true
+    systemctl --user -M ${user}@ stop hermes-dashboard@${profile}.service || true
+    runuser -u ${user.shellquote} -- /opt/hermes-agent/venv/bin/hermes --profile ${profile.shellquote} import ${force_flag} ${archive.shellquote}
+    systemctl --user -M ${user}@ start hermes-gateway@${profile}.service || true
+    systemctl --user -M ${user}@ start hermes-dashboard@${profile}.service || true
     | COMMAND
 
   return run_command($command, $target, 'Restore Hermes backup')

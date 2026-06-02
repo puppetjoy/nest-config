@@ -36,3 +36,48 @@ nest::service::gitlab_runner::instances:
     podman: true
     puppetcore: true
     qemu: true
+
+# Hermes profiles run as named instances; the root/default profile is not a
+# long-running Nesty agent.
+nest::app::hermes::instances:
+  talon:
+    profile: 'talon'
+    display_name: 'Talon'
+    clone_from_default: true
+    gitlab_enabled: true
+    honcho_workspace: 'hermes'
+    honcho_user_peer: 'joy'
+    honcho_ai_peer: 'talon'
+    gateway_enabled: true
+    dashboard_enabled: true
+    dashboard_port: 9119
+    dashboard_public_url: 'https://talon.eyrie'
+    soul_content: |
+      # Talon
+
+      You are Talon, Joy's Nest Ops bot.
+
+      You help Joy operate Nest, Eyrie, Puppet, GitLab, Kubernetes,
+      Hermes, Honcho, and related infrastructure. Prefer
+      Puppet-managed source-of-truth changes and verify claims with
+      concrete checks.
+
+  tars:
+    profile: 'tars'
+    display_name: 'Tars'
+    gitlab_enabled: false
+    honcho_workspace: 'hermes'
+    honcho_user_peer: 'joy'
+    honcho_ai_peer: 'tars'
+    gateway_enabled: true
+    dashboard_enabled: true
+    dashboard_port: 9120
+    dashboard_public_url: 'https://tars.eyrie'
+    soul_content: |
+      # Tars
+
+      You are Tars, Joy's personal assistant.
+
+      You help with personal organization, reminders, lightweight
+      research, communication support, and day-to-day planning. You are
+      concise, practical, and friendly.

@@ -1,5 +1,4 @@
 class nest::app::hermes::config {
-  $install_dir                      = $nest::app::hermes::install_dir
   $gitlab_url                       = $nest::app::hermes::gitlab_url
   $gitlab_token                     = $nest::app::hermes::gitlab_token
   $tavily_api_key                   = $nest::app::hermes::tavily_api_key
@@ -13,26 +12,15 @@ class nest::app::hermes::config {
   $auxiliary_mini_model             = $nest::app::hermes::auxiliary_mini_model
   $compression_timeout              = $nest::app::hermes::compression_timeout
   $web_extract_timeout              = $nest::app::hermes::web_extract_timeout
-  $dashboard_public_url             = $nest::app::hermes::dashboard_public_url
+  $dashboard_bind_host              = $nest::app::hermes::dashboard_bind_host
   $dashboard_oauth_client_id        = $nest::app::hermes::dashboard_oauth_client_id
   $dashboard_oauth_portal_url       = $nest::app::hermes::dashboard_oauth_portal_url
-  $venv_dir                         = "${install_dir}/venv"
-  $venv_python                      = "${venv_dir}/bin/python"
-  $hermes_config_dir                = "/home/${nest::user}/.config/hermes"
-  $hermes_home_dir                  = "/home/${nest::user}/.hermes"
-  $hermes_env_path                  = "${hermes_home_dir}/.env"
-  $hermes_config_path               = "${hermes_home_dir}/config.yaml"
-  $hermes_managed_config_path       = "${hermes_home_dir}/managed-config.yaml"
-  $hermes_config_manager_path       = "${install_dir}/bin/manage-hermes-config"
-  $hermes_honcho_config_path        = "${hermes_home_dir}/honcho.json"
-  $dashboard_oauth_client_id_value  = $dashboard_oauth_client_id ? {
-    undef   => '',
-    default => $dashboard_oauth_client_id,
-  }
-  $dashboard_oauth_portal_url_value = $dashboard_oauth_portal_url ? {
-    undef   => '',
-    default => $dashboard_oauth_portal_url,
-  }
+  $instances                        = $nest::app::hermes::instances
+  $instance_secrets                 = $nest::app::hermes::instance_secrets
+
+  $hermes_config_dir = "/home/${nest::user}/.config/hermes"
+  $hermes_home_dir   = "/home/${nest::user}/.hermes"
+  $profiles_dir      = "${hermes_home_dir}/profiles"
 
   file { $hermes_config_dir:
     ensure => directory,
@@ -48,253 +36,103 @@ class nest::app::hermes::config {
     group  => $nest::user,
   }
 
-  file { $hermes_env_path:
-    ensure  => file,
-    mode    => '0600',
-    owner   => $nest::user,
-    group   => $nest::user,
-    require => File[$hermes_home_dir],
-  }
-
-
-  file { $hermes_config_path:
-    ensure  => file,
-    mode    => '0600',
-    owner   => $nest::user,
-    group   => $nest::user,
-    require => File[$hermes_home_dir],
-  }
-
-  if $gitlab_token {
-    file_line { 'hermes-env-gitlab-url':
-      path    => $hermes_env_path,
-      line    => "GITLAB_URL=${gitlab_url}",
-      match   => '^GITLAB_URL=',
-      require => File[$hermes_env_path],
-    }
-
-    file_line { 'hermes-env-gitlab-token':
-      path    => $hermes_env_path,
-      line    => Sensitive("GITLAB_TOKEN=${gitlab_token.unwrap}"),
-      match   => '^GITLAB_TOKEN=',
-      require => File[$hermes_env_path],
-    }
-  } else {
-    file_line { 'hermes-env-gitlab-url':
-      ensure            => absent,
-      path              => $hermes_env_path,
-      match             => '^GITLAB_URL=',
-      match_for_absence => true,
-      multiple          => true,
-      require           => File[$hermes_env_path],
-    }
-
-    file_line { 'hermes-env-gitlab-token':
-      ensure            => absent,
-      path              => $hermes_env_path,
-      match             => '^GITLAB_TOKEN=',
-      match_for_absence => true,
-      multiple          => true,
-      require           => File[$hermes_env_path],
-    }
-  }
-
-  if $tavily_api_key {
-    file_line { 'hermes-env-tavily-api-key':
-      path    => $hermes_env_path,
-      line    => Sensitive("TAVILY_API_KEY=${tavily_api_key.unwrap}"),
-      match   => '^TAVILY_API_KEY=',
-      require => File[$hermes_env_path],
-    }
-  } else {
-    file_line { 'hermes-env-tavily-api-key':
-      ensure            => absent,
-      path              => $hermes_env_path,
-      match             => '^TAVILY_API_KEY=',
-      match_for_absence => true,
-      multiple          => true,
-      require           => File[$hermes_env_path],
-    }
-  }
-
-  if $telegram_bot_token {
-    file_line { 'hermes-env-telegram-bot-token':
-      path    => $hermes_env_path,
-      line    => Sensitive("TELEGRAM_BOT_TOKEN=${telegram_bot_token.unwrap}"),
-      match   => '^TELEGRAM_BOT_TOKEN=',
-      require => File[$hermes_env_path],
-    }
-
-    file_line { 'hermes-env-telegram-allowed-users':
-      path    => $hermes_env_path,
-      line    => "TELEGRAM_ALLOWED_USERS=${telegram_allowed}",
-      match   => '^TELEGRAM_ALLOWED_USERS=',
-      require => File[$hermes_env_path],
-    }
-
-    file_line { 'hermes-env-telegram-home-channel':
-      path    => $hermes_env_path,
-      line    => "TELEGRAM_HOME_CHANNEL=${telegram_home}",
-      match   => '^TELEGRAM_HOME_CHANNEL=',
-      require => File[$hermes_env_path],
-    }
-  } else {
-    file_line { 'hermes-env-telegram-bot-token':
-      ensure            => absent,
-      path              => $hermes_env_path,
-      match             => '^TELEGRAM_BOT_TOKEN=',
-      match_for_absence => true,
-      multiple          => true,
-      require           => File[$hermes_env_path],
-    }
-
-    file_line { 'hermes-env-telegram-allowed-users':
-      ensure            => absent,
-      path              => $hermes_env_path,
-      match             => '^TELEGRAM_ALLOWED_USERS=',
-      match_for_absence => true,
-      multiple          => true,
-      require           => File[$hermes_env_path],
-    }
-
-    file_line { 'hermes-env-telegram-home-channel':
-      ensure            => absent,
-      path              => $hermes_env_path,
-      match             => '^TELEGRAM_HOME_CHANNEL=',
-      match_for_absence => true,
-      multiple          => true,
-      require           => File[$hermes_env_path],
-    }
-  }
-
-  file { "${install_dir}/bin":
+  file { $profiles_dir:
     ensure  => directory,
-    mode    => '0755',
-    owner   => 'root',
-    group   => 'root',
-    require => File[$install_dir],
-  }
-
-  file { $hermes_config_manager_path:
-    ensure  => file,
-    mode    => '0755',
-    owner   => 'root',
-    group   => 'root',
-    source  => 'puppet:///modules/nest/hermes/manage-config.py',
-    require => File["${install_dir}/bin"],
-  }
-
-  file { $hermes_managed_config_path:
-    ensure  => file,
-    mode    => '0600',
+    mode    => '0700',
     owner   => $nest::user,
     group   => $nest::user,
-    content => @("YAML"),
-      ---
-      model:
-        provider: "${model_provider}"
-        default: "${model_name}"
-        base_url: "${model_base_url}"
-      web:
-        backend: tavily
-        search_backend: tavily
-      auxiliary:
-        compression:
-          provider: "${auxiliary_provider}"
-          model: "${auxiliary_mini_model}"
-          timeout: ${compression_timeout}
-        web_extract:
-          provider: "${auxiliary_provider}"
-          model: "${auxiliary_mini_model}"
-          timeout: ${web_extract_timeout}
-      platform_toolsets:
-        telegram:
-          - browser
-          - clarify
-          - code_execution
-          - computer_use
-          - cronjob
-          - delegation
-          - file
-          - image_gen
-          - memory
-          - messaging
-          - session_search
-          - skills
-          - terminal
-          - todo
-          - tts
-          - vision
-          - web
-      display:
-        tool_progress: all
-        tool_progress_command: true
-        platforms:
-          telegram:
-            tool_progress: all
-            tool_preview_length: 500
-      memory:
-        provider: honcho
-      dashboard:
-        public_url: "${dashboard_public_url}"
-        oauth:
-          client_id: "${dashboard_oauth_client_id_value}"
-          portal_url: "${dashboard_oauth_portal_url_value}"
-      | YAML
     require => File[$hermes_home_dir],
   }
 
-  exec { 'configure_hermes_managed_config':
-    command     => "${venv_python} ${hermes_config_manager_path} apply ${hermes_config_path} ${hermes_managed_config_path}",
-    unless      => "${venv_python} ${hermes_config_manager_path} check ${hermes_config_path} ${hermes_managed_config_path}",
-    user        => $nest::user,
-    environment => ["HOME=/home/${nest::user}"],
-    require     => [
-      Exec['install_hermes_agent'],
-      Exec['install_hermes_honcho_deps'],
-      File[$hermes_config_path],
-      File[$hermes_config_manager_path],
-      File[$hermes_managed_config_path],
-      File[$hermes_honcho_config_path],
-    ],
-  }
+  $instances.each |String[1] $instance_name, Hash $instance_config| {
+    $secrets = $instance_secrets[$instance_name] ? {
+      undef   => {},
+      default => $instance_secrets[$instance_name],
+    }
 
-  file_line { 'hermes-env-honcho-api-key':
-    ensure            => absent,
-    path              => $hermes_env_path,
-    match             => '^HONCHO_API_KEY=',
-    match_for_absence => true,
-    multiple          => true,
-    require           => File[$hermes_env_path],
-  }
+    $config = $instance_config + $secrets
 
-  file { $hermes_honcho_config_path:
-    ensure  => file,
-    mode    => '0600',
-    owner   => $nest::user,
-    group   => $nest::user,
-    content => @("JSON"),
-      {
-        "dialecticCadence": 2,
-        "baseUrl": "https://honcho.eyrie",
-        "hosts": {
-          "hermes": {
-            "workspace": "hermes",
-            "peerName": "joy",
-            "aiPeer": "talon",
-            "enabled": true,
-            "pinPeerName": true,
-            "observationMode": "directional",
-            "writeFrequency": "async",
-            "recallMode": "hybrid",
-            "dialecticCadence": 2,
-            "dialecticReasoningLevel": "low",
-            "sessionStrategy": "per-session",
-            "saveMessages": true
-          }
-        }
-      }
-      | JSON
-    require => File[$hermes_home_dir],
+    $profile                 = pick($config['profile'], $instance_name)
+    $display_name            = pick($config['display_name'], $instance_name)
+    $instance_gitlab_enabled = pick($config['gitlab_enabled'], false)
+    $instance_gitlab_token   = $instance_gitlab_enabled ? {
+      true    => $config['gitlab_token'] ? {
+        undef   => $gitlab_token,
+        default => $config['gitlab_token'],
+      },
+      default => undef,
+    }
+    $instance_tavily_api_key    = $config['tavily_api_key'] ? {
+      undef   => $tavily_api_key,
+      default => $config['tavily_api_key'],
+    }
+    $instance_telegram_token    = $config['telegram_bot_token'] ? {
+      undef   => $telegram_bot_token,
+      default => $config['telegram_bot_token'],
+    }
+    $instance_telegram_enabled  = pick($config['telegram_enabled'], true)
+    $instance_telegram_allowed  = pick($config['telegram_allowed'], $telegram_allowed)
+    $instance_telegram_home     = pick($config['telegram_home'], $telegram_home)
+    $instance_model_provider    = pick($config['model_provider'], $model_provider)
+    $instance_model_name        = pick($config['model_name'], $model_name)
+    $instance_model_base_url    = pick($config['model_base_url'], $model_base_url)
+    $instance_aux_provider      = pick($config['auxiliary_provider'], $auxiliary_provider)
+    $instance_aux_model         = pick($config['auxiliary_mini_model'], $auxiliary_mini_model)
+    $instance_compress_timeout  = pick($config['compression_timeout'], $compression_timeout)
+    $instance_extract_timeout   = pick($config['web_extract_timeout'], $web_extract_timeout)
+    $instance_dashboard_enabled = pick($config['dashboard_enabled'], false)
+    $instance_dashboard_bind    = pick($config['dashboard_bind_host'], $dashboard_bind_host)
+    $instance_dashboard_port    = pick($config['dashboard_port'], 9119)
+    $instance_dashboard_url     = pick($config['dashboard_public_url'], "https://${instance_name}.eyrie")
+    $instance_oauth_client_id   = $config['dashboard_oauth_client_id'] ? {
+      undef   => $dashboard_oauth_client_id,
+      default => $config['dashboard_oauth_client_id'],
+    }
+    $instance_oauth_portal_url  = $config['dashboard_oauth_portal_url'] ? {
+      undef   => $dashboard_oauth_portal_url,
+      default => $config['dashboard_oauth_portal_url'],
+    }
+    $instance_gateway_enabled   = pick($config['gateway_enabled'], true)
+    $instance_honcho_base_url   = pick($config['honcho_base_url'], 'https://honcho.eyrie')
+    $instance_honcho_workspace  = pick($config['honcho_workspace'], 'hermes')
+    $instance_honcho_user_peer  = pick($config['honcho_user_peer'], 'joy')
+    $instance_honcho_ai_peer    = pick($config['honcho_ai_peer'], $instance_name)
+    $instance_soul_content      = $config['soul_content']
+    $instance_clone_default     = pick($config['clone_from_default'], false)
+
+    nest::lib::hermes { $instance_name:
+      profile                    => $profile,
+      display_name               => $display_name,
+      install_dir                => $nest::app::hermes::install_dir,
+      user                       => $nest::user,
+      gitlab_url                 => $gitlab_url,
+      gitlab_token               => $instance_gitlab_token,
+      gitlab_enabled             => $instance_gitlab_enabled,
+      tavily_api_key             => $instance_tavily_api_key,
+      telegram_bot_token         => $instance_telegram_token,
+      telegram_enabled           => $instance_telegram_enabled,
+      telegram_allowed           => $instance_telegram_allowed,
+      telegram_home              => $instance_telegram_home,
+      model_provider             => $instance_model_provider,
+      model_name                 => $instance_model_name,
+      model_base_url             => $instance_model_base_url,
+      auxiliary_provider         => $instance_aux_provider,
+      auxiliary_mini_model       => $instance_aux_model,
+      compression_timeout        => $instance_compress_timeout,
+      web_extract_timeout        => $instance_extract_timeout,
+      dashboard_enabled          => $instance_dashboard_enabled,
+      dashboard_bind_host        => $instance_dashboard_bind,
+      dashboard_port             => $instance_dashboard_port,
+      dashboard_public_url       => $instance_dashboard_url,
+      dashboard_oauth_client_id  => $instance_oauth_client_id,
+      dashboard_oauth_portal_url => $instance_oauth_portal_url,
+      gateway_enabled            => $instance_gateway_enabled,
+      honcho_base_url            => $instance_honcho_base_url,
+      honcho_workspace           => $instance_honcho_workspace,
+      honcho_user_peer           => $instance_honcho_user_peer,
+      honcho_ai_peer             => $instance_honcho_ai_peer,
+      soul_content               => $instance_soul_content,
+      clone_from_default         => $instance_clone_default,
+    }
   }
 }

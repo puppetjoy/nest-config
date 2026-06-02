@@ -1,0 +1,24 @@
+---
+description: 'Deploy Tars dashboard edge'
+
+parameters:
+  deploy:
+    description: 'Run or skip the deployment'
+    type: Boolean
+    default: true
+
+  render_to:
+    description: 'Just render the template'
+    type: String
+    default: ''
+
+steps:
+  - description: 'Deploy Tars dashboard edge'
+    plan: 'nest::kubernetes::deploy'
+    parameters:
+      service: 'tars'
+      app: 'hermes-dashboard'
+      namespace: 'ai'
+      init: false
+      deploy: $deploy
+      render_to: $render_to
