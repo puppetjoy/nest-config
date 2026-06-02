@@ -141,6 +141,19 @@ define nest::lib::hermes (
     require => File[$profile_dir],
   }
 
+  file { "${profile_dir}/systemd.env":
+    ensure  => file,
+    mode    => '0600',
+    owner   => $user,
+    group   => $user,
+    content => @("ENV"),
+      HERMES_DASHBOARD_BIND_HOST=${dashboard_bind_host}
+      HERMES_DASHBOARD_PORT=${dashboard_port}
+      HERMES_DASHBOARD_PUBLIC_URL=${dashboard_public_url}
+      | ENV
+    require => File[$profile_dir],
+  }
+
   file { $hermes_managed_config_path:
     ensure  => file,
     mode    => '0600',
