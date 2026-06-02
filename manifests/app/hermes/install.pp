@@ -77,6 +77,13 @@ class nest::app::hermes::install {
     require     => Exec['install_hermes_agent'],
   }
 
+  exec { 'install_hermes_web_deps':
+    command     => "${venv_pip} install '${source_dir}[web]'",
+    unless      => "${venv_python} -c \"import fastapi, uvicorn\"",
+    environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
+    require     => Exec['install_hermes_agent'],
+  }
+
   nest::lib::package { 'media-video/ffmpeg':
     ensure => present,
   }
@@ -104,6 +111,15 @@ class nest::app::hermes::install {
       unless      => "${nodejs::npm_path} list --global agent-browser --depth=0 >/dev/null 2>&1 && ${nodejs::npm_path} outdated --global agent-browser --depth=0 >/dev/null 2>&1",
       environment => ['HOME=/root'],
       require     => Class['nodejs'],
+    }
+
+    exec { 'build_hermes_dashboard_web':
+      command => "cd ${source_dir}/web && ${nodejs::npm_path} install --silent && ${nodejs::npm_path} run build",
+      creates => "${source_dir}/hermes_cli/web_dist/index.html",
+      require => [
+        Class['nodejs'],
+        Vcsrepo[$source_dir],
+      ],
     }
   }
 }
