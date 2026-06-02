@@ -205,6 +205,14 @@ class nest::app::hermes::service {
     ensure => absent,
   }
 
+  file { "${systemd_user_dir}/default.target.wants/hermes-gateway.service":
+    ensure => absent,
+  }
+
+  file { "${systemd_user_dir}/default.target.wants/hermes-dashboard.service":
+    ensure => absent,
+  }
+
   file { "${systemd_user_dir}/hermes-gateway.service.d":
     ensure  => absent,
     recurse => true,

@@ -43,7 +43,6 @@ nest::app::hermes::instances:
   talon:
     profile: 'talon'
     display_name: 'Talon'
-    clone_from_default: true
     gitlab_enabled: true
     honcho_workspace: 'hermes'
     honcho_user_peer: 'joy'
