@@ -5,7 +5,6 @@ class nest::app::hermes (
   String[1]                      $gitlab_url     = 'https://gitlab.joyfullee.me',
   Optional[Sensitive[String[1]]] $gitlab_token   = undef,
   Optional[Sensitive[String[1]]] $tavily_api_key = undef,
-  Optional[Sensitive[String[1]]] $honcho_api_key = undef,
 ) {
   case $facts['os']['family'] {
     'Gentoo': {
@@ -84,13 +83,11 @@ class nest::app::hermes (
         require     => Exec['install_hermes_agent'],
       }
 
-      if $honcho_api_key {
-        exec { 'install_hermes_honcho_deps':
-          command     => "${venv_pip} install 'honcho-ai>=2.0.1'",
-          unless      => "${venv_python} -c \"import honcho\"",
-          environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
-          require     => Exec['install_hermes_agent'],
-        }
+      exec { 'install_hermes_honcho_deps':
+        command     => "${venv_pip} install 'honcho-ai>=2.0.1'",
+        unless      => "${venv_python} -c \"import honcho\"",
+        environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
+        require     => Exec['install_hermes_agent'],
       }
 
       nest::lib::package { 'media-video/ffmpeg':
@@ -229,64 +226,55 @@ class nest::app::hermes (
         require     => Exec['install_hermes_agent'],
       }
 
-      if $honcho_api_key {
-        file_line { 'hermes-env-honcho-api-key':
-          path    => $hermes_env_path,
-          line    => Sensitive("HONCHO_API_KEY=${honcho_api_key.unwrap}"),
-          match   => '^HONCHO_API_KEY=',
-          require => File[$hermes_env_path],
-        }
+      file_line { 'hermes-env-honcho-api-key':
+        ensure            => absent,
+        path              => $hermes_env_path,
+        match             => '^HONCHO_API_KEY=',
+        match_for_absence => true,
+        multiple          => true,
+        require           => File[$hermes_env_path],
+      }
 
-        file { $hermes_honcho_config_path:
-          ensure  => file,
-          mode    => '0600',
-          owner   => $nest::user,
-          group   => $nest::user,
-          content => @("JSON"),
-            {
-              "dialecticCadence": 2,
-              "baseUrl": "https://honcho.eyrie",
-              "hosts": {
-                "hermes": {
-                  "workspace": "hermes",
-                  "peerName": "joy",
-                  "aiPeer": "talon",
-                  "enabled": true,
-                  "pinPeerName": true,
-                  "observationMode": "directional",
-                  "writeFrequency": "async",
-                  "recallMode": "hybrid",
-                  "dialecticCadence": 2,
-                  "dialecticReasoningLevel": "low",
-                  "sessionStrategy": "per-session",
-                  "saveMessages": true
-                }
+      file { $hermes_honcho_config_path:
+        ensure  => file,
+        mode    => '0600',
+        owner   => $nest::user,
+        group   => $nest::user,
+        content => @("JSON"),
+          {
+            "dialecticCadence": 2,
+            "baseUrl": "https://honcho.eyrie",
+            "hosts": {
+              "hermes": {
+                "workspace": "hermes",
+                "peerName": "joy",
+                "aiPeer": "talon",
+                "enabled": true,
+                "pinPeerName": true,
+                "observationMode": "directional",
+                "writeFrequency": "async",
+                "recallMode": "hybrid",
+                "dialecticCadence": 2,
+                "dialecticReasoningLevel": "low",
+                "sessionStrategy": "per-session",
+                "saveMessages": true
               }
             }
-            | JSON
-          require => File[$hermes_home_dir],
-        }
+          }
+          | JSON
+        require => File[$hermes_home_dir],
+      }
 
-        exec { 'configure_hermes_honcho_memory_provider':
-          command     => "${venv_dir}/bin/hermes config set memory.provider honcho",
-          unless      => "${venv_python} -c \"import pathlib, sys, yaml; p = pathlib.Path('${hermes_config_path}'); cfg = yaml.safe_load(p.read_text()) if p.exists() else {}; memory = (cfg or {}).get('memory', {}); sys.exit(0 if memory.get('provider') == 'honcho' else 1)\"",
-          user        => $nest::user,
-          environment => ["HOME=/home/${nest::user}"],
-          require     => [
-            Exec['install_hermes_agent'],
-            Exec['install_hermes_honcho_deps'],
-            File[$hermes_honcho_config_path],
-          ],
-        }
-      } else {
-        file_line { 'hermes-env-honcho-api-key':
-          ensure            => absent,
-          path              => $hermes_env_path,
-          match             => '^HONCHO_API_KEY=',
-          match_for_absence => true,
-          multiple          => true,
-          require           => File[$hermes_env_path],
-        }
+      exec { 'configure_hermes_honcho_memory_provider':
+        command     => "${venv_dir}/bin/hermes config set memory.provider honcho",
+        unless      => "${venv_python} -c \"import pathlib, sys, yaml; p = pathlib.Path('${hermes_config_path}'); cfg = yaml.safe_load(p.read_text()) if p.exists() else {}; memory = (cfg or {}).get('memory', {}); sys.exit(0 if memory.get('provider') == 'honcho' else 1)\"",
+        user        => $nest::user,
+        environment => ["HOME=/home/${nest::user}"],
+        require     => [
+          Exec['install_hermes_agent'],
+          Exec['install_hermes_honcho_deps'],
+          File[$hermes_honcho_config_path],
+        ],
       }
 
       file { $systemd_user_dir:
