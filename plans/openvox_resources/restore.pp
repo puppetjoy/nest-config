@@ -44,6 +44,8 @@ plan nest::openvox_resources::restore (
                 mountPath: /restore/etc/puppetlabs/puppet
               - name: puppetserver-ca
                 mountPath: /restore/etc/puppetlabs/puppetserver/ca
+              - name: puppetdb-storage
+                mountPath: /restore/opt/puppetlabs/server/data/puppetdb
         volumes:
           - name: nest
             hostPath:
@@ -55,12 +57,32 @@ plan nest::openvox_resources::restore (
           - name: puppetserver-ca
             persistentVolumeClaim:
               claimName: ${service}-puppetserver-ca-claim
+          - name: puppetdb-storage
+            persistentVolumeClaim:
+              claimName: ${service}-puppetserver-puppetdb-claim
       | YAML
 
     run_command("printf %s ${restore_pod_yaml.shellquote} | kubectl apply -f -", 'localhost', 'Create OpenVox restore pod')
     run_command("kubectl wait -n ${kubernetes_namespace.shellquote} --for=condition=Ready pod/${restore_pod.shellquote} --timeout=240s", 'localhost', 'Wait for OpenVox restore pod')
-    run_command("kubectl exec -n ${kubernetes_namespace.shellquote} ${restore_pod.shellquote} -- bash -lc 'rm -rf /restore/etc/puppetlabs/puppet/ssl /restore/etc/puppetlabs/puppetserver/ca/* && mkdir -p /restore/etc/puppetlabs/puppet /restore/etc/puppetlabs/puppetserver/ca && zstd -dc ${backup_dir.shellquote}/puppet-ssl.tar.zst | tar -C /restore/etc/puppetlabs -xf -'", 'localhost', 'Restore Puppet SSL state')
+    run_command("kubectl exec -n ${kubernetes_namespace.shellquote} ${restore_pod.shellquote} -- bash -lc 'rm -rf /restore/etc/puppetlabs/puppet/ssl /restore/etc/puppetlabs/puppetserver/ca/* /restore/opt/puppetlabs/server/data/puppetdb/certs && mkdir -p /restore/etc/puppetlabs/puppet /restore/etc/puppetlabs/puppetserver/ca /restore/opt/puppetlabs/server/data/puppetdb && zstd -dc ${backup_dir.shellquote}/puppet-ssl.tar.zst | tar -C /restore/etc/puppetlabs -xf -'", 'localhost', 'Restore Puppet SSL state')
     run_command("kubectl delete pod -n ${kubernetes_namespace.shellquote} ${restore_pod.shellquote} --wait=true", 'localhost', 'Remove OpenVox restore pod')
+
+    run_command("kubectl scale -n ${kubernetes_namespace.shellquote} deploy/${puppetserver.shellquote} --replicas=1", 'localhost', 'Scale restored Puppetserver up')
+    run_command("kubectl rollout status -n ${kubernetes_namespace.shellquote} deploy/${puppetserver.shellquote} --timeout=300s", 'localhost', 'Wait for restored Puppetserver')
+
+    $puppetserver_pod = run_command([
+      'kubectl', 'get', 'pod', '-n', $kubernetes_namespace,
+      '-l', "app.kubernetes.io/component=puppetserver,app.kubernetes.io/instance=${service}",
+      '--sort-by=.metadata.creationTimestamp',
+      '-o', 'jsonpath={.items[-1].metadata.name}',
+    ].shellquote, 'localhost', 'Find restored Puppetserver pod').first.value['stdout'].chomp
+
+    $puppetserver_container = run_command([
+      'kubectl', 'get', 'deploy', '-n', $kubernetes_namespace, $puppetserver,
+      '-o', 'jsonpath={.spec.template.spec.containers[0].name}',
+    ].shellquote, 'localhost', 'Find restored Puppetserver container').first.value['stdout'].chomp
+
+    run_command("kubectl exec -n ${kubernetes_namespace.shellquote} ${puppetserver_pod.shellquote} -c ${puppetserver_container.shellquote} -- puppetserver ca clean --certname openvoxdb", 'localhost', 'Clean stale PuppetDB certificate from restored CA')
 
     $primary_pod = run_command([
       'kubectl', 'get', 'pod', '-n', $kubernetes_namespace,
