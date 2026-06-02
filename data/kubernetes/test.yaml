@@ -1,7 +1,7 @@
 ---
 node_role: workstation
 registry: 'registry-test.eyrie'
-restore_registry: 'registry.eyrie'
+config_registry: 'registry.eyrie'
 restore_hour: '1-23/3'
 restore_job_ttl: 21600 # 6h; keep last two restore jobs in history
 restore_suspended: false
@@ -43,7 +43,7 @@ resources:
               affinity: *affinity
               containers:
                 - name: nest
-                  image: "%{lookup('restore_registry')}/nest/config/main"
+                  image: "%{lookup('config_registry')}/nest/config/main"
                   imagePullPolicy: Always
                   command:
                     - bolt
