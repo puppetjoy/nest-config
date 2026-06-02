@@ -71,7 +71,7 @@ steps:
       init: $init
 
   - description: 'Deploy Puppet'
-    plan: nest::eyrie::deploy_openvox
+    plan: nest::eyrie::deploy_puppet
     parameters:
       deploy: $deploy and $puppet
       init: $init

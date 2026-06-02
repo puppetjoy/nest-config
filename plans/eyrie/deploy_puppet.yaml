@@ -1,12 +1,7 @@
 ---
-description: 'Deploy an OpenVox-backed Puppet service'
+description: 'Deploy the Puppet service'
 
 parameters:
-  service:
-    description: 'Puppet service to deploy'
-    type: String
-    default: 'puppet'
-
   namespace:
     description: 'Kubernetes namespace'
     type: String
@@ -28,16 +23,11 @@ parameters:
     default: ''
 
 steps:
-  - description: 'Deploy OpenVox'
-    plan: nest::kubernetes::deploy
+  - description: 'Deploy Puppet'
+    plan: nest::eyrie::openvox::deploy
     parameters:
       namespace: $namespace
-      service: $service
-      app: 'openvox'
-      chart: 'openvox/puppetserver'
-      repo_url: 'https://openvoxproject.github.io/openvox-helm-chart'
-      version: '10.1.1'
+      service: 'puppet'
       deploy: $deploy
       init: $init
-      wait: $init
       render_to: $render_to
