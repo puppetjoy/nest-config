@@ -6,4 +6,5 @@ puppet_load_balancer_ip: '172.21.1.0'
 service_name: "%{nest::kubernetes::main_service}"
 puppet_server_certname: puppet-test.eyrie
 puppet_server_alt_names: puppet-test.eyrie
+puppetboard_fqdn: puppet-test.eyrie
 puppetdb_fqdn: puppetdb-test.eyrie

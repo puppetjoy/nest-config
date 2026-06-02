@@ -134,7 +134,7 @@ resources:
         name: "%{lookup('cert_issuer')}"
         kind: "%{lookup('cert_issuer_kind')}"
       dnsNames:
-        - "%{nest::kubernetes::fqdn}"
+        - "%{lookup('puppetboard_fqdn')}"
 
   puppetboard-deployment:
     apiVersion: apps/v1
@@ -283,7 +283,7 @@ resources:
     spec:
       ingressClassName: "%{lookup('ingress_class')}"
       rules:
-        - host: "%{nest::kubernetes::fqdn}"
+        - host: "%{lookup('puppetboard_fqdn')}"
           http:
             paths:
               - path: /
@@ -296,7 +296,7 @@ resources:
       tls:
         - secretName: "%{nest::kubernetes::service}-puppetboard-certs"
           hosts:
-            - "%{nest::kubernetes::fqdn}"
+            - "%{lookup('puppetboard_fqdn')}"
 
   puppetdb-certs:
     apiVersion: cert-manager.io/v1

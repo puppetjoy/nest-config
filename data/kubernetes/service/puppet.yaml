@@ -11,5 +11,6 @@ node_role: compute
 storage_class: owl-crypt
 puppet_server_certname: puppet.eyrie
 puppet_server_alt_names: puppet.eyrie
+puppetboard_fqdn: puppet.eyrie
 puppetboard_certname: puppetboard
 puppetdb_fqdn: puppetdb.eyrie
