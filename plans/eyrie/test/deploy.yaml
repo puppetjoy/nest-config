@@ -54,7 +54,6 @@ steps:
     plan: nest::eyrie::deploy_openvox
     parameters:
       namespace: 'test'
-      resources: true
       deploy: $apps
       init: $init
 
