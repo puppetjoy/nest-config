@@ -23,12 +23,13 @@ plan nest::eyrie::ai::honcho::backup (
 
   run_command("kubectl exec -n ${namespace.shellquote} ${primary_pod.shellquote} -c postgres -- pg_dump -U postgres -d ${database.shellquote} --format=custom > ${tmp_dir.shellquote}/honcho.dump", 'localhost', 'Dump Honcho database')
 
+  $created_at = run_command('date --iso-8601=seconds', 'localhost', 'Timestamp backup').first.value['stdout'].chomp
   $metadata = @("JSON"/L)
     {
       "namespace": "${namespace}",
       "service": "${service}",
       "cnpg_primary": "${primary_pod}",
-      "created_at": "$(date --iso-8601=seconds)"
+      "created_at": "${created_at}"
     }
     | JSON
 
