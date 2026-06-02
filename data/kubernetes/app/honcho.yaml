@@ -53,6 +53,65 @@ redis_storage_size: 1Gi
 resources:
   registry_auths: {}
 
+  init:
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: "%{nest::kubernetes::service}-init"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      backoffLimit: 1
+      ttlSecondsAfterFinished: 21600
+      template:
+        spec:
+          restartPolicy: Never
+          imagePullSecrets:
+            - name: "%{nest::kubernetes::service}-registry-auths"
+          containers:
+            - name: nest
+              image: "%{lookup('config_registry')}/nest/config/main"
+              imagePullPolicy: Always
+              command:
+                - bolt
+                - plan
+                - run
+                - "%{lookup('plan_base')}::init"
+                - "namespace=%{nest::kubernetes::namespace}"
+                - "service=%{nest::kubernetes::service}"
+                - "service_name=%{lookup('service_name')}"
+              env:
+                - name: KUBECONFIG
+                  value: '/nest/home/kubeconfigs/eyrie.conf'
+              volumeMounts:
+                - name: nest
+                  mountPath: '/nest'
+                - name: bolt-config
+                  mountPath: '/etc/puppetlabs/bolt'
+                  readOnly: true
+                - name: eyaml-config
+                  mountPath: '/etc/eyaml'
+                  readOnly: true
+                - name: eyrie-ssh-key
+                  mountPath: '/root/.ssh/id_ed25519'
+                  readOnly: true
+          volumes:
+            - name: nest
+              hostPath:
+                path: '/nest'
+                type: Directory
+            - name: bolt-config
+              hostPath:
+                path: '/etc/puppetlabs/bolt'
+                type: Directory
+            - name: eyaml-config
+              hostPath:
+                path: '/etc/eyaml'
+                type: Directory
+            - name: eyrie-ssh-key
+              hostPath:
+                path: '/root/.ssh/id_ed25519_eyrie'
+                type: File
+
   certs:
     apiVersion: cert-manager.io/v1
     kind: Certificate
