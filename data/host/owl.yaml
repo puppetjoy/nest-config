@@ -71,7 +71,7 @@ nest::app::hermes::instances:
     honcho_ai_peer: 'tars'
     gateway_enabled: true
     dashboard_enabled: true
-    dashboard_port: 9120
+    dashboard_port: 9121
     dashboard_public_url: 'https://tars.eyrie'
     soul_content: |
       # Tars
