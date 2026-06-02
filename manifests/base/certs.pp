@@ -23,6 +23,14 @@ class nest::base::certs {
         command     => '/usr/sbin/update-ca-certificates',
         refreshonly => true,
       }
+
+      # Load CA certs from the system store for NSS consumers such as
+      # Firefox, Chromium, and Hermes' Playwright/agent-browser sessions.
+      # See: https://superuser.com/a/1836165
+      file { '/usr/lib64/libnssckbi.so':
+        ensure => link,
+        target => '/usr/lib64/pkcs11/p11-kit-trust.so',
+      }
     }
 
     'Darwin': {
