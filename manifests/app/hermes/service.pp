@@ -114,6 +114,15 @@ class nest::app::hermes::service {
     ],
   }
 
+  file { "${install_dir}/bin/agent-request-watch":
+    ensure  => file,
+    source  => 'puppet:///modules/nest/app/hermes/agent_request_watch.py',
+    mode    => '0755',
+    owner   => 'root',
+    group   => 'root',
+    require => File["${install_dir}/bin"],
+  }
+
   file { "${systemd_user_dir}/hermes-gateway@.service":
     ensure  => file,
     mode    => '0644',
@@ -197,6 +206,56 @@ class nest::app::hermes::service {
     ],
   }
 
+  file { "${systemd_user_dir}/hermes-agent-request-watch.service":
+    ensure  => file,
+    mode    => '0644',
+    owner   => $nest::user,
+    group   => $nest::user,
+    content => @("UNIT"),
+      [Unit]
+      Description=Watch Hermes agent requests for Talon review
+      After=network-online.target ${hermes_environment_unit}
+      Wants=network-online.target
+      Requires=${hermes_environment_unit}
+
+      [Service]
+      Type=oneshot
+      EnvironmentFile=${hermes_home_dir}/profiles/talon/systemd.env
+      ExecStart=${install_dir}/bin/agent-request-watch
+      WorkingDirectory=/home/${nest::user}
+      Environment="PATH=${venv_dir}/bin:/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      Environment="VIRTUAL_ENV=${venv_dir}"
+      Environment="PYTHONPATH=${source_dir}"
+      Environment="HERMES_HOME=${hermes_home_dir}"
+      Environment="SSL_CERT_FILE="
+      Environment="SSL_CERT_DIR=/etc/ssl/certs"
+      StandardOutput=journal
+      StandardError=journal
+      | UNIT
+    require => File["${install_dir}/bin/agent-request-watch"],
+  }
+
+  file { "${systemd_user_dir}/hermes-agent-request-watch.timer":
+    ensure  => file,
+    mode    => '0644',
+    owner   => $nest::user,
+    group   => $nest::user,
+    content => @("UNIT"),
+      [Unit]
+      Description=Poll Hermes agent requests for Talon review
+
+      [Timer]
+      OnBootSec=1min
+      OnUnitActiveSec=1min
+      AccuracySec=15s
+      Unit=hermes-agent-request-watch.service
+
+      [Install]
+      WantedBy=timers.target
+      | UNIT
+    require => File["${systemd_user_dir}/hermes-agent-request-watch.service"],
+  }
+
   file { "${systemd_user_dir}/hermes-gateway.service":
     ensure => absent,
   }
@@ -237,6 +296,14 @@ class nest::app::hermes::service {
   ~>
   Exec['hermes-systemd-user-daemon-reload']
 
+  File["${systemd_user_dir}/hermes-agent-request-watch.service"]
+  ~>
+  Exec['hermes-systemd-user-daemon-reload']
+
+  File["${systemd_user_dir}/hermes-agent-request-watch.timer"]
+  ~>
+  Exec['hermes-systemd-user-daemon-reload']
+
   File["${systemd_user_dir}/hermes-gateway.service"]
   ~>
   Exec['hermes-systemd-user-daemon-reload']
@@ -254,5 +321,15 @@ class nest::app::hermes::service {
   exec { 'enable_hermes_gateway_linger':
     command => "/usr/bin/loginctl enable-linger ${nest::user}",
     unless  => "/usr/bin/loginctl show-user ${nest::user} -p Linger --value | /bin/grep -qx yes",
+  }
+
+  exec { 'enable_hermes_agent_request_watch_timer':
+    command => '/bin/sh -c \'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user enable --now hermes-agent-request-watch.timer\'',
+    unless  => '/bin/sh -c \'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-enabled --quiet hermes-agent-request-watch.timer && XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-active --quiet hermes-agent-request-watch.timer\'',
+    user    => $nest::user,
+    require => [
+      Exec['enable_hermes_gateway_linger'],
+      File["${systemd_user_dir}/hermes-agent-request-watch.timer"],
+    ],
   }
 }
