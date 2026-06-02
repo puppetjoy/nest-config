@@ -224,7 +224,7 @@ define nest::lib::hermes (
         "dialecticCadence": 2,
         "baseUrl": "${honcho_base_url}",
         "hosts": {
-          "hermes": {
+          "hermes.${profile}": {
             "workspace": "${honcho_workspace}",
             "peerName": "${honcho_user_peer}",
             "aiPeer": "${honcho_ai_peer}",
