@@ -62,3 +62,11 @@ steps:
       init: $init
       wait: $init
       render_to: $render_to
+
+  - description: 'Restore initial OpenVox resources'
+    plan: nest::eyrie::openvox_resources::restore
+    parameters:
+      namespace: $namespace
+      service: $service
+      service_name: $service
+      restore: $deploy and $resources and $openvox and $init and $render_to == ''
