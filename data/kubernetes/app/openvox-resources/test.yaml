@@ -11,6 +11,7 @@ resources:
       namespace: "%{nest::kubernetes::namespace}"
     spec:
       concurrencyPolicy: Forbid
+      suspend: true
       schedule: "%{nest::kubernetes::cron_job_offset} %{lookup('restore_hour')} * * *"
       timeZone: 'America/New_York'
       jobTemplate:
