@@ -245,6 +245,7 @@ class nest::app::hermes (
           content => @("JSON"),
             {
               "dialecticCadence": 2,
+              "baseUrl": "https://honcho.eyrie",
               "hosts": {
                 "hermes": {
                   "workspace": "hermes",
@@ -332,6 +333,14 @@ class nest::app::hermes (
         group   => $nest::user,
         content => "[Service]\nEnvironment=SSH_AUTH_SOCK=%t/ssh-agent.socket\n",
       }
+      ->
+      file { "${hermes_gateway_dropin_dir}/20-system-cert-trust.conf":
+        ensure  => file,
+        mode    => '0644',
+        owner   => $nest::user,
+        group   => $nest::user,
+        content => "[Service]\nEnvironment=SSL_CERT_FILE=\nEnvironment=SSL_CERT_DIR=/etc/ssl/certs\n",
+      }
 
       File["${systemd_user_dir}/${hermes_environment_unit}"]
       ~>
@@ -342,6 +351,10 @@ class nest::app::hermes (
       Exec['hermes-gateway-systemd-user-daemon-reload']
 
       File["${hermes_gateway_dropin_dir}/10-ssh-agent.conf"]
+      ~>
+      Exec['hermes-gateway-systemd-user-daemon-reload']
+
+      File["${hermes_gateway_dropin_dir}/20-system-cert-trust.conf"]
       ~>
       Exec['hermes-gateway-systemd-user-daemon-reload']
 
