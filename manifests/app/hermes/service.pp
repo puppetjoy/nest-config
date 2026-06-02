@@ -46,7 +46,7 @@ class nest::app::hermes::service {
     content => [
       '#!/bin/sh',
       'set -eu',
-      "exec ${venv_python} -m hermes_cli.main --profile " + '"$1"' + ' dashboard --host "${HERMES_DASHBOARD_BIND_HOST}" --port "${HERMES_DASHBOARD_PORT}" --no-open --skip-build --tui --insecure',
+      ["exec ${venv_python} -m hermes_cli.main --profile ", '"$1"', ' dashboard --host "${HERMES_DASHBOARD_BIND_HOST}" --port "${HERMES_DASHBOARD_PORT}" --no-open --skip-build --tui --insecure'].join(''),
       '',
     ].join("\n"),
     require => [
