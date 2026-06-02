@@ -78,6 +78,14 @@ nest::app::hermes::instances:
     dashboard_enabled: true
     dashboard_port: 9121
     dashboard_public_url: 'https://tars.eyrie'
+    telegram_toolsets:
+      - agent_requests
+      - clarify
+      - memory
+      - messaging
+      - session_search
+      - todo
+      - web
     soul_content: |
       # Tars
 

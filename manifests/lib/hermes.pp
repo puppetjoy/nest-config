@@ -30,6 +30,7 @@ define nest::lib::hermes (
   String[1]            $honcho_user_peer         = 'joy',
   String[1]            $honcho_ai_peer           = $title,
   Optional[String[1]]  $soul_content             = undef,
+  Any                  $telegram_toolsets        = undef,
   Boolean              $clone_from_default       = false,
 ) {
   $venv_dir                         = "${install_dir}/venv"
@@ -55,6 +56,30 @@ define nest::lib::hermes (
     undef   => "# ${display_name}\n\nYou are ${display_name}, one of Joy's Hermes Agent profiles.\n",
     default => $soul_content,
   }
+  $default_telegram_toolsets         = [
+    'agent_requests',
+    'browser',
+    'clarify',
+    'code_execution',
+    'computer_use',
+    'cronjob',
+    'delegation',
+    'file',
+    'image_gen',
+    'memory',
+    'messaging',
+    'session_search',
+    'skills',
+    'terminal',
+    'todo',
+    'tts',
+    'vision',
+    'web',
+  ]
+  $effective_telegram_toolsets       = pick($telegram_toolsets, $default_telegram_toolsets)
+  $telegram_toolsets_yaml            = $effective_telegram_toolsets.map |String[1] $toolset| {
+    "          - ${toolset}"
+  }.join("\n")
 
   file { $profile_dir:
     ensure  => directory,
@@ -188,23 +213,7 @@ define nest::lib::hermes (
           timeout: ${web_extract_timeout}
       platform_toolsets:
         telegram:
-          - browser
-          - clarify
-          - code_execution
-          - computer_use
-          - cronjob
-          - delegation
-          - file
-          - image_gen
-          - memory
-          - messaging
-          - session_search
-          - skills
-          - terminal
-          - todo
-          - tts
-          - vision
-          - web
+${telegram_toolsets_yaml}
       display:
         tool_progress: all
         tool_progress_command: true

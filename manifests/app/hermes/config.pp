@@ -21,6 +21,7 @@ class nest::app::hermes::config {
   $hermes_config_dir = "/home/${nest::user}/.config/hermes"
   $hermes_home_dir   = "/home/${nest::user}/.hermes"
   $profiles_dir      = "${hermes_home_dir}/profiles"
+  $requests_dir      = "${hermes_home_dir}/agent-requests"
 
   file { $hermes_config_dir:
     ensure => directory,
@@ -37,6 +38,14 @@ class nest::app::hermes::config {
   }
 
   file { $profiles_dir:
+    ensure  => directory,
+    mode    => '0700',
+    owner   => $nest::user,
+    group   => $nest::user,
+    require => File[$hermes_home_dir],
+  }
+
+  file { $requests_dir:
     ensure  => directory,
     mode    => '0700',
     owner   => $nest::user,
@@ -118,6 +127,7 @@ class nest::app::hermes::config {
     $instance_honcho_user_peer  = pick($config['honcho_user_peer'], 'joy')
     $instance_honcho_ai_peer    = pick($config['honcho_ai_peer'], $instance_name)
     $instance_soul_content      = $config['soul_content']
+    $instance_toolsets          = pick($config['telegram_toolsets'], undef)
     $instance_clone_default     = pick($config['clone_from_default'], false)
 
     nest::lib::hermes { $instance_name:
@@ -152,6 +162,7 @@ class nest::app::hermes::config {
       honcho_user_peer           => $instance_honcho_user_peer,
       honcho_ai_peer             => $instance_honcho_ai_peer,
       soul_content               => $instance_soul_content,
+      telegram_toolsets          => $instance_toolsets,
       clone_from_default         => $instance_clone_default,
     }
   }
