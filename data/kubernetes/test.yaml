@@ -4,6 +4,7 @@ registry: 'registry-test.eyrie'
 restore_registry: 'registry.eyrie'
 restore_hour: '1-23/3'
 restore_job_ttl: 21600 # 6h; keep last two restore jobs in history
+restore_suspended: false
 
 .affinity: &affinity
   nodeAffinity:
@@ -31,6 +32,7 @@ resources:
       namespace: "%{nest::kubernetes::namespace}"
     spec:
       concurrencyPolicy: Forbid
+      suspend: "%{alias('restore_suspended')}"
       schedule: "%{nest::kubernetes::cron_job_offset} %{lookup('restore_hour')} * * *"
       timeZone: 'America/New_York'
       jobTemplate:
@@ -50,7 +52,7 @@ resources:
                     - "%{lookup('plan_base')}::restore"
                     - "namespace=%{nest::kubernetes::namespace}"
                     - "service=%{nest::kubernetes::service}"
-                    - "service_name=%{nest::kubernetes::service_name}"
+                    - "service_name=%{lookup('service_name')}"
                     - 'restore=true'
                   env:
                     - name: KUBECONFIG

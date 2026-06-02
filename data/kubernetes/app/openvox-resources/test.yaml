@@ -1,12 +1,2 @@
 ---
-patches:
-  40-suspend-restore:
-    - patch:
-        - op: add
-          path: '/spec/suspend'
-          value: true
-      target:
-        group: batch
-        version: v1
-        kind: CronJob
-        name: "%{nest::kubernetes::service}-restore"
+restore_suspended: true

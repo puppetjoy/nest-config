@@ -45,7 +45,7 @@ resources:
                     - "%{lookup('plan_base')}::backup"
                     - "namespace=%{nest::kubernetes::namespace}"
                     - "service=%{nest::kubernetes::service}"
-                    - "service_name=%{nest::kubernetes::service_name}"
+                    - "service_name=%{lookup('service_name')}"
                   env:
                     - name: KUBECONFIG
                       value: '/nest/home/kubeconfigs/eyrie.conf'
@@ -151,7 +151,7 @@ patches:
           value: "%{nest::kubernetes::fqdn}"
         - op: add
           path: '/metadata/labels/james.tl~1service_name'
-          value: "%{nest::kubernetes::service_name}"
+          value: "%{lookup('service_name')}"
         - op: add
           path: '/spec/ports/-'
           value:
