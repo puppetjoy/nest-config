@@ -7,6 +7,7 @@ class nest::app::hermes::install {
   $venv_pip          = "${venv_dir}/bin/pip"
   $source_dir        = "${install_dir}/src"
   $git_revision_file = "${install_dir}/.installed-git-revision"
+  $tui_revision_file = "${install_dir}/.installed-tui-revision"
 
 
   nest::lib::package { 'dev-python/virtualenv':
@@ -74,6 +75,19 @@ class nest::app::hermes::install {
     ],
   }
 
+  exec { 'build_hermes_tui':
+    command     => "npm ci --silent --no-fund --no-audit --progress=false && npm run build && git -C ${source_dir} rev-parse HEAD > ${tui_revision_file}",
+    cwd         => "${source_dir}/ui-tui",
+    unless      => "test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${tui_revision_file} 2>/dev/null)\" && test -f ${source_dir}/ui-tui/dist/entry.js && test -d ${source_dir}/ui-tui/node_modules",
+    environment => [
+      'HOME=/root',
+      'NPM_CONFIG_CACHE=/root/.npm',
+    ],
+    path        => ['/bin', '/usr/bin', '/usr/sbin'],
+    timeout     => 600,
+    require     => Vcsrepo[$source_dir],
+  }
+
   file { '/usr/local/bin/hermes':
     ensure  => link,
     target  => "${venv_dir}/bin/hermes",
@@ -97,6 +111,13 @@ class nest::app::hermes::install {
   exec { 'install_hermes_web_deps':
     command     => "${venv_pip} install '${source_dir}[web]'",
     unless      => "${venv_python} -c \"import fastapi, uvicorn\"",
+    environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
+    require     => Exec['install_hermes_agent'],
+  }
+
+  exec { 'install_hermes_pty_deps':
+    command     => "${venv_pip} install '${source_dir}[pty]'",
+    unless      => "${venv_python} -c \"import ptyprocess\"",
     environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
     require     => Exec['install_hermes_agent'],
   }

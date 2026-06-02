@@ -134,6 +134,7 @@ class nest::app::hermes::service {
       Environment="PYTHONPATH=${source_dir}"
       Environment="HERMES_HOME=${hermes_home_dir}"
       Environment="HERMES_DASHBOARD_TUI=1"
+      Environment="HERMES_TUI_DIR=${source_dir}/ui-tui"
       Restart=always
       RestartSec=5
       StandardOutput=journal
@@ -142,7 +143,11 @@ class nest::app::hermes::service {
       [Install]
       WantedBy=default.target
       | UNIT
-    require => Exec['install_hermes_agent'],
+    require => [
+      Exec['install_hermes_agent'],
+      Exec['install_hermes_pty_deps'],
+      Exec['build_hermes_tui'],
+    ],
   }
 
   File["${systemd_user_dir}/hermes-dashboard.service"]
@@ -170,6 +175,14 @@ class nest::app::hermes::service {
   }
 
   Exec['patch_hermes_dashboard_insecure_websockets']
+  ~>
+  Exec['restart_hermes_dashboard_service']
+
+  Exec['build_hermes_tui']
+  ~>
+  Exec['restart_hermes_dashboard_service']
+
+  Exec['install_hermes_pty_deps']
   ~>
   Exec['restart_hermes_dashboard_service']
 
