@@ -42,6 +42,8 @@ lookup_options:
     convert_to: 'Sensitive'
   nest::service::gitlab_runner::instances:
     merge: 'deep'
+  nest::service::honcho::openai_api_key:
+    convert_to: 'Sensitive'
   nest::service::kubernetes::bolt_private_key:
     convert_to: 'Sensitive'
   nest::service::llama_server::hf_token:
@@ -106,6 +108,7 @@ nest::cnames:
 
   # AI services
   chat.eyrie: 'ingress-compute.eyrie'
+  honcho.eyrie: 'ingress-compute.eyrie'
   llm.eyrie: 'ingress-compute.eyrie'
   llama-util.nest: 'kestrel.nest'
 

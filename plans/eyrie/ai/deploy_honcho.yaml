@@ -1,0 +1,29 @@
+---
+description: 'Deploy Honcho memory service'
+
+parameters:
+  deploy:
+    description: 'Run or skip the deployment'
+    type: Boolean
+    default: true
+
+  render_to:
+    description: 'Just render the template'
+    type: String
+    default: ''
+
+  init:
+    description: 'Deploy initial revision'
+    type: Boolean
+    default: false
+
+steps:
+  - description: 'Deploy Honcho'
+    plan: 'nest::kubernetes::deploy'
+    parameters:
+      service: 'honcho'
+      app: 'honcho'
+      namespace: 'ai'
+      init: $init
+      deploy: $deploy
+      render_to: $render_to

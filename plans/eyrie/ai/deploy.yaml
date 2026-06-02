@@ -22,6 +22,11 @@ parameters:
     type: Boolean
     default: true
 
+  honcho:
+    description: 'Deploy Honcho memory service'
+    type: Boolean
+    default: true
+
   init:
     description: 'Deploy initial revision'
     type: Boolean
@@ -43,3 +48,9 @@ steps:
     plan: nest::eyrie::ai::deploy_librechat
     parameters:
       deploy: $deploy and $librechat
+
+  - description: 'Deploy Honcho'
+    plan: nest::eyrie::ai::deploy_honcho
+    parameters:
+      deploy: $deploy and $honcho
+      init: $init
