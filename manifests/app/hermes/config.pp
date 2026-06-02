@@ -127,7 +127,7 @@ class nest::app::hermes::config {
     $instance_honcho_user_peer  = pick($config['honcho_user_peer'], 'joy')
     $instance_honcho_ai_peer    = pick($config['honcho_ai_peer'], $instance_name)
     $instance_soul_content      = $config['soul_content']
-    $instance_toolsets          = pick($config['telegram_toolsets'], undef)
+    $instance_toolsets          = $config['telegram_toolsets']
     $instance_clone_default     = pick($config['clone_from_default'], false)
 
     nest::lib::hermes { $instance_name:
