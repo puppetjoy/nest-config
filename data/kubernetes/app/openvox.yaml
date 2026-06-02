@@ -30,7 +30,7 @@ resources:
           initContainers: []
           containers:
             - name: done
-              image: "%{lookup('registry')}/nest/stage1/server"
+              image: "%{lookup('config_registry')}/nest/stage1/server"
               imagePullPolicy: IfNotPresent
               command: ['true']
           volumes: []
