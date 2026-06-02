@@ -221,6 +221,7 @@ class nest::app::hermes::service {
       [Service]
       Type=oneshot
       EnvironmentFile=${hermes_home_dir}/profiles/talon/systemd.env
+      EnvironmentFile=${hermes_home_dir}/profiles/talon/.env
       ExecStart=${install_dir}/bin/agent-request-watch
       WorkingDirectory=/home/${nest::user}
       Environment="PATH=${venv_dir}/bin:/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
