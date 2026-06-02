@@ -44,6 +44,26 @@ class nest::app::hermes::config {
     require => File[$hermes_home_dir],
   }
 
+  [
+    'sessions',
+    'memories',
+    'cron',
+    'logs',
+    'cache',
+    'state-snapshots',
+    'config.yaml',
+    'managed-config.yaml',
+    'honcho.json',
+    'SOUL.md',
+    '.env',
+  ].each |String[1] $default_profile_path| {
+    file { "${hermes_home_dir}/${default_profile_path}":
+      ensure  => absent,
+      force   => true,
+      recurse => true,
+    }
+  }
+
   $instances.each |String[1] $instance_name, Hash $instance_config| {
     $secrets = $instance_secrets[$instance_name] ? {
       undef   => {},
