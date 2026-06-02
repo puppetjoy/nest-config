@@ -43,11 +43,12 @@ class nest::app::hermes::service {
     mode    => '0755',
     owner   => 'root',
     group   => 'root',
-    content => @("SCRIPT"),
-      #!/bin/sh
-      set -eu
-      exec ${venv_python} -m hermes_cli.main --profile "\$1" dashboard --host "\${HERMES_DASHBOARD_BIND_HOST}" --port "\${HERMES_DASHBOARD_PORT}" --no-open --skip-build --tui --insecure
-      | SCRIPT
+    content => [
+      '#!/bin/sh',
+      'set -eu',
+      "exec ${venv_python} -m hermes_cli.main --profile " + '"$1"' + ' dashboard --host "${HERMES_DASHBOARD_BIND_HOST}" --port "${HERMES_DASHBOARD_PORT}" --no-open --skip-build --tui --insecure',
+      '',
+    ].join("\n"),
     require => [
       File["${install_dir}/bin"],
       Exec['install_hermes_agent'],
