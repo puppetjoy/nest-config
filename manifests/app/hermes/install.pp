@@ -114,8 +114,9 @@ class nest::app::hermes::install {
     }
 
     exec { 'build_hermes_dashboard_web':
-      command => "cd ${source_dir}/web && ${nodejs::npm_path} install --silent && ${nodejs::npm_path} run build",
+      command => "${nodejs::npm_path} install --silent && ${nodejs::npm_path} run build",
       creates => "${source_dir}/hermes_cli/web_dist/index.html",
+      cwd     => "${source_dir}/web",
       require => [
         Class['nodejs'],
         Vcsrepo[$source_dir],
