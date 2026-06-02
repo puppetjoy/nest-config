@@ -14,8 +14,8 @@ parameters:
 
 steps:
   - description: "Initialize ${service} OpenVox resources"
-    plan: nest::openvox::restore
+    plan: nest::eyrie::openvox::restore
     parameters:
-      kubernetes_namespace: $namespace
+      namespace: $namespace
       service: $service
       restore: true
