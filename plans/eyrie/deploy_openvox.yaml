@@ -38,18 +38,7 @@ parameters:
     default: ''
 
 steps:
-  - description: 'Deploy resources'
-    plan: nest::kubernetes::deploy
-    parameters:
-      namespace: $namespace
-      service: "${service}-resources"
-      app: 'openvox-resources'
-      deploy: $deploy and $resources or $init
-      init: $init
-      wait: $render_to == ''
-      render_to: $render_to
-
-  - description: 'Deploy the instance'
+  - description: 'Deploy OpenVox'
     plan: nest::kubernetes::deploy
     parameters:
       namespace: $namespace
@@ -58,7 +47,7 @@ steps:
       chart: 'openvox/puppetserver'
       repo_url: 'https://openvoxproject.github.io/openvox-helm-chart'
       version: '10.1.1'
-      deploy: $deploy and $openvox
+      deploy: $deploy and ($openvox or $resources)
       init: $init
       wait: $init
       render_to: $render_to

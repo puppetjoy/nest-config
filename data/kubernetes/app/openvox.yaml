@@ -1,8 +1,64 @@
 ---
+include:
+  - 'nest::service::puppet'
+
+node_role: compute
+postgres_image: ghcr.io/cloudnative-pg/postgresql:17.6
+postgres_storage_class: owl-crypt
+postgres_storage_size: 16Gi
+plan_base: nest::eyrie::openvox_resources
+service_name: "%{nest::kubernetes::service}"
+
 resources:
   registry_auths: {}
-  backup: {}
-  restore: {}
+
+  postgres-cluster:
+    apiVersion: postgresql.cnpg.io/v1
+    kind: Cluster
+    metadata:
+      name: "%{nest::kubernetes::main_service}-cnpg"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      instances: 1
+      imageName: "%{lookup('postgres_image')}"
+      bootstrap:
+        initdb:
+          database: openvoxdb
+          owner: puppetdb
+          postInitApplicationSQL:
+            - CREATE EXTENSION IF NOT EXISTS pg_trgm;
+            - CREATE EXTENSION IF NOT EXISTS pgcrypto;
+      storage:
+        storageClass: "%{lookup('postgres_storage_class')}"
+        size: "%{lookup('postgres_storage_size')}"
+      affinity:
+        nodeSelector:
+          "node-role.kubernetes.io/%{lookup('node_role')}": ''
+        tolerations:
+          - key: "node-role.kubernetes.io/%{lookup('node_role')}"
+            operator: Exists
+            effect: NoSchedule
+
+  r10k-code-creds:
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: "%{nest::kubernetes::main_service}-r10k-code-creds"
+      namespace: "%{nest::kubernetes::namespace}"
+    type: Opaque
+    data:
+      id_rsa: "%{nest::service::puppet::r10k_deploy_key_base64}"
+      known_hosts: "%{nest::service::puppet::r10k_known_hosts_base64}"
+
+  puppetboard-secrets:
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: "%{nest::kubernetes::main_service}-puppetboard-secrets"
+      namespace: "%{nest::kubernetes::namespace}"
+    type: Opaque
+    data:
+      SECRET_KEY: "%{nest::service::puppet::puppetboard_secret_key_base64}"
 
   puppetboard-client-cert-serviceaccount:
     apiVersion: v1
