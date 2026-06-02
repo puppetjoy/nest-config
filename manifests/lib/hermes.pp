@@ -64,6 +64,15 @@ define nest::lib::hermes (
     require => File[$profiles_dir],
   }
 
+  file { "${profile_dir}/SOUL.md":
+    ensure  => file,
+    mode    => '0600',
+    owner   => $user,
+    group   => $user,
+    content => $soul_seed,
+    require => File[$profile_dir],
+  }
+
   if $clone_from_default {
     exec { "bootstrap_hermes_profile_${profile}":
       command => @("COMMAND"/L),
