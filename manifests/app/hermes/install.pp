@@ -1,0 +1,110 @@
+class nest::app::hermes::install (
+  Stdlib::Absolutepath $install_dir = '/opt/hermes-agent',
+  String[1]            $git_url     = 'https://github.com/NousResearch/hermes-agent.git',
+  String[1]            $git_ref     = 'main',
+) {
+  $venv_dir          = "${install_dir}/venv"
+  $venv_python       = "${venv_dir}/bin/python"
+  $venv_pip          = "${venv_dir}/bin/pip"
+  $source_dir        = "${install_dir}/src"
+  $git_revision_file = "${install_dir}/.installed-git-revision"
+
+
+  nest::lib::package { 'dev-python/virtualenv':
+    ensure => present,
+  }
+
+  ensure_resource('nest::lib::package', 'sys-apps/ripgrep', {
+    'ensure' => 'present',
+  })
+
+  file { $install_dir:
+    ensure => directory,
+    mode   => '0755',
+    owner  => 'root',
+    group  => 'root',
+  }
+
+  exec { 'create_hermes_venv':
+    command => "/usr/bin/python3 -m virtualenv ${venv_dir}",
+    creates => $venv_python,
+    require => [
+      File[$install_dir],
+      Nest::Lib::Package['dev-python/virtualenv'],
+    ],
+  }
+
+  include 'nest::base::git'
+
+  vcsrepo { $source_dir:
+    ensure   => latest,
+    provider => git,
+    source   => $git_url,
+    revision => $git_ref,
+    require  => [
+      File[$install_dir],
+      Class['nest::base::git'],
+    ],
+  }
+
+  exec { 'install_hermes_agent':
+    command     => "${venv_pip} install --upgrade --force-reinstall ${source_dir} && git -C ${source_dir} rev-parse HEAD > ${git_revision_file}",
+    unless      => "test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent')\"",
+    environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
+    path        => ['/bin', '/usr/bin'],
+    require     => [
+      Exec['create_hermes_venv'],
+      Vcsrepo[$source_dir],
+    ],
+  }
+
+  file { '/usr/local/bin/hermes':
+    ensure  => link,
+    target  => "${venv_dir}/bin/hermes",
+    require => Exec['install_hermes_agent'],
+  }
+
+  exec { 'install_hermes_telegram_deps':
+    command     => "${venv_pip} install 'python-telegram-bot[webhooks]==22.6'",
+    unless      => "${venv_python} -c \"import importlib.metadata as m; raise SystemExit(0 if m.version('python-telegram-bot') == '22.6' else 1)\"",
+    environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
+    require     => Exec['install_hermes_agent'],
+  }
+
+  exec { 'install_hermes_honcho_deps':
+    command     => "${venv_pip} install 'honcho-ai>=2.0.1'",
+    unless      => "${venv_python} -c \"import honcho\"",
+    environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
+    require     => Exec['install_hermes_agent'],
+  }
+
+  nest::lib::package { 'media-video/ffmpeg':
+    ensure => present,
+  }
+
+  if $facts['profile']['architecture'] == 'amd64' {
+    include 'nodejs'
+
+    nest::lib::package_use { 'media-libs/freetype':
+      use => ['harfbuzz'],
+    }
+
+    nest::lib::package { 'www-client/google-chrome':
+      ensure  => present,
+      require => Nest::Lib::Package_use['media-libs/freetype'],
+    }
+
+    file { '/usr/local/bin/google-chrome':
+      ensure  => link,
+      target  => '/usr/bin/google-chrome-stable',
+      require => Nest::Lib::Package['www-client/google-chrome'],
+    }
+
+    exec { 'install_hermes_agent_browser':
+      command     => "${nodejs::npm_path} install --global agent-browser@latest",
+      unless      => "${nodejs::npm_path} list --global agent-browser --depth=0 >/dev/null 2>&1 && ${nodejs::npm_path} outdated --global agent-browser --depth=0 >/dev/null 2>&1",
+      environment => ['HOME=/root'],
+      require     => Class['nodejs'],
+    }
+  }
+}

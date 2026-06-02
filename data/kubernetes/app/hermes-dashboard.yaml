@@ -1,0 +1,82 @@
+---
+cert_issuer: eyrie-ca
+cert_issuer_kind: ClusterIssuer
+ingress_class: contour-compute
+backend_host: owl.nest
+backend_ip: 172.22.4.4
+backend_port: 9119
+plan_base: 'nest::app::hermes'
+
+resources:
+  registry_auths: {}
+
+  certs:
+    apiVersion: cert-manager.io/v1
+    kind: Certificate
+    metadata:
+      name: "%{nest::kubernetes::service}-certs"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      secretName: "%{nest::kubernetes::service}-certs"
+      issuerRef:
+        name: "%{lookup('cert_issuer')}"
+        kind: "%{lookup('cert_issuer_kind')}"
+      dnsNames:
+        - "%{nest::kubernetes::fqdn}"
+
+  service:
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: "%{nest::kubernetes::service}"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      ports:
+        - name: http
+          port: 80
+          protocol: TCP
+          targetPort: "%{alias('backend_port')}"
+
+  endpoints:
+    apiVersion: v1
+    kind: Endpoints
+    metadata:
+      name: "%{nest::kubernetes::service}"
+      namespace: "%{nest::kubernetes::namespace}"
+    subsets:
+      - addresses:
+          - ip: "%{lookup('backend_ip')}"
+            hostname: "%{lookup('backend_host')}"
+        ports:
+          - name: http
+            port: "%{alias('backend_port')}"
+            protocol: TCP
+
+  ingress:
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      annotations:
+        projectcontour.io/response-timeout: infinity
+        projectcontour.io/websocket-routes: /
+      name: "%{nest::kubernetes::service}"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      ingressClassName: "%{lookup('ingress_class')}"
+      rules:
+        - host: "%{nest::kubernetes::fqdn}"
+          http:
+            paths:
+              - path: /
+                pathType: Prefix
+                backend:
+                  service:
+                    name: "%{nest::kubernetes::service}"
+                    port:
+                      number: 80
+      tls:
+        - secretName: "%{nest::kubernetes::service}-certs"
+          hosts:
+            - "%{nest::kubernetes::fqdn}"
+
+values: {}

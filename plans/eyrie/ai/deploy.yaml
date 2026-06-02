@@ -27,6 +27,11 @@ parameters:
     type: Boolean
     default: true
 
+  talon:
+    description: 'Deploy Talon dashboard edge'
+    type: Boolean
+    default: true
+
   init:
     description: 'Deploy initial revision'
     type: Boolean
@@ -54,3 +59,8 @@ steps:
     parameters:
       deploy: $deploy and $honcho
       init: $init
+
+  - description: 'Deploy Talon dashboard edge'
+    plan: nest::eyrie::ai::deploy_talon
+    parameters:
+      deploy: $deploy and $talon

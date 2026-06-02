@@ -110,6 +110,7 @@ nest::cnames:
   chat.eyrie: 'ingress-compute.eyrie'
   honcho.eyrie: 'ingress-compute.eyrie'
   llm.eyrie: 'ingress-compute.eyrie'
+  talon.eyrie: 'ingress-compute.eyrie'
   llama-util.nest: 'kestrel.nest'
 
   # Local services
