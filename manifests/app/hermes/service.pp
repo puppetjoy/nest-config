@@ -162,6 +162,16 @@ class nest::app::hermes::service {
     ],
   }
 
+  exec { 'restart_hermes_dashboard_service':
+    command     => '/bin/sh -c "XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user restart hermes-dashboard.service"',
+    user        => $nest::user,
+    refreshonly => true,
+    require     => Exec['enable_hermes_dashboard_service'],
+  }
+
+  Exec['patch_hermes_dashboard_insecure_websockets']
+  ~>
+  Exec['restart_hermes_dashboard_service']
 
   File["${systemd_user_dir}/${hermes_environment_unit}"]
   ~>

@@ -1,0 +1,20 @@
+diff --git a/hermes_cli/web_server.py b/hermes_cli/web_server.py
+--- a/hermes_cli/web_server.py
++++ b/hermes_cli/web_server.py
+@@ -3390,6 +3390,8 @@ def _ws_client_is_allowed(ws: "WebSocket") -> bool:
+     """
+     if getattr(app.state, "auth_required", False):
+         return True
++    if getattr(app.state, "allow_public", False):
++        return True
+     client_host = ws.client.host if ws.client else ""
+     if not client_host:
+         return True
+@@ -4843,6 +4845,7 @@ def start_server(
+     # injection / WS-auth paths can branch on it consistently.  Phase 3.5
+     # uses this to decide whether to refuse the bind, log the gate-on
+     # banner, and enable uvicorn proxy_headers.
++    app.state.allow_public = allow_public
+     app.state.auth_required = should_require_auth(host, allow_public)
+ 
+     if app.state.auth_required:

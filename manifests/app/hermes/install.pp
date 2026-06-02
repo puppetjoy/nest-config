@@ -57,6 +57,23 @@ class nest::app::hermes::install {
     ],
   }
 
+  file { "${install_dir}/dashboard-insecure-websockets.patch":
+    ensure => file,
+    source => 'puppet:///modules/nest/app/hermes/dashboard-insecure-websockets.patch',
+    mode   => '0644',
+    owner  => 'root',
+    group  => 'root',
+  }
+
+  exec { 'patch_hermes_dashboard_insecure_websockets':
+    command => "/usr/bin/patch -N -p1 -d ${source_dir} < ${install_dir}/dashboard-insecure-websockets.patch",
+    unless  => "/bin/grep -q 'app.state.allow_public = allow_public' ${source_dir}/hermes_cli/web_server.py && /bin/grep -q 'getattr(app.state, \"allow_public\", False)' ${source_dir}/hermes_cli/web_server.py",
+    require => [
+      File["${install_dir}/dashboard-insecure-websockets.patch"],
+      Vcsrepo[$source_dir],
+    ],
+  }
+
   file { '/usr/local/bin/hermes':
     ensure  => link,
     target  => "${venv_dir}/bin/hermes",
