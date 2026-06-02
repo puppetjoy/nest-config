@@ -5,6 +5,7 @@ class nest::app::hermes::service {
   $dashboard_port            = $nest::app::hermes::dashboard_port
   $venv_dir                  = "${install_dir}/venv"
   $venv_python               = "${venv_dir}/bin/python"
+  $source_dir                = "${install_dir}/src"
   $hermes_home_dir           = "/home/${nest::user}/.hermes"
   $systemd_user_dir          = "/home/${nest::user}/.config/systemd/user"
   $hermes_gateway_dropin_dir = "${systemd_user_dir}/hermes-gateway.service.d"
@@ -51,6 +52,7 @@ class nest::app::hermes::service {
       WorkingDirectory=/home/${nest::user}
       Environment="PATH=${venv_dir}/bin:/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
       Environment="VIRTUAL_ENV=${venv_dir}"
+      Environment="PYTHONPATH=${source_dir}"
       Environment="HERMES_HOME=${hermes_home_dir}"
       Restart=always
       RestartSec=5
@@ -129,6 +131,7 @@ class nest::app::hermes::service {
       WorkingDirectory=/home/${nest::user}
       Environment="PATH=${venv_dir}/bin:/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
       Environment="VIRTUAL_ENV=${venv_dir}"
+      Environment="PYTHONPATH=${source_dir}"
       Environment="HERMES_HOME=${hermes_home_dir}"
       Environment="HERMES_DASHBOARD_TUI=1"
       Restart=always
