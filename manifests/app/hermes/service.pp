@@ -38,6 +38,65 @@ class nest::app::hermes::service {
     require => File[$install_dir],
   }
 
+  file { "${install_dir}/bin/manage-hermes-config":
+    ensure  => file,
+    mode    => '0755',
+    owner   => 'root',
+    group   => 'root',
+    content => @("PYTHON"),
+      #!/usr/bin/env python3
+      import copy
+      import sys
+      from pathlib import Path
+
+      import yaml
+
+
+      def load_yaml(path):
+          p = Path(path)
+          if not p.exists():
+              return {}
+          with p.open() as fh:
+              return yaml.safe_load(fh) or {}
+
+
+      def deep_merge(base, override):
+          result = copy.deepcopy(base)
+          for key, value in override.items():
+              if isinstance(result.get(key), dict) and isinstance(value, dict):
+                  result[key] = deep_merge(result[key], value)
+              else:
+                  result[key] = copy.deepcopy(value)
+          return result
+
+
+      def dump_yaml(data):
+          return yaml.safe_dump(data, default_flow_style=False, sort_keys=True)
+
+
+      def main():
+          if len(sys.argv) != 4 or sys.argv[1] not in {'check', 'apply'}:
+              print('usage: manage-hermes-config check|apply CONFIG MANAGED', file=sys.stderr)
+              return 2
+          mode, config_path, managed_path = sys.argv[1:]
+          current = load_yaml(config_path)
+          managed = load_yaml(managed_path)
+          desired = deep_merge(current, managed)
+          current_text = dump_yaml(current)
+          desired_text = dump_yaml(desired)
+          if mode == 'check':
+              return 0 if current_text == desired_text else 1
+          if current_text != desired_text:
+              Path(config_path).write_text(desired_text)
+          return 0
+
+
+      if __name__ == '__main__':
+          raise SystemExit(main())
+      | PYTHON
+    require => File["${install_dir}/bin"],
+  }
+
   file { "${install_dir}/bin/hermes-dashboard":
     ensure  => file,
     mode    => '0755',
