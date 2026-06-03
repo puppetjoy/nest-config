@@ -151,6 +151,7 @@ class nest::app::hermes::config {
     $instance_soul_content      = $config['soul_content']
     $instance_toolsets          = $config['telegram_toolsets']
     $instance_google_workspace  = pick($config['google_workspace_enabled'], false)
+    $instance_extra_packages    = pick($config['extra_packages'], [])
 
     nest::lib::hermes { $instance_name:
       profile                    => $profile,
@@ -189,6 +190,7 @@ class nest::app::hermes::config {
       soul_content               => $instance_soul_content,
       telegram_toolsets          => $instance_toolsets,
       google_workspace_enabled   => $instance_google_workspace,
+      extra_packages             => $instance_extra_packages,
     }
   }
 }

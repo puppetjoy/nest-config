@@ -35,6 +35,7 @@ define nest::lib::hermes (
   Optional[String[1]]  $soul_content             = undef,
   Any                  $telegram_toolsets        = undef,
   Boolean              $google_workspace_enabled = false,
+  Array[String[1]]     $extra_packages           = [],
 ) {
   $venv_dir                         = "${install_dir}/venv"
   $venv_python                      = "${venv_dir}/bin/python"
@@ -83,6 +84,10 @@ define nest::lib::hermes (
   $telegram_toolsets_yaml            = $effective_telegram_toolsets.map |String[1] $toolset| {
     "          - ${toolset}"
   }.join("\n")
+
+  ensure_resource('nest::lib::package', $extra_packages, {
+    'ensure' => 'present',
+  })
 
   file { $profile_dir:
     ensure  => directory,
