@@ -59,6 +59,20 @@ MISSION_TERMS = {
     "tars",
     "talon",
 }
+TOOLING_SCOPE_TERMS = {
+    "agent request",
+    "broker",
+    "capability",
+    "google-workspace skill",
+    "google_workspace",
+    "hermes",
+    "profile-scoped skill",
+    "skill documentation",
+    "skill_manage",
+    "tool bug",
+    "tooling",
+    "toolset",
+}
 
 
 def now() -> str:
@@ -179,6 +193,9 @@ def scope_guard_decision(request: dict[str, Any]) -> dict[str, str] | None:
     ).lower()
     personal_hits = sorted(term for term in PERSONAL_ASSISTANT_TERMS if term in text)
     mission_hits = sorted(term for term in MISSION_TERMS if term in text)
+    tooling_hits = sorted(term for term in TOOLING_SCOPE_TERMS if term in text)
+    if tooling_hits:
+        return None
     if not personal_hits:
         return None
     if mission_hits and not ({"gmail", "order", "purchase", "shipment", "tracking", "ups"} & set(personal_hits)):
@@ -248,9 +265,15 @@ def run_reviewer_agent(reviewer: str, request: dict[str, Any]) -> dict[str, str]
         Begin work only if the request is within Talon's Nest Ops mission:
         operating Nest, Eyrie, Puppet, GitLab, Kubernetes, Hermes, Honcho,
         related infrastructure, or approved setup/security work for those
-        systems. Talon is not a general personal assistant. Decline personal
-        Gmail, shopping, shipment tracking, calendar/social, or similar private
-        life tasks even if Tars accidentally submits them.
+        systems. Hermes/tooling/capability/skill-management bug reports are
+        in scope even when the affected tool or example mentions Google
+        Workspace, Gmail, calendar, or another personal-assistant domain.
+        Talon is not a general personal assistant: decline requests to read,
+        summarize, act on, or retrieve personal Gmail, shopping, shipment
+        tracking, calendar/social, or similar private-life content for its own
+        sake. Do not decline a request merely because it mentions one of those
+        domains while asking about a tool, skill, broker, OAuth, profile, or
+        Puppet-managed capability problem.
 
         Return ONLY one JSON object with these
         string fields:
