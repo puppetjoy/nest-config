@@ -89,6 +89,28 @@ define nest::lib::hermes (
     'ensure' => 'present',
   })
 
+  if 'media-gfx/inkscape' in $extra_packages {
+    nest::lib::package_use { 'hermes-inkscape-poppler':
+      package => 'app-text/poppler',
+      use     => ['cairo'],
+    }
+
+    nest::lib::package_use { 'hermes-inkscape-pillow':
+      package => 'dev-python/pillow',
+      use     => ['tiff', 'webp'],
+    }
+
+    nest::lib::package_use { 'hermes-inkscape-tiff':
+      package => 'media-libs/tiff',
+      use     => ['jpeg'],
+    }
+
+    Nest::Lib::Package_use['hermes-inkscape-poppler']
+    -> Nest::Lib::Package_use['hermes-inkscape-pillow']
+    -> Nest::Lib::Package_use['hermes-inkscape-tiff']
+    -> Nest::Lib::Package['media-gfx/inkscape']
+  }
+
   file { $profile_dir:
     ensure  => directory,
     mode    => '0700',
