@@ -15,6 +15,7 @@ class nest::base::packages {
         'app-portage/genlop',
         'app-portage/gentoolkit',
         'dev-debug/strace',
+        'media-gfx/chafa',
         'net-analyzer/openbsd-netcat',
         'net-dns/bind-tools',
         'net-misc/iperf',
