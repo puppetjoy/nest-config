@@ -45,13 +45,7 @@ define nest::lib::hermes (
   $hermes_config_manager_path       = "${install_dir}/bin/manage-hermes-config"
   $hermes_honcho_config_path        = "${profile_dir}/honcho.json"
   $systemd_user_dir                 = "/home/${user}/.config/systemd/user"
-  $gateway_service_name             = "hermes-gateway-${profile}.service"
-  $old_gateway_service_name         = "hermes-gateway@${profile}.service"
-  $systemd_main_pid                 = '$MAINPID'
-  $old_gateway_disable_require      = $gateway_enabled ? {
-    true    => [Exec['enable_hermes_gateway_linger'], Exec["enable_hermes_gateway_${profile}"]],
-    default => [Exec['enable_hermes_gateway_linger']],
-  }
+  $native_gateway_service_name      = "hermes-gateway-${profile}.service"
   $dashboard_oauth_client_id_value  = $dashboard_oauth_client_id ? {
     undef   => '',
     default => $dashboard_oauth_client_id,
@@ -315,95 +309,50 @@ ${telegram_toolsets_yaml}
     ],
   }
 
-  file { "${systemd_user_dir}/${gateway_service_name}":
-    ensure  => file,
-    mode    => '0644',
-    owner   => $user,
-    group   => $user,
-    content => @("UNIT"),
-      [Unit]
-      Description=Hermes Agent Gateway - Messaging Platform Integration (${profile})
-      After=network-online.target hermes-environment.service
-      Wants=network-online.target
-      Requires=hermes-environment.service
-      StartLimitIntervalSec=0
-
-      [Service]
-      Type=simple
-      EnvironmentFile=-${profile_dir}/systemd.env
-      ExecStart=${venv_python} -m hermes_cli.main --profile ${profile} gateway run --replace
-      WorkingDirectory=/home/${user}
-      Environment="PATH=${venv_dir}/bin:/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-      Environment="VIRTUAL_ENV=${venv_dir}"
-      Environment="PYTHONPATH=${install_dir}/src"
-      Environment="HERMES_HOME=${profile_dir}"
-      Environment="SSH_AUTH_SOCK=%t/ssh-agent.socket"
-      Environment="SSL_CERT_FILE="
-      Environment="SSL_CERT_DIR=/etc/ssl/certs"
-      Restart=always
-      RestartSec=5
-      RestartMaxDelaySec=300
-      RestartSteps=5
-      RestartForceExitStatus=75
-      KillMode=mixed
-      KillSignal=SIGTERM
-      ExecReload=/bin/kill -USR1 ${systemd_main_pid}
-      TimeoutStopSec=210
-      StandardOutput=journal
-      StandardError=journal
-
-      [Install]
-      WantedBy=default.target
-      | UNIT
-    require => [
-      Exec['install_hermes_agent'],
-      File["${profile_dir}/systemd.env"],
-    ],
-  }
-
-  exec { "daemon_reload_hermes_gateway_${profile}":
-    command     => '/bin/sh -c "XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user daemon-reload"',
-    user        => $user,
-    refreshonly => true,
-  }
-
-  File["${systemd_user_dir}/${gateway_service_name}"]
-  ~>
-  Exec["daemon_reload_hermes_gateway_${profile}"]
-
   if $gateway_enabled {
     exec { "enable_hermes_gateway_${profile}":
-      command => "/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user enable --now ${gateway_service_name}'",
-      unless  => "/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-enabled --quiet ${gateway_service_name} && XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-active --quiet ${gateway_service_name}'",
+      command => "/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user enable --now hermes-gateway@${profile}.service'",
+      unless  => "/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-enabled --quiet hermes-gateway@${profile}.service && XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-active --quiet hermes-gateway@${profile}.service'",
       user    => $user,
       require => [
         Exec['enable_hermes_gateway_linger'],
-        Exec["daemon_reload_hermes_gateway_${profile}"],
-        File["${systemd_user_dir}/${gateway_service_name}"],
+        File["${systemd_user_dir}/hermes-gateway@.service"],
+        File["${profile_dir}/systemd.env"],
+        Exec["configure_hermes_managed_config_${profile}"],
       ],
     }
+
+    exec { "disable_native_hermes_gateway_${profile}":
+      command => "/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user disable --now ${native_gateway_service_name} || true'",
+      unless  => "/bin/sh -c '! XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-enabled --quiet ${native_gateway_service_name} 2>/dev/null && ! XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-active --quiet ${native_gateway_service_name} 2>/dev/null'",
+      user    => $user,
+      require => Exec["enable_hermes_gateway_${profile}"],
+    }
+
+    file { "${systemd_user_dir}/${native_gateway_service_name}":
+      ensure  => absent,
+      require => Exec["disable_native_hermes_gateway_${profile}"],
+    }
+
+    file { "${systemd_user_dir}/default.target.wants/${native_gateway_service_name}":
+      ensure  => absent,
+      require => Exec["disable_native_hermes_gateway_${profile}"],
+    }
+
+    File["${systemd_user_dir}/${native_gateway_service_name}"]
+    ~>
+    Exec['hermes-systemd-user-daemon-reload']
+
+    File["${systemd_user_dir}/default.target.wants/${native_gateway_service_name}"]
+    ~>
+    Exec['hermes-systemd-user-daemon-reload']
   } else {
     exec { "disable_hermes_gateway_${profile}":
-      command => "/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user disable --now ${gateway_service_name} || true'",
-      unless  => "/bin/sh -c '! XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-enabled --quiet ${gateway_service_name} && ! XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-active --quiet ${gateway_service_name}'",
+      command => "/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user disable --now hermes-gateway@${profile}.service || true'",
+      unless  => "/bin/sh -c '! XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-enabled --quiet hermes-gateway@${profile}.service && ! XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-active --quiet hermes-gateway@${profile}.service'",
       user    => $user,
-      require => [
-        Exec["daemon_reload_hermes_gateway_${profile}"],
-        File["${systemd_user_dir}/${gateway_service_name}"],
-      ],
+      require => File["${systemd_user_dir}/hermes-gateway@.service"],
     }
-  }
-
-  exec { "disable_old_hermes_gateway_${profile}":
-    command => "/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user disable --now ${old_gateway_service_name} || true'",
-    unless  => "/bin/sh -c '! XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-enabled --quiet ${old_gateway_service_name} 2>/dev/null && ! XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-active --quiet ${old_gateway_service_name} 2>/dev/null'",
-    user    => $user,
-    require => $old_gateway_disable_require,
-  }
-
-  file { "${systemd_user_dir}/default.target.wants/${old_gateway_service_name}":
-    ensure  => absent,
-    require => Exec["disable_old_hermes_gateway_${profile}"],
   }
 
   if $dashboard_enabled {

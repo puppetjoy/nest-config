@@ -13,6 +13,7 @@ class nest::app::hermes::service {
   }
   $systemd_user_dir        = "/home/${nest::user}/.config/systemd/user"
   $hermes_environment_unit = 'hermes-environment.service'
+  $systemd_main_pid        = '$MAINPID'
 
   file { $systemd_user_dir:
     ensure => directory,
@@ -122,7 +123,96 @@ class nest::app::hermes::service {
   }
 
   file { "${install_dir}/bin/hermes-gateway-control":
-    ensure => absent,
+    ensure  => file,
+    mode    => '0755',
+    owner   => 'root',
+    group   => 'root',
+    content => @(SCRIPT),
+      #!/usr/bin/env python3
+      import argparse
+      import re
+      import subprocess
+      import sys
+      import time
+      from pathlib import Path
+
+
+      def systemctl(*args, check=True):
+          return subprocess.run(
+              ['/usr/bin/systemctl', '--user', *args],
+              check=check,
+              text=True,
+              stdout=subprocess.PIPE,
+              stderr=subprocess.PIPE,
+          )
+
+
+      def current_gateway_profile():
+          try:
+              cgroup = Path('/proc/self/cgroup').read_text()
+          except OSError:
+              return None
+          match = re.search(r'hermes-gateway@([^/]+)\.service', cgroup)
+          if not match:
+              return None
+          return match.group(1)
+
+
+      def wait_for_state(unit, wanted, timeout):
+          deadline = time.monotonic() + timeout
+          last = ''
+          while time.monotonic() < deadline:
+              result = systemctl('show', unit, '-p', 'ActiveState', '-p', 'SubState', '--value', check=False)
+              last = ' '.join(result.stdout.split())
+              fields = result.stdout.splitlines()
+              if fields and fields[0] == wanted:
+                  return 0
+              time.sleep(1)
+          print(f'{unit} did not reach {wanted}; last state: {last}', file=sys.stderr)
+          return 1
+
+
+      def main():
+          parser = argparse.ArgumentParser(description='Safely control Puppet-managed Hermes profile gateways')
+          parser.add_argument('action', choices=['reload', 'restart', 'start', 'stop', 'status'])
+          parser.add_argument('profile')
+          parser.add_argument('--timeout', type=int, default=60)
+          args = parser.parse_args()
+
+          unit = f'hermes-gateway@{args.profile}.service'
+          current = current_gateway_profile()
+
+          if args.action == 'status':
+              result = systemctl('status', unit, '--no-pager', check=False)
+              sys.stdout.write(result.stdout)
+              sys.stderr.write(result.stderr)
+              return result.returncode
+
+          if args.action == 'reload':
+              return systemctl('kill', '--kill-who=main', '-s', 'SIGUSR1', unit).returncode
+
+          if args.action == 'restart' and current == args.profile:
+              print(
+                  f'refusing to restart current Hermes gateway profile {args.profile!r} from inside itself; '
+                  'use reload for config changes or restart it from an outside operator shell',
+                  file=sys.stderr,
+              )
+              return 75
+
+          command = {
+              'restart': ['restart', '--no-block', unit],
+              'start': ['start', '--no-block', unit],
+              'stop': ['stop', '--no-block', unit],
+          }[args.action]
+          systemctl(*command)
+          wanted = 'inactive' if args.action == 'stop' else 'active'
+          return wait_for_state(unit, wanted, args.timeout)
+
+
+      if __name__ == '__main__':
+          raise SystemExit(main())
+      | SCRIPT
+    require => File["${install_dir}/bin"],
   }
 
   file { "${install_dir}/bin/agent-request-watch":
@@ -154,7 +244,46 @@ class nest::app::hermes::service {
 
 
   file { "${systemd_user_dir}/hermes-gateway@.service":
-    ensure => absent,
+    ensure  => file,
+    mode    => '0644',
+    owner   => $nest::user,
+    group   => $nest::user,
+    content => @("UNIT"),
+      [Unit]
+      Description=Hermes Agent Gateway (%i)
+      After=network-online.target ${hermes_environment_unit}
+      Wants=network-online.target
+      Requires=${hermes_environment_unit}
+      StartLimitIntervalSec=0
+
+      [Service]
+      Type=simple
+      EnvironmentFile=-${hermes_home_dir}/profiles/%i/systemd.env
+      ExecStart=${venv_python} -m hermes_cli.main --profile %i gateway run --replace
+      WorkingDirectory=/home/${nest::user}
+      Environment="PATH=${venv_dir}/bin:/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      Environment="VIRTUAL_ENV=${venv_dir}"
+      Environment="PYTHONPATH=${pythonpath}"
+      Environment="HERMES_HOME=${hermes_home_dir}"
+      Environment="SSH_AUTH_SOCK=%t/ssh-agent.socket"
+      Environment="SSL_CERT_FILE="
+      Environment="SSL_CERT_DIR=/etc/ssl/certs"
+      Restart=always
+      RestartSec=5
+      RestartMaxDelaySec=300
+      RestartSteps=5
+      RestartForceExitStatus=75
+      KillMode=mixed
+      KillSignal=SIGTERM
+      ExecReload=/bin/kill -USR1 ${systemd_main_pid}
+      TimeoutStopSec=210
+      StandardOutput=journal
+      StandardError=journal
+
+      [Install]
+      WantedBy=default.target
+      | UNIT
+    require => Exec['install_hermes_agent'],
   }
 
   file { "${systemd_user_dir}/hermes-dashboard@.service":
