@@ -38,6 +38,8 @@ STATUS_VALUES = {
     "cancelled",
 }
 UPDATE_STATUS_VALUES = STATUS_VALUES - {"submitted"}
+CHANGE_STATUSES = {"in_progress", "completed"}
+
 
 
 def _now() -> str:
@@ -176,6 +178,15 @@ def _notify_submission(request: dict[str, Any]) -> dict[str, Any]:
     return _telegram_send(message)
 
 
+def _request_has_joy_approval(request: dict[str, Any]) -> bool:
+    if request.get("joy_approved_at"):
+        return True
+    for event in request.get("events", []):
+        if event.get("joy_approval") or event.get("joy_steering"):
+            return True
+    return False
+
+
 def _notify_update(request: dict[str, Any], event: dict[str, Any]) -> dict[str, Any]:
     parts = [
         "🦉 Agent request update",
@@ -188,6 +199,10 @@ def _notify_update(request: dict[str, Any], event: dict[str, Any]) -> dict[str, 
     ]
     if event.get("proposal"):
         parts.extend(["", "Proposal:", event["proposal"]])
+    if event.get("joy_approval"):
+        parts.extend(["", "Joy approval:", event["joy_approval"]])
+    if event.get("joy_steering"):
+        parts.extend(["", "Joy steering:", event["joy_steering"]])
     if event.get("response_to_requester"):
         parts.extend(["", "Response to requester:", event["response_to_requester"]])
     message = "\n".join(part for part in parts if part is not None)
@@ -273,6 +288,8 @@ def agent_request_update_tool(args: dict[str, Any], **_kw) -> str:
     summary = _clean_text(args.get("summary"), max_len=4000)
     proposal = _clean_text(args.get("proposal"), max_len=8000)
     response_to_requester = _clean_text(args.get("response_to_requester"), max_len=8000)
+    joy_approval = _clean_text(args.get("joy_approval"), max_len=4000)
+    joy_steering = _clean_text(args.get("joy_steering"), max_len=8000)
 
     if not request_id or not status or not summary:
         return json.dumps({"error": "request_id, status, and summary are required"})
@@ -284,6 +301,13 @@ def agent_request_update_tool(args: dict[str, Any], **_kw) -> str:
         request = _find_request(state, request_id)
         if not request:
             return json.dumps({"error": f"No request found with id {request_id}"})
+        if status == "approved":
+            if request.get("status") != "proposed":
+                return json.dumps({"error": "Requests must be in proposed status before Joy can approve them"})
+            if not joy_approval and not joy_steering:
+                return json.dumps({"error": "status=approved requires joy_approval and/or joy_steering documenting Joy's decision"})
+        if status in CHANGE_STATUSES and not _request_has_joy_approval(request):
+            return json.dumps({"error": "Joy approval is required before marking a request in_progress or completed; use status=proposed first, then status=approved with joy_approval/joy_steering"})
         event = {
             "at": at,
             "actor": _profile_name(),
@@ -292,8 +316,16 @@ def agent_request_update_tool(args: dict[str, Any], **_kw) -> str:
         }
         if proposal:
             event["proposal"] = proposal
+        if joy_approval:
+            event["joy_approval"] = joy_approval
+        if joy_steering:
+            event["joy_steering"] = joy_steering
         if response_to_requester:
             event["response_to_requester"] = response_to_requester
+        if status == "approved":
+            request["joy_approved_at"] = at
+            request["joy_approval"] = joy_approval
+            request["joy_steering"] = joy_steering
         request["status"] = status
         request["updated_at"] = at
         request["latest_update"] = event
@@ -340,7 +372,8 @@ UPDATE_SCHEMA = {
     "name": "agent_request_update",
     "description": (
         "Talon-only: update an agent request after review, approval, implementation, or denial. "
-        "Use status='proposed' with proposal text when asking Joy to approve a plan."
+        "Use status='proposed' with proposal text when asking Joy to approve a plan. "
+        "Use status='approved' only after Joy approves or steers the proposal, and include joy_approval/joy_steering."
     ),
     "parameters": {
         "type": "object",
@@ -349,6 +382,8 @@ UPDATE_SCHEMA = {
             "status": {"type": "string", "enum": sorted(UPDATE_STATUS_VALUES), "description": "New request status"},
             "summary": {"type": "string", "description": "Concise human-readable update"},
             "proposal": {"type": "string", "description": "Optional proposed solution for Joy approval"},
+            "joy_approval": {"type": "string", "description": "Joy's explicit approval text for status=approved"},
+            "joy_steering": {"type": "string", "description": "Joy's steering, constraints, or modifications to an approved proposal"},
             "response_to_requester": {"type": "string", "description": "Optional message/result intended for the requesting assistant"},
         },
         "required": ["request_id", "status", "summary"],

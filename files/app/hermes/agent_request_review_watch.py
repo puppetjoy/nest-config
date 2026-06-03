@@ -21,8 +21,9 @@ from typing import Any
 
 DEFAULT_REVIEWER = "talon"
 DEFAULT_HERMES_BIN = "/opt/hermes-agent/venv/bin/hermes"
-PROCESSABLE_STATUSES = {"reviewing"}
-DECISION_STATUSES = {"approved", "cancelled", "completed", "denied", "in_progress", "needs_info", "proposed", "reviewing"}
+PROCESSABLE_STATUSES = {"reviewing", "approved"}
+REVIEW_DECISION_STATUSES = {"cancelled", "denied", "needs_info", "proposed"}
+APPROVED_DECISION_STATUSES = {"cancelled", "completed", "denied", "in_progress", "needs_info", "proposed"}
 MAX_TEXT = 12000
 PERSONAL_ASSISTANT_TERMS = {
     "delivery",
@@ -151,12 +152,24 @@ def event_marker(request: dict[str, Any]) -> str:
     return f"{request.get('updated_at')}:{update.get('at')}:{update.get('action')}"
 
 
+def request_has_joy_approval(request: dict[str, Any]) -> bool:
+    if request.get("joy_approved_at"):
+        return True
+    for event in request.get("events", []):
+        if event.get("joy_approval") or event.get("joy_steering"):
+            return True
+    return False
+
+
 def pending_items(state: dict[str, Any], reviewer: str, request_id: str | None = None) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     for request in state.get("requests", []):
         if request_id and request.get("id") != request_id:
             continue
-        if request.get("status") not in PROCESSABLE_STATUSES:
+        status = request.get("status")
+        if status not in PROCESSABLE_STATUSES:
+            continue
+        if status == "approved" and not request_has_joy_approval(request):
             continue
         if request.get("reviewer", reviewer) != reviewer:
             continue
@@ -231,11 +244,12 @@ def extract_json(text: str) -> dict[str, Any]:
     return parsed
 
 
-def normalize_decision(output: str) -> dict[str, str]:
+def normalize_decision(output: str, allowed_statuses: set[str]) -> dict[str, str]:
     parsed = extract_json(output)
     status = clean_text(parsed.get("status"), max_len=40).lower()
-    if status not in DECISION_STATUSES:
-        raise ValueError(f"invalid reviewer status: {status!r}")
+    if status not in allowed_statuses:
+        allowed = ", ".join(sorted(allowed_statuses))
+        raise ValueError(f"invalid reviewer status for this phase: {status!r}; allowed: {allowed}")
     summary = clean_text(parsed.get("summary"), max_len=2000)
     if not summary:
         raise ValueError("reviewer decision missing summary")
@@ -253,11 +267,30 @@ def run_reviewer_agent(reviewer: str, request: dict[str, Any]) -> dict[str, str]
     env = os.environ.copy()
     env["HERMES_HOME"] = str(profile_home)
     env.setdefault("PYTHONPATH", "/opt/hermes-agent/src")
+    status = str(request.get("status") or "")
+    approved_phase = status == "approved"
+    allowed_statuses = APPROVED_DECISION_STATUSES if approved_phase else REVIEW_DECISION_STATUSES
+    phase_instructions = (
+        "Joy has approved or steered this proposal. You may now implement the "
+        "approved/steered change, staying within Joy's steering and Talon's "
+        "Nest Ops mission. If the work needs a materially different plan, "
+        "return status proposed with a revised proposal instead of changing it."
+        if approved_phase else
+        "This is review-only. Do not make setup, ops, Puppet, credential, "
+        "service, or other side-effecting changes. Inspect only what you need "
+        "to produce a concrete proposal, ask for missing information, or deny "
+        "out-of-scope work. Joy must approve or steer the proposal before Talon "
+        "implements changes."
+    )
+    toolsets = "terminal,file,web,skills" if approved_phase else "file,web,skills"
     prompt = textwrap.dedent(
         f"""
         You are {reviewer}, Joy's Nest Ops reviewer for the local Hermes
         agent-request broker. A requesting assistant submitted a request and
         the deterministic watcher marked it for review.
+
+        Request phase: {status}
+        Phase rules: {phase_instructions}
 
         Request data:
         {request_context(request)}
@@ -278,18 +311,18 @@ def run_reviewer_agent(reviewer: str, request: dict[str, Any]) -> dict[str, str]
         Return ONLY one JSON object with these
         string fields:
 
-        - status: one of proposed, completed, needs_info, denied, cancelled,
-          approved, in_progress, reviewing
+        - status: one of {", ".join(sorted(allowed_statuses))}
         - summary: concise update for Joy/broker history
         - proposal: required when status is proposed, otherwise empty string
         - response_to_requester: required when the requester should receive a
           concrete answer or missing-input request, otherwise empty string
 
-        If the work requires Joy's approval before setup or ops changes, return
-        status proposed and a concrete proposal. If the request is safe and
-        already approved by its context, complete it and include a
-        response_to_requester. If required input is missing, use needs_info and
-        state exactly what is missing. If unsafe or out of policy, deny it.
+        During review-only phase, use status proposed with a concrete plan for
+        any setup or ops change, even if the change seems obvious or safe. Joy
+        must approve or steer it before implementation. During approved phase,
+        implement only the approved/steered plan. If required input is missing,
+        use needs_info and state exactly what is missing. If unsafe or out of
+        policy, deny it.
 
         Do not merely summarize the request. Do not send a separate Telegram
         message. The runner will update the broker from your JSON. Keep secrets
@@ -301,7 +334,7 @@ def run_reviewer_agent(reviewer: str, request: dict[str, Any]) -> dict[str, str]
         "--profile",
         reviewer,
         "--toolsets",
-        "terminal,file,web,skills",
+        toolsets,
         "--oneshot",
         prompt,
     ]
@@ -320,7 +353,7 @@ def run_reviewer_agent(reviewer: str, request: dict[str, Any]) -> dict[str, str]
     output = result.stdout.strip()
     if not output:
         raise RuntimeError("Hermes reviewer oneshot produced no output")
-    return normalize_decision(output)
+    return normalize_decision(output, allowed_statuses)
 
 
 def notify_update(request: dict[str, Any], update: dict[str, Any]) -> dict[str, Any]:
@@ -369,6 +402,8 @@ def apply_decision(request_id: str, marker: str, reviewer: str, decision: dict[s
             update["proposal"] = decision["proposal"]
         if decision.get("response_to_requester"):
             update["response_to_requester"] = decision["response_to_requester"]
+        if decision["status"] in {"in_progress", "completed"} and not request_has_joy_approval(request):
+            raise ValueError("Joy approval is required before applying implementation statuses")
         request["status"] = decision["status"]
         request["updated_at"] = at
         request["latest_update"] = update
