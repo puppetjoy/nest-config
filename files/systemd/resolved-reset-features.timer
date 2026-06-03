@@ -1,0 +1,12 @@
+[Unit]
+Description=Periodically reset systemd-resolved server features after outages
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+AccuracySec=1min
+RandomizedDelaySec=30s
+Unit=resolved-reset-features.service
+
+[Install]
+WantedBy=timers.target

@@ -93,7 +93,21 @@ class nest::base::systemd {
     notify => Nest::Lib::Systemd_reload['systemd'],
   }
   ->
+  file { '/etc/systemd/system/resolved-reset-features.timer':
+    mode   => '0644',
+    owner  => 'root',
+    group  => 'root',
+    source => 'puppet:///modules/nest/systemd/resolved-reset-features.timer',
+    notify => Nest::Lib::Systemd_reload['systemd'],
+  }
+  ->
   service { 'resolved-reset-features.service':
+    enable  => true,
+    require => Nest::Lib::Systemd_reload['systemd'],
+  }
+
+  service { 'resolved-reset-features.timer':
+    ensure  => running,
     enable  => true,
     require => Nest::Lib::Systemd_reload['systemd'],
   }
