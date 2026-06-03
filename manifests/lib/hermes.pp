@@ -361,9 +361,15 @@ ${telegram_toolsets_yaml}
     ],
   }
 
+  exec { "daemon_reload_hermes_gateway_${profile}":
+    command     => '/bin/sh -c "XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user daemon-reload"',
+    user        => $user,
+    refreshonly => true,
+  }
+
   File["${systemd_user_dir}/${gateway_service_name}"]
   ~>
-  Exec['hermes-systemd-user-daemon-reload']
+  Exec["daemon_reload_hermes_gateway_${profile}"]
 
   if $gateway_enabled {
     exec { "enable_hermes_gateway_${profile}":
@@ -372,7 +378,7 @@ ${telegram_toolsets_yaml}
       user    => $user,
       require => [
         Exec['enable_hermes_gateway_linger'],
-        Exec['hermes-systemd-user-daemon-reload'],
+        Exec["daemon_reload_hermes_gateway_${profile}"],
         File["${systemd_user_dir}/${gateway_service_name}"],
       ],
     }
@@ -381,7 +387,10 @@ ${telegram_toolsets_yaml}
       command => "/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user disable --now ${gateway_service_name} || true'",
       unless  => "/bin/sh -c '! XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-enabled --quiet ${gateway_service_name} && ! XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-active --quiet ${gateway_service_name}'",
       user    => $user,
-      require => File["${systemd_user_dir}/${gateway_service_name}"],
+      require => [
+        Exec["daemon_reload_hermes_gateway_${profile}"],
+        File["${systemd_user_dir}/${gateway_service_name}"],
+      ],
     }
   }
 
