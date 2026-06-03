@@ -31,6 +31,7 @@ define nest::lib::hermes (
   String[1]            $honcho_ai_peer           = $title,
   Optional[String[1]]  $soul_content             = undef,
   Any                  $telegram_toolsets        = undef,
+  Boolean              $google_workspace_enabled = false,
   Boolean              $clone_from_default       = false,
 ) {
   $venv_dir                         = "${install_dir}/venv"
@@ -96,6 +97,36 @@ define nest::lib::hermes (
     group   => $user,
     content => $soul_seed,
     require => File[$profile_dir],
+  }
+
+  if $google_workspace_enabled {
+    file { "${profile_dir}/skills":
+      ensure  => directory,
+      mode    => '0700',
+      owner   => $user,
+      group   => $user,
+      require => File[$profile_dir],
+    }
+
+    file { "${profile_dir}/skills/productivity":
+      ensure  => directory,
+      mode    => '0700',
+      owner   => $user,
+      group   => $user,
+      require => File["${profile_dir}/skills"],
+    }
+
+    file { "${profile_dir}/skills/productivity/google-workspace":
+      ensure  => link,
+      target  => "${install_dir}/src/skills/productivity/google-workspace",
+      links   => manage,
+      owner   => $user,
+      group   => $user,
+      require => [
+        Exec['install_hermes_agent'],
+        File["${profile_dir}/skills/productivity"],
+      ],
+    }
   }
 
   if $clone_from_default {

@@ -6,6 +6,7 @@ class nest::app::hermes::install {
   $venv_python       = "${venv_dir}/bin/python"
   $venv_pip          = "${venv_dir}/bin/pip"
   $source_dir        = "${install_dir}/src"
+  $gws_dir           = '/opt/google-workspace-cli'
   $git_revision_file = "${install_dir}/.installed-git-revision"
   $tui_revision_file = "${install_dir}/.installed-tui-revision"
 
@@ -131,6 +132,13 @@ class nest::app::hermes::install {
     require     => Exec['install_hermes_agent'],
   }
 
+  exec { 'install_hermes_google_deps':
+    command     => "${venv_pip} install '${source_dir}[google]'",
+    unless      => "${venv_python} -c \"import googleapiclient, google_auth_oauthlib, google_auth_httplib2\"",
+    environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
+    require     => Exec['install_hermes_agent'],
+  }
+
   nest::lib::package { 'media-video/ffmpeg':
     ensure => present,
   }
@@ -158,6 +166,26 @@ class nest::app::hermes::install {
       unless      => "${nodejs::npm_path} list --global agent-browser --depth=0 >/dev/null 2>&1 && ${nodejs::npm_path} outdated --global agent-browser --depth=0 >/dev/null 2>&1",
       environment => ['HOME=/root'],
       require     => Class['nodejs'],
+    }
+
+    file { $gws_dir:
+      ensure => directory,
+      mode   => '0755',
+      owner  => 'root',
+      group  => 'root',
+    }
+    ->
+    exec { 'install_google_workspace_cli':
+      command     => "${nodejs::npm_path} install @googleworkspace/cli@latest",
+      unless      => "${nodejs::npm_path} list @googleworkspace/cli --depth=0 >/dev/null 2>&1 && ${nodejs::npm_path} outdated @googleworkspace/cli --depth=0 >/dev/null 2>&1",
+      cwd         => $gws_dir,
+      environment => ['HOME=/root'],
+      require     => Class['nodejs'],
+    }
+    ->
+    file { '/usr/local/bin/gws':
+      ensure => link,
+      target => "${gws_dir}/node_modules/.bin/gws",
     }
 
     exec { 'build_hermes_dashboard_web':

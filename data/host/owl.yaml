@@ -86,6 +86,7 @@ nest::app::hermes::instances:
       - session_search
       - todo
       - web
+    google_workspace_enabled: true
     soul_content: |
       # Tars
 

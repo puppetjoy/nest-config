@@ -128,6 +128,7 @@ class nest::app::hermes::config {
     $instance_honcho_ai_peer    = pick($config['honcho_ai_peer'], $instance_name)
     $instance_soul_content      = $config['soul_content']
     $instance_toolsets          = $config['telegram_toolsets']
+    $instance_google_workspace  = pick($config['google_workspace_enabled'], false)
     $instance_clone_default     = pick($config['clone_from_default'], false)
 
     nest::lib::hermes { $instance_name:
@@ -163,6 +164,7 @@ class nest::app::hermes::config {
       honcho_ai_peer             => $instance_honcho_ai_peer,
       soul_content               => $instance_soul_content,
       telegram_toolsets          => $instance_toolsets,
+      google_workspace_enabled   => $instance_google_workspace,
       clone_from_default         => $instance_clone_default,
     }
   }
