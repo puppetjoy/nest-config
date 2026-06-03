@@ -2,7 +2,7 @@
 
 This exposes profile-scoped Google read/search operations without granting a
 personal-assistant profile the general terminal tool.  It intentionally wraps
-only the read-only subset Joy approved for Tars' initial Google Workspace
+only the read-only subset Joy approved for Star's initial Google Workspace
 integration.
 """
 
@@ -97,8 +97,8 @@ def _extract_recursive_body(payload: dict[str, Any]) -> tuple[str, str]:
 
     Gmail messages often nest the useful text/plain or text/html part inside
     multipart/alternative under multipart/related. The bundled skill extractor
-    currently checks only one level, so keep the Tars tool robust here without
-    broadening Tars' tool access.
+    currently checks only one level, so keep the Star tool robust here without
+    broadening Star's tool access.
     """
     text_plain: list[str] = []
     text_html: list[str] = []

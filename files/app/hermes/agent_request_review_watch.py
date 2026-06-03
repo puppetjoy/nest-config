@@ -56,7 +56,7 @@ MISSION_TERMS = {
     "puppet",
     "service",
     "systemd",
-    "tars",
+    "star",
     "talon",
 }
 TOOLING_SCOPE_TERMS = {

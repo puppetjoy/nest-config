@@ -1,5 +1,5 @@
 ---
-description: 'Deploy Tars dashboard edge'
+description: 'Deploy Star dashboard edge'
 
 parameters:
   deploy:
@@ -13,10 +13,10 @@ parameters:
     default: ''
 
 steps:
-  - description: 'Deploy Tars dashboard edge'
+  - description: 'Deploy Star dashboard edge'
     plan: 'nest::kubernetes::deploy'
     parameters:
-      service: 'tars'
+      service: 'star'
       app: 'hermes-dashboard'
       namespace: 'ai'
       init: false

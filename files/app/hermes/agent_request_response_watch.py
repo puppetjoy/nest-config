@@ -96,7 +96,7 @@ def update_received_message(profile: str, request: dict[str, Any], update: dict[
             f"From: {update.get('actor', 'unknown')}",
             f"Update: {update.get('action', request.get('status'))}",
             "",
-            "Tars is processing Talon's response and will follow up shortly.",
+            "Star is processing Talon's response and will follow up shortly.",
         ]
     )
 
@@ -174,7 +174,7 @@ def run_profile_agent(profile: str, request: dict[str, Any], response: str) -> s
 
 
 def main(argv: list[str]) -> int:
-    profile = argv[1] if len(argv) > 1 else os.environ.get("REQUESTER_PROFILE", "tars")
+    profile = argv[1] if len(argv) > 1 else os.environ.get("REQUESTER_PROFILE", "star")
     directory = store_dir()
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
     path = state_path()

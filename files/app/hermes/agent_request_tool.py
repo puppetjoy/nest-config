@@ -1,7 +1,7 @@
 """Agent request broker tools for Joy's Hermes profiles.
 
 This is a narrow, local control-plane for assistant-to-ops requests.  It lets
-Tars submit setup/install/help requests to Talon without giving Tars operator
+Star submit setup/install/help requests to Talon without giving Star operator
 credentials, and lets Talon publish review/progress/outcome updates with a
 Telegram audit trail.
 """
