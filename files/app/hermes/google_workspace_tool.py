@@ -8,9 +8,11 @@ integration.
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -86,6 +88,67 @@ def _run_google_api(parts: list[str]) -> dict[str, Any] | list[Any] | str:
         return stdout
 
 
+def _decode_body_data(data: str) -> str:
+    return base64.urlsafe_b64decode(data).decode("utf-8", errors="replace")
+
+
+def _extract_recursive_body(payload: dict[str, Any]) -> tuple[str, str]:
+    """Return body text from nested Gmail MIME payloads.
+
+    Gmail messages often nest the useful text/plain or text/html part inside
+    multipart/alternative under multipart/related. The bundled skill extractor
+    currently checks only one level, so keep the Tars tool robust here without
+    broadening Tars' tool access.
+    """
+    text_plain: list[str] = []
+    text_html: list[str] = []
+
+    def walk(part: dict[str, Any]) -> None:
+        mime_type = str(part.get("mimeType") or "").lower()
+        body = part.get("body") or {}
+        data = body.get("data")
+        if data and mime_type == "text/plain":
+            text_plain.append(_decode_body_data(data))
+        elif data and mime_type == "text/html":
+            text_html.append(_decode_body_data(data))
+        for child in part.get("parts") or []:
+            walk(child)
+
+    walk(payload)
+    if text_plain:
+        return "\n".join(text_plain), "text/plain"
+    if text_html:
+        return "\n".join(text_html), "text/html"
+    return "", ""
+
+
+def _headers_dict(msg: dict[str, Any]) -> dict[str, str]:
+    return {h["name"]: h["value"] for h in msg.get("payload", {}).get("headers", [])}
+
+
+def _gmail_get_recursive(message_id: str) -> dict[str, Any]:
+    script_dir = _script_path("google_api.py").parent
+    if str(script_dir) not in sys.path:
+        sys.path.insert(0, str(script_dir))
+    import google_api  # type: ignore[import-not-found]
+
+    service = google_api.build_service("gmail", "v1")
+    msg = service.users().messages().get(userId="me", id=message_id, format="full").execute()
+    headers = _headers_dict(msg)
+    body, body_mime_type = _extract_recursive_body(msg.get("payload") or {})
+    return {
+        "id": msg["id"],
+        "threadId": msg["threadId"],
+        "from": headers.get("From", ""),
+        "to": headers.get("To", ""),
+        "subject": headers.get("Subject", ""),
+        "date": headers.get("Date", ""),
+        "labels": msg.get("labelIds", []),
+        "body": body,
+        "body_mime_type": body_mime_type,
+    }
+
+
 def google_workspace_status_tool(args: dict[str, Any], **_kw) -> str:
     setup = _script_path("setup.py")
     status: dict[str, Any] = {
@@ -131,7 +194,10 @@ def google_workspace_gmail_get_tool(args: dict[str, Any], **_kw) -> str:
     message_id = str(args.get("message_id") or "").strip()
     if not message_id:
         return json.dumps({"error": "message_id is required"})
-    result = _run_google_api(["gmail", "get", message_id])
+    try:
+        result = _gmail_get_recursive(message_id)
+    except Exception as exc:
+        result = {"error": "GMAIL_GET_FAILED", "message": str(exc)}
     return json.dumps(result, ensure_ascii=False)
 
 
