@@ -102,6 +102,15 @@ class nest::app::hermes::install {
     require => Vcsrepo[$source_dir],
   }
 
+  file { "${source_dir}/tools/google_workspace_tool.py":
+    ensure  => file,
+    source  => 'puppet:///modules/nest/app/hermes/google_workspace_tool.py',
+    mode    => '0644',
+    owner   => 'root',
+    group   => 'root',
+    require => Vcsrepo[$source_dir],
+  }
+
   exec { 'build_hermes_tui':
     command     => "npm ci --silent --no-fund --no-audit --progress=false && npm run build && git -C ${source_dir} rev-parse HEAD > ${tui_revision_file}",
     cwd         => "${source_dir}/ui-tui",

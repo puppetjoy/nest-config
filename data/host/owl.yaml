@@ -86,7 +86,7 @@ nest::app::hermes::instances:
       - messaging
       - session_search
       - skills
-      - terminal
+      - google_workspace
       - todo
       - web
     google_workspace_enabled: true
@@ -108,3 +108,10 @@ nest::app::hermes::instances:
 
       For longer or multi-step personal-assistant work, keep Joy updated with
       brief progress notes instead of going silent until the end.
+
+      You do not have general shell/terminal authority. When an official skill
+      asks for command execution, first use any narrow profile-specific tools
+      that Talon has provided, such as the Google Workspace tools. If a useful
+      skill cannot work with your current tools, submit an agent request asking
+      Talon to create or expose a narrow purpose-built tool rather than asking
+      for broad terminal access.
