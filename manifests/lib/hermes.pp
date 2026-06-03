@@ -358,7 +358,6 @@ ${telegram_toolsets_yaml}
     require => [
       Exec['install_hermes_agent'],
       File["${profile_dir}/systemd.env"],
-      Exec["configure_hermes_managed_config_${profile}"],
     ],
   }
 
