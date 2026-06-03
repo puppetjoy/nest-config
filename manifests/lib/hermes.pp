@@ -32,7 +32,6 @@ define nest::lib::hermes (
   Optional[String[1]]  $soul_content             = undef,
   Any                  $telegram_toolsets        = undef,
   Boolean              $google_workspace_enabled = false,
-  Boolean              $clone_from_default       = false,
 ) {
   $venv_dir                         = "${install_dir}/venv"
   $venv_python                      = "${venv_dir}/bin/python"
@@ -45,7 +44,6 @@ define nest::lib::hermes (
   $hermes_config_manager_path       = "${install_dir}/bin/manage-hermes-config"
   $hermes_honcho_config_path        = "${profile_dir}/honcho.json"
   $systemd_user_dir                 = "/home/${user}/.config/systemd/user"
-  $native_gateway_service_name      = "hermes-gateway-${profile}.service"
   $dashboard_oauth_client_id_value  = $dashboard_oauth_client_id ? {
     undef   => '',
     default => $dashboard_oauth_client_id,
@@ -130,30 +128,6 @@ define nest::lib::hermes (
     }
   }
 
-  if $clone_from_default {
-    exec { "bootstrap_hermes_profile_${profile}":
-      command => @("COMMAND"/L),
-        /bin/sh -c '
-        set -eu
-        cd ${hermes_home_dir}
-        for path in sessions memories skills cron logs; do
-          if [ -e "${path}" ] && [ ! -e "profiles/${profile}/${path}" ]; then
-            cp -a "${path}" "profiles/${profile}/${path}"
-          fi
-        done
-        for path in .env SOUL.md auth.json; do
-          if [ -e "${path}" ] && [ ! -e "profiles/${profile}/${path}" ]; then
-            cp -a "${path}" "profiles/${profile}/${path}"
-          fi
-        done
-        touch "profiles/${profile}/.profile-bootstrap-complete"
-        '
-        | COMMAND
-      creates => "${profile_dir}/.profile-bootstrap-complete",
-      user    => $user,
-      require => File[$profile_dir],
-    }
-  }
 
   $gitlab_env_lines = $gitlab_token ? {
     undef   => [],
@@ -321,37 +295,6 @@ ${telegram_toolsets_yaml}
         Exec["configure_hermes_managed_config_${profile}"],
       ],
     }
-
-    exec { "disable_native_hermes_gateway_${profile}":
-      command => "/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user disable --now ${native_gateway_service_name} || true'",
-      unless  => "/bin/sh -c '! XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-enabled --quiet ${native_gateway_service_name} 2>/dev/null && ! XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-active --quiet ${native_gateway_service_name} 2>/dev/null'",
-      user    => $user,
-      require => Exec["enable_hermes_gateway_${profile}"],
-    }
-
-    file { "${systemd_user_dir}/${native_gateway_service_name}":
-      ensure  => absent,
-      require => Exec["disable_native_hermes_gateway_${profile}"],
-    }
-
-    file { "${systemd_user_dir}/default.target.wants/${native_gateway_service_name}":
-      ensure  => absent,
-      require => Exec["disable_native_hermes_gateway_${profile}"],
-    }
-
-    exec { "daemon_reload_native_hermes_gateway_cleanup_${profile}":
-      command     => '/bin/sh -c "XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user daemon-reload"',
-      user        => $user,
-      refreshonly => true,
-    }
-
-    File["${systemd_user_dir}/${native_gateway_service_name}"]
-    ~>
-    Exec["daemon_reload_native_hermes_gateway_cleanup_${profile}"]
-
-    File["${systemd_user_dir}/default.target.wants/${native_gateway_service_name}"]
-    ~>
-    Exec["daemon_reload_native_hermes_gateway_cleanup_${profile}"]
   } else {
     exec { "disable_hermes_gateway_${profile}":
       command => "/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user disable --now hermes-gateway@${profile}.service || true'",

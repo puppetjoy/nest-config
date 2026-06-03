@@ -397,26 +397,6 @@ class nest::app::hermes::service {
     ensure => absent,
   }
 
-  exec { 'disable_old_hermes_tars_units':
-    command => '/bin/sh -c \'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user disable --now hermes-gateway@tars.service hermes-dashboard@tars.service hermes-agent-request-response-watch-tars.timer || true\'',
-    unless  => '/bin/sh -c \'! XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-enabled --quiet hermes-gateway@tars.service 2>/dev/null && ! XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-active --quiet hermes-gateway@tars.service 2>/dev/null && ! XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-enabled --quiet hermes-dashboard@tars.service 2>/dev/null && ! XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-active --quiet hermes-dashboard@tars.service 2>/dev/null && ! XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-enabled --quiet hermes-agent-request-response-watch-tars.timer 2>/dev/null && ! XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-active --quiet hermes-agent-request-response-watch-tars.timer 2>/dev/null\'',
-    user    => $nest::user,
-    require => Exec['enable_hermes_gateway_linger'],
-  }
-
-  [
-    "${systemd_user_dir}/hermes-agent-request-response-watch-tars.service",
-    "${systemd_user_dir}/hermes-agent-request-response-watch-tars.timer",
-    "${systemd_user_dir}/default.target.wants/hermes-gateway@tars.service",
-    "${systemd_user_dir}/default.target.wants/hermes-dashboard@tars.service",
-    "${systemd_user_dir}/timers.target.wants/hermes-agent-request-response-watch-tars.timer",
-  ].each |String[1] $old_tars_unit_path| {
-    file { $old_tars_unit_path:
-      ensure  => absent,
-      require => Exec['disable_old_hermes_tars_units'],
-    }
-  }
-
   file { "${systemd_user_dir}/default.target.wants/hermes-gateway.service":
     ensure => absent,
   }

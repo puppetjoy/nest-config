@@ -136,7 +136,6 @@ class nest::app::hermes::config {
     $instance_soul_content      = $config['soul_content']
     $instance_toolsets          = $config['telegram_toolsets']
     $instance_google_workspace  = pick($config['google_workspace_enabled'], false)
-    $instance_clone_default     = pick($config['clone_from_default'], false)
 
     nest::lib::hermes { $instance_name:
       profile                    => $profile,
@@ -172,7 +171,6 @@ class nest::app::hermes::config {
       soul_content               => $instance_soul_content,
       telegram_toolsets          => $instance_toolsets,
       google_workspace_enabled   => $instance_google_workspace,
-      clone_from_default         => $instance_clone_default,
     }
   }
 }
