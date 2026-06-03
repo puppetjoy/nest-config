@@ -45,6 +45,13 @@ class nest::app::hermes::config {
     require => File[$hermes_home_dir],
   }
 
+  file { "${profiles_dir}/tars":
+    ensure  => absent,
+    force   => true,
+    recurse => true,
+    require => File[$profiles_dir],
+  }
+
   file { $requests_dir:
     ensure  => directory,
     mode    => '0700',

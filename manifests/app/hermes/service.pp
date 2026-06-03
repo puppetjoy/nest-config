@@ -405,13 +405,6 @@ class nest::app::hermes::service {
     }
   }
 
-  file { "${hermes_home_dir}/profiles/tars":
-    ensure  => absent,
-    force   => true,
-    recurse => true,
-    require => Exec['disable_old_hermes_tars_units'],
-  }
-
   file { "${systemd_user_dir}/default.target.wants/hermes-gateway.service":
     ensure => absent,
   }
