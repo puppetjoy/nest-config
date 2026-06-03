@@ -1,0 +1,120 @@
+#!/usr/bin/env zsh
+
+set -euo pipefail
+
+: ${BOLT_PROJECT:=/opt/nest}
+: ${NEST_CI_SSH_KEY:=/run/secrets/ssh_private_key}
+
+log_section() {
+  printf '\n== %s ==\n' "$1"
+}
+
+run_probe() {
+  printf '+ %s\n' "$*"
+  "$@" || true
+}
+
+probe_tcp() {
+  local target=$1
+  local host=${target%:*}
+  local port=${target##*:}
+
+  printf '+ tcp %s ... ' "$target"
+  if command -v nc >/dev/null 2>&1; then
+    if nc -z -w 5 "$host" "$port" >/dev/null 2>&1; then
+      printf 'ok\n'
+    else
+      printf 'failed\n'
+    fi
+  elif timeout 6 zsh -c "</dev/tcp/${host}/${port}" >/dev/null 2>&1; then
+    printf 'ok\n'
+  else
+    printf 'failed\n'
+  fi
+}
+
+network_diagnostics() {
+  log_section 'Resolver configuration'
+  run_probe cat /etc/resolv.conf
+
+  log_section 'Routes'
+  run_probe ip route
+  run_probe ip route get 172.22.4.3
+  run_probe ip route get 172.22.4.2
+  run_probe ip route get 172.21.2.1
+
+  log_section 'Targeted name lookups'
+  for host in \
+    gitlab.joyfullee.me \
+    registry.gitlab.joyfullee.me \
+    ssh.gitlab.eyrie \
+    forgeapi.puppet.com \
+    forge.puppet.com \
+    github.com; do
+    printf '== %s ==\n' "$host"
+    getent hosts "$host" || true
+  done
+
+  log_section 'Targeted TCP probes'
+  for target in \
+    gitlab.joyfullee.me:443 \
+    registry.gitlab.joyfullee.me:443 \
+    ssh.gitlab.eyrie:22 \
+    forgeapi.puppet.com:443 \
+    forge.puppet.com:443 \
+    github.com:443; do
+    probe_tcp "$target"
+  done
+}
+
+module_diagnostics() {
+  log_section 'Bolt project state'
+  run_probe pwd
+  run_probe git -C "$BOLT_PROJECT" rev-parse --short HEAD
+  run_probe git -C "$BOLT_PROJECT" status --short
+  run_probe git -C "$BOLT_PROJECT" remote -v
+
+  log_section 'Puppetfile summary'
+  if [[ -f "$BOLT_PROJECT/Puppetfile" ]]; then
+    sed -E \
+      -e 's#(https?://|git@)[^[:space:]"'"'"']+#\1[redacted]#g' \
+      -e 's#(token|password|secret)(=|:)[^[:space:]]+#\1\2[redacted]#Ig' \
+      "$BOLT_PROJECT/Puppetfile" || true
+  else
+    printf 'No Puppetfile at %s/Puppetfile\n' "$BOLT_PROJECT"
+  fi
+
+  log_section 'Module install remnants'
+  run_probe find "$BOLT_PROJECT/.modules" -maxdepth 2 -mindepth 1 -type d
+}
+
+on_error() {
+  local status=$?
+
+  log_section "bolt module install failed with status ${status}"
+  network_diagnostics
+  module_diagnostics
+
+  return "$status"
+}
+
+main() {
+  cd "$BOLT_PROJECT"
+
+  log_section 'SSH agent setup'
+  eval "$(ssh-agent -s)"
+  trap 'ssh-agent -k >/dev/null 2>&1 || true' EXIT
+  ssh-add "$NEST_CI_SSH_KEY"
+
+  network_diagnostics
+
+  trap on_error ERR
+  log_section 'Installing Bolt project modules'
+  bolt module install --log-level debug
+  trap - ERR
+
+  log_section 'Installed modules'
+  find "$BOLT_PROJECT/.modules" -maxdepth 2 -mindepth 1 -type d | sort
+}
+
+main "$@"
