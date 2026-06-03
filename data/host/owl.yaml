@@ -87,6 +87,7 @@ nest::app::hermes::instances:
       - session_search
       - skills
       - google_workspace
+      - cronjob
       - todo
       - web
     google_workspace_enabled: true
