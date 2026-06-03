@@ -6,6 +6,9 @@ class nest::app::hermes::install {
   $venv_python       = "${venv_dir}/bin/python"
   $venv_pip          = "${venv_dir}/bin/pip"
   $source_dir        = "${install_dir}/src"
+  $broker_git_url    = $nest::app::hermes::broker_git_url
+  $broker_git_ref    = $nest::app::hermes::broker_git_ref
+  $broker_source_dir = "${install_dir}/agent-request-broker"
   $gws_dir           = '/opt/google-workspace-cli'
   $git_revision_file = "${install_dir}/.installed-git-revision"
   $tui_revision_file = "${install_dir}/.installed-tui-revision"
@@ -42,6 +45,17 @@ class nest::app::hermes::install {
     provider => git,
     source   => $git_url,
     revision => $git_ref,
+    require  => [
+      File[$install_dir],
+      Class['nest::base::git'],
+    ],
+  }
+
+  vcsrepo { $broker_source_dir:
+    ensure   => latest,
+    provider => git,
+    source   => $broker_git_url,
+    revision => $broker_git_ref,
     require  => [
       File[$install_dir],
       Class['nest::base::git'],
@@ -94,12 +108,12 @@ class nest::app::hermes::install {
   }
 
   file { "${source_dir}/tools/agent_request_tool.py":
-    ensure  => file,
-    source  => 'puppet:///modules/nest/app/hermes/agent_request_tool.py',
-    mode    => '0644',
-    owner   => 'root',
-    group   => 'root',
-    require => Vcsrepo[$source_dir],
+    ensure  => link,
+    target  => "${broker_source_dir}/src/tools/agent_request_tool.py",
+    require => [
+      Vcsrepo[$source_dir],
+      Vcsrepo[$broker_source_dir],
+    ],
   }
 
   file { "${source_dir}/tools/google_workspace_tool.py":
