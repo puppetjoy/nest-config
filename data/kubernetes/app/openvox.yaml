@@ -205,6 +205,8 @@ resources:
                 capabilities:
                   drop:
                     - all
+                runAsGroup: 0
+                runAsUser: 0
               volumeMounts:
                 - name: puppetdb-client-certs
                   mountPath: /etc/puppetboard/puppetdb
