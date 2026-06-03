@@ -32,6 +32,11 @@ parameters:
     type: Boolean
     default: true
 
+  star:
+    description: 'Deploy Star dashboard edge'
+    type: Boolean
+    default: true
+
   init:
     description: 'Deploy initial revision'
     type: Boolean
@@ -64,3 +69,8 @@ steps:
     plan: nest::eyrie::ai::deploy_talon
     parameters:
       deploy: $deploy and $talon
+
+  - description: 'Deploy Star dashboard edge'
+    plan: nest::eyrie::ai::deploy_star
+    parameters:
+      deploy: $deploy and $star
