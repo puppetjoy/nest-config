@@ -24,6 +24,41 @@ DEFAULT_HERMES_BIN = "/opt/hermes-agent/venv/bin/hermes"
 PROCESSABLE_STATUSES = {"reviewing"}
 DECISION_STATUSES = {"approved", "cancelled", "completed", "denied", "in_progress", "needs_info", "proposed", "reviewing"}
 MAX_TEXT = 12000
+PERSONAL_ASSISTANT_TERMS = {
+    "delivery",
+    "gmail",
+    "glassware",
+    "merchant",
+    "order",
+    "package",
+    "purchase",
+    "shipment",
+    "shopping",
+    "tracking",
+    "ups",
+}
+MISSION_TERMS = {
+    "backup",
+    "bolt",
+    "dashboard",
+    "deploy",
+    "eyrie",
+    "gitlab",
+    "google oauth",
+    "google workspace oauth",
+    "hermes",
+    "honcho",
+    "kubernetes",
+    "nest",
+    "oauth",
+    "openvox",
+    "ops",
+    "puppet",
+    "service",
+    "systemd",
+    "tars",
+    "talon",
+}
 
 
 def now() -> str:
@@ -136,6 +171,32 @@ def request_context(request: dict[str, Any]) -> str:
     return json.dumps(public, ensure_ascii=False, indent=2, sort_keys=True)
 
 
+def scope_guard_decision(request: dict[str, Any]) -> dict[str, str] | None:
+    """Decline obvious personal-assistant requests before invoking Talon."""
+    text = "\n".join(
+        str(request.get(key) or "")
+        for key in ("title", "request", "context")
+    ).lower()
+    personal_hits = sorted(term for term in PERSONAL_ASSISTANT_TERMS if term in text)
+    mission_hits = sorted(term for term in MISSION_TERMS if term in text)
+    if not personal_hits:
+        return None
+    if mission_hits and not ({"gmail", "order", "purchase", "shipment", "tracking", "ups"} & set(personal_hits)):
+        return None
+    if mission_hits and {"google oauth", "google workspace oauth", "oauth"} & set(mission_hits):
+        return None
+    return {
+        "status": "denied",
+        "summary": "Declined before tool use because the request appears to be a personal-assistant task outside Talon's Nest Ops mission.",
+        "proposal": "",
+        "response_to_requester": (
+            "Talon is Joy's Nest Ops bot and should not handle personal Gmail, "
+            "shopping, shipment, or similar assistant tasks through the ops broker. "
+            "Please keep this with a personal-assistant profile instead of Talon."
+        ),
+    }
+
+
 def extract_json(text: str) -> dict[str, Any]:
     raw = text.strip()
     if raw.startswith("```"):
@@ -184,7 +245,14 @@ def run_reviewer_agent(reviewer: str, request: dict[str, Any]) -> dict[str, str]
         Request data:
         {request_context(request)}
 
-        Begin work on this request now. Return ONLY one JSON object with these
+        Begin work only if the request is within Talon's Nest Ops mission:
+        operating Nest, Eyrie, Puppet, GitLab, Kubernetes, Hermes, Honcho,
+        related infrastructure, or approved setup/security work for those
+        systems. Talon is not a general personal assistant. Decline personal
+        Gmail, shopping, shipment tracking, calendar/social, or similar private
+        life tasks even if Tars accidentally submits them.
+
+        Return ONLY one JSON object with these
         string fields:
 
         - status: one of proposed, completed, needs_info, denied, cancelled,
@@ -328,13 +396,17 @@ def main(argv: list[str]) -> int:
         request = item["request"]
         request_id = str(request.get("id"))
         try:
-            decision = run_reviewer_agent(args.reviewer, request)
+            decision = scope_guard_decision(request)
+            guarded = decision is not None
+            if decision is None:
+                decision = run_reviewer_agent(args.reviewer, request)
             result = apply_decision(request_id, item["marker"], args.reviewer, decision)
             if result.get("skipped"):
                 print(f"review_skipped id={request_id} reason={result.get('reason')}")
             else:
+                verb = "scope_denied" if guarded else "reviewed"
                 print(
-                    f"reviewed id={request_id} status={decision['status']} "
+                    f"{verb} id={request_id} status={decision['status']} "
                     f"telegram_sent={result.get('telegram', {}).get('sent')}"
                 )
         except Exception as exc:  # noqa: BLE001 - leave marker unset so the request can retry
