@@ -10,6 +10,8 @@ lookup_options:
     convert_to: 'Sensitive'
   nest::app::hermes::gitlab_token:
     convert_to: 'Sensitive'
+  nest::app::hermes::openai_api_key:
+    convert_to: 'Sensitive'
   nest::app::hermes::tavily_api_key:
     convert_to: 'Sensitive'
   nest::app::hermes::telegram_bot_token:

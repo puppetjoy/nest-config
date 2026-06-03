@@ -1,6 +1,7 @@
 class nest::app::hermes::config {
   $gitlab_url                       = $nest::app::hermes::gitlab_url
   $gitlab_token                     = $nest::app::hermes::gitlab_token
+  $openai_api_key                   = $nest::app::hermes::openai_api_key
   $tavily_api_key                   = $nest::app::hermes::tavily_api_key
   $telegram_bot_token               = $nest::app::hermes::telegram_bot_token
   $telegram_allowed                 = $nest::app::hermes::telegram_allowed
@@ -10,6 +11,8 @@ class nest::app::hermes::config {
   $model_base_url                   = $nest::app::hermes::model_base_url
   $auxiliary_provider               = $nest::app::hermes::auxiliary_provider
   $auxiliary_mini_model             = $nest::app::hermes::auxiliary_mini_model
+  $image_gen_provider               = $nest::app::hermes::image_gen_provider
+  $image_gen_model                  = $nest::app::hermes::image_gen_model
   $compression_timeout              = $nest::app::hermes::compression_timeout
   $web_extract_timeout              = $nest::app::hermes::web_extract_timeout
   $dashboard_bind_host              = $nest::app::hermes::dashboard_bind_host
@@ -102,6 +105,10 @@ class nest::app::hermes::config {
       undef   => $tavily_api_key,
       default => $config['tavily_api_key'],
     }
+    $instance_openai_api_key    = $config['openai_api_key'] ? {
+      undef   => $openai_api_key,
+      default => $config['openai_api_key'],
+    }
     $instance_telegram_token    = $config['telegram_bot_token'] ? {
       undef   => $telegram_bot_token,
       default => $config['telegram_bot_token'],
@@ -114,6 +121,8 @@ class nest::app::hermes::config {
     $instance_model_base_url    = pick($config['model_base_url'], $model_base_url)
     $instance_aux_provider      = pick($config['auxiliary_provider'], $auxiliary_provider)
     $instance_aux_model         = pick($config['auxiliary_mini_model'], $auxiliary_mini_model)
+    $instance_image_provider    = pick($config['image_gen_provider'], $image_gen_provider)
+    $instance_image_model       = pick($config['image_gen_model'], $image_gen_model)
     $instance_compress_timeout  = pick($config['compression_timeout'], $compression_timeout)
     $instance_extract_timeout   = pick($config['web_extract_timeout'], $web_extract_timeout)
     $instance_dashboard_enabled = pick($config['dashboard_enabled'], false)
@@ -145,6 +154,7 @@ class nest::app::hermes::config {
       gitlab_url                 => $gitlab_url,
       gitlab_token               => $instance_gitlab_token,
       gitlab_enabled             => $instance_gitlab_enabled,
+      openai_api_key             => $instance_openai_api_key,
       tavily_api_key             => $instance_tavily_api_key,
       telegram_bot_token         => $instance_telegram_token,
       telegram_enabled           => $instance_telegram_enabled,
@@ -155,6 +165,8 @@ class nest::app::hermes::config {
       model_base_url             => $instance_model_base_url,
       auxiliary_provider         => $instance_aux_provider,
       auxiliary_mini_model       => $instance_aux_model,
+      image_gen_provider         => $instance_image_provider,
+      image_gen_model            => $instance_image_model,
       compression_timeout        => $instance_compress_timeout,
       web_extract_timeout        => $instance_extract_timeout,
       dashboard_enabled          => $instance_dashboard_enabled,

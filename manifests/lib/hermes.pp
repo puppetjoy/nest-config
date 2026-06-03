@@ -6,6 +6,7 @@ define nest::lib::hermes (
   String[1]            $gitlab_url               = 'https://gitlab.joyfullee.me',
   Any                  $gitlab_token             = undef,
   Boolean              $gitlab_enabled           = false,
+  Any                  $openai_api_key           = undef,
   Any                  $tavily_api_key           = undef,
   Any                  $telegram_bot_token       = undef,
   Boolean              $telegram_enabled         = true,
@@ -16,6 +17,8 @@ define nest::lib::hermes (
   String[1]            $model_base_url           = 'https://chatgpt.com/backend-api/codex',
   String[1]            $auxiliary_provider       = 'openai-codex',
   String[1]            $auxiliary_mini_model     = 'gpt-5.4-mini',
+  Optional[String[1]]  $image_gen_provider       = undef,
+  Optional[String[1]]  $image_gen_model          = undef,
   Integer[1]           $compression_timeout      = 120,
   Integer[1]           $web_extract_timeout      = 360,
   Boolean              $dashboard_enabled        = false,
@@ -148,6 +151,14 @@ define nest::lib::hermes (
     },
   }
 
+  $openai_env_lines = $openai_api_key ? {
+    undef   => [],
+    default => $openai_api_key =~ Sensitive[String[1]] ? {
+      true    => ["OPENAI_API_KEY=${openai_api_key.unwrap}"],
+      default => ["OPENAI_API_KEY=${openai_api_key}"],
+    },
+  }
+
   $telegram_env_lines = $telegram_bot_token ? {
     undef   => [],
     default => $telegram_enabled ? {
@@ -159,7 +170,22 @@ define nest::lib::hermes (
     },
   }
 
-  $env_content = [$gitlab_env_lines, $tavily_env_lines, $telegram_env_lines].flatten.join("\n")
+  $image_gen_yaml = $image_gen_provider ? {
+    undef   => '',
+    default => $image_gen_model ? {
+      undef   => @("YAML"),
+        image_gen:
+          provider: "${image_gen_provider}"
+        | YAML
+      default => @("YAML"),
+        image_gen:
+          provider: "${image_gen_provider}"
+          model: "${image_gen_model}"
+        | YAML
+    },
+  }
+
+  $env_content = [$gitlab_env_lines, $openai_env_lines, $tavily_env_lines, $telegram_env_lines].flatten.join("\n")
 
   file { $hermes_env_path:
     ensure    => file,
@@ -208,6 +234,7 @@ define nest::lib::hermes (
       web:
         backend: tavily
         search_backend: tavily
+${image_gen_yaml}
       auxiliary:
         compression:
           provider: "${auxiliary_provider}"
