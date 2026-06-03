@@ -85,6 +85,22 @@ def telegram_send(message: str) -> dict[str, Any]:
         return {"sent": False, "reason": str(exc)}
 
 
+def update_received_message(profile: str, request: dict[str, Any], update: dict[str, Any]) -> str:
+    return "\n".join(
+        [
+            "📬 Agent update received",
+            f"To: {profile}",
+            f"ID: {request.get('id')}",
+            f"Status: {request.get('status')}",
+            f"Title: {request.get('title')}",
+            f"From: {update.get('actor', 'unknown')}",
+            f"Update: {update.get('action', request.get('status'))}",
+            "",
+            "Tars is processing Talon's response and will follow up shortly.",
+        ]
+    )
+
+
 def pending_items(state: dict[str, Any], profile: str) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     for request in state.get("requests", []):
@@ -178,6 +194,12 @@ def main(argv: list[str]) -> int:
     for item in items[:3]:
         request = item["request"]
         try:
+            received = telegram_send(update_received_message(profile, request, item["update"]))
+            if received.get("sent"):
+                print(f"update_received_notified id={request.get('id')} telegram_sent=True")
+            else:
+                print(f"update_received_notify_failed id={request.get('id')} notification={received}", file=sys.stderr)
+
             message = run_profile_agent(profile, request, item["response"])
             notification = telegram_send(message)
             if not notification.get("sent"):
