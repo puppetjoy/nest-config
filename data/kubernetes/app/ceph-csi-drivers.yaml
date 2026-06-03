@@ -1,0 +1,76 @@
+---
+node_role: storage
+
+resources:
+  registry_auths: {}
+  backup: {}
+
+.placement: &placement
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+          - key: "node-role.kubernetes.io/%{lookup('node_role')}"
+            operator: Exists
+
+.tolerations: &tolerations
+  - key: "node-role.kubernetes.io/%{lookup('node_role')}"
+    operator: Exists
+    effect: NoSchedule
+
+.plugin_tolerations: &plugin_tolerations
+  - key: node-role.kubernetes.io/workstation
+    operator: Exists
+    effect: NoSchedule
+
+.driver_defaults: &driver_defaults
+  clusterName: ceph
+  grpcTimeout: 150
+  snapshotPolicy: volumeSnapshot
+  fsGroupPolicy: File
+  cephFsClientType: kernel
+  deployCsiAddons: false
+  generateOMapInfo: false
+  nodePlugin:
+    priorityClassName: system-node-critical
+    kubeletDirPath: /var/lib/kubelet
+    enableSeLinuxHostMount: false
+    resources: {}
+    tolerations: *plugin_tolerations
+  controllerPlugin:
+    hostNetwork: true
+    priorityClassName: system-cluster-critical
+    replicas: 2
+    resources: {}
+    deploymentStrategy:
+      type: Recreate
+    affinity: *placement
+    tolerations: *tolerations
+
+values:
+  # Rook's cluster chart manages CephConnection and ClientProfile objects for
+  # the prod and test clusters. Keep this driver chart focused on the shared
+  # CSI operator config and driver definitions.
+  cephConnections: []
+  clientProfiles: []
+
+  operatorConfig:
+    name: ceph-csi-operator-config
+    namespace: rook-ceph
+    create: true
+    driverSpecDefaults:
+      <<: *driver_defaults
+
+  drivers:
+    rbd:
+      <<: *driver_defaults
+      name: rook-ceph.rbd.csi.ceph.com
+      enabled: true
+    cephfs:
+      <<: *driver_defaults
+      name: rook-ceph.cephfs.csi.ceph.com
+      enabled: true
+    nfs:
+      enabled: false
+    nvmeof:
+      enabled: false

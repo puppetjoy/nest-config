@@ -1,9 +1,11 @@
 # Configure Ceph
 #
 # @param rook Deploy Rook
+# @param csi Deploy Ceph CSI drivers
 # @param ceph Deploy Ceph
 plan nest::kubernetes::deploy_ceph ( # lint:ignore:deploy_plan_boundary -- existing Ceph workaround commands need migration into chart resources
   Boolean $rook = true,
+  Boolean $csi  = true,
   Boolean $ceph = true,
 ) {
   run_plan('nest::kubernetes::deploy', {
@@ -12,9 +14,20 @@ plan nest::kubernetes::deploy_ceph ( # lint:ignore:deploy_plan_boundary -- exist
     'chart'     => 'rook-release/rook-ceph',
     'namespace' => 'rook-ceph',
     'repo_url'  => 'https://charts.rook.io/release',
-    'version'   => '1.19.6',
+    'version'   => '1.20.0',
     'wait'      => true,
     'deploy'    => $rook,
+  })
+
+  run_plan('nest::kubernetes::deploy', {
+    'service'   => 'ceph-csi-drivers',
+    'app'       => 'ceph-csi-drivers',
+    'chart'     => 'ceph-csi-operator/ceph-csi-drivers',
+    'namespace' => 'rook-ceph',
+    'repo_url'  => 'https://ceph.github.io/ceph-csi-operator',
+    'version'   => '1.0.1',
+    'wait'      => true,
+    'deploy'    => $csi,
   })
 
   run_plan('nest::kubernetes::deploy', {
@@ -23,7 +36,7 @@ plan nest::kubernetes::deploy_ceph ( # lint:ignore:deploy_plan_boundary -- exist
     'chart'     => 'rook-release/rook-ceph-cluster',
     'namespace' => 'rook-ceph',
     'repo_url'  => 'https://charts.rook.io/release',
-    'version'   => '1.19.6',
+    'version'   => '1.20.0',
     'subcharts' => [
       {
         'service'  => 'ceph-monitoring',
