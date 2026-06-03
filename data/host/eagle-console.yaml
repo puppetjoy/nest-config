@@ -7,4 +7,11 @@ nest::classes:
 nest::packages:
   - 'dev-libs/libgpiod'
 
+nest::raspberrypi_config:
+  # Keep Wi-Fi enabled: this Pi 3 A+ uses wlan0 as its only network path.
+  - 'dtoverlay=disable-bt'
+  - 'dtparam=audio=off'
+  - 'dtparam=hdmi=off'
+  - 'initial_turbo=0'
+
 nest::tool::arduino::cli_source: 'https://downloads.arduino.cc/arduino-cli/arduino-cli_latest_Linux_ARMv7.tar.gz'

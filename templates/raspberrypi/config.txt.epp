@@ -4,7 +4,9 @@ enable_uart=1
 uart_2ndstage=1
 <% } -%>
 <% 'raspberrypi3': { -%>
+<% unless 'dtoverlay=disable-bt' in $nest::raspberrypi_config { -%>
 dtoverlay=miniuart-bt
+<% } -%>
 enable_uart=1
 <% } -%>
 <% 'raspberrypi4' : { -%>
@@ -27,4 +29,7 @@ kernel=u-boot.bin
 <% 'u-root': { -%>
 initramfs u-root.img followkernel
 <% } -%>
+<% } -%>
+<% $nest::raspberrypi_config.each |$line| { -%>
+<%= $line %>
 <% } -%>
