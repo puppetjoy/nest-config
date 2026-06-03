@@ -1,0 +1,22 @@
+--- a/gateway/run.py	2026-05-28 23:30:04.858895228 -0400
++++ b/gateway/run.py	2026-06-02 23:12:57.052755342 -0400
+@@ -16125,6 +16125,19 @@
+             if preview:
+                 from agent.display import get_tool_preview_max_len
+                 _pl = get_tool_preview_max_len()
++                if _pl <= 0:
++                    try:
++                        _pl = int(
++                            resolve_display_setting(
++                                _load_gateway_config(),
++                                platform_key,
++                                "tool_preview_length",
++                                0,
++                            )
++                            or 0
++                        )
++                    except Exception:
++                        _pl = 0
+                 _cap = _pl if _pl > 0 else 40
+                 if len(preview) > _cap:
+                     preview = preview[:_cap - 3] + "..."

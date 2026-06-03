@@ -76,6 +76,23 @@ class nest::app::hermes::install {
     ],
   }
 
+  file { "${install_dir}/telegram-tool-preview-length.patch":
+    ensure => file,
+    source => 'puppet:///modules/nest/app/hermes/telegram-tool-preview-length.patch',
+    mode   => '0644',
+    owner  => 'root',
+    group  => 'root',
+  }
+
+  exec { 'patch_hermes_telegram_tool_preview_length':
+    command => "/usr/bin/patch -N -p1 -d ${source_dir} < ${install_dir}/telegram-tool-preview-length.patch",
+    unless  => "/bin/grep -q 'if _pl <= 0:' ${source_dir}/gateway/run.py",
+    require => [
+      File["${install_dir}/telegram-tool-preview-length.patch"],
+      Vcsrepo[$source_dir],
+    ],
+  }
+
   file { "${source_dir}/tools/agent_request_tool.py":
     ensure  => file,
     source  => 'puppet:///modules/nest/app/hermes/agent_request_tool.py',
