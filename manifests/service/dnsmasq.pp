@@ -56,8 +56,9 @@ class nest::service::dnsmasq (
       $systemd_device_units = $interfaces.map |$i| { "sys-subsystem-net-devices-${i}.device" }.join(' ')
       $dnsmasq_systemd_dropin_unit = @("END_UNIT")
         [Unit]
+        Wants=systemd-resolved.service
         Requires=${systemd_device_units}
-        After=${systemd_device_units}
+        After=systemd-resolved.service ${systemd_device_units}
         | END_UNIT
 
       file { '/etc/systemd/system/dnsmasq.service.d':

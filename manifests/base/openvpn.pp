@@ -61,6 +61,14 @@ class nest::base::openvpn {
         notify  => Nest::Lib::Systemd_reload['openvpn'],
       }
 
+      file { '/etc/systemd/system/openvpn-client@.service.d/30-restart.conf':
+        mode    => '0644',
+        owner   => 'root',
+        group   => 'root',
+        content => epp('nest/openvpn/client-restart.conf.epp'),
+        notify  => Nest::Lib::Systemd_reload['openvpn'],
+      }
+
       if $nest::router {
         contain 'nest::lib::router'
 

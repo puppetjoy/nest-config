@@ -1,0 +1,7 @@
+[Unit]
+StartLimitIntervalSec=0
+
+[Service]
+Restart=always
+RestartSec=30s
+ExecStartPost=-/usr/bin/resolvectl reset-server-features
