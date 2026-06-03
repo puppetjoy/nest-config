@@ -5,6 +5,8 @@ nest::classes:
 nest::kernel_config:
   CONFIG_SND_USB_AUDIO: m
 
+nest::journal: persistent
+
 # Allow Roc audio streaming from home
 firewalld::custom_services:
   roc:
