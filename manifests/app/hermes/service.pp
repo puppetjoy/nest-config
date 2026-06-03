@@ -123,6 +123,15 @@ class nest::app::hermes::service {
     require => File["${install_dir}/bin"],
   }
 
+  file { "${install_dir}/bin/agent-request-response-watch":
+    ensure  => file,
+    source  => 'puppet:///modules/nest/app/hermes/agent_request_response_watch.py',
+    mode    => '0755',
+    owner   => 'root',
+    group   => 'root',
+    require => File["${install_dir}/bin"],
+  }
+
   file { "${systemd_user_dir}/hermes-gateway@.service":
     ensure  => file,
     mode    => '0644',
@@ -257,6 +266,57 @@ class nest::app::hermes::service {
     require => File["${systemd_user_dir}/hermes-agent-request-watch.service"],
   }
 
+  file { "${systemd_user_dir}/hermes-agent-request-response-watch-tars.service":
+    ensure  => file,
+    mode    => '0644',
+    owner   => $nest::user,
+    group   => $nest::user,
+    content => @("UNIT"),
+      [Unit]
+      Description=Deliver Hermes agent-request responses to Tars
+      After=network-online.target ${hermes_environment_unit}
+      Wants=network-online.target
+      Requires=${hermes_environment_unit}
+
+      [Service]
+      Type=oneshot
+      EnvironmentFile=${hermes_home_dir}/profiles/tars/systemd.env
+      EnvironmentFile=${hermes_home_dir}/profiles/tars/.env
+      ExecStart=${install_dir}/bin/agent-request-response-watch tars
+      WorkingDirectory=/home/${nest::user}
+      Environment="PATH=${venv_dir}/bin:/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      Environment="VIRTUAL_ENV=${venv_dir}"
+      Environment="PYTHONPATH=${source_dir}"
+      Environment="HERMES_HOME=${hermes_home_dir}"
+      Environment="SSL_CERT_FILE="
+      Environment="SSL_CERT_DIR=/etc/ssl/certs"
+      StandardOutput=journal
+      StandardError=journal
+      | UNIT
+    require => File["${install_dir}/bin/agent-request-response-watch"],
+  }
+
+  file { "${systemd_user_dir}/hermes-agent-request-response-watch-tars.timer":
+    ensure  => file,
+    mode    => '0644',
+    owner   => $nest::user,
+    group   => $nest::user,
+    content => @("UNIT"),
+      [Unit]
+      Description=Poll Hermes agent-request responses for Tars
+
+      [Timer]
+      OnBootSec=1min
+      OnUnitActiveSec=1min
+      AccuracySec=15s
+      Unit=hermes-agent-request-response-watch-tars.service
+
+      [Install]
+      WantedBy=timers.target
+      | UNIT
+    require => File["${systemd_user_dir}/hermes-agent-request-response-watch-tars.service"],
+  }
+
   file { "${systemd_user_dir}/hermes-gateway.service":
     ensure => absent,
   }
@@ -305,6 +365,14 @@ class nest::app::hermes::service {
   ~>
   Exec['hermes-systemd-user-daemon-reload']
 
+  File["${systemd_user_dir}/hermes-agent-request-response-watch-tars.service"]
+  ~>
+  Exec['hermes-systemd-user-daemon-reload']
+
+  File["${systemd_user_dir}/hermes-agent-request-response-watch-tars.timer"]
+  ~>
+  Exec['hermes-systemd-user-daemon-reload']
+
   File["${systemd_user_dir}/hermes-gateway.service"]
   ~>
   Exec['hermes-systemd-user-daemon-reload']
@@ -331,6 +399,16 @@ class nest::app::hermes::service {
     require => [
       Exec['enable_hermes_gateway_linger'],
       File["${systemd_user_dir}/hermes-agent-request-watch.timer"],
+    ],
+  }
+
+  exec { 'enable_hermes_agent_request_response_watch_tars_timer':
+    command => '/bin/sh -c \'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user enable --now hermes-agent-request-response-watch-tars.timer\'',
+    unless  => '/bin/sh -c \'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-enabled --quiet hermes-agent-request-response-watch-tars.timer && XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-active --quiet hermes-agent-request-response-watch-tars.timer\'',
+    user    => $nest::user,
+    require => [
+      Exec['enable_hermes_gateway_linger'],
+      File["${systemd_user_dir}/hermes-agent-request-response-watch-tars.timer"],
     ],
   }
 }
