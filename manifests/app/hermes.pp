@@ -4,7 +4,6 @@ class nest::app::hermes (
   String[1]                      $git_ref                     = 'main',
   String[1]                      $gitlab_url                  = 'https://gitlab.joyfullee.me',
   Optional[Sensitive[String[1]]] $gitlab_token                = undef,
-  Optional[Sensitive[String[1]]] $openai_api_key              = undef,
   Optional[Sensitive[String[1]]] $tavily_api_key              = undef,
   Optional[Sensitive[String[1]]] $telegram_bot_token          = undef,
   String[1]                      $telegram_allowed            = '8756212310',

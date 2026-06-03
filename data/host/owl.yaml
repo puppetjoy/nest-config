@@ -13,9 +13,6 @@ nest::dvorak: true
 nest::text_scaling_factor: 1.5
 
 nest::app::hermes::git_ref: 'v2026.5.29.2'
-nest::app::hermes::model_provider: 'custom'
-nest::app::hermes::model_base_url: 'https://api.openai.com/v1'
-nest::app::hermes::auxiliary_provider: 'main'
 
 nest::kernel_cmdline:
   # Max VRAM allocation (112 GiB)

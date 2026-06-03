@@ -6,7 +6,6 @@ define nest::lib::hermes (
   String[1]            $gitlab_url               = 'https://gitlab.joyfullee.me',
   Any                  $gitlab_token             = undef,
   Boolean              $gitlab_enabled           = false,
-  Any                  $openai_api_key           = undef,
   Any                  $tavily_api_key           = undef,
   Any                  $telegram_bot_token       = undef,
   Boolean              $telegram_enabled         = true,
@@ -174,14 +173,6 @@ define nest::lib::hermes (
     },
   }
 
-  $openai_env_lines = $openai_api_key ? {
-    undef   => [],
-    default => $openai_api_key =~ Sensitive[String[1]] ? {
-      true    => ["OPENAI_API_KEY=${openai_api_key.unwrap}"],
-      default => ["OPENAI_API_KEY=${openai_api_key}"],
-    },
-  }
-
   $telegram_env_lines = $telegram_bot_token ? {
     undef   => [],
     default => $telegram_enabled ? {
@@ -193,7 +184,7 @@ define nest::lib::hermes (
     },
   }
 
-  $env_content = [$gitlab_env_lines, $openai_env_lines, $tavily_env_lines, $telegram_env_lines].flatten.join("\n")
+  $env_content = [$gitlab_env_lines, $tavily_env_lines, $telegram_env_lines].flatten.join("\n")
 
   file { $hermes_env_path:
     ensure    => file,

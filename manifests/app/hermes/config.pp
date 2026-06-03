@@ -1,7 +1,6 @@
 class nest::app::hermes::config {
   $gitlab_url                       = $nest::app::hermes::gitlab_url
   $gitlab_token                     = $nest::app::hermes::gitlab_token
-  $openai_api_key                   = $nest::app::hermes::openai_api_key
   $tavily_api_key                   = $nest::app::hermes::tavily_api_key
   $telegram_bot_token               = $nest::app::hermes::telegram_bot_token
   $telegram_allowed                 = $nest::app::hermes::telegram_allowed
@@ -103,10 +102,6 @@ class nest::app::hermes::config {
       undef   => $tavily_api_key,
       default => $config['tavily_api_key'],
     }
-    $instance_openai_api_key    = $config['openai_api_key'] ? {
-      undef   => $openai_api_key,
-      default => $config['openai_api_key'],
-    }
     $instance_telegram_token    = $config['telegram_bot_token'] ? {
       undef   => $telegram_bot_token,
       default => $config['telegram_bot_token'],
@@ -151,7 +146,6 @@ class nest::app::hermes::config {
       gitlab_url                 => $gitlab_url,
       gitlab_token               => $instance_gitlab_token,
       gitlab_enabled             => $instance_gitlab_enabled,
-      openai_api_key             => $instance_openai_api_key,
       tavily_api_key             => $instance_tavily_api_key,
       telegram_bot_token         => $instance_telegram_token,
       telegram_enabled           => $instance_telegram_enabled,
