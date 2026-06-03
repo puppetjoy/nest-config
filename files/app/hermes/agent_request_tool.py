@@ -177,14 +177,20 @@ def _notify_submission(request: dict[str, Any]) -> dict[str, Any]:
 
 
 def _notify_update(request: dict[str, Any], event: dict[str, Any]) -> dict[str, Any]:
-    message = (
-        "🦉 Agent request update\n"
-        f"ID: {request.get('id')}\n"
-        f"Status: {request.get('status')}\n"
-        f"Title: {request.get('title')}\n"
-        f"By: {event.get('actor')}\n\n"
-        f"{event.get('summary', '')}"
-    )
+    parts = [
+        "🦉 Agent request update",
+        f"ID: {request.get('id')}",
+        f"Status: {request.get('status')}",
+        f"Title: {request.get('title')}",
+        f"By: {event.get('actor')}",
+        "",
+        event.get("summary", ""),
+    ]
+    if event.get("proposal"):
+        parts.extend(["", "Proposal:", event["proposal"]])
+    if event.get("response_to_requester"):
+        parts.extend(["", "Response to requester:", event["response_to_requester"]])
+    message = "\n".join(part for part in parts if part is not None)
     return _telegram_send(message)
 
 
