@@ -339,13 +339,19 @@ ${telegram_toolsets_yaml}
       require => Exec["disable_native_hermes_gateway_${profile}"],
     }
 
+    exec { "daemon_reload_native_hermes_gateway_cleanup_${profile}":
+      command     => '/bin/sh -c "XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user daemon-reload"',
+      user        => $user,
+      refreshonly => true,
+    }
+
     File["${systemd_user_dir}/${native_gateway_service_name}"]
     ~>
-    Exec['hermes-systemd-user-daemon-reload']
+    Exec["daemon_reload_native_hermes_gateway_cleanup_${profile}"]
 
     File["${systemd_user_dir}/default.target.wants/${native_gateway_service_name}"]
     ~>
-    Exec['hermes-systemd-user-daemon-reload']
+    Exec["daemon_reload_native_hermes_gateway_cleanup_${profile}"]
   } else {
     exec { "disable_hermes_gateway_${profile}":
       command => "/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user disable --now hermes-gateway@${profile}.service || true'",
