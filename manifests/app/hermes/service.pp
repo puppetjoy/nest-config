@@ -6,6 +6,11 @@ class nest::app::hermes::service {
   $broker_source_dir       = "${install_dir}/agent-request-broker"
   $pythonpath              = "${source_dir}:${broker_source_dir}/src"
   $hermes_home_dir         = "/home/${nest::user}/.hermes"
+  $response_watch_profiles = $nest::app::hermes::instances.filter |String[1] $_instance_name, Hash $instance_config| {
+    pick($instance_config['agent_request_response_watch_enabled'], false)
+  }.map |String[1] $instance_name, Hash $instance_config| {
+    pick($instance_config['profile'], $instance_name)
+  }
   $systemd_user_dir        = "/home/${nest::user}/.config/systemd/user"
   $hermes_environment_unit = 'hermes-environment.service'
 
@@ -278,55 +283,57 @@ class nest::app::hermes::service {
     require => File["${systemd_user_dir}/hermes-agent-request-watch.service"],
   }
 
-  file { "${systemd_user_dir}/hermes-agent-request-response-watch-star.service":
-    ensure  => file,
-    mode    => '0644',
-    owner   => $nest::user,
-    group   => $nest::user,
-    content => @("UNIT"),
-      [Unit]
-      Description=Deliver Hermes agent-request responses to Star
-      After=network-online.target ${hermes_environment_unit}
-      Wants=network-online.target
-      Requires=${hermes_environment_unit}
+  $response_watch_profiles.each |String[1] $response_watch_profile| {
+    file { "${systemd_user_dir}/hermes-agent-request-response-watch-${response_watch_profile}.service":
+      ensure  => file,
+      mode    => '0644',
+      owner   => $nest::user,
+      group   => $nest::user,
+      content => @("UNIT"),
+        [Unit]
+        Description=Deliver Hermes agent-request responses to ${response_watch_profile}
+        After=network-online.target ${hermes_environment_unit}
+        Wants=network-online.target
+        Requires=${hermes_environment_unit}
 
-      [Service]
-      Type=oneshot
-      EnvironmentFile=${hermes_home_dir}/profiles/star/systemd.env
-      EnvironmentFile=${hermes_home_dir}/profiles/star/.env
-      ExecStart=${install_dir}/bin/agent-request-response-watch star
-      WorkingDirectory=/home/${nest::user}
-      Environment="PATH=${venv_dir}/bin:/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-      Environment="VIRTUAL_ENV=${venv_dir}"
-      Environment="PYTHONPATH=${pythonpath}"
-      Environment="HERMES_HOME=${hermes_home_dir}"
-      Environment="SSL_CERT_FILE="
-      Environment="SSL_CERT_DIR=/etc/ssl/certs"
-      StandardOutput=journal
-      StandardError=journal
-      | UNIT
-    require => File["${install_dir}/bin/agent-request-response-watch"],
-  }
+        [Service]
+        Type=oneshot
+        EnvironmentFile=${hermes_home_dir}/profiles/${response_watch_profile}/systemd.env
+        EnvironmentFile=${hermes_home_dir}/profiles/${response_watch_profile}/.env
+        ExecStart=${install_dir}/bin/agent-request-response-watch ${response_watch_profile}
+        WorkingDirectory=/home/${nest::user}
+        Environment="PATH=${venv_dir}/bin:/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+        Environment="VIRTUAL_ENV=${venv_dir}"
+        Environment="PYTHONPATH=${pythonpath}"
+        Environment="HERMES_HOME=${hermes_home_dir}"
+        Environment="SSL_CERT_FILE="
+        Environment="SSL_CERT_DIR=/etc/ssl/certs"
+        StandardOutput=journal
+        StandardError=journal
+        | UNIT
+      require => File["${install_dir}/bin/agent-request-response-watch"],
+    }
 
-  file { "${systemd_user_dir}/hermes-agent-request-response-watch-star.timer":
-    ensure  => file,
-    mode    => '0644',
-    owner   => $nest::user,
-    group   => $nest::user,
-    content => @("UNIT"),
-      [Unit]
-      Description=Poll Hermes agent-request responses for Star
+    file { "${systemd_user_dir}/hermes-agent-request-response-watch-${response_watch_profile}.timer":
+      ensure  => file,
+      mode    => '0644',
+      owner   => $nest::user,
+      group   => $nest::user,
+      content => @("UNIT"),
+        [Unit]
+        Description=Poll Hermes agent-request responses for ${response_watch_profile}
 
-      [Timer]
-      OnBootSec=1min
-      OnUnitActiveSec=1min
-      AccuracySec=15s
-      Unit=hermes-agent-request-response-watch-star.service
+        [Timer]
+        OnBootSec=1min
+        OnUnitActiveSec=1min
+        AccuracySec=15s
+        Unit=hermes-agent-request-response-watch-${response_watch_profile}.service
 
-      [Install]
-      WantedBy=timers.target
-      | UNIT
-    require => File["${systemd_user_dir}/hermes-agent-request-response-watch-star.service"],
+        [Install]
+        WantedBy=timers.target
+        | UNIT
+      require => File["${systemd_user_dir}/hermes-agent-request-response-watch-${response_watch_profile}.service"],
+    }
   }
 
   file { "${systemd_user_dir}/hermes-agent-request-review-watch-talon.service":
@@ -448,13 +455,15 @@ class nest::app::hermes::service {
   ~>
   Exec['hermes-systemd-user-daemon-reload']
 
-  File["${systemd_user_dir}/hermes-agent-request-response-watch-star.service"]
-  ~>
-  Exec['hermes-systemd-user-daemon-reload']
+  $response_watch_profiles.each |String[1] $response_watch_profile| {
+    File["${systemd_user_dir}/hermes-agent-request-response-watch-${response_watch_profile}.service"]
+    ~>
+    Exec['hermes-systemd-user-daemon-reload']
 
-  File["${systemd_user_dir}/hermes-agent-request-response-watch-star.timer"]
-  ~>
-  Exec['hermes-systemd-user-daemon-reload']
+    File["${systemd_user_dir}/hermes-agent-request-response-watch-${response_watch_profile}.timer"]
+    ~>
+    Exec['hermes-systemd-user-daemon-reload']
+  }
 
   File["${systemd_user_dir}/hermes-agent-request-review-watch-talon.service"]
   ~>
@@ -493,14 +502,16 @@ class nest::app::hermes::service {
     ],
   }
 
-  exec { 'enable_hermes_agent_request_response_watch_star_timer':
-    command => '/bin/sh -c \'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user enable --now hermes-agent-request-response-watch-star.timer\'',
-    unless  => '/bin/sh -c \'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-enabled --quiet hermes-agent-request-response-watch-star.timer && XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-active --quiet hermes-agent-request-response-watch-star.timer\'',
-    user    => $nest::user,
-    require => [
-      Exec['enable_hermes_gateway_linger'],
-      File["${systemd_user_dir}/hermes-agent-request-response-watch-star.timer"],
-    ],
+  $response_watch_profiles.each |String[1] $response_watch_profile| {
+    exec { "enable_hermes_agent_request_response_watch_${response_watch_profile}_timer":
+      command => "/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user enable --now hermes-agent-request-response-watch-${response_watch_profile}.timer'",
+      unless  => "/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-enabled --quiet hermes-agent-request-response-watch-${response_watch_profile}.timer && XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-active --quiet hermes-agent-request-response-watch-${response_watch_profile}.timer'",
+      user    => $nest::user,
+      require => [
+        Exec['enable_hermes_gateway_linger'],
+        File["${systemd_user_dir}/hermes-agent-request-response-watch-${response_watch_profile}.timer"],
+      ],
+    }
   }
 
   exec { 'enable_hermes_agent_request_review_watch_talon_timer':
