@@ -27,6 +27,7 @@ stages:
     - 'podman build
         --build-arg=BRANCH="$CI_COMMIT_BRANCH"
         --build-arg=REPOSITORY="$CI_REPOSITORY_URL"
+        --dns=172.22.4.3
         --file=Containerfile
         --secret=id=ssh_private_key,src="$NEST_CI_PRIVATE_KEY_FILE"
         --squash
