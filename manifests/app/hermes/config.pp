@@ -121,8 +121,14 @@ class nest::app::hermes::config {
     $instance_model_base_url    = pick($config['model_base_url'], $model_base_url)
     $instance_aux_provider      = pick($config['auxiliary_provider'], $auxiliary_provider)
     $instance_aux_model         = pick($config['auxiliary_mini_model'], $auxiliary_mini_model)
-    $instance_image_provider    = pick($config['image_gen_provider'], $image_gen_provider)
-    $instance_image_model       = pick($config['image_gen_model'], $image_gen_model)
+    $instance_image_provider    = $config['image_gen_provider'] ? {
+      undef   => $image_gen_provider,
+      default => $config['image_gen_provider'],
+    }
+    $instance_image_model       = $config['image_gen_model'] ? {
+      undef   => $image_gen_model,
+      default => $config['image_gen_model'],
+    }
     $instance_compress_timeout  = pick($config['compression_timeout'], $compression_timeout)
     $instance_extract_timeout   = pick($config['web_extract_timeout'], $web_extract_timeout)
     $instance_dashboard_enabled = pick($config['dashboard_enabled'], false)
