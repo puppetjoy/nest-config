@@ -123,6 +123,7 @@ nest::app::hermes::instances:
     honcho_workspace: 'hermes'
     honcho_user_peer: 'joy'
     honcho_ai_peer: 'talon'
+    ssh_auth_sock: '/run/user/1000/ssh-agent.socket'
     gateway_enabled: true
     dashboard_enabled: true
     dashboard_port: 9119

@@ -23,7 +23,6 @@ class nest::app::hermes::service {
     pick($instance_config['profile'], $instance_name)
   }
   $systemd_user_dir        = "/home/${nest::user}/.config/systemd/user"
-  $hermes_environment_unit = 'hermes-environment.service'
   $systemd_main_pid        = '$MAINPID'
 
   file { $systemd_user_dir:
@@ -32,20 +31,8 @@ class nest::app::hermes::service {
     owner  => $nest::user,
     group  => $nest::user,
   }
-  ->
-  file { "${systemd_user_dir}/${hermes_environment_unit}":
-    ensure  => file,
-    mode    => '0644',
-    owner   => $nest::user,
-    group   => $nest::user,
-    content => @("UNIT"),
-      [Unit]
-      Description=Import shell environment for Hermes Agent Gateway
-
-      [Service]
-      Type=oneshot
-      ExecStart=/home/${nest::user}/bin/reset-systemd-environment
-      | UNIT
+  file { "${systemd_user_dir}/hermes-environment.service":
+    ensure => absent,
   }
 
 
@@ -178,9 +165,8 @@ class nest::app::hermes::service {
     content => @("UNIT"),
       [Unit]
       Description=Hermes Agent Gateway (%i)
-      After=network-online.target ${hermes_environment_unit}
+      After=network-online.target
       Wants=network-online.target
-      Requires=${hermes_environment_unit}
       StartLimitIntervalSec=0
 
       [Service]
@@ -192,7 +178,6 @@ class nest::app::hermes::service {
       Environment="VIRTUAL_ENV=${venv_dir}"
       Environment="PYTHONPATH=${pythonpath}"
       Environment="HERMES_HOME=${hermes_home_dir}"
-      Environment="SSH_AUTH_SOCK=%t/ssh-agent.socket"
       Environment="SSL_CERT_FILE="
       Environment="SSL_CERT_DIR=/etc/ssl/certs"
       Restart=always
@@ -221,9 +206,8 @@ class nest::app::hermes::service {
     content => @("UNIT"),
       [Unit]
       Description=Hermes Agent Dashboard (%i)
-      After=network-online.target ${hermes_environment_unit}
+      After=network-online.target
       Wants=network-online.target
-      Requires=${hermes_environment_unit}
       StartLimitIntervalSec=0
 
       [Service]
@@ -262,9 +246,8 @@ class nest::app::hermes::service {
     content => @("UNIT"),
       [Unit]
       Description=Watch Hermes agent requests for Talon review
-      After=network-online.target ${hermes_environment_unit}
+      After=network-online.target
       Wants=network-online.target
-      Requires=${hermes_environment_unit}
 
       [Service]
       Type=oneshot
@@ -314,9 +297,8 @@ class nest::app::hermes::service {
       content => @("UNIT"),
         [Unit]
         Description=Deliver Hermes agent-request responses to ${response_watch_profile}
-        After=network-online.target ${hermes_environment_unit}
+        After=network-online.target
         Wants=network-online.target
-        Requires=${hermes_environment_unit}
 
         [Service]
         Type=oneshot
@@ -367,9 +349,8 @@ class nest::app::hermes::service {
       content => @("UNIT"),
         [Unit]
         Description=Run ${peer_watch_profile} on targeted Hermes peer requests
-        After=network-online.target ${hermes_environment_unit}
+        After=network-online.target
         Wants=network-online.target
-        Requires=${hermes_environment_unit}
 
         [Service]
         Type=oneshot
@@ -419,9 +400,8 @@ class nest::app::hermes::service {
     content => @("UNIT"),
       [Unit]
       Description=Run Talon on Hermes agent requests marked for review
-      After=network-online.target ${hermes_environment_unit}
+      After=network-online.target
       Wants=network-online.target
-      Requires=${hermes_environment_unit}
 
       [Service]
       Type=oneshot
@@ -490,7 +470,7 @@ class nest::app::hermes::service {
     force   => true,
   }
 
-  File["${systemd_user_dir}/${hermes_environment_unit}"]
+  File["${systemd_user_dir}/hermes-environment.service"]
   ~>
   Exec['hermes-systemd-user-daemon-reload']
 

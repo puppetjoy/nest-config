@@ -31,6 +31,7 @@ define nest::lib::hermes (
   String[1]            $agent_request_backend    = 'json',
   String[1]            $agent_request_kanban_board= 'agent-requests-dev',
   Boolean              $gateway_enabled          = true,
+  Optional[String[1]]  $ssh_auth_sock            = undef,
   String[1]            $honcho_base_url          = 'https://honcho.eyrie',
   String[1]            $honcho_workspace         = 'hermes',
   String[1]            $honcho_user_peer         = 'joy',
@@ -225,6 +226,16 @@ define nest::lib::hermes (
     "AGENT_REQUEST_BACKEND=${agent_request_backend}",
     "AGENT_REQUEST_KANBAN_BOARD=${agent_request_kanban_board}",
   ]
+  $systemd_env_lines = [
+    "HERMES_DASHBOARD_BIND_HOST=${dashboard_bind_host}",
+    "HERMES_DASHBOARD_PORT=${dashboard_port}",
+    "HERMES_DASHBOARD_PUBLIC_URL=${dashboard_public_url}",
+    $ssh_auth_sock ? {
+      undef   => [],
+      default => ["SSH_AUTH_SOCK=${ssh_auth_sock}"],
+    },
+    '',
+  ].flatten
 
   $image_gen_yaml = $image_gen_provider ? {
     undef   => '',
@@ -305,11 +316,7 @@ define nest::lib::hermes (
     mode    => '0600',
     owner   => $user,
     group   => $user,
-    content => @("ENV"),
-      HERMES_DASHBOARD_BIND_HOST=${dashboard_bind_host}
-      HERMES_DASHBOARD_PORT=${dashboard_port}
-      HERMES_DASHBOARD_PUBLIC_URL=${dashboard_public_url}
-      | ENV
+    content => $systemd_env_lines.join("\n"),
     require => File[$profile_dir],
   }
 
