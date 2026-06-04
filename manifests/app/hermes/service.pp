@@ -156,6 +156,14 @@ class nest::app::hermes::service {
     ],
   }
 
+  file { "${install_dir}/bin/agent-request-propose":
+    ensure  => link,
+    target  => "${broker_source_dir}/bin/agent-request-propose",
+    require => [
+      File["${install_dir}/bin"],
+      Vcsrepo[$broker_source_dir],
+    ],
+  }
 
   file { "${systemd_user_dir}/hermes-gateway@.service":
     ensure  => file,
