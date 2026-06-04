@@ -35,8 +35,6 @@ define nest::lib::hermes (
   Optional[String[1]]  $soul_content             = undef,
   Optional[String[1]]  $skin_name                = undef,
   Optional[String[1]]  $skin_content             = undef,
-  Optional[String[1]]  $hero_png_source          = undef,
-  Optional[String[1]]  $hero_ansi_source         = undef,
   Any                  $telegram_toolsets        = undef,
   Boolean              $google_workspace_enabled = false,
   Array[String[1]]     $extra_packages           = [],
@@ -52,8 +50,6 @@ define nest::lib::hermes (
   $hermes_config_manager_path       = "${install_dir}/bin/manage-hermes-config"
   $hermes_honcho_config_path        = "${profile_dir}/honcho.json"
   $hermes_skins_dir                 = "${profile_dir}/skins"
-  $hermes_assets_dir                = "${profile_dir}/assets"
-  $hermes_hero_assets_dir           = "${hermes_assets_dir}/hero"
   $systemd_user_dir                 = "/home/${user}/.config/systemd/user"
   $dashboard_oauth_client_id_value  = $dashboard_oauth_client_id ? {
     undef   => '',
@@ -223,7 +219,6 @@ define nest::lib::hermes (
     default => "  skin: \"${skin_name}\"\n",
   }
   $has_custom_skin = $skin_name != undef and $skin_content != undef
-  $has_hero_assets = $hero_png_source != undef or $hero_ansi_source != undef
 
   $env_content = [$gitlab_env_lines, $openai_env_lines, $tavily_env_lines, $telegram_env_lines].flatten.join("\n")
 
@@ -263,46 +258,6 @@ define nest::lib::hermes (
       group   => $user,
       content => $skin_content,
       require => File[$hermes_skins_dir],
-    }
-  }
-
-  if $has_hero_assets {
-    file { $hermes_assets_dir:
-      ensure  => directory,
-      mode    => '0700',
-      owner   => $user,
-      group   => $user,
-      require => File[$profile_dir],
-    }
-
-    file { $hermes_hero_assets_dir:
-      ensure  => directory,
-      mode    => '0700',
-      owner   => $user,
-      group   => $user,
-      require => File[$hermes_assets_dir],
-    }
-
-    if $hero_png_source != undef {
-      file { "${hermes_hero_assets_dir}/A-cool-ops-dawn-${profile}-40x36.png":
-        ensure  => file,
-        mode    => '0600',
-        owner   => $user,
-        group   => $user,
-        source  => $hero_png_source,
-        require => File[$hermes_hero_assets_dir],
-      }
-    }
-
-    if $hero_ansi_source != undef {
-      file { "${hermes_hero_assets_dir}/A-cool-ops-dawn-${profile}-safe-40x18-full.ansi":
-        ensure  => file,
-        mode    => '0600',
-        owner   => $user,
-        group   => $user,
-        source  => $hero_ansi_source,
-        require => File[$hermes_hero_assets_dir],
-      }
     }
   }
 
