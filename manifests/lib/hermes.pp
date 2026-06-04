@@ -226,7 +226,7 @@ define nest::lib::hermes (
   }
   $dashboard_theme_yaml = $dashboard_theme ? {
     undef   => '',
-    default => "        theme: \"${dashboard_theme}\"\n",
+    default => "  theme: \"${dashboard_theme}\"\n",
   }
   $effective_skin_content = $skin_content ? {
     undef   => undef,
@@ -327,7 +327,8 @@ ${display_skin_yaml}  platforms:
         provider: honcho
       dashboard:
         public_url: "${dashboard_public_url}"
-${dashboard_theme_yaml}        oauth:
+${dashboard_theme_yaml}
+        oauth:
           client_id: "${dashboard_oauth_client_id_value}"
           portal_url: "${dashboard_oauth_portal_url_value}"
       | YAML
