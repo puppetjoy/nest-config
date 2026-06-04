@@ -58,7 +58,6 @@ class nest::app::hermes::install {
     provider => git,
     source   => $broker_git_url,
     revision => $broker_git_ref,
-    identity => "/home/${nest::user}/.ssh/id_ed25519",
     require  => [
       File[$install_dir],
       Class['nest::base::git'],
