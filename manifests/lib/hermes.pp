@@ -220,7 +220,7 @@ define nest::lib::hermes (
   }
   $display_skin_yaml = $skin_name ? {
     undef   => '',
-    default => "        skin: \"${skin_name}\"\n",
+    default => "  skin: \"${skin_name}\"\n",
   }
   $has_custom_skin = $skin_name != undef and $skin_content != undef
   $has_hero_assets = $hero_png_source != undef or $hero_ansi_source != undef
@@ -349,7 +349,7 @@ ${telegram_toolsets_yaml}
       display:
         tool_progress: all
         tool_progress_command: true
-${display_skin_yaml}        platforms:
+${display_skin_yaml}  platforms:
           telegram:
             tool_progress: all
             tool_preview_length: 500
