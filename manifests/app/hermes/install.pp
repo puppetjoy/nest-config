@@ -10,9 +10,10 @@ class nest::app::hermes::install {
   $broker_git_ref    = $nest::app::hermes::broker_git_ref
   $broker_source_dir = "${install_dir}/agent-request-broker"
   $gws_dir           = '/opt/google-workspace-cli'
-  $git_revision_file = "${install_dir}/.installed-git-revision"
-  $tui_revision_file = "${install_dir}/.installed-tui-revision"
-  $web_revision_file = "${install_dir}/.installed-web-revision"
+  $git_revision_file        = "${install_dir}/.installed-git-revision"
+  $broker_git_revision_file = "${install_dir}/.installed-agent-request-broker-revision"
+  $tui_revision_file        = "${install_dir}/.installed-tui-revision"
+  $web_revision_file        = "${install_dir}/.installed-web-revision"
 
 
   nest::lib::package { 'dev-python/virtualenv':
@@ -65,7 +66,7 @@ class nest::app::hermes::install {
 
   exec { 'install_hermes_agent':
     command     => "${venv_pip} install --upgrade --force-reinstall ${source_dir} && git -C ${source_dir} rev-parse HEAD > ${git_revision_file}",
-    unless      => "test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent')\" && /bin/grep -q 'app.state.allow_public = allow_public' ${venv_dir}/lib/python*/site-packages/hermes_cli/web_server.py && /bin/grep -q 'if _pl <= 0:' ${venv_dir}/lib/python*/site-packages/gateway/run.py && /bin/grep -q '_banner_hero_renderable' ${venv_dir}/lib/python*/site-packages/hermes_cli/banner.py && /bin/grep -q 'banner_subtitle' ${venv_dir}/lib/python*/site-packages/hermes_cli/banner.py",
+    unless      => "test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent')\" && /bin/grep -q 'app.state.allow_public = allow_public' ${venv_dir}/lib/python*/site-packages/hermes_cli/web_server.py && /bin/grep -q 'if _pl <= 0:' ${venv_dir}/lib/python*/site-packages/gateway/run.py && /bin/grep -q '_banner_hero_renderable' ${venv_dir}/lib/python*/site-packages/hermes_cli/banner.py && /bin/grep -q 'banner_subtitle' ${venv_dir}/lib/python*/site-packages/hermes_cli/banner.py && /bin/grep -q 'discover_builtin_tools()' ${venv_dir}/lib/python*/site-packages/cli.py",
     environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
     path        => ['/bin', '/usr/bin'],
     require     => [
@@ -74,6 +75,9 @@ class nest::app::hermes::install {
       Exec['patch_hermes_telegram_tool_preview_length'],
       Exec['patch_hermes_banner_hero_renderable'],
       Exec['patch_hermes_banner_logo_suppression'],
+      Exec['patch_hermes_cli_custom_toolset_validation'],
+      File["${source_dir}/tools/agent_request_tool.py"],
+      File["${source_dir}/tools/google_workspace_tool.py"],
     ],
   }
 
@@ -145,6 +149,23 @@ class nest::app::hermes::install {
     ],
   }
 
+  file { "${install_dir}/cli-discover-custom-toolsets-before-validation.patch":
+    ensure => file,
+    source => 'puppet:///modules/nest/app/hermes/cli-discover-custom-toolsets-before-validation.patch',
+    mode   => '0644',
+    owner  => 'root',
+    group  => 'root',
+  }
+
+  exec { 'patch_hermes_cli_custom_toolset_validation':
+    command => "/usr/bin/patch -N -p1 -d ${source_dir} < ${install_dir}/cli-discover-custom-toolsets-before-validation.patch",
+    unless  => "/bin/grep -q 'Profile-managed platform_toolsets may' ${source_dir}/cli.py",
+    require => [
+      File["${install_dir}/cli-discover-custom-toolsets-before-validation.patch"],
+      Vcsrepo[$source_dir],
+    ],
+  }
+
   file { "${install_dir}/dashboard-rich-art-spans.patch":
     ensure => file,
     source => 'puppet:///modules/nest/app/hermes/dashboard-rich-art-spans.patch',
@@ -201,6 +222,17 @@ class nest::app::hermes::install {
     target  => "${broker_source_dir}/src/tools/agent_request_tool.py",
     require => [
       Vcsrepo[$source_dir],
+      Vcsrepo[$broker_source_dir],
+    ],
+  }
+
+  exec { 'install_hermes_agent_request_broker':
+    command     => "${venv_pip} install --upgrade --force-reinstall ${broker_source_dir} && git -C ${broker_source_dir} rev-parse HEAD > ${broker_git_revision_file}",
+    unless      => "test \"$(git -C ${broker_source_dir} rev-parse HEAD)\" = \"$(cat ${broker_git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent-request-broker'); import agent_request_broker\"",
+    environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
+    path        => ['/bin', '/usr/bin'],
+    require     => [
+      Exec['create_hermes_venv'],
       Vcsrepo[$broker_source_dir],
     ],
   }
