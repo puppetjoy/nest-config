@@ -252,12 +252,13 @@ define nest::lib::hermes (
     }
 
     file { "${hermes_skins_dir}/${skin_name}.yaml":
-      ensure  => file,
-      mode    => '0600',
-      owner   => $user,
-      group   => $user,
-      content => $skin_content,
-      require => File[$hermes_skins_dir],
+      ensure    => file,
+      mode      => '0600',
+      owner     => $user,
+      group     => $user,
+      content   => $skin_content,
+      show_diff => false,
+      require   => File[$hermes_skins_dir],
     }
   }
 
