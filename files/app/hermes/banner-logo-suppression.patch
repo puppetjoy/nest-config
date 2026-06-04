@@ -1,0 +1,32 @@
+diff -uNr a/hermes_cli/banner.py b/hermes_cli/banner.py
+--- a/hermes_cli/banner.py	2026-06-04 06:00:00.000000000 -0400
++++ b/hermes_cli/banner.py	2026-06-04 06:00:00.000000000 -0400
+@@ -558,7 +558,11 @@
+     if len(model_short) > 28:
+         model_short = model_short[:25] + "..."
+     ctx_str = f" [dim {dim}]·[/] [dim {dim}]{_format_context_length(context_length)} context[/]" if context_length else ""
+-    left_lines.append(_banner_markup(f"[{accent}]{model_short}[/]{ctx_str} [dim {dim}]·[/] [dim {dim}]Nous Research[/]"))
++    subtitle = _skin_branding("banner_subtitle", "Nous Research")
++    subtitle_str = (
++        f" [dim {dim}]·[/] [dim {dim}]{subtitle}[/]" if subtitle else ""
++    )
++    left_lines.append(_banner_markup(f"[{accent}]{model_short}[/]{ctx_str}{subtitle_str}"))
+ 
+     if os.getenv("HERMES_YOLO_MODE"):
+         left_lines.append(_banner_markup(f"[bold red]⚠ YOLO mode[/] [dim {dim}]— all approval prompts bypassed[/]"))
+@@ -744,9 +748,14 @@
+     console.print()
+     term_width = shutil.get_terminal_size().columns
+     if term_width >= 95:
+-        _logo = _bskin.banner_logo if _bskin and hasattr(_bskin, 'banner_logo') and _bskin.banner_logo else HERMES_AGENT_LOGO
+-        console.print(_logo)
+-        console.print()
++        _skin_logo = _bskin.banner_logo if _bskin and hasattr(_bskin, 'banner_logo') else ""
++        if _skin_logo == "__none__":
++            _logo = ""
++        else:
++            _logo = _skin_logo or HERMES_AGENT_LOGO
++        if _logo:
++            console.print(_logo)
++            console.print()
+     console.print(outer_panel)

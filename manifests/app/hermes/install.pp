@@ -65,7 +65,7 @@ class nest::app::hermes::install {
 
   exec { 'install_hermes_agent':
     command     => "${venv_pip} install --upgrade --force-reinstall ${source_dir} && git -C ${source_dir} rev-parse HEAD > ${git_revision_file}",
-    unless      => "test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent')\" && /bin/grep -q 'app.state.allow_public = allow_public' ${venv_dir}/lib/python*/site-packages/hermes_cli/web_server.py && /bin/grep -q 'if _pl <= 0:' ${venv_dir}/lib/python*/site-packages/gateway/run.py && /bin/grep -q '_banner_hero_renderable' ${venv_dir}/lib/python*/site-packages/hermes_cli/banner.py",
+    unless      => "test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent')\" && /bin/grep -q 'app.state.allow_public = allow_public' ${venv_dir}/lib/python*/site-packages/hermes_cli/web_server.py && /bin/grep -q 'if _pl <= 0:' ${venv_dir}/lib/python*/site-packages/gateway/run.py && /bin/grep -q '_banner_hero_renderable' ${venv_dir}/lib/python*/site-packages/hermes_cli/banner.py && /bin/grep -q 'banner_subtitle' ${venv_dir}/lib/python*/site-packages/hermes_cli/banner.py",
     environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
     path        => ['/bin', '/usr/bin'],
     require     => [
@@ -73,6 +73,7 @@ class nest::app::hermes::install {
       Exec['patch_hermes_dashboard_insecure_websockets'],
       Exec['patch_hermes_telegram_tool_preview_length'],
       Exec['patch_hermes_banner_hero_renderable'],
+      Exec['patch_hermes_banner_logo_suppression'],
     ],
   }
 
@@ -124,6 +125,23 @@ class nest::app::hermes::install {
     require => [
       File["${install_dir}/banner-hero-renderable.patch"],
       Vcsrepo[$source_dir],
+    ],
+  }
+
+  file { "${install_dir}/banner-logo-suppression.patch":
+    ensure => file,
+    source => 'puppet:///modules/nest/app/hermes/banner-logo-suppression.patch',
+    mode   => '0644',
+    owner  => 'root',
+    group  => 'root',
+  }
+
+  exec { 'patch_hermes_banner_logo_suppression':
+    command => "/usr/bin/patch -N -p1 -d ${source_dir} < ${install_dir}/banner-logo-suppression.patch",
+    unless  => "/bin/grep -q 'banner_subtitle' ${source_dir}/hermes_cli/banner.py && /bin/grep -q '__none__' ${source_dir}/hermes_cli/banner.py",
+    require => [
+      File["${install_dir}/banner-logo-suppression.patch"],
+      Exec['patch_hermes_banner_hero_renderable'],
     ],
   }
 

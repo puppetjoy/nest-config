@@ -97,11 +97,13 @@ nest::app::hermes::instances:
           - ['⟪', '⟫']
       branding:
         agent_name: Talon
+        banner_subtitle: ''
         welcome: Talon is on watch. Type your message or /help for commands.
         goodbye: Talon is folding the laptop. 🦉
         response_label: ' 🦉 Talon '
         prompt_symbol: '🦉'
         help_header: '(•v•) Talon commands'
+      banner_logo: '__none__'
       tool_prefix: '▏'
       tool_emojis:
         terminal: '🖥️'
@@ -195,11 +197,13 @@ nest::app::hermes::instances:
           - ['⟪', '⟫']
       branding:
         agent_name: Star
+        banner_subtitle: ''
         welcome: Star is ready with the planner. Type your message or /help for commands.
         goodbye: Star is closing the planner. 🦋
         response_label: ' 🦋 Star '
         prompt_symbol: '🦋'
         help_header: '(✦) Star commands'
+      banner_logo: '__none__'
       tool_prefix: '╎'
       tool_emojis:
         google_workspace: '📅'
