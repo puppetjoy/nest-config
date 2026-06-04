@@ -1,0 +1,19 @@
+diff -uNr a/ui-tui/src/components/branding.tsx b/ui-tui/src/components/branding.tsx
+--- a/ui-tui/src/components/branding.tsx	2026-06-04 02:45:42.582754940 -0400
++++ b/ui-tui/src/components/branding.tsx	2026-06-04 02:45:42.594928425 -0400
+@@ -27,13 +27,12 @@
+   )
+ }
+ 
+-const ART_BACKGROUND_COLOR = '#000000'
+ 
+ export function ArtLines({ lines }: { lines: [string, string, string][][] }) {
+   return (
+-    <Box flexDirection="column" height={lines.length} opaque width={artWidth(lines)}>
++    <Box flexDirection="column" height={lines.length} width={artWidth(lines)}>
+       {lines.map((spans, i) => (
+-        <Text backgroundColor={ART_BACKGROUND_COLOR} key={i} wrap="truncate-end">
++        <Text key={i} wrap="truncate-end">
+           {spans.map(([fg, bg, text], j) => (
+             <Text backgroundColor={bg || undefined} color={fg || undefined} key={j}>
+               {text}

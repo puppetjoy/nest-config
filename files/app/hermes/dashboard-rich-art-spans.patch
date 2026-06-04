@@ -1,6 +1,6 @@
 diff -uNr a/ui-tui/src/banner.ts b/ui-tui/src/banner.ts
---- a/ui-tui/src/banner.ts	2026-06-04 02:34:40.598258915 -0400
-+++ b/ui-tui/src/banner.ts	2026-06-04 02:34:40.598693854 -0400
+--- a/ui-tui/src/banner.ts	2026-06-04 02:16:27.097659219 -0400
++++ b/ui-tui/src/banner.ts	2026-06-04 02:17:05.905277946 -0400
 @@ -1,46 +1,74 @@
  import type { ThemeColors } from './theme.js'
  
@@ -119,23 +119,22 @@ diff -uNr a/ui-tui/src/banner.ts b/ui-tui/src/banner.ts
 +type Span = [string, string, string]
 +type Line = Span[]
 diff -uNr a/ui-tui/src/components/branding.tsx b/ui-tui/src/components/branding.tsx
---- a/ui-tui/src/components/branding.tsx	2026-06-04 02:34:40.598315812 -0400
-+++ b/ui-tui/src/components/branding.tsx	2026-06-04 02:34:40.612587766 -0400
-@@ -27,12 +27,18 @@
+--- a/ui-tui/src/components/branding.tsx	2026-06-04 02:16:27.098505284 -0400
++++ b/ui-tui/src/components/branding.tsx	2026-06-04 02:45:21.096910232 -0400
+@@ -27,12 +27,16 @@
    )
  }
  
 -export function ArtLines({ lines }: { lines: [string, string][] }) {
-+const ART_BACKGROUND_COLOR = '#000000'
-+
 +export function ArtLines({ lines }: { lines: [string, string, string][][] }) {
    return (
-     <Box flexDirection="column" height={lines.length} opaque width={artWidth(lines)}>
+-    <Box flexDirection="column" height={lines.length} opaque width={artWidth(lines)}>
 -      {lines.map(([c, text], i) => (
 -        <Text color={c} key={i} wrap="truncate-end">
 -          {text}
++    <Box flexDirection="column" height={lines.length} width={artWidth(lines)}>
 +      {lines.map((spans, i) => (
-+        <Text backgroundColor={ART_BACKGROUND_COLOR} key={i} wrap="truncate-end">
++        <Text key={i} wrap="truncate-end">
 +          {spans.map(([fg, bg, text], j) => (
 +            <Text backgroundColor={bg || undefined} color={fg || undefined} key={j}>
 +              {text}
