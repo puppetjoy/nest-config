@@ -117,7 +117,7 @@ class nest::app::hermes::install {
 
   exec { 'patch_hermes_banner_hero_renderable':
     command => "/usr/bin/patch -N -p1 -d ${source_dir} < ${install_dir}/banner-hero-renderable.patch",
-    unless  => "/bin/grep -q 'def _banner_hero_renderable' ${source_dir}/hermes_cli/banner.py && (/bin/grep -q 'AnsiDecoder().decode(hero)' ${source_dir}/hermes_cli/banner.py || /bin/grep -q 'class _RawAnsiHero' ${source_dir}/hermes_cli/banner.py)",
+    unless  => "/bin/sh -c '(/bin/grep -q '\''def _banner_hero_renderable'\'' ${source_dir}/hermes_cli/banner.py && (/bin/grep -q '\''AnsiDecoder().decode(hero)'\'' ${source_dir}/hermes_cli/banner.py || /bin/grep -q '\''class _RawAnsiHero'\'' ${source_dir}/hermes_cli/banner.py)) || (/bin/grep -q '\''Text.from_markup(hero, emoji=False, overflow=\"ignore\")'\'' ${source_dir}/hermes_cli/banner.py && /bin/grep -q '\''width=39, min_width=39, max_width=39, no_wrap=True'\'' ${source_dir}/hermes_cli/banner.py)'",
     require => [
       File["${install_dir}/banner-hero-renderable.patch"],
       Vcsrepo[$source_dir],
@@ -134,7 +134,7 @@ class nest::app::hermes::install {
 
   exec { 'patch_hermes_banner_hero_raw_ansi_segments':
     command => "/usr/bin/patch -N -p1 -d ${source_dir} < ${install_dir}/banner-hero-raw-ansi-segments.patch",
-    unless  => "/bin/grep -q 'class _RawAnsiHero' ${source_dir}/hermes_cli/banner.py && /bin/grep -q 'ControlType.CARRIAGE_RETURN' ${source_dir}/hermes_cli/banner.py",
+    unless  => "/bin/sh -c '(/bin/grep -q '\''class _RawAnsiHero'\'' ${source_dir}/hermes_cli/banner.py && /bin/grep -q '\''ControlType.CARRIAGE_RETURN'\'' ${source_dir}/hermes_cli/banner.py) || (/bin/grep -q '\''Text.from_markup(hero, emoji=False, overflow=\"ignore\")'\'' ${source_dir}/hermes_cli/banner.py && /bin/grep -q '\''width=39, min_width=39, max_width=39, no_wrap=True'\'' ${source_dir}/hermes_cli/banner.py)'",
     require => [
       File["${install_dir}/banner-hero-raw-ansi-segments.patch"],
       Exec['patch_hermes_banner_hero_renderable'],
@@ -149,9 +149,9 @@ class nest::app::hermes::install {
     group  => 'root',
   }
 
-  exec { 'finalize_hermes_banner_hero_raw_ansi':
+  exec { 'finalize_hermes_banner_hero_rendering':
     command => "/opt/hermes-agent/venv/bin/python ${install_dir}/banner-hero-finalize.py",
-    unless  => "/usr/bin/env PYTHONPATH=${source_dir} /opt/hermes-agent/venv/bin/python -c 'import hermes_cli.banner' && /bin/grep -q 'class _RawAnsiHero' ${source_dir}/hermes_cli/banner.py && /bin/grep -q 'return _RawAnsiHero(hero)' ${source_dir}/hermes_cli/banner.py && /bin/grep -Fq '_CSI_RE = re.compile(r\"\\x1b' ${source_dir}/hermes_cli/banner.py && ! /bin/grep -q 'AnsiDecoder().decode(hero)' ${source_dir}/hermes_cli/banner.py && test ! -f ${source_dir}/hermes_cli/banner.py.rej",
+    unless  => "/usr/bin/env PYTHONPATH=${source_dir} /opt/hermes-agent/venv/bin/python -c 'import hermes_cli.banner' && /bin/grep -q 'Text.from_markup(hero, emoji=False, overflow=\"ignore\")' ${source_dir}/hermes_cli/banner.py && /bin/grep -q 'text.no_wrap = True' ${source_dir}/hermes_cli/banner.py && /bin/grep -q 'width=39, min_width=39, max_width=39, no_wrap=True' ${source_dir}/hermes_cli/banner.py && ! /bin/grep -q 'class _RawAnsiHero' ${source_dir}/hermes_cli/banner.py && ! /bin/grep -q 'AnsiDecoder().decode(hero)' ${source_dir}/hermes_cli/banner.py && test ! -f ${source_dir}/hermes_cli/banner.py.rej",
     require => [
       File["${install_dir}/banner-hero-finalize.py"],
       Exec['patch_hermes_banner_hero_raw_ansi_segments'],

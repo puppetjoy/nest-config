@@ -4,59 +4,32 @@ from pathlib import Path
 path = Path('/opt/hermes-agent/src/hermes_cli/banner.py')
 s = path.read_text()
 
-s = s.replace('from rich.ansi import AnsiDecoder\n', '')
-if 'import re\n' not in s:
-    s = s.replace('import os\n', 'import os\nimport re\n', 1)
-if 'from rich.segment import ControlType, Segment\n' not in s:
-    s = s.replace('from rich.panel import Panel\n', 'from rich.panel import Panel\nfrom rich.segment import ControlType, Segment\n', 1)
+s = s.replace('import re\n', '')
+s = s.replace('from rich.segment import ControlType, Segment\n', '')
 
-raw_block = r'''_CSI_RE = re.compile(r"\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))")
+helper = """def _banner_hero_renderable(hero: str) -> Text:
+    \"\"\"Render banner hero art as fixed-width, non-wrapping Rich markup.
 
-
-class _RawAnsiHero:
-    """Raw ANSI terminal art with Rich-compatible measurement.
-
-    Direct terminal output for Joy's half-block mascot art is already correct.
-    Rich's AnsiDecoder can preserve the glyph grid but re-emits truecolor
-    through the surrounding console's color policy, which can corrupt the TUI
-    rendering. Yield the original SGR bytes as zero-width control segments and
-    the glyph/space cells as normal text segments, so Rich measures rows by
-    terminal cells while the terminal receives the original ANSI stream.
-    """
-
-    def __init__(self, ansi: str):
-        self.ansi = ansi
-
-    def __rich_console__(self, console, options):
-        for line in self.ansi.splitlines():
-            pos = 0
-            for match in _CSI_RE.finditer(line):
-                if match.start() > pos:
-                    yield Segment(line[pos:match.start()])
-                # Mark escape/control bytes zero-width for Rich measurement,
-                # while preserving the exact SGR stream in output.
-                yield Segment(match.group(0), None, [(ControlType.CARRIAGE_RETURN,)])
-                pos = match.end()
-            if pos < len(line):
-                yield Segment(line[pos:])
-            yield Segment.line()
-
-
-def _banner_hero_renderable(hero: str):
-    """Render banner hero art without mixing it into surrounding markup."""
-    if "\x1b" in hero:
-        return _RawAnsiHero(hero)
-    return Text.from_markup(hero)
+    The accepted Talon/Star source art is the safe 39-column half-block ANSI
+    artifact. Hiera stores a faithful Rich-markup conversion of that artifact
+    because the banner path is a Rich renderer. Keep the hero isolated and
+    non-wrapping so Rich table measurement may not squeeze sparse rows down to
+    their minimum width and scatter cells across columns.
+    \"\"\"
+    text = Text.from_markup(hero, emoji=False, overflow=\"ignore\")
+    text.no_wrap = True
+    return text
 
 
 def _banner_markup(markup: str) -> Text:
-    """Parse regular one-line banner markup into a Rich Text renderable."""
+    \"\"\"Parse regular one-line banner markup into a Rich Text renderable.\"\"\"
     return Text.from_markup(markup)
-'''
+"""
 
 candidates = [
     idx for idx in [
         s.find('_CSI_RE = re.compile'),
+        s.find('class _RawAnsiHero'),
         s.find('def _banner_hero_renderable'),
     ]
     if idx != -1
@@ -67,11 +40,23 @@ start = min(candidates)
 marker = '# =========================================================================\n# ASCII Art & Branding'
 end = s.find(marker, start)
 if end == -1:
-    raise SystemExit('could not find banner helper region end')
-s = s[:start] + raw_block + '\n' + s[end:]
+    raise SystemExit('could not find ASCII art marker')
+s = s[:start] + helper + '\n' + s[end:]
 
+s = s.replace(
+    '    layout_table.add_column("left", justify="center")\n'
+    '    layout_table.add_column("right", justify="left")\n',
+    '    layout_table.add_column("left", justify="left", width=39, min_width=39, max_width=39, no_wrap=True, overflow="ignore")\n'
+    '    layout_table.add_column("right", justify="left")\n',
+)
+s = s.replace(
+    '    layout_table.add_column("left", justify="left")\n'
+    '    layout_table.add_column("right", justify="left")\n',
+    '    layout_table.add_column("left", justify="left", width=39, min_width=39, max_width=39, no_wrap=True, overflow="ignore")\n'
+    '    layout_table.add_column("right", justify="left")\n',
+)
+
+path.write_text(s)
 rej = path.with_suffix(path.suffix + '.rej')
 if rej.exists():
     rej.unlink()
-
-path.write_text(s)
