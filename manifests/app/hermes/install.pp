@@ -124,6 +124,23 @@ class nest::app::hermes::install {
     ],
   }
 
+  file { "${install_dir}/banner-hero-raw-ansi-segments.patch":
+    ensure => file,
+    source => 'puppet:///modules/nest/app/hermes/banner-hero-raw-ansi-segments.patch',
+    mode   => '0644',
+    owner  => 'root',
+    group  => 'root',
+  }
+
+  exec { 'patch_hermes_banner_hero_raw_ansi_segments':
+    command => "/usr/bin/patch -N -p1 -d ${source_dir} < ${install_dir}/banner-hero-raw-ansi-segments.patch",
+    unless  => "/bin/grep -q 'class _RawAnsiHero' ${source_dir}/hermes_cli/banner.py && /bin/grep -q 'ControlType.CARRIAGE_RETURN' ${source_dir}/hermes_cli/banner.py",
+    require => [
+      File["${install_dir}/banner-hero-raw-ansi-segments.patch"],
+      Exec['patch_hermes_banner_hero_renderable'],
+    ],
+  }
+
   file { "${source_dir}/tools/agent_request_tool.py":
     ensure  => link,
     target  => "${broker_source_dir}/src/tools/agent_request_tool.py",
