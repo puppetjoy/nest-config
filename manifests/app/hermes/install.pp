@@ -143,6 +143,23 @@ class nest::app::hermes::install {
     ],
   }
 
+  file { "${install_dir}/dashboard-art-black-background.patch":
+    ensure => file,
+    source => 'puppet:///modules/nest/app/hermes/dashboard-art-black-background.patch',
+    mode   => '0644',
+    owner  => 'root',
+    group  => 'root',
+  }
+
+  exec { 'patch_hermes_dashboard_art_black_background':
+    command => "/usr/bin/patch -N -p1 -d ${source_dir} < ${install_dir}/dashboard-art-black-background.patch",
+    unless  => "/bin/grep -q 'ART_BACKGROUND_COLOR' ${source_dir}/ui-tui/src/components/branding.tsx",
+    require => [
+      File["${install_dir}/dashboard-art-black-background.patch"],
+      Exec['patch_hermes_dashboard_rich_art_spans'],
+    ],
+  }
+
   file { "${source_dir}/tools/agent_request_tool.py":
     ensure  => link,
     target  => "${broker_source_dir}/src/tools/agent_request_tool.py",
@@ -164,7 +181,7 @@ class nest::app::hermes::install {
   exec { 'build_hermes_tui':
     command     => "npm ci --silent --no-fund --no-audit --progress=false && npm run build && git -C ${source_dir} rev-parse HEAD > ${tui_revision_file}",
     cwd         => "${source_dir}/ui-tui",
-    unless      => "test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${tui_revision_file} 2>/dev/null)\" && test -f ${source_dir}/ui-tui/dist/entry.js && test -d ${source_dir}/ui-tui/node_modules && /bin/grep -q 'RICH_OPEN_RE' ${source_dir}/ui-tui/dist/entry.js",
+    unless      => "test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${tui_revision_file} 2>/dev/null)\" && test -f ${source_dir}/ui-tui/dist/entry.js && test -d ${source_dir}/ui-tui/node_modules && /bin/grep -q 'ART_BACKGROUND_COLOR' ${source_dir}/ui-tui/dist/entry.js",
     environment => [
       'HOME=/root',
       'NPM_CONFIG_CACHE=/root/.npm',
@@ -174,6 +191,7 @@ class nest::app::hermes::install {
     require     => [
       Vcsrepo[$source_dir],
       Exec['patch_hermes_dashboard_rich_art_spans'],
+      Exec['patch_hermes_dashboard_art_black_background'],
     ],
   }
 
