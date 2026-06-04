@@ -1,0 +1,13 @@
+diff --git a/web/src/pages/ChatPage.tsx b/web/src/pages/ChatPage.tsx
+index d8bc2e1..9e5f7d2 100644
+--- a/web/src/pages/ChatPage.tsx
++++ b/web/src/pages/ChatPage.tsx
+@@ -816,7 +816,7 @@ export default function ChatPage({ isActive = true }: { isActive?: boolean }) {
+       <div className="flex min-h-0 flex-1 flex-col gap-2 lg:flex-row lg:gap-3">
+         <div
+           className={cn(
+-            "relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg",
++            "hermes-chat-terminal-isolated relative z-[102] flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg",
+             "p-2 sm:p-3",
+           )}
+           style={{
