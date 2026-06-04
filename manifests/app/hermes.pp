@@ -4,7 +4,7 @@ class nest::app::hermes (
   String[1]                      $git_ref                     = 'main',
   String[1]                      $broker_git_url              = 'https://gitlab.joyfullee.me/joy/hermes-agent-request-broker.git',
   String[1]                      $broker_git_ref              = 'main',
-  Enum['json', 'kanban']         $agent_request_backend       = 'json',
+  Enum['json', 'kanban']         $agent_request_backend       = 'kanban',
   String[1]                      $agent_request_kanban_board  = 'agent-requests-dev',
   String[1]                      $gitlab_url                  = 'https://gitlab.joyfullee.me',
   Optional[Sensitive[String[1]]] $gitlab_token                = undef,

@@ -28,7 +28,7 @@ define nest::lib::hermes (
   Optional[String[1]]  $dashboard_theme          = undef,
   Optional[String[1]]  $dashboard_oauth_client_id= undef,
   Optional[String[1]]  $dashboard_oauth_portal_url= undef,
-  String[1]            $agent_request_backend    = 'json',
+  String[1]            $agent_request_backend    = 'kanban',
   String[1]            $agent_request_kanban_board= 'agent-requests-dev',
   Boolean              $gateway_enabled          = true,
   Optional[String[1]]  $ssh_auth_sock            = undef,
