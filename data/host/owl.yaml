@@ -46,8 +46,6 @@ nest::app::hermes::instances:
     gitlab_enabled: true
     image_gen_provider: 'openai'
     image_gen_model: 'gpt-image-2-medium'
-    extra_packages:
-      - 'media-gfx/inkscape'
     honcho_workspace: 'hermes'
     honcho_user_peer: 'joy'
     honcho_ai_peer: 'talon'
