@@ -3,9 +3,15 @@ class nest::app::hermes::service {
   $venv_dir                = "${install_dir}/venv"
   $venv_python             = "${venv_dir}/bin/python"
   $source_dir              = "${install_dir}/src"
-  $broker_source_dir       = "${install_dir}/agent-request-broker"
-  $pythonpath              = "${source_dir}:${broker_source_dir}/src"
-  $hermes_home_dir         = "/home/${nest::user}/.hermes"
+  $broker_source_dir            = "${install_dir}/agent-request-broker"
+  $pythonpath                   = "${source_dir}:${broker_source_dir}/src"
+  $agent_request_backend        = $nest::app::hermes::agent_request_backend
+  $agent_request_legacy_enabled = $agent_request_backend == 'json'
+  $agent_request_unit_ensure    = $agent_request_legacy_enabled ? {
+    true    => file,
+    default => absent,
+  }
+  $hermes_home_dir              = "/home/${nest::user}/.hermes"
   $response_watch_profiles = $nest::app::hermes::instances.filter |String[1] $_instance_name, Hash $instance_config| {
     pick($instance_config['agent_request_response_watch_enabled'], false)
   }.map |String[1] $instance_name, Hash $instance_config| {
@@ -249,7 +255,7 @@ class nest::app::hermes::service {
   }
 
   file { "${systemd_user_dir}/hermes-agent-request-watch.service":
-    ensure  => file,
+    ensure  => $agent_request_unit_ensure,
     mode    => '0644',
     owner   => $nest::user,
     group   => $nest::user,
@@ -279,7 +285,7 @@ class nest::app::hermes::service {
   }
 
   file { "${systemd_user_dir}/hermes-agent-request-watch.timer":
-    ensure  => file,
+    ensure  => $agent_request_unit_ensure,
     mode    => '0644',
     owner   => $nest::user,
     group   => $nest::user,
@@ -301,7 +307,7 @@ class nest::app::hermes::service {
 
   $response_watch_profiles.each |String[1] $response_watch_profile| {
     file { "${systemd_user_dir}/hermes-agent-request-response-watch-${response_watch_profile}.service":
-      ensure  => file,
+      ensure  => $agent_request_unit_ensure,
       mode    => '0644',
       owner   => $nest::user,
       group   => $nest::user,
@@ -331,7 +337,7 @@ class nest::app::hermes::service {
     }
 
     file { "${systemd_user_dir}/hermes-agent-request-response-watch-${response_watch_profile}.timer":
-      ensure  => file,
+      ensure  => $agent_request_unit_ensure,
       mode    => '0644',
       owner   => $nest::user,
       group   => $nest::user,
@@ -354,7 +360,7 @@ class nest::app::hermes::service {
 
   $peer_watch_profiles.each |String[1] $peer_watch_profile| {
     file { "${systemd_user_dir}/hermes-agent-request-peer-watch-${peer_watch_profile}.service":
-      ensure  => file,
+      ensure  => $agent_request_unit_ensure,
       mode    => '0644',
       owner   => $nest::user,
       group   => $nest::user,
@@ -384,7 +390,7 @@ class nest::app::hermes::service {
     }
 
     file { "${systemd_user_dir}/hermes-agent-request-peer-watch-${peer_watch_profile}.timer":
-      ensure  => file,
+      ensure  => $agent_request_unit_ensure,
       mode    => '0644',
       owner   => $nest::user,
       group   => $nest::user,
@@ -406,7 +412,7 @@ class nest::app::hermes::service {
   }
 
   file { "${systemd_user_dir}/hermes-agent-request-review-watch-talon.service":
-    ensure  => file,
+    ensure  => $agent_request_unit_ensure,
     mode    => '0644',
     owner   => $nest::user,
     group   => $nest::user,
@@ -436,7 +442,7 @@ class nest::app::hermes::service {
   }
 
   file { "${systemd_user_dir}/hermes-agent-request-review-watch-talon.timer":
-    ensure  => file,
+    ensure  => $agent_request_unit_ensure,
     mode    => '0644',
     owner   => $nest::user,
     group   => $nest::user,
@@ -551,47 +557,67 @@ class nest::app::hermes::service {
     unless  => "/usr/bin/loginctl show-user ${nest::user} -p Linger --value | /bin/grep -qx yes",
   }
 
-  exec { 'enable_hermes_agent_request_watch_timer':
-    command => '/bin/sh -c \'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user enable --now hermes-agent-request-watch.timer\'',
-    unless  => '/bin/sh -c \'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-enabled --quiet hermes-agent-request-watch.timer && XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-active --quiet hermes-agent-request-watch.timer\'',
-    user    => $nest::user,
-    require => [
-      Exec['enable_hermes_gateway_linger'],
-      File["${systemd_user_dir}/hermes-agent-request-watch.timer"],
-    ],
-  }
-
-  $response_watch_profiles.each |String[1] $response_watch_profile| {
-    exec { "enable_hermes_agent_request_response_watch_${response_watch_profile}_timer":
-      command => "/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user enable --now hermes-agent-request-response-watch-${response_watch_profile}.timer'",
-      unless  => "/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-enabled --quiet hermes-agent-request-response-watch-${response_watch_profile}.timer && XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-active --quiet hermes-agent-request-response-watch-${response_watch_profile}.timer'",
+  if $agent_request_legacy_enabled {
+    exec { 'enable_hermes_agent_request_watch_timer':
+      command => '/bin/sh -c \'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user enable --now hermes-agent-request-watch.timer\'',
+      unless  => '/bin/sh -c \'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-enabled --quiet hermes-agent-request-watch.timer && XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-active --quiet hermes-agent-request-watch.timer\'',
       user    => $nest::user,
       require => [
         Exec['enable_hermes_gateway_linger'],
-        File["${systemd_user_dir}/hermes-agent-request-response-watch-${response_watch_profile}.timer"],
+        File["${systemd_user_dir}/hermes-agent-request-watch.timer"],
       ],
     }
-  }
 
-  $peer_watch_profiles.each |String[1] $peer_watch_profile| {
-    exec { "enable_hermes_agent_request_peer_watch_${peer_watch_profile}_timer":
-      command => "/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user enable --now hermes-agent-request-peer-watch-${peer_watch_profile}.timer'",
-      unless  => "/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-enabled --quiet hermes-agent-request-peer-watch-${peer_watch_profile}.timer && XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-active --quiet hermes-agent-request-peer-watch-${peer_watch_profile}.timer'",
+    $response_watch_profiles.each |String[1] $response_watch_profile| {
+      exec { "enable_hermes_agent_request_response_watch_${response_watch_profile}_timer":
+        command => "/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user enable --now hermes-agent-request-response-watch-${response_watch_profile}.timer'",
+        unless  => "/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-enabled --quiet hermes-agent-request-response-watch-${response_watch_profile}.timer && XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-active --quiet hermes-agent-request-response-watch-${response_watch_profile}.timer'",
+        user    => $nest::user,
+        require => [
+          Exec['enable_hermes_gateway_linger'],
+          File["${systemd_user_dir}/hermes-agent-request-response-watch-${response_watch_profile}.timer"],
+        ],
+      }
+    }
+
+    $peer_watch_profiles.each |String[1] $peer_watch_profile| {
+      exec { "enable_hermes_agent_request_peer_watch_${peer_watch_profile}_timer":
+        command => "/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user enable --now hermes-agent-request-peer-watch-${peer_watch_profile}.timer'",
+        unless  => "/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-enabled --quiet hermes-agent-request-peer-watch-${peer_watch_profile}.timer && XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-active --quiet hermes-agent-request-peer-watch-${peer_watch_profile}.timer'",
+        user    => $nest::user,
+        require => [
+          Exec['enable_hermes_gateway_linger'],
+          File["${systemd_user_dir}/hermes-agent-request-peer-watch-${peer_watch_profile}.timer"],
+        ],
+      }
+    }
+
+    exec { 'enable_hermes_agent_request_review_watch_talon_timer':
+      command => '/bin/sh -c \'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user enable --now hermes-agent-request-review-watch-talon.timer\'',
+      unless  => '/bin/sh -c \'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-enabled --quiet hermes-agent-request-review-watch-talon.timer && XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-active --quiet hermes-agent-request-review-watch-talon.timer\'',
       user    => $nest::user,
       require => [
         Exec['enable_hermes_gateway_linger'],
-        File["${systemd_user_dir}/hermes-agent-request-peer-watch-${peer_watch_profile}.timer"],
+        File["${systemd_user_dir}/hermes-agent-request-review-watch-talon.timer"],
       ],
     }
-  }
+  } else {
+    $agent_request_timer_units = [
+      'hermes-agent-request-watch.timer',
+      'hermes-agent-request-review-watch-talon.timer',
+    ] + $response_watch_profiles.map |String[1] $response_watch_profile| {
+      "hermes-agent-request-response-watch-${response_watch_profile}.timer"
+    } + $peer_watch_profiles.map |String[1] $peer_watch_profile| {
+      "hermes-agent-request-peer-watch-${peer_watch_profile}.timer"
+    }
 
-  exec { 'enable_hermes_agent_request_review_watch_talon_timer':
-    command => '/bin/sh -c \'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user enable --now hermes-agent-request-review-watch-talon.timer\'',
-    unless  => '/bin/sh -c \'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-enabled --quiet hermes-agent-request-review-watch-talon.timer && XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-active --quiet hermes-agent-request-review-watch-talon.timer\'',
-    user    => $nest::user,
-    require => [
-      Exec['enable_hermes_gateway_linger'],
-      File["${systemd_user_dir}/hermes-agent-request-review-watch-talon.timer"],
-    ],
+    $agent_request_timer_units.each |String[1] $agent_request_timer_unit| {
+      exec { "disable_${agent_request_timer_unit}":
+        command => "/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user disable --now ${agent_request_timer_unit} || true'",
+        unless  => "/bin/sh -c '! XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-enabled --quiet ${agent_request_timer_unit} && ! XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-active --quiet ${agent_request_timer_unit}'",
+        user    => $nest::user,
+        before  => Exec['hermes-systemd-user-daemon-reload'],
+      }
+    }
   }
 }

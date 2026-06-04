@@ -28,6 +28,8 @@ define nest::lib::hermes (
   Optional[String[1]]  $dashboard_theme          = undef,
   Optional[String[1]]  $dashboard_oauth_client_id= undef,
   Optional[String[1]]  $dashboard_oauth_portal_url= undef,
+  String[1]            $agent_request_backend    = 'json',
+  String[1]            $agent_request_kanban_board= 'agent-requests-dev',
   Boolean              $gateway_enabled          = true,
   String[1]            $honcho_base_url          = 'https://honcho.eyrie',
   String[1]            $honcho_workspace         = 'hermes',
@@ -219,6 +221,11 @@ define nest::lib::hermes (
     },
   }
 
+  $agent_request_env_lines = [
+    "AGENT_REQUEST_BACKEND=${agent_request_backend}",
+    "AGENT_REQUEST_KANBAN_BOARD=${agent_request_kanban_board}",
+  ]
+
   $image_gen_yaml = $image_gen_provider ? {
     undef   => '',
     default => $image_gen_model ? {
@@ -251,7 +258,7 @@ define nest::lib::hermes (
   }
   $has_custom_skin = $skin_name != undef and $effective_skin_content != undef
 
-  $env_content = [$gitlab_env_lines, $openai_env_lines, $tavily_env_lines, $telegram_env_lines].flatten.join("\n")
+  $env_content = [$gitlab_env_lines, $openai_env_lines, $tavily_env_lines, $telegram_env_lines, $agent_request_env_lines].flatten.join("\n")
 
   file { $hermes_env_path:
     ensure    => file,

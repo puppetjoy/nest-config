@@ -18,6 +18,8 @@ class nest::app::hermes::config {
   $dashboard_bind_host              = $nest::app::hermes::dashboard_bind_host
   $dashboard_oauth_client_id        = $nest::app::hermes::dashboard_oauth_client_id
   $dashboard_oauth_portal_url       = $nest::app::hermes::dashboard_oauth_portal_url
+  $agent_request_backend            = $nest::app::hermes::agent_request_backend
+  $agent_request_kanban_board       = $nest::app::hermes::agent_request_kanban_board
   $instances                        = $nest::app::hermes::instances
   $instance_secrets                 = $nest::app::hermes::instance_secrets
 
@@ -190,6 +192,8 @@ class nest::app::hermes::config {
       dashboard_theme            => $instance_dashboard_theme,
       dashboard_oauth_client_id  => $instance_oauth_client_id,
       dashboard_oauth_portal_url => $instance_oauth_portal_url,
+      agent_request_backend      => $agent_request_backend,
+      agent_request_kanban_board => $agent_request_kanban_board,
       gateway_enabled            => $instance_gateway_enabled,
       honcho_base_url            => $instance_honcho_base_url,
       honcho_workspace           => $instance_honcho_workspace,
