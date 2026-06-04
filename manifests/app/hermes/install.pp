@@ -153,7 +153,7 @@ class nest::app::hermes::install {
 
   exec { 'patch_hermes_dashboard_art_transparent_bg':
     command => "/usr/bin/patch -N -p1 -d ${source_dir} < ${install_dir}/dashboard-art-transparent-bg.patch",
-    unless  => "! /bin/grep -q 'ART_BACKGROUND_COLOR' ${source_dir}/ui-tui/src/components/branding.tsx && ! /bin/grep -q 'height={lines.length} opaque width={artWidth(lines)}' ${source_dir}/ui-tui/src/components/branding.tsx",
+    unless  => "/bin/sh -c '! /bin/grep -q '\''ART_BACKGROUND_COLOR'\'' ${source_dir}/ui-tui/src/components/branding.tsx && ! /bin/grep -q '\''height={lines.length} opaque width={artWidth(lines)}'\'' ${source_dir}/ui-tui/src/components/branding.tsx'",
     require => [
       File["${install_dir}/dashboard-art-transparent-bg.patch"],
       Exec['patch_hermes_dashboard_rich_art_spans'],
@@ -181,7 +181,7 @@ class nest::app::hermes::install {
   exec { 'build_hermes_tui':
     command     => "npm ci --silent --no-fund --no-audit --progress=false && npm run build && git -C ${source_dir} rev-parse HEAD > ${tui_revision_file}",
     cwd         => "${source_dir}/ui-tui",
-    unless      => "test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${tui_revision_file} 2>/dev/null)\" && test -f ${source_dir}/ui-tui/dist/entry.js && test -d ${source_dir}/ui-tui/node_modules && /bin/grep -q 'RICH_OPEN_RE' ${source_dir}/ui-tui/dist/entry.js && ! /bin/grep -q 'ART_BACKGROUND_COLOR' ${source_dir}/ui-tui/dist/entry.js",
+    unless      => "/bin/sh -c 'test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${tui_revision_file} 2>/dev/null)\" && test -f ${source_dir}/ui-tui/dist/entry.js && test -d ${source_dir}/ui-tui/node_modules && /bin/grep -q '\''RICH_OPEN_RE'\'' ${source_dir}/ui-tui/dist/entry.js && ! /bin/grep -q '\''ART_BACKGROUND_COLOR'\'' ${source_dir}/ui-tui/dist/entry.js'",
     environment => [
       'HOME=/root',
       'NPM_CONFIG_CACHE=/root/.npm',
