@@ -221,7 +221,7 @@ define nest::lib::hermes (
   }
   $skin_banner_hero_yaml = $skin_banner_hero_source ? {
     undef   => '',
-    default => "banner_hero: |\n${nest::ansi_to_rich($skin_banner_hero_source).split('\n').map |String $line| { "  ${line}" }.join('\n')}\n",
+    default => "banner_hero: |\n${nest::ansi_to_rich($skin_banner_hero_source).split("\n").map |String $line| { "  ${line}" }.join("\n")}\n",
   }
   $effective_skin_content = $skin_content ? {
     undef   => undef,
