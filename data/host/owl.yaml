@@ -43,6 +43,76 @@ nest::app::hermes::instances:
   talon:
     profile: 'talon'
     display_name: 'Talon'
+    skin_name: 'talon-ops-dawn'
+    hero_png_source: 'puppet:///modules/nest/app/hermes/hero/A-cool-ops-dawn-talon-40x36.png'
+    hero_ansi_source: 'puppet:///modules/nest/app/hermes/hero/A-cool-ops-dawn-talon-safe-40x18-full.ansi'
+    skin_content: |
+      name: talon-ops-dawn
+      description: Talon ops dawn — deep navy/violet with warm laptop glow
+      colors:
+        banner_border: '#5F5AE8'
+        banner_title: '#FFE3B8'
+        banner_accent: '#FF8C68'
+        banner_dim: '#6F6597'
+        banner_text: '#F7E9D0'
+        ui_accent: '#8C7CFF'
+        ui_label: '#FFC37A'
+        ui_ok: '#73D49B'
+        ui_error: '#EF6A73'
+        ui_warn: '#FFB86B'
+        prompt: '#F7E9D0'
+        input_rule: '#504685'
+        response_border: '#A99CFF'
+        status_bar_bg: '#111827'
+        status_bar_text: '#E9D7C2'
+        status_bar_strong: '#FFD6A0'
+        status_bar_dim: '#8F7EA8'
+        status_bar_good: '#73D49B'
+        status_bar_warn: '#FFB86B'
+        status_bar_bad: '#EF6A73'
+        status_bar_critical: '#FF4E64'
+        session_label: '#FFC37A'
+        session_border: '#5F5AE8'
+      spinner:
+        waiting_faces:
+          - '(•v•)'
+          - '(•ᴗ•)'
+          - '(•θ•)'
+          - '(•▿•)'
+        thinking_faces:
+          - '(•v•)'
+          - '(⌐v⌐)'
+          - '(•θ•)'
+          - '(•_•)'
+        thinking_verbs:
+          - watching the Nest
+          - checking the runbook
+          - lining up the change
+          - reading the logs
+          - folding the diff
+          - keeping watch
+        wings:
+          - ['<', '>']
+          - ['‹', '›']
+          - ['⌜', '⌟']
+          - ['⟪', '⟫']
+      branding:
+        agent_name: Talon
+        welcome: Talon is on watch. Type your message or /help for commands.
+        goodbye: Talon is folding the laptop. 🦉
+        response_label: ' 🦉 Talon '
+        prompt_symbol: '🦉'
+        help_header: '(•v•) Talon commands'
+      tool_prefix: '▏'
+      tool_emojis:
+        terminal: '🖥️'
+        file: '📄'
+        web: '🔎'
+        browser: '🌐'
+        skills: '📚'
+        agent_requests: '🪶'
+        todo: '☑️'
+        gitlab: '🦊'
     gitlab_enabled: true
     image_gen_provider: 'openai'
     image_gen_model: 'gpt-image-2-medium'
@@ -72,6 +142,75 @@ nest::app::hermes::instances:
   star:
     profile: 'star'
     display_name: 'Star'
+    skin_name: 'star-dawn-butterfly'
+    hero_png_source: 'puppet:///modules/nest/app/hermes/hero/A-cool-ops-dawn-star-40x36.png'
+    hero_ansi_source: 'puppet:///modules/nest/app/hermes/hero/A-cool-ops-dawn-star-safe-40x18-full.ansi'
+    skin_content: |
+      name: star-dawn-butterfly
+      description: Star dawn butterfly — lavender, violet, planner-blue, and sunrise-peach
+      colors:
+        banner_border: '#9F86FF'
+        banner_title: '#FFF1C9'
+        banner_accent: '#FFB68A'
+        banner_dim: '#7D6CB0'
+        banner_text: '#F6F0FF'
+        ui_accent: '#8FB7FF'
+        ui_label: '#C2B4FF'
+        ui_ok: '#8CE6C8'
+        ui_error: '#F27A8A'
+        ui_warn: '#FFD08A'
+        prompt: '#F6F0FF'
+        input_rule: '#68569F'
+        response_border: '#AFCBFF'
+        status_bar_bg: '#211A3A'
+        status_bar_text: '#F6F0FF'
+        status_bar_strong: '#AFCBFF'
+        status_bar_dim: '#9B8BC4'
+        status_bar_good: '#8CE6C8'
+        status_bar_warn: '#FFD08A'
+        status_bar_bad: '#F27A8A'
+        status_bar_critical: '#FF5E7E'
+        session_label: '#AFCBFF'
+        session_border: '#9F86FF'
+      spinner:
+        waiting_faces:
+          - '(✦)'
+          - '(✧)'
+          - '(◇)'
+          - '(⋯)'
+        thinking_faces:
+          - '(✦)'
+          - '(✧)'
+          - '(◇)'
+          - '(⋯)'
+        thinking_verbs:
+          - sorting the plan
+          - checking the list
+          - lining up the day
+          - finding the next step
+          - marking the next note
+          - arranging the page
+        wings:
+          - ['ʚ', 'ɞ']
+          - ['‹', '›']
+          - ['⟪', '⟫']
+          - ['⟨', '⟩']
+      branding:
+        agent_name: Star
+        welcome: Star is ready with the planner. Type your message or /help for commands.
+        goodbye: Star is closing the planner. 🦋
+        response_label: ' 🦋 Star '
+        prompt_symbol: '🦋'
+        help_header: '(✦) Star commands'
+      tool_prefix: '╎'
+      tool_emojis:
+        google_workspace: '📅'
+        cronjob: '⏰'
+        todo: '☑️'
+        web: '🔎'
+        session_search: '📝'
+        messaging: '💬'
+        agent_requests: '🦋'
     gitlab_enabled: false
     honcho_workspace: 'hermes'
     honcho_user_peer: 'joy'

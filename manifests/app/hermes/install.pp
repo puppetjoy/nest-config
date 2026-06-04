@@ -144,6 +144,22 @@ class nest::app::hermes::install {
     require => Exec['install_hermes_agent'],
   }
 
+  $nest::app::hermes::instances.each |String[1] $instance_name, Hash $instance_config| {
+    $wrapper_profile = pick($instance_config['profile'], $instance_name)
+
+    file { "/usr/local/bin/${wrapper_profile}":
+      ensure  => file,
+      mode    => '0755',
+      owner   => 'root',
+      group   => 'root',
+      content => @("SH"),
+        #!/bin/sh
+        exec ${venv_dir}/bin/hermes --profile ${wrapper_profile} "$@"
+        | SH
+      require => Exec['install_hermes_agent'],
+    }
+  }
+
   exec { 'install_hermes_telegram_deps':
     command     => "${venv_pip} install 'python-telegram-bot[webhooks]==22.6'",
     unless      => "${venv_python} -c \"import importlib.metadata as m; raise SystemExit(0 if m.version('python-telegram-bot') == '22.6' else 1)\"",

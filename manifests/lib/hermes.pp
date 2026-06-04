@@ -33,6 +33,10 @@ define nest::lib::hermes (
   String[1]            $honcho_user_peer         = 'joy',
   String[1]            $honcho_ai_peer           = $title,
   Optional[String[1]]  $soul_content             = undef,
+  Optional[String[1]]  $skin_name                = undef,
+  Optional[String[1]]  $skin_content             = undef,
+  Optional[String[1]]  $hero_png_source          = undef,
+  Optional[String[1]]  $hero_ansi_source         = undef,
   Any                  $telegram_toolsets        = undef,
   Boolean              $google_workspace_enabled = false,
   Array[String[1]]     $extra_packages           = [],
@@ -47,6 +51,9 @@ define nest::lib::hermes (
   $hermes_managed_config_path       = "${profile_dir}/managed-config.yaml"
   $hermes_config_manager_path       = "${install_dir}/bin/manage-hermes-config"
   $hermes_honcho_config_path        = "${profile_dir}/honcho.json"
+  $hermes_skins_dir                 = "${profile_dir}/skins"
+  $hermes_assets_dir                = "${profile_dir}/assets"
+  $hermes_hero_assets_dir           = "${hermes_assets_dir}/hero"
   $systemd_user_dir                 = "/home/${user}/.config/systemd/user"
   $dashboard_oauth_client_id_value  = $dashboard_oauth_client_id ? {
     undef   => '',
@@ -211,6 +218,12 @@ define nest::lib::hermes (
         | YAML
     },
   }
+  $display_skin_yaml = $skin_name ? {
+    undef   => '',
+    default => "        skin: \"${skin_name}\"\n",
+  }
+  $has_custom_skin = $skin_name != undef and $skin_content != undef
+  $has_hero_assets = $hero_png_source != undef or $hero_ansi_source != undef
 
   $env_content = [$gitlab_env_lines, $openai_env_lines, $tavily_env_lines, $telegram_env_lines].flatten.join("\n")
 
@@ -232,6 +245,65 @@ define nest::lib::hermes (
     content => "--- {}\n",
     replace => false,
     require => File[$profile_dir],
+  }
+
+  if $has_custom_skin {
+    file { $hermes_skins_dir:
+      ensure  => directory,
+      mode    => '0700',
+      owner   => $user,
+      group   => $user,
+      require => File[$profile_dir],
+    }
+
+    file { "${hermes_skins_dir}/${skin_name}.yaml":
+      ensure  => file,
+      mode    => '0600',
+      owner   => $user,
+      group   => $user,
+      content => $skin_content,
+      require => File[$hermes_skins_dir],
+    }
+  }
+
+  if $has_hero_assets {
+    file { $hermes_assets_dir:
+      ensure  => directory,
+      mode    => '0700',
+      owner   => $user,
+      group   => $user,
+      require => File[$profile_dir],
+    }
+
+    file { $hermes_hero_assets_dir:
+      ensure  => directory,
+      mode    => '0700',
+      owner   => $user,
+      group   => $user,
+      require => File[$hermes_assets_dir],
+    }
+
+    if $hero_png_source != undef {
+      file { "${hermes_hero_assets_dir}/A-cool-ops-dawn-${profile}-40x36.png":
+        ensure  => file,
+        mode    => '0600',
+        owner   => $user,
+        group   => $user,
+        source  => $hero_png_source,
+        require => File[$hermes_hero_assets_dir],
+      }
+    }
+
+    if $hero_ansi_source != undef {
+      file { "${hermes_hero_assets_dir}/A-cool-ops-dawn-${profile}-safe-40x18-full.ansi":
+        ensure  => file,
+        mode    => '0600',
+        owner   => $user,
+        group   => $user,
+        source  => $hero_ansi_source,
+        require => File[$hermes_hero_assets_dir],
+      }
+    }
   }
 
   file { "${profile_dir}/systemd.env":
@@ -277,7 +349,7 @@ ${telegram_toolsets_yaml}
       display:
         tool_progress: all
         tool_progress_command: true
-        platforms:
+${display_skin_yaml}        platforms:
           telegram:
             tool_progress: all
             tool_preview_length: 500
@@ -322,12 +394,17 @@ ${telegram_toolsets_yaml}
     require => File[$profile_dir],
   }
 
-  exec { "configure_hermes_managed_config_${profile}":
-    command     => "${venv_python} ${hermes_config_manager_path} apply ${hermes_config_path} ${hermes_managed_config_path}",
-    unless      => "${venv_python} ${hermes_config_manager_path} check ${hermes_config_path} ${hermes_managed_config_path}",
-    user        => $user,
-    environment => ["HOME=/home/${user}"],
-    require     => [
+  $configure_require = $has_custom_skin ? {
+    true    => [
+      Exec['install_hermes_agent'],
+      Exec['install_hermes_honcho_deps'],
+      File[$hermes_config_path],
+      File[$hermes_config_manager_path],
+      File[$hermes_managed_config_path],
+      File[$hermes_honcho_config_path],
+      File["${hermes_skins_dir}/${skin_name}.yaml"],
+    ],
+    default => [
       Exec['install_hermes_agent'],
       Exec['install_hermes_honcho_deps'],
       File[$hermes_config_path],
@@ -335,6 +412,14 @@ ${telegram_toolsets_yaml}
       File[$hermes_managed_config_path],
       File[$hermes_honcho_config_path],
     ],
+  }
+
+  exec { "configure_hermes_managed_config_${profile}":
+    command     => "${venv_python} ${hermes_config_manager_path} apply ${hermes_config_path} ${hermes_managed_config_path}",
+    unless      => "${venv_python} ${hermes_config_manager_path} check ${hermes_config_path} ${hermes_managed_config_path}",
+    user        => $user,
+    environment => ["HOME=/home/${user}"],
+    require     => $configure_require,
   }
 
   if $gateway_enabled {

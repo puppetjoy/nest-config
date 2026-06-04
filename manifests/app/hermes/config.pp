@@ -149,6 +149,10 @@ class nest::app::hermes::config {
     $instance_honcho_user_peer  = pick($config['honcho_user_peer'], 'joy')
     $instance_honcho_ai_peer    = pick($config['honcho_ai_peer'], $instance_name)
     $instance_soul_content      = $config['soul_content']
+    $instance_skin_name         = $config['skin_name']
+    $instance_skin_content      = $config['skin_content']
+    $instance_hero_png_source   = $config['hero_png_source']
+    $instance_hero_ansi_source  = $config['hero_ansi_source']
     $instance_toolsets          = $config['telegram_toolsets']
     $instance_google_workspace  = pick($config['google_workspace_enabled'], false)
     $instance_extra_packages    = pick($config['extra_packages'], [])
@@ -188,6 +192,10 @@ class nest::app::hermes::config {
       honcho_user_peer           => $instance_honcho_user_peer,
       honcho_ai_peer             => $instance_honcho_ai_peer,
       soul_content               => $instance_soul_content,
+      skin_name                  => $instance_skin_name,
+      skin_content               => $instance_skin_content,
+      hero_png_source            => $instance_hero_png_source,
+      hero_ansi_source           => $instance_hero_ansi_source,
       telegram_toolsets          => $instance_toolsets,
       google_workspace_enabled   => $instance_google_workspace,
       extra_packages             => $instance_extra_packages,
