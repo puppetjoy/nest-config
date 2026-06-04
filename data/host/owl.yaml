@@ -94,6 +94,7 @@ nest::app::hermes::instances:
       - web
     google_workspace_enabled: true
     agent_request_response_watch_enabled: true
+    agent_request_peer_watch_enabled: true
     soul_content: |
       # Star
 
