@@ -25,6 +25,7 @@ define nest::lib::hermes (
   String[1]            $dashboard_bind_host      = '0.0.0.0',
   Stdlib::Port         $dashboard_port           = 9119,
   String[1]            $dashboard_public_url     = "https://${title}.eyrie",
+  Optional[String[1]]  $dashboard_theme          = undef,
   Optional[String[1]]  $dashboard_oauth_client_id= undef,
   Optional[String[1]]  $dashboard_oauth_portal_url= undef,
   Boolean              $gateway_enabled          = true,
@@ -223,6 +224,10 @@ define nest::lib::hermes (
     undef   => '',
     default => "banner_hero: |2\n${nest::ansi_to_rich($skin_banner_hero_source).split("\n").map |String $line| { "  ${line}" }.join("\n")}\n",
   }
+  $dashboard_theme_yaml = $dashboard_theme ? {
+    undef   => '',
+    default => "        theme: \"${dashboard_theme}\"\n",
+  }
   $effective_skin_content = $skin_content ? {
     undef   => undef,
     default => "${skin_content}${skin_banner_hero_yaml}",
@@ -322,7 +327,7 @@ ${display_skin_yaml}  platforms:
         provider: honcho
       dashboard:
         public_url: "${dashboard_public_url}"
-        oauth:
+${dashboard_theme_yaml}        oauth:
           client_id: "${dashboard_oauth_client_id_value}"
           portal_url: "${dashboard_oauth_portal_url_value}"
       | YAML

@@ -135,6 +135,7 @@ class nest::app::hermes::config {
     $instance_dashboard_bind    = pick($config['dashboard_bind_host'], $dashboard_bind_host)
     $instance_dashboard_port    = pick($config['dashboard_port'], 9119)
     $instance_dashboard_url     = pick($config['dashboard_public_url'], "https://${instance_name}.eyrie")
+    $instance_dashboard_theme   = $config['dashboard_theme']
     $instance_oauth_client_id   = $config['dashboard_oauth_client_id'] ? {
       undef   => $dashboard_oauth_client_id,
       default => $config['dashboard_oauth_client_id'],
@@ -183,6 +184,7 @@ class nest::app::hermes::config {
       dashboard_bind_host        => $instance_dashboard_bind,
       dashboard_port             => $instance_dashboard_port,
       dashboard_public_url       => $instance_dashboard_url,
+      dashboard_theme            => $instance_dashboard_theme,
       dashboard_oauth_client_id  => $instance_oauth_client_id,
       dashboard_oauth_portal_url => $instance_oauth_portal_url,
       gateway_enabled            => $instance_gateway_enabled,

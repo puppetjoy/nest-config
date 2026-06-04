@@ -124,6 +124,7 @@ nest::app::hermes::instances:
     dashboard_enabled: true
     dashboard_port: 9119
     dashboard_public_url: 'https://talon.eyrie'
+    dashboard_theme: 'midnight'
     soul_content: |
       # Talon
 
@@ -221,6 +222,7 @@ nest::app::hermes::instances:
     dashboard_enabled: true
     dashboard_port: 9121
     dashboard_public_url: 'https://star.eyrie'
+    dashboard_theme: 'rose'
     telegram_toolsets:
       - agent_requests
       - browser
