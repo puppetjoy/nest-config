@@ -35,6 +35,7 @@ define nest::lib::hermes (
   Optional[String[1]]  $soul_content             = undef,
   Optional[String[1]]  $skin_name                = undef,
   Optional[String[1]]  $skin_content             = undef,
+  Optional[String[1]]  $skin_banner_hero_source  = undef,
   Any                  $telegram_toolsets        = undef,
   Boolean              $google_workspace_enabled = false,
   Array[String[1]]     $extra_packages           = [],
@@ -218,7 +219,15 @@ define nest::lib::hermes (
     undef   => '',
     default => "  skin: \"${skin_name}\"\n",
   }
-  $has_custom_skin = $skin_name != undef and $skin_content != undef
+  $skin_banner_hero_yaml = $skin_banner_hero_source ? {
+    undef   => '',
+    default => "banner_hero: |\n${nest::ansi_to_rich($skin_banner_hero_source).split('\n').map |String $line| { "  ${line}" }.join('\n')}\n",
+  }
+  $effective_skin_content = $skin_content ? {
+    undef   => undef,
+    default => "${skin_content}${skin_banner_hero_yaml}",
+  }
+  $has_custom_skin = $skin_name != undef and $effective_skin_content != undef
 
   $env_content = [$gitlab_env_lines, $openai_env_lines, $tavily_env_lines, $telegram_env_lines].flatten.join("\n")
 
@@ -256,7 +265,7 @@ define nest::lib::hermes (
       mode      => '0600',
       owner     => $user,
       group     => $user,
-      content   => $skin_content,
+      content   => $effective_skin_content,
       show_diff => false,
       require   => File[$hermes_skins_dir],
     }
