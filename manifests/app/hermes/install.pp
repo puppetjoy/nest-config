@@ -107,57 +107,6 @@ class nest::app::hermes::install {
     ],
   }
 
-  file { "${install_dir}/banner-hero-renderable.patch":
-    ensure => file,
-    source => 'puppet:///modules/nest/app/hermes/banner-hero-renderable.patch',
-    mode   => '0644',
-    owner  => 'root',
-    group  => 'root',
-  }
-
-  exec { 'patch_hermes_banner_hero_renderable':
-    command => "/usr/bin/patch -N -p1 -d ${source_dir} < ${install_dir}/banner-hero-renderable.patch",
-    unless  => "/bin/sh -c '(/bin/grep -q '\''def _banner_hero_renderable'\'' ${source_dir}/hermes_cli/banner.py && (/bin/grep -q '\''AnsiDecoder().decode(hero)'\'' ${source_dir}/hermes_cli/banner.py || /bin/grep -q '\''class _RawAnsiHero'\'' ${source_dir}/hermes_cli/banner.py)) || (/bin/grep -q '\''Text.from_markup(hero, emoji=False, overflow=\"ignore\")'\'' ${source_dir}/hermes_cli/banner.py && /bin/grep -q '\''width=39, min_width=39, max_width=39, no_wrap=True'\'' ${source_dir}/hermes_cli/banner.py)'",
-    require => [
-      File["${install_dir}/banner-hero-renderable.patch"],
-      Vcsrepo[$source_dir],
-    ],
-  }
-
-  file { "${install_dir}/banner-hero-raw-ansi-segments.patch":
-    ensure => file,
-    source => 'puppet:///modules/nest/app/hermes/banner-hero-raw-ansi-segments.patch',
-    mode   => '0644',
-    owner  => 'root',
-    group  => 'root',
-  }
-
-  exec { 'patch_hermes_banner_hero_raw_ansi_segments':
-    command => "/usr/bin/patch -N -p1 -d ${source_dir} < ${install_dir}/banner-hero-raw-ansi-segments.patch",
-    unless  => "/bin/sh -c '(/bin/grep -q '\''class _RawAnsiHero'\'' ${source_dir}/hermes_cli/banner.py && /bin/grep -q '\''ControlType.CARRIAGE_RETURN'\'' ${source_dir}/hermes_cli/banner.py) || (/bin/grep -q '\''Text.from_markup(hero, emoji=False, overflow=\"ignore\")'\'' ${source_dir}/hermes_cli/banner.py && /bin/grep -q '\''width=39, min_width=39, max_width=39, no_wrap=True'\'' ${source_dir}/hermes_cli/banner.py)'",
-    require => [
-      File["${install_dir}/banner-hero-raw-ansi-segments.patch"],
-      Exec['patch_hermes_banner_hero_renderable'],
-    ],
-  }
-
-  file { "${install_dir}/banner-hero-finalize.py":
-    ensure => file,
-    source => 'puppet:///modules/nest/app/hermes/banner-hero-finalize.py',
-    mode   => '0755',
-    owner  => 'root',
-    group  => 'root',
-  }
-
-  exec { 'finalize_hermes_banner_hero_rendering':
-    command => "/opt/hermes-agent/venv/bin/python ${install_dir}/banner-hero-finalize.py",
-    unless  => "/usr/bin/env PYTHONPATH=${source_dir} /opt/hermes-agent/venv/bin/python -c 'import hermes_cli.banner' && /bin/grep -q 'Text.from_markup(hero, emoji=False, overflow=\"ignore\")' ${source_dir}/hermes_cli/banner.py && /bin/grep -q 'text.no_wrap = True' ${source_dir}/hermes_cli/banner.py && /bin/grep -q 'width=39, min_width=39, max_width=39, no_wrap=True' ${source_dir}/hermes_cli/banner.py && ! /bin/grep -q 'class _RawAnsiHero' ${source_dir}/hermes_cli/banner.py && ! /bin/grep -q 'AnsiDecoder().decode(hero)' ${source_dir}/hermes_cli/banner.py && test ! -f ${source_dir}/hermes_cli/banner.py.rej",
-    require => [
-      File["${install_dir}/banner-hero-finalize.py"],
-      Exec['patch_hermes_banner_hero_raw_ansi_segments'],
-    ],
-  }
-
   file { "${source_dir}/tools/agent_request_tool.py":
     ensure  => link,
     target  => "${broker_source_dir}/src/tools/agent_request_tool.py",
