@@ -64,12 +64,14 @@ class nest::app::hermes::install {
 
   exec { 'install_hermes_agent':
     command     => "${venv_pip} install --upgrade --force-reinstall ${source_dir} && git -C ${source_dir} rev-parse HEAD > ${git_revision_file}",
-    unless      => "test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent')\"",
+    unless      => "test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent')\" && /bin/grep -q 'app.state.allow_public = allow_public' ${venv_dir}/lib/python*/site-packages/hermes_cli/web_server.py && /bin/grep -q 'if _pl <= 0:' ${venv_dir}/lib/python*/site-packages/gateway/run.py && /bin/grep -q '_banner_hero_renderable' ${venv_dir}/lib/python*/site-packages/hermes_cli/banner.py",
     environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
     path        => ['/bin', '/usr/bin'],
     require     => [
       Exec['create_hermes_venv'],
-      Vcsrepo[$source_dir],
+      Exec['patch_hermes_dashboard_insecure_websockets'],
+      Exec['patch_hermes_telegram_tool_preview_length'],
+      Exec['patch_hermes_banner_hero_renderable'],
     ],
   }
 
@@ -103,6 +105,23 @@ class nest::app::hermes::install {
     unless  => "/bin/grep -q 'if _pl <= 0:' ${source_dir}/gateway/run.py",
     require => [
       File["${install_dir}/telegram-tool-preview-length.patch"],
+      Vcsrepo[$source_dir],
+    ],
+  }
+
+  file { "${install_dir}/banner-hero-renderable.patch":
+    ensure => file,
+    source => 'puppet:///modules/nest/app/hermes/banner-hero-renderable.patch',
+    mode   => '0644',
+    owner  => 'root',
+    group  => 'root',
+  }
+
+  exec { 'patch_hermes_banner_hero_renderable':
+    command => "/usr/bin/patch -N -p1 -d ${source_dir} < ${install_dir}/banner-hero-renderable.patch",
+    unless  => "/bin/grep -q '_banner_hero_renderable' ${source_dir}/hermes_cli/banner.py && /bin/grep -q 'left_content = Group' ${source_dir}/hermes_cli/banner.py",
+    require => [
+      File["${install_dir}/banner-hero-renderable.patch"],
       Vcsrepo[$source_dir],
     ],
   }
