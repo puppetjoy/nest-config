@@ -1,0 +1,80 @@
+--- a/hermes_cli/kanban_db.py	2026-05-28 23:30:04.863895235 -0400
++++ b/hermes_cli/kanban_db.py	2026-06-04 17:42:42.007692053 -0400
+@@ -2291,6 +2291,47 @@
+     )
+ 
+ 
++
++
++def _notify_agent_request_dispatch_event(
++    conn: sqlite3.Connection,
++    task_id: str,
++    *,
++    action: str,
++    actor: str = "",
++    summary: str = "",
++    event_kind: str = "claimed",
++) -> None:
++    """Best-effort request-aware notification for dispatcher events.
++
++    Called after claim_task/claim_review_task returns, so the durable Kanban
++    event has already been committed. The broker owns formatting, routing, and
++    dedupe; Kanban remains the source of truth.
++    """
++    try:
++        from agent_request_broker import kanban_backend as agent_requests
++    except Exception:
++        return
++    try:
++        event_id = None
++        run_id = None
++        for event in reversed(list_events(conn, task_id)):
++            if event.kind == event_kind:
++                event_id = event.id
++                run_id = event.run_id
++                break
++        agent_requests.notify_kanban_event(
++            task_id=task_id,
++            action=action,
++            actor=actor,
++            summary=summary,
++            event_id=event_id,
++            run_id=run_id,
++        )
++    except Exception:
++        _log.exception("agent-request dispatcher notification hook failed for %s", task_id)
++
++
+ def _end_run(
+     conn: sqlite3.Connection,
+     task_id: str,
+@@ -5483,6 +5524,14 @@
+         claimed = claim_task(conn, row["id"], ttl_seconds=ttl_seconds)
+         if claimed is None:
+             continue
++        _notify_agent_request_dispatch_event(
++            conn,
++            claimed.id,
++            action="in_progress",
++            actor=claimed.assignee or row["assignee"] or "",
++            summary=f"Request claimed by {claimed.assignee or row['assignee'] or 'worker'}",
++            event_kind="claimed",
++        )
+         try:
+             workspace = resolve_workspace(claimed, board=board)
+         except Exception as exc:
+@@ -5562,6 +5611,14 @@
+         claimed = claim_review_task(conn, row["id"], ttl_seconds=ttl_seconds)
+         if claimed is None:
+             continue
++        _notify_agent_request_dispatch_event(
++            conn,
++            claimed.id,
++            action="in_progress",
++            actor=claimed.assignee or row["assignee"] or "",
++            summary=f"Review claimed by {claimed.assignee or row['assignee'] or 'worker'}",
++            event_kind="claimed",
++        )
+         try:
+             workspace = resolve_workspace(claimed, board=board)
+         except Exception as exc:
