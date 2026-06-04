@@ -1,0 +1,144 @@
+diff -uNr a/ui-tui/src/banner.ts b/ui-tui/src/banner.ts
+--- a/ui-tui/src/banner.ts	2026-06-04 02:16:27.097659219 -0400
++++ b/ui-tui/src/banner.ts	2026-06-04 02:17:05.905277946 -0400
+@@ -1,46 +1,74 @@
+ import type { ThemeColors } from './theme.js'
+ 
+-const RICH_RE = /\[(?:bold\s+)?(?:dim\s+)?(#(?:[0-9a-fA-F]{3,8}))\]([\s\S]*?)(\[\/\])/g
++const RICH_OPEN_RE = /^\[((?:bold\s+)?(?:dim\s+)?#(?:[0-9a-fA-F]{3,8})(?:\s+on\s+#(?:[0-9a-fA-F]{3,8}))?)\]/
++const RICH_COLOR_RE = /#(?:[0-9a-fA-F]{3,8})/g
+ 
+ export function parseRichMarkup(markup: string): Line[] {
+   const lines: Line[] = []
+ 
+-  for (const raw of markup.split('\n')) {
+-    const trimmed = raw.trimEnd()
++  const rawLines = (markup.endsWith('\n') ? markup.slice(0, -1) : markup).split('\n')
+ 
+-    if (!trimmed) {
+-      lines.push(['', ' '])
++  for (const raw of rawLines) {
++    const trimmed = raw.endsWith('\r') ? raw.slice(0, -1) : raw
++    const spans: Span[] = []
++    let cursor = 0
++    let fg = ''
++    let bg = ''
+ 
+-      continue
+-    }
++    while (cursor < trimmed.length) {
++      const rest = trimmed.slice(cursor)
+ 
+-    const matches = [...trimmed.matchAll(RICH_RE)]
++      if (rest.startsWith('[/]')) {
++        fg = ''
++        bg = ''
++        cursor += 3
+ 
+-    if (!matches.length) {
+-      lines.push(['', trimmed])
++        continue
++      }
+ 
+-      continue
++      const open = rest.match(RICH_OPEN_RE)
++
++      if (open) {
++        const colors = [...(open[1]?.matchAll(RICH_COLOR_RE) ?? [])].map(m => m[0])
++        fg = colors[0] ?? ''
++        bg = colors[1] ?? ''
++        cursor += open[0].length
++
++        continue
++      }
++
++      const nextOpen = rest.indexOf('[')
++      const take = nextOpen <= 0 ? 1 : nextOpen
++      const text = rest.slice(0, take)
++
++      spans.push([fg, bg, text])
++      cursor += text.length
+     }
+ 
+-    let cursor = 0
++    lines.push(spans.length ? mergeSpans(spans) : [['', '', ' ']])
++  }
+ 
+-    for (const m of matches) {
+-      const before = trimmed.slice(cursor, m.index)
++  return lines
++}
+ 
+-      if (before) {
+-        lines.push(['', before])
+-      }
++const mergeSpans = (spans: Span[]): Span[] => {
++  const out: Span[] = []
+ 
+-      lines.push([m[1]!, m[2]!])
+-      cursor = m.index! + m[0].length
++  for (const [fg, bg, text] of spans) {
++    if (!text) {
++      continue
+     }
+ 
+-    if (cursor < trimmed.length) {
+-      lines.push(['', trimmed.slice(cursor)])
++    const prev = out[out.length - 1]
++
++    if (prev && prev[0] === fg && prev[1] === bg) {
++      prev[2] += text
++    } else {
++      out.push([fg, bg, text])
+     }
+   }
+ 
+-  return lines
++  return out
+ }
+ 
+ const LOGO_ART = [
+@@ -76,7 +104,7 @@
+ const colorize = (art: string[], gradient: readonly number[], c: ThemeColors): Line[] => {
+   const p = [c.primary, c.accent, c.border, c.muted]
+ 
+-  return art.map((text, i) => [p[gradient[i]!] ?? c.muted, text])
++  return art.map((text, i) => [[p[gradient[i]!] ?? c.muted, '', text]])
+ }
+ 
+ export const LOGO_WIDTH = Math.max(...LOGO_ART.map(line => line.length))
+@@ -88,6 +116,8 @@
+ export const caduceus = (c: ThemeColors, customHero?: string): Line[] =>
+   customHero ? parseRichMarkup(customHero) : colorize(CADUCEUS_ART, CADUC_GRADIENT, c)
+ 
+-export const artWidth = (lines: Line[]) => lines.reduce((m, [, t]) => Math.max(m, t.length), 0)
++export const artWidth = (lines: Line[]) =>
++  lines.reduce((m, spans) => Math.max(m, spans.reduce((n, [, , text]) => n + text.length, 0)), 0)
+ 
+-type Line = [string, string]
++type Span = [string, string, string]
++type Line = Span[]
+diff -uNr a/ui-tui/src/components/branding.tsx b/ui-tui/src/components/branding.tsx
+--- a/ui-tui/src/components/branding.tsx	2026-06-04 02:16:27.098505284 -0400
++++ b/ui-tui/src/components/branding.tsx	2026-06-04 02:16:27.110855554 -0400
+@@ -27,12 +27,16 @@
+   )
+ }
+ 
+-export function ArtLines({ lines }: { lines: [string, string][] }) {
++export function ArtLines({ lines }: { lines: [string, string, string][][] }) {
+   return (
+     <Box flexDirection="column" height={lines.length} opaque width={artWidth(lines)}>
+-      {lines.map(([c, text], i) => (
+-        <Text color={c} key={i} wrap="truncate-end">
+-          {text}
++      {lines.map((spans, i) => (
++        <Text key={i} wrap="truncate-end">
++          {spans.map(([fg, bg, text], j) => (
++            <Text backgroundColor={bg || undefined} color={fg || undefined} key={j}>
++              {text}
++            </Text>
++          ))}
+         </Text>
+       ))}
+     </Box>
