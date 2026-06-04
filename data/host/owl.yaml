@@ -223,7 +223,7 @@ nest::app::hermes::instances:
     dashboard_port: 9121
     dashboard_public_url: 'https://star.eyrie'
     dashboard_theme: 'rose'
-    telegram_toolsets:
+    toolsets:
       - agent_requests
       - browser
       - clarify

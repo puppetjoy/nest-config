@@ -37,6 +37,7 @@ define nest::lib::hermes (
   Optional[String[1]]  $skin_name                = undef,
   Optional[String[1]]  $skin_content             = undef,
   Optional[String[1]]  $skin_banner_hero_source  = undef,
+  Any                  $toolsets                 = undef,
   Any                  $telegram_toolsets        = undef,
   Boolean              $google_workspace_enabled = false,
   Array[String[1]]     $extra_packages           = [],
@@ -65,7 +66,7 @@ define nest::lib::hermes (
     undef   => "# ${display_name}\n\nYou are ${display_name}, one of Joy's Hermes Agent profiles.\n",
     default => $soul_content,
   }
-  $default_telegram_toolsets         = [
+  $default_toolsets                  = [
     'agent_requests',
     'browser',
     'clarify',
@@ -85,9 +86,24 @@ define nest::lib::hermes (
     'vision',
     'web',
   ]
-  $effective_telegram_toolsets       = pick($telegram_toolsets, $default_telegram_toolsets)
-  $telegram_toolsets_yaml            = $effective_telegram_toolsets.map |String[1] $toolset| {
+  $effective_toolsets                = pick($toolsets, $telegram_toolsets, $default_toolsets)
+  $toolsets_yaml                     = $effective_toolsets.map |String[1] $toolset| {
     "          - ${toolset}"
+  }.join("\n")
+  $platform_toolsets_yaml            = [
+    'cli',
+    'telegram',
+    'discord',
+    'whatsapp',
+    'slack',
+    'signal',
+    'homeassistant',
+    'qqbot',
+    'yuanbao',
+    'teams',
+    'google_chat',
+  ].map |String[1] $platform| {
+    "        ${platform}:\n${toolsets_yaml}"
   }.join("\n")
 
   ensure_resource('nest::lib::package', $extra_packages, {
@@ -314,8 +330,7 @@ ${image_gen_yaml}
           model: "${auxiliary_mini_model}"
           timeout: ${web_extract_timeout}
       platform_toolsets:
-        telegram:
-${telegram_toolsets_yaml}
+${platform_toolsets_yaml}
       display:
         tool_progress: all
         tool_progress_command: true
