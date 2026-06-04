@@ -305,6 +305,7 @@ class nest::app::hermes::install {
       command => "${nodejs::npm_path} install --silent && ${nodejs::npm_path} run build && git -C ${source_dir} rev-parse HEAD > ${web_revision_file}",
       unless  => "test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${web_revision_file} 2>/dev/null)\" && test -f ${source_dir}/hermes_cli/web_dist/index.html && /bin/grep -R -q 'hermes-chat-terminal-isolated' ${source_dir}/hermes_cli/web_dist/assets",
       cwd     => "${source_dir}/web",
+      path    => ['/bin', '/usr/bin', '/usr/sbin'],
       require => [
         Class['nodejs'],
         Vcsrepo[$source_dir],
