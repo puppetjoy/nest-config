@@ -313,6 +313,9 @@ define nest::lib::hermes (
     group   => $user,
     content => @("YAML"),
       ---
+      toolsets:
+        - hermes-cli
+        - kanban
       model:
         provider: "${model_provider}"
         default: "${model_name}"
