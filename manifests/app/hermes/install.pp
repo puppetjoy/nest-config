@@ -107,6 +107,23 @@ class nest::app::hermes::install {
     ],
   }
 
+  file { "${install_dir}/banner-hero-renderable.patch":
+    ensure => file,
+    source => 'puppet:///modules/nest/app/hermes/banner-hero-renderable.patch',
+    mode   => '0644',
+    owner  => 'root',
+    group  => 'root',
+  }
+
+  exec { 'patch_hermes_banner_hero_renderable':
+    command => "/usr/bin/patch -N -p1 -d ${source_dir} < ${install_dir}/banner-hero-renderable.patch",
+    unless  => "/bin/grep -q 'def _banner_hero_renderable' ${source_dir}/hermes_cli/banner.py && /bin/grep -q 'AnsiDecoder().decode(hero)' ${source_dir}/hermes_cli/banner.py",
+    require => [
+      File["${install_dir}/banner-hero-renderable.patch"],
+      Vcsrepo[$source_dir],
+    ],
+  }
+
   file { "${source_dir}/tools/agent_request_tool.py":
     ensure  => link,
     target  => "${broker_source_dir}/src/tools/agent_request_tool.py",
