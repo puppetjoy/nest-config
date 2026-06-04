@@ -76,6 +76,7 @@ define nest::lib::hermes (
     'delegation',
     'file',
     'image_gen',
+    'kanban',
     'memory',
     'messaging',
     'session_search',

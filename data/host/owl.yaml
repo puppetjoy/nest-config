@@ -112,6 +112,7 @@ nest::app::hermes::instances:
         browser: '🌐'
         skills: '📚'
         agent_requests: '🪶'
+        kanban: '📋'
         todo: '☑️'
         gitlab: '🦊'
     gitlab_enabled: true
@@ -214,6 +215,7 @@ nest::app::hermes::instances:
         session_search: '📝'
         messaging: '💬'
         agent_requests: '🦋'
+        kanban: '📋'
     gitlab_enabled: false
     honcho_workspace: 'hermes'
     honcho_user_peer: 'joy'
@@ -232,6 +234,7 @@ nest::app::hermes::instances:
       - session_search
       - skills
       - google_workspace
+      - kanban
       - cronjob
       - todo
       - web
