@@ -1,0 +1,17 @@
+diff --git a/hermes_cli/web_server.py b/hermes_cli/web_server.py
+index a1e9d27..bb3d4a5 100644
+--- a/hermes_cli/web_server.py
++++ b/hermes_cli/web_server.py
+@@ -3515,6 +3515,13 @@ def _resolve_chat_argv(
+     env.setdefault("HERMES_TUI_DISABLE_MOUSE", "1")
+     env.setdefault("HERMES_TUI_INLINE", "1")
++    # The browser side of /api/pty is xterm.js, which supports 24-bit color.
++    # The PTY child otherwise inherits only TERM=xterm-256color from the
++    # service environment, causing chalk to quantize hex colors into the
++    # 6x6x6 ANSI-256 cube. Advertise truecolor for the embedded chat path so
++    # profile art and theme colors survive as 38;2/48;2 SGR sequences.
++    env.setdefault("COLORTERM", "truecolor")
++    env.setdefault("FORCE_COLOR", "3")
+ 
+     if resume:
+         latest_resume, _latest_path = _session_latest_descendant(resume)

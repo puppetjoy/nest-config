@@ -144,19 +144,19 @@ class nest::app::hermes::install {
     ],
   }
 
-  file { "${install_dir}/dashboard-chat-terminal-isolation.patch":
+  file { "${install_dir}/dashboard-chat-truecolor-env.patch":
     ensure => file,
-    source => 'puppet:///modules/nest/app/hermes/dashboard-chat-terminal-isolation.patch',
+    source => 'puppet:///modules/nest/app/hermes/dashboard-chat-truecolor-env.patch',
     mode   => '0644',
     owner  => 'root',
     group  => 'root',
   }
 
-  exec { 'patch_hermes_dashboard_chat_terminal_isolation':
-    command => "/usr/bin/patch -N -p1 -d ${source_dir} < ${install_dir}/dashboard-chat-terminal-isolation.patch",
-    unless  => "/bin/grep -q 'hermes-chat-terminal-isolated' ${source_dir}/web/src/pages/ChatPage.tsx",
+  exec { 'patch_hermes_dashboard_chat_truecolor_env':
+    command => "/usr/bin/patch -N -p1 -d ${source_dir} < ${install_dir}/dashboard-chat-truecolor-env.patch",
+    unless  => "/bin/grep -q 'COLORTERM.*truecolor' ${source_dir}/hermes_cli/web_server.py",
     require => [
-      File["${install_dir}/dashboard-chat-terminal-isolation.patch"],
+      File["${install_dir}/dashboard-chat-truecolor-env.patch"],
       Vcsrepo[$source_dir],
     ],
   }
@@ -303,13 +303,12 @@ class nest::app::hermes::install {
 
     exec { 'build_hermes_dashboard_web':
       command => "${nodejs::npm_path} install --silent && ${nodejs::npm_path} run build && git -C ${source_dir} rev-parse HEAD > ${web_revision_file}",
-      unless  => "test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${web_revision_file} 2>/dev/null)\" && test -f ${source_dir}/hermes_cli/web_dist/index.html && /bin/grep -R -q 'hermes-chat-terminal-isolated' ${source_dir}/hermes_cli/web_dist/assets",
+      unless  => "test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${web_revision_file} 2>/dev/null)\" && test -f ${source_dir}/hermes_cli/web_dist/index.html",
       cwd     => "${source_dir}/web",
       path    => ['/bin', '/usr/bin', '/usr/sbin'],
       require => [
         Class['nodejs'],
         Vcsrepo[$source_dir],
-        Exec['patch_hermes_dashboard_chat_terminal_isolation'],
       ],
     }
   }
