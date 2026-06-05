@@ -165,7 +165,7 @@ resources:
                     - -ec
                     - >-
                       fmt='%'; fmt="${fmt}{http_code}";
-                      code=$(curl -ks -o /dev/null -w "${fmt}" https://127.0.0.1:6901/);
+                      code=$(curl -ks -o /dev/null -w "${fmt}" https://127.0.0.1:6901/ || true);
                       test "${code}" = 401
                 periodSeconds: 5
                 timeoutSeconds: 2
