@@ -159,6 +159,7 @@ class nest::app::hermes::config {
       undef   => $config['telegram_toolsets'],
       default => $config['toolsets'],
     }
+    $instance_profile_toolsets  = pick($config['profile_toolsets'], ['hermes-cli', 'kanban'])
     $instance_google_workspace  = pick($config['google_workspace_enabled'], false)
     $instance_extra_packages    = pick($config['extra_packages'], [])
 
@@ -204,6 +205,7 @@ class nest::app::hermes::config {
       skin_name                  => $instance_skin_name,
       skin_content               => $instance_skin_content,
       skin_banner_hero_source    => $instance_skin_hero_source,
+      profile_toolsets           => $instance_profile_toolsets,
       toolsets                   => $instance_toolsets,
       google_workspace_enabled   => $instance_google_workspace,
       extra_packages             => $instance_extra_packages,
