@@ -15,7 +15,7 @@ app_args: >-
   --start-maximized
   --disable-gpu
   --disable-features=UseChromeOSDirectVideoDecoder
-  --user-data-dir=/home/kasm-user/.config/google-chrome
+  --user-data-dir=/home/kasm-user/.config/star-shopping-chrome
   --remote-debugging-address=0.0.0.0
   --remote-debugging-port=9222
 storage_class: owl-crypt
@@ -144,6 +144,22 @@ resources:
               effect: NoSchedule
           securityContext:
             fsGroup: 1000
+          initContainers:
+            - name: seed-debug-profile
+              image: "%{lookup('image')}"
+              command:
+                - /bin/sh
+                - -ec
+                - >-
+                  if [ ! -e /home/kasm-user/.config/star-shopping-chrome ] && [ -d /home/kasm-user/.config/google-chrome ]; then
+                    mkdir -p /home/kasm-user/.config;
+                    cp -a /home/kasm-user/.config/google-chrome /home/kasm-user/.config/star-shopping-chrome;
+                  else
+                    mkdir -p /home/kasm-user/.config/star-shopping-chrome;
+                  fi
+              volumeMounts:
+                - name: profile
+                  mountPath: /home/kasm-user
           containers:
             - name: kasm-chrome
               image: "%{lookup('image')}"
