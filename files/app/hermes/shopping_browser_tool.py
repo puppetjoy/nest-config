@@ -56,10 +56,13 @@ UNSAFE_OPERATIONS = {
 
 PRODUCT_EXTRACT_JS = r"""
 (() => {
-  const text = (selector) => {
-    const node = document.querySelector(selector);
-    return node ? node.textContent.replace(/\s+/g, ' ').trim() : '';
+  const cleanNodeText = (node) => {
+    if (!node) return '';
+    const clone = node.cloneNode(true);
+    clone.querySelectorAll('script, style, noscript').forEach((child) => child.remove());
+    return clone.textContent.replace(/\s+/g, ' ').trim();
   };
+  const text = (selector) => cleanNodeText(document.querySelector(selector));
   const firstText = (selectors) => {
     for (const selector of selectors) {
       const value = text(selector);
@@ -104,14 +107,28 @@ CART_EXTRACT_JS = r"""
   const clean = (value) => (value || '').replace(/\s+/g, ' ').trim();
   const text = (node, selector) => {
     const found = node.querySelector(selector);
-    return found ? clean(found.textContent) : '';
+    if (!found) return '';
+    const clone = found.cloneNode(true);
+    clone.querySelectorAll('script, style, noscript').forEach((child) => child.remove());
+    return clean(clone.textContent);
   };
-  const items = Array.from(document.querySelectorAll('.sc-list-item, [data-name="Active Items"] [data-asin]'))
+  const firstText = (node, selectors) => {
+    for (const selector of selectors) {
+      const value = text(node, selector);
+      if (value) return value;
+    }
+    return '';
+  };
+  const primaryItems = Array.from(document.querySelectorAll('.sc-list-item'))
+    .filter((item) => clean(item.textContent));
+  const fallbackItems = Array.from(document.querySelectorAll('[data-name="Active Items"] [data-asin]'));
+  const itemNodes = primaryItems.length ? primaryItems : fallbackItems;
+  const items = itemNodes
     .map((item) => ({
-      name: text(item, '.sc-product-title, .a-truncate-cut, h4, .a-link-normal'),
-      quantity: text(item, '[data-a-selector="value"], .sc-action-quantity select option:checked, .sc-action-quantity .a-dropdown-prompt'),
-      price: text(item, '.sc-product-price, .a-price .a-offscreen, .sc-price'),
-      delivery_estimate: text(item, '.sc-delivery-message, .delivery-message, [data-feature-id="delivery-message"]')
+      name: firstText(item, ['.sc-product-title', '.a-truncate-cut', 'h4', '.a-link-normal']),
+      quantity: firstText(item, ['[data-a-selector="value"]', '.sc-action-quantity select option:checked', '.sc-action-quantity .a-dropdown-prompt']),
+      price: firstText(item, ['.sc-product-price', '.a-price .a-offscreen', '.sc-price']),
+      delivery_estimate: firstText(item, ['.sc-delivery-message', '.delivery-message', '[data-feature-id="delivery-message"]'])
     }))
     .filter((item) => item.name || item.price || item.quantity || item.delivery_estimate)
     .slice(0, 30);
