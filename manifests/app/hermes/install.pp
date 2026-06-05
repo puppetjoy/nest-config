@@ -76,7 +76,7 @@ class nest::app::hermes::install {
 
   exec { 'install_hermes_agent':
     command     => "${venv_pip} install --upgrade --force-reinstall ${source_dir} && git -C ${source_dir} rev-parse HEAD > ${git_revision_file}",
-    unless      => "test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent')\" && /bin/grep -q 'app.state.allow_public = allow_public' ${venv_dir}/lib/python*/site-packages/hermes_cli/web_server.py && /bin/grep -q 'if _pl <= 0:' ${venv_dir}/lib/python*/site-packages/gateway/run.py && /bin/grep -q '_banner_hero_renderable' ${venv_dir}/lib/python*/site-packages/hermes_cli/banner.py && /bin/grep -q 'banner_subtitle' ${venv_dir}/lib/python*/site-packages/hermes_cli/banner.py && /bin/grep -q 'discover_builtin_tools()' ${venv_dir}/lib/python*/site-packages/cli.py && /bin/grep -q '_notify_agent_request_event' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q 'Approved/unblocked/resumed; task is eligible to continue' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q '_notify_agent_request_dispatch_event' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_db.py && /bin/grep -q 'dispatcher_profile=dispatcher_profile' ${venv_dir}/lib/python*/site-packages/gateway/run.py && /bin/grep -q '_resolve_cross_board_task_refs' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_db.py && /bin/grep -q '_reclassify_legacy_prose_payload' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_diagnostics.py && /bin/grep -q 'severity = \"info\" if cross_board_refs and not phantom_refs else \"warning\"' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_diagnostics.py && /bin/grep -q 'prose_ref_current_board_checker' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_diagnostics.py",
+    unless      => "test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent')\" && /bin/grep -q 'app.state.allow_public = allow_public' ${venv_dir}/lib/python*/site-packages/hermes_cli/web_server.py && /bin/grep -q 'if _pl <= 0:' ${venv_dir}/lib/python*/site-packages/gateway/run.py && /bin/grep -q '_banner_hero_renderable' ${venv_dir}/lib/python*/site-packages/hermes_cli/banner.py && /bin/grep -q 'banner_subtitle' ${venv_dir}/lib/python*/site-packages/hermes_cli/banner.py && /bin/grep -q 'discover_builtin_tools()' ${venv_dir}/lib/python*/site-packages/cli.py && /bin/grep -q '_notify_agent_request_event' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q 'Approved/unblocked/resumed; task is eligible to continue' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q '_notify_agent_request_dispatch_event' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_db.py && /bin/grep -q 'dispatcher_profile=dispatcher_profile' ${venv_dir}/lib/python*/site-packages/gateway/run.py && /bin/grep -q '_resolve_cross_board_task_refs' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_db.py && /bin/grep -q '_reclassify_legacy_prose_payload' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_diagnostics.py && /bin/grep -q 'severity = \"info\" if cross_board_refs and not phantom_refs else \"warning\"' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_diagnostics.py && /bin/grep -q 'prose_ref_current_board_checker' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_diagnostics.py && /bin/grep -q 'BOARD_COLUMN_METADATA' ${venv_dir}/lib/python*/site-packages/plugins/kanban/dashboard/plugin_api.py",
     environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
     path        => ['/bin', '/usr/bin'],
     require     => [
@@ -94,6 +94,7 @@ class nest::app::hermes::install {
       Exec['patch_hermes_kanban_legacy_prose_diagnostic_reclassification'],
       Exec['patch_hermes_kanban_cross_board_info_severity'],
       Exec['patch_hermes_kanban_same_board_legacy_prose_diagnostic_cleanup'],
+      Exec['patch_hermes_kanban_review_lane_metadata'],
       File["${source_dir}/tools/agent_request_tool.py"],
       File["${source_dir}/tools/google_workspace_tool.py"],
       File["${source_dir}/tools/shopping_browser_tool.py"],
@@ -321,6 +322,23 @@ class nest::app::hermes::install {
     ],
   }
 
+  file { "${install_dir}/kanban-review-lane-metadata.patch":
+    ensure => file,
+    source => 'puppet:///modules/nest/app/hermes/kanban-review-lane-metadata.patch',
+    mode   => '0644',
+    owner  => 'root',
+    group  => 'root',
+  }
+
+  exec { 'patch_hermes_kanban_review_lane_metadata':
+    command => "/usr/bin/patch -N -p1 -d ${source_dir} < ${install_dir}/kanban-review-lane-metadata.patch",
+    unless  => "/bin/grep -q 'BOARD_COLUMN_METADATA' ${source_dir}/plugins/kanban/dashboard/plugin_api.py && /bin/grep -q 'hermes-kanban-dot-review' ${source_dir}/plugins/kanban/dashboard/dist/index.js && /bin/grep -q 'Awaiting human review' ${source_dir}/web/src/i18n/en.ts && /bin/grep -q 'test_board_columns_include_review_metadata' ${source_dir}/tests/plugins/test_kanban_dashboard_plugin.py",
+    require => [
+      File["${install_dir}/kanban-review-lane-metadata.patch"],
+      Exec['patch_hermes_kanban_same_board_legacy_prose_diagnostic_cleanup'],
+    ],
+  }
+
   file { "${install_dir}/dashboard-rich-art-spans.patch":
     ensure => file,
     source => 'puppet:///modules/nest/app/hermes/dashboard-rich-art-spans.patch',
@@ -540,12 +558,13 @@ class nest::app::hermes::install {
 
     exec { 'build_hermes_dashboard_web':
       command => "${nodejs::npm_path} install --silent && ${nodejs::npm_path} run build && git -C ${source_dir} rev-parse HEAD > ${web_revision_file}",
-      unless  => "test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${web_revision_file} 2>/dev/null)\" && test -f ${source_dir}/hermes_cli/web_dist/index.html",
+      unless  => "test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${web_revision_file} 2>/dev/null)\" && test -f ${source_dir}/hermes_cli/web_dist/index.html && /bin/grep -q 'Awaiting human review' ${source_dir}/hermes_cli/web_dist/assets/*.js",
       cwd     => "${source_dir}/web",
       path    => ['/bin', '/usr/bin', '/usr/sbin'],
       require => [
         Class['nodejs'],
         Vcsrepo[$source_dir],
+        Exec['patch_hermes_kanban_review_lane_metadata'],
       ],
     }
   }

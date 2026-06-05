@@ -1,0 +1,149 @@
+--- a/plugins/kanban/dashboard/plugin_api.py
++++ b/plugins/kanban/dashboard/plugin_api.py
+@@ -139,6 +139,18 @@
+ BOARD_COLUMNS: list[str] = [
+     "triage", "todo", "scheduled", "ready", "running", "blocked", "review", "done",
+ ]
++
++BOARD_COLUMN_METADATA: dict[str, dict[str, str]] = {
++    "triage": {"label": "Triage", "description": "Raw ideas — a specifier will flesh out the spec"},
++    "todo": {"label": "Todo", "description": "Waiting on dependencies or unassigned"},
++    "scheduled": {"label": "Scheduled", "description": "Waiting on a known time delay or scheduled follow-up"},
++    "ready": {"label": "Ready", "description": "Dependencies satisfied; assign a profile to dispatch"},
++    "running": {"label": "In Progress", "description": "Claimed by a worker — in-flight"},
++    "blocked": {"label": "Blocked", "description": "Worker asked for human input"},
++    "review": {"label": "Review", "description": "Awaiting human review"},
++    "done": {"label": "Done", "description": "Completed"},
++    "archived": {"label": "Archived", "description": "Archived"},
++}
+ 
+ 
+ _CARD_SUMMARY_PREVIEW_CHARS = 200
+@@ -492,7 +504,13 @@
+ 
+         return {
+             "columns": [
+-                {"name": name, "tasks": columns[name]} for name in columns.keys()
++                {
++                    "name": name,
++                    "label": BOARD_COLUMN_METADATA.get(name, {}).get("label", name),
++                    "description": BOARD_COLUMN_METADATA.get(name, {}).get("description", ""),
++                    "tasks": columns[name],
++                }
++                for name in columns.keys()
+             ],
+             "tenants": tenants,
+             "assignees": assignees,
+--- a/plugins/kanban/dashboard/dist/index.js
++++ b/plugins/kanban/dashboard/dist/index.js
+@@ -97,6 +97,7 @@
+     ready: "Ready",
+     running: "In Progress",
+     blocked: "Blocked",
++    review: "Review",
+     done: "Done",
+     archived: "Archived",
+   };
+@@ -106,6 +107,7 @@
+     ready: "Dependencies satisfied; assign a profile to dispatch",
+     running: "Claimed by a worker — in-flight",
+     blocked: "Worker asked for human input",
++    review: "Awaiting human review",
+     done: "Completed",
+     archived: "Archived",
+   };
+@@ -157,6 +159,7 @@
+     ready: "hermes-kanban-dot-ready",
+     running: "hermes-kanban-dot-running",
+     blocked: "hermes-kanban-dot-blocked",
++    review: "hermes-kanban-dot-review",
+     done: "hermes-kanban-dot-done",
+     archived: "hermes-kanban-dot-archived",
+   };
+@@ -2309,8 +2312,8 @@
+       });
+     }, [props.column, props.laneByProfile]);
+ 
+-    const colHelp = getColumnHelp(t, props.column.name);
+-    const colLabel = getColumnLabel(t, props.column.name);
++    const colHelp = props.column.description || getColumnHelp(t, props.column.name) || "";
++    const colLabel = props.column.label || getColumnLabel(t, props.column.name) || props.column.name;
+ 
+     return h("div", {
+       ref: colRef,
+--- a/plugins/kanban/dashboard/dist/style.css
++++ b/plugins/kanban/dashboard/dist/style.css
+@@ -166,6 +166,7 @@
+ .hermes-kanban-dot-ready    { background: #d4b348; }  /* amber */
+ .hermes-kanban-dot-running  { background: #3fb97d; }  /* green */
+ .hermes-kanban-dot-blocked  { background: var(--color-destructive, #d14a4a); }
++.hermes-kanban-dot-review   { background: #b47dd6; }  /* lilac */
+ .hermes-kanban-dot-done     { background: #4a8cd1; }  /* blue */
+ .hermes-kanban-dot-archived { background: var(--color-border); }
+ 
+--- a/web/src/i18n/en.ts
++++ b/web/src/i18n/en.ts
+@@ -666,6 +666,7 @@
+       ready: "Ready",
+       running: "In Progress",
+       blocked: "Blocked",
++      review: "Review",
+       done: "Done",
+       archived: "Archived",
+     },
+@@ -676,6 +677,7 @@
+       ready: "Dependencies satisfied; assign a profile to dispatch",
+       running: "Claimed by a worker — in-flight",
+       blocked: "Worker asked for human input",
++      review: "Awaiting human review",
+       done: "Completed",
+       archived: "Archived",
+     },
+--- a/web/src/i18n/types.ts
++++ b/web/src/i18n/types.ts
+@@ -674,6 +674,7 @@
+       ready: string;
+       running: string;
+       blocked: string;
++      review?: string;
+       done: string;
+       archived: string;
+     };
+@@ -684,6 +685,7 @@
+       ready: string;
+       running: string;
+       blocked: string;
++      review?: string;
+       done: string;
+       archived: string;
+     };
+--- a/tests/plugins/test_kanban_dashboard_plugin.py
++++ b/tests/plugins/test_kanban_dashboard_plugin.py
+@@ -77,6 +77,27 @@
+     assert data["tenants"] == []
+     assert data["assignees"] == []
+     assert data["latest_event_id"] == 0
++
++
++def test_board_columns_include_review_metadata(client):
++    r = client.get("/api/plugins/kanban/board")
++    assert r.status_code == 200
++    columns = {c["name"]: c for c in r.json()["columns"]}
++
++    assert columns["review"]["label"] == "Review"
++    assert columns["review"]["description"] == "Awaiting human review"
++
++
++def test_dashboard_bundle_has_review_lane_metadata():
++    repo_root = Path(__file__).resolve().parents[2]
++    bundle = repo_root / "plugins" / "kanban" / "dashboard" / "dist" / "index.js"
++    css = repo_root / "plugins" / "kanban" / "dashboard" / "dist" / "style.css"
++    js = bundle.read_text()
++
++    assert 'review: "Review"' in js
++    assert 'review: "Awaiting human review"' in js
++    assert 'review: "hermes-kanban-dot-review"' in js
++    assert ".hermes-kanban-dot-review" in css.read_text()
+ 
+ 
+ # ---------------------------------------------------------------------------
