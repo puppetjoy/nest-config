@@ -1,0 +1,41 @@
+diff -ruN a/hermes_cli/kanban_diagnostics.py b/hermes_cli/kanban_diagnostics.py
+--- a/hermes_cli/kanban_diagnostics.py	2026-06-05 06:10:00.000000000 -0400
++++ b/hermes_cli/kanban_diagnostics.py	2026-06-05 06:10:00.000000000 -0400
+@@ -547,7 +547,7 @@
+ 
+ def _rule_prose_phantom_refs(task, events, runs, now, cfg) -> list[Diagnostic]:
+     """Advisory prose-scan: the completion summary mentions ``t_<hex>``
+-    ids that don't resolve. Non-blocking; surfaced as a warning only.
++    ids that don't resolve. Non-blocking; cross-board-only hits are info.
+ 
+     Auto-clears when a fresh clean completion arrives AFTER the
+     suspected event.
+@@ -611,8 +611,9 @@
+             "be pointed at cards that never existed."
+         )
+         actions = _generic_recovery_actions(task, running=running)
++    severity = "info" if cross_board_refs and not phantom_refs else "warning"
+     return [Diagnostic(
+         kind="prose_phantom_refs",
+-        severity="warning",
++        severity=severity,
+         title=title,
+         detail=detail,
+diff -ruN a/tests/hermes_cli/test_kanban_diagnostics.py b/tests/hermes_cli/test_kanban_diagnostics.py
+--- a/tests/hermes_cli/test_kanban_diagnostics.py	2026-06-05 06:10:00.000000000 -0400
++++ b/tests/hermes_cli/test_kanban_diagnostics.py	2026-06-05 06:10:00.000000000 -0400
+@@ -119,6 +119,7 @@
+     assert len(diags) == 1
+     d = diags[0]
+     assert d.title == "Completion summary has unresolved and cross-board task ids"
++    assert d.severity == "warning"
+     assert d.data["phantom_refs"] == ["t_badbadbad"]
+     assert d.data["cross_board_refs"] == [{
+         "id": "t_deadbeef99",
+@@ -155,6 +156,7 @@
+     d = diags[0]
+     assert d.title == "Completion summary references another Kanban board"
+     assert d.actions == []
++    assert d.severity == "info"
+     assert d.data["phantom_refs"] == []
+     assert d.data["cross_board_refs"][0]["id"] == "t_deadbeef99"

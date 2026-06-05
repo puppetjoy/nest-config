@@ -76,7 +76,7 @@ class nest::app::hermes::install {
 
   exec { 'install_hermes_agent':
     command     => "${venv_pip} install --upgrade --force-reinstall ${source_dir} && git -C ${source_dir} rev-parse HEAD > ${git_revision_file}",
-    unless      => "test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent')\" && /bin/grep -q 'app.state.allow_public = allow_public' ${venv_dir}/lib/python*/site-packages/hermes_cli/web_server.py && /bin/grep -q 'if _pl <= 0:' ${venv_dir}/lib/python*/site-packages/gateway/run.py && /bin/grep -q '_banner_hero_renderable' ${venv_dir}/lib/python*/site-packages/hermes_cli/banner.py && /bin/grep -q 'banner_subtitle' ${venv_dir}/lib/python*/site-packages/hermes_cli/banner.py && /bin/grep -q 'discover_builtin_tools()' ${venv_dir}/lib/python*/site-packages/cli.py && /bin/grep -q '_notify_agent_request_event' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q 'Approved/unblocked/resumed; task is eligible to continue' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q '_notify_agent_request_dispatch_event' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_db.py && /bin/grep -q 'dispatcher_profile=dispatcher_profile' ${venv_dir}/lib/python*/site-packages/gateway/run.py && /bin/grep -q '_resolve_cross_board_task_refs' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_db.py && /bin/grep -q '_reclassify_legacy_prose_payload' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_diagnostics.py",
+    unless      => "test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent')\" && /bin/grep -q 'app.state.allow_public = allow_public' ${venv_dir}/lib/python*/site-packages/hermes_cli/web_server.py && /bin/grep -q 'if _pl <= 0:' ${venv_dir}/lib/python*/site-packages/gateway/run.py && /bin/grep -q '_banner_hero_renderable' ${venv_dir}/lib/python*/site-packages/hermes_cli/banner.py && /bin/grep -q 'banner_subtitle' ${venv_dir}/lib/python*/site-packages/hermes_cli/banner.py && /bin/grep -q 'discover_builtin_tools()' ${venv_dir}/lib/python*/site-packages/cli.py && /bin/grep -q '_notify_agent_request_event' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q 'Approved/unblocked/resumed; task is eligible to continue' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q '_notify_agent_request_dispatch_event' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_db.py && /bin/grep -q 'dispatcher_profile=dispatcher_profile' ${venv_dir}/lib/python*/site-packages/gateway/run.py && /bin/grep -q '_resolve_cross_board_task_refs' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_db.py && /bin/grep -q '_reclassify_legacy_prose_payload' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_diagnostics.py && /bin/grep -q 'severity = \"info\" if cross_board_refs and not phantom_refs else \"warning\"' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_diagnostics.py",
     environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
     path        => ['/bin', '/usr/bin'],
     require     => [
@@ -92,6 +92,7 @@ class nest::app::hermes::install {
       Exec['patch_hermes_kanban_dispatcher_profile_scope'],
       Exec['patch_hermes_kanban_cross_board_phantom_references'],
       Exec['patch_hermes_kanban_legacy_prose_diagnostic_reclassification'],
+      Exec['patch_hermes_kanban_cross_board_info_severity'],
       File["${source_dir}/tools/agent_request_tool.py"],
       File["${source_dir}/tools/google_workspace_tool.py"],
       File["${source_dir}/tools/shopping_browser_tool.py"],
@@ -282,6 +283,23 @@ class nest::app::hermes::install {
     require => [
       File["${install_dir}/kanban-legacy-prose-diagnostic-reclassification.patch"],
       Exec['patch_hermes_kanban_cross_board_phantom_references'],
+    ],
+  }
+
+  file { "${install_dir}/kanban-cross-board-info-severity.patch":
+    ensure => file,
+    source => 'puppet:///modules/nest/app/hermes/kanban-cross-board-info-severity.patch',
+    mode   => '0644',
+    owner  => 'root',
+    group  => 'root',
+  }
+
+  exec { 'patch_hermes_kanban_cross_board_info_severity':
+    command => "/usr/bin/patch -N -p1 -d ${source_dir} < ${install_dir}/kanban-cross-board-info-severity.patch",
+    unless  => "/bin/grep -q 'severity = \"info\" if cross_board_refs and not phantom_refs else \"warning\"' ${source_dir}/hermes_cli/kanban_diagnostics.py",
+    require => [
+      File["${install_dir}/kanban-cross-board-info-severity.patch"],
+      Exec['patch_hermes_kanban_legacy_prose_diagnostic_reclassification'],
     ],
   }
 
