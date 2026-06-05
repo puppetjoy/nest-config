@@ -40,6 +40,7 @@ define nest::lib::hermes (
   Optional[String[1]]  $skin_name                = undef,
   Optional[String[1]]  $skin_content             = undef,
   Optional[String[1]]  $skin_banner_hero_source  = undef,
+  Array[String[1]]     $profile_toolsets         = ['hermes-cli', 'kanban'],
   Any                  $toolsets                 = undef,
   Any                  $telegram_toolsets        = undef,
   Boolean              $google_workspace_enabled = false,
@@ -93,6 +94,9 @@ define nest::lib::hermes (
   $effective_toolsets                = pick($toolsets, $telegram_toolsets, $default_toolsets)
   $toolsets_yaml                     = $effective_toolsets.map |String[1] $toolset| {
     "          - ${toolset}"
+  }.join("\n")
+  $profile_toolsets_yaml             = $profile_toolsets.map |String[1] $toolset| {
+    "        - ${toolset}"
   }.join("\n")
   $platform_toolsets_yaml            = [
     'cli',
@@ -327,8 +331,7 @@ define nest::lib::hermes (
     content => @("YAML"),
       ---
       toolsets:
-        - hermes-cli
-        - kanban
+${profile_toolsets_yaml}
       model:
         provider: "${model_provider}"
         default: "${model_name}"
