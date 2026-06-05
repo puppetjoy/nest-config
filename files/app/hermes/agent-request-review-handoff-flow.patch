@@ -61,7 +61,7 @@ diff --git a/src/agent_request_broker/kanban_backend.py b/src/agent_request_brok
 index 63742c9..b4191ef 100644
 --- a/src/agent_request_broker/kanban_backend.py
 +++ b/src/agent_request_broker/kanban_backend.py
-@@ -37,14 +37,17 @@ URGENCY_PRIORITIES = {
+@@ -37,17 +37,20 @@ URGENCY_PRIORITIES = {
  }
  TERMINAL_COMPAT_STATUSES = {"completed", "denied", "cancelled"}
  CHILD_COMPLETION_CLASSES = {"blocking", "nonblocking_followup", "future_milestone"}
@@ -73,6 +73,8 @@ index 63742c9..b4191ef 100644
 +REVIEW_REQUESTED = "reviewing"
 +REVIEW_ACCEPTED = "review_accepted"
  CHANGE_STATUSES = {"in_progress", "completed"}
+ CALLBACK_ACTIONS = {"approve", "deny", "steer", "review_accept", "review_changes", "review_question", "needs_info_answer"}
+ CALLBACK_BINDING_ACTIONS = {"approve", "deny", "steer"}
  COMMENT_PREFIX = "<!-- agent-request:event "
  COMMENT_SUFFIX = " -->"
  APPROVAL_PREFIX = "apr-"
