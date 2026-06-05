@@ -159,8 +159,14 @@ resources:
                 - name: https
                   containerPort: 6901
               readinessProbe:
-                tcpSocket:
-                  port: 6901
+                exec:
+                  command:
+                    - /bin/sh
+                    - -ec
+                    - >-
+                      fmt='%'; fmt="${fmt}{http_code}";
+                      code=$(curl -ks -o /dev/null -w "${fmt}" https://127.0.0.1:6901/);
+                      test "${code}" = 401
                 periodSeconds: 5
                 timeoutSeconds: 2
               livenessProbe:
