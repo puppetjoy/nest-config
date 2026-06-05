@@ -157,8 +157,9 @@ resources:
                   else
                     mkdir -p /home/kasm-user/.config/star-shopping-chrome;
                   fi;
-                  rm -f /home/kasm-user/.config/star-shopping-chrome/SingletonCookie
-                    /home/kasm-user/.config/star-shopping-chrome/SingletonLock
+                  rm -f \
+                    /home/kasm-user/.config/star-shopping-chrome/SingletonCookie \
+                    /home/kasm-user/.config/star-shopping-chrome/SingletonLock \
                     /home/kasm-user/.config/star-shopping-chrome/SingletonSocket
               volumeMounts:
                 - name: profile
