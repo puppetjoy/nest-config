@@ -133,12 +133,21 @@ class nest::base::users {
       }
     }
 
+    $dotfiles_git_url = 'git@gitlab.joyfullee.me:joy/dotfiles.git'
+
+    exec { "set-dotfiles-remote-${home_dir}":
+      command => "/usr/sbin/git -C ${home_dir} remote set-url origin ${dotfiles_git_url}",
+      onlyif  => "/bin/sh -c 'test -d ${home_dir}/.git && test \$(/usr/sbin/git -C ${home_dir} remote get-url origin) != ${dotfiles_git_url}'",
+      require => File[$home_dir],
+    }
+
     vcsrepo { $home_dir:
       ensure   => latest,
       provider => git,
-      source   => 'https://gitlab.joyfullee.me/joy/dotfiles.git',
+      source   => $dotfiles_git_url,
       revision => 'main',
       user     => $exec_user,
+      require  => Exec["set-dotfiles-remote-${home_dir}"],
     }
     ~>
     exec { "refresh-${home_dir}":
