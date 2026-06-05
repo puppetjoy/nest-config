@@ -139,6 +139,15 @@ PRODUCT_EXTRACT_JS = r"""
       '#fulfillerInfoFeature_feature_div',
       '#merchant-info'
     ]),
+    product_condition: firstText([
+      '#condition-value',
+      '#buybox #condition-value',
+      '#desktop_buybox #condition-value',
+      '#buybox [id*="condition" i]',
+      '#desktop_buybox [id*="condition" i]',
+      '#buybox [data-csa-c-content-id*="condition" i]',
+      '#desktop_buybox [data-csa-c-content-id*="condition" i]'
+    ]),
     asin: firstText(['#ASIN', 'input[name="ASIN"]', 'input#ASIN']) || (document.querySelector('#ASIN, input[name="ASIN"], input#ASIN') || {}).value || '',
     image_url_candidates: Array.from(new Set(imageUrls)).slice(0, 12)
   };
@@ -210,16 +219,30 @@ ADD_TO_CART_PRECHECK_JS = r"""
     return '';
   })();
   const asin = (document.querySelector('#ASIN, input[name="ASIN"], input#ASIN') || {}).value || '';
+  const conditionText = clean([
+    text('#condition-value'),
+    text('#buybox #condition-value'),
+    text('#desktop_buybox #condition-value'),
+    text('#buybox [id*="condition" i]'),
+    text('#desktop_buybox [id*="condition" i]'),
+    text('#buybox [data-csa-c-content-id*="condition" i]'),
+    text('#desktop_buybox [data-csa-c-content-id*="condition" i]')
+  ].filter(Boolean).join(' '));
+  const selectedOfferText = clean(Array.from(document.querySelectorAll('#buyBoxAccordion input[type="radio"]:checked, #buybox input[type="radio"]:checked, #desktop_buybox input[type="radio"]:checked'))
+    .map((input) => clean((input.closest('label, .a-accordion-row, .a-box, .a-section, li, div') || input).textContent))
+    .filter(Boolean)
+    .join(' '));
+  const conditionSummary = (conditionText || selectedOfferText || '').slice(0, 240);
   const buyBoxText = clean([
     text('#buybox'),
     text('#desktop_buybox'),
-    text('#ppd'),
     text('#apex_desktop')
   ].filter(Boolean).join(' '));
   const buyBoxLower = buyBoxText.toLowerCase();
+  const unsafeConditionRe = /\b(used|renewed|refurbished|pre-owned|open box)\b/i;
   const unexpectedReason = (() => {
-    if (buyBoxLower.includes('used') || buyBoxLower.includes('renewed') || buyBoxLower.includes('refurbished')) return 'Buy box appears to offer a used, renewed, or refurbished item.';
-    if (buyBoxLower.includes('digital') || buyBoxLower.includes('kindle')) return 'Buy box appears to offer a digital item.';
+    if (conditionSummary && unsafeConditionRe.test(conditionSummary)) return `Buy box appears to offer a used, renewed, or refurbished item: ${conditionSummary}`;
+    if (/\b(digital|kindle)\b/i.test(buyBoxLower)) return 'Buy box appears to offer a digital item.';
     if (buyBoxLower.includes('add-on item')) return 'Buy box appears to be an add-on item.';
     const selectedWarranty = Array.from(document.querySelectorAll('input[type="checkbox"], input[type="radio"]'))
       .some((input) => input.checked && /warranty|protection|coverage|insurance/i.test(clean(input.closest('label, div, span') ? input.closest('label, div, span').textContent : input.name || input.id || '')));
@@ -261,6 +284,7 @@ ADD_TO_CART_PRECHECK_JS = r"""
     asin,
     challenge_reason: challengeReason,
     unexpected_reason: unexpectedReason,
+    condition_summary: conditionSummary || 'not_visible',
     subscription_selected: subscriptionSelected,
     add_button_visible: Boolean(addButton),
     add_button_disabled: Boolean(addButton && addButton.disabled),
@@ -935,7 +959,7 @@ STATUS_SCHEMA = {
 
 INSPECT_PRODUCT_SCHEMA = {
     "name": "shopping_browser_inspect_product",
-    "description": "Read-only Amazon product inspection through the Kasm shopping session. Returns product title, logged-in price, delivery/Prime text, availability, seller, ship-from text, and public Amazon product image URLs when visible. Does not expose cookies, local storage, request headers, raw CDP, screenshots, or browser handles.",
+    "description": "Read-only Amazon product inspection through the Kasm shopping session. Returns product title, logged-in price, delivery/Prime text, availability, seller, ship-from text, visible condition text when Amazon exposes it, and public Amazon product image URLs when visible. Does not expose cookies, local storage, request headers, raw CDP, screenshots, or browser handles.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -1081,6 +1105,9 @@ if __name__ == "__main__":
     assert _bounded_max_reviews(99) == MAX_REVIEWS
     assert _product_url_from_url_or_asin("B01J01XGPK") == ("https://www.amazon.com/dp/B01J01XGPK", "B01J01XGPK")
     assert _approved_cart_addition("B01J01XGPK", 1, Decimal("7.95"), "one_time")["quantity"] == 1
+    assert "text('#ppd')" not in ADD_TO_CART_PRECHECK_JS
+    assert "condition_summary" in ADD_TO_CART_PRECHECK_JS
+    assert "product_condition" in PRODUCT_EXTRACT_JS
     assert not any(word in json.dumps(STATUS_SCHEMA).lower() for word in ("cookie", "localstorage"))
     product = {"image_url_candidates": ["https://m.media-amazon.com/images/I/example._AC_SX679_.jpg?x=1", "https://example.com/not-amazon.jpg"]}
     _normalize_product_images(product)
