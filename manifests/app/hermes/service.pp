@@ -165,6 +165,22 @@ class nest::app::hermes::service {
     ],
   }
 
+  [
+    'agent-request-maintain',
+    'agent-request-supersede',
+    'agent-request-cancel',
+    'agent-request-deny',
+  ].each |String $agent_request_maintenance_command| {
+    file { "${install_dir}/bin/${agent_request_maintenance_command}":
+      ensure  => link,
+      target  => "${broker_source_dir}/bin/${agent_request_maintenance_command}",
+      require => [
+        File["${install_dir}/bin"],
+        Vcsrepo[$broker_source_dir],
+      ],
+    }
+  }
+
   file { "${systemd_user_dir}/hermes-gateway@.service":
     ensure  => file,
     mode    => '0644',
