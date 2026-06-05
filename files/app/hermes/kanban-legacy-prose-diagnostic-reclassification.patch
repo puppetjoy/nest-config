@@ -1,0 +1,166 @@
+diff -ruN a/hermes_cli/kanban_diagnostics.py b/hermes_cli/kanban_diagnostics.py
+--- a/hermes_cli/kanban_diagnostics.py	2026-06-05 05:47:06.656014844 -0400
++++ b/hermes_cli/kanban_diagnostics.py	2026-06-05 05:47:06.671408584 -0400
+@@ -498,6 +498,53 @@
+     )]
+ 
+ 
++def _reclassify_legacy_prose_payload(payload: dict, cfg: dict) -> dict:
++    """Reclassify pre-cross-board prose diagnostics at render time.
++
++    Older ``suspected_hallucinated_references`` events only persisted
++    ``phantom_refs``. When the caller supplies a bounded resolver, move ids
++    that now resolve outside the current board into ``cross_board_refs`` while
++    leaving true missing-everywhere ids in ``phantom_refs``.
++    """
++    if not isinstance(payload, dict):
++        return {}
++    raw_phantom_refs = payload.get("phantom_refs", []) or []
++    phantom_refs: list[str] = []
++    for ref in raw_phantom_refs:
++        if isinstance(ref, str) and ref not in phantom_refs:
++            phantom_refs.append(ref)
++    if not phantom_refs or payload.get("cross_board_refs") is not None:
++        return payload
++
++    resolver = cfg.get("prose_ref_resolver")
++    if not callable(resolver):
++        return payload
++    try:
++        resolved = resolver(phantom_refs)
++    except Exception:
++        return payload
++    if not isinstance(resolved, list) or not resolved:
++        return payload
++
++    cross_board_refs: list[dict] = []
++    for ref in resolved:
++        if not isinstance(ref, dict):
++            continue
++        tid = ref.get("id")
++        if tid and tid in phantom_refs and all(existing.get("id") != tid for existing in cross_board_refs):
++            cross_board_refs.append(ref)
++    if not cross_board_refs:
++        return payload
++
++    cross_ids = {ref.get("id") for ref in cross_board_refs}
++    out = dict(payload)
++    out["phantom_refs"] = [ref for ref in phantom_refs if ref not in cross_ids]
++    out["cross_board_refs"] = cross_board_refs
++    if not out.get("current_board") and cfg.get("current_board"):
++        out["current_board"] = cfg.get("current_board")
++    return out
++
++
+ def _rule_prose_phantom_refs(task, events, runs, now, cfg) -> list[Diagnostic]:
+     """Advisory prose-scan: the completion summary mentions ``t_<hex>``
+     ids that don't resolve. Non-blocking; surfaced as a warning only.
+@@ -512,7 +559,7 @@
+     cross_board_refs: list[dict] = []
+     current_board = None
+     for ev in hits:
+-        payload = _parse_payload(ev)
++        payload = _reclassify_legacy_prose_payload(_parse_payload(ev), cfg)
+         if payload.get("current_board") and current_board is None:
+             current_board = payload.get("current_board")
+         for pid in payload.get("phantom_refs", []) or []:
+diff -ruN a/plugins/kanban/dashboard/plugin_api.py b/plugins/kanban/dashboard/plugin_api.py
+--- a/plugins/kanban/dashboard/plugin_api.py	2026-06-05 05:47:06.656476621 -0400
++++ b/plugins/kanban/dashboard/plugin_api.py	2026-06-05 05:47:06.671584818 -0400
+@@ -234,6 +234,12 @@
+     from hermes_cli.config import load_config
+ 
+     diag_config = kd.config_from_runtime_config(load_config())
++    # Reclassify legacy prose-scan diagnostics that predate cross-board
++    # payloads. This is read-only and bounded to the phantom ids already
++    # persisted on active diagnostic events for the current dashboard board.
++    from hermes_cli import kanban_db
++    diag_config["prose_ref_resolver"] = lambda ids: kanban_db._resolve_cross_board_task_refs(conn, ids)
++    diag_config["current_board"] = kanban_db._board_slug_for_conn(conn)
+ 
+     # Build the candidate task list. We need each task's row + its
+     # events + its runs. Doing N separate queries works but scales
+diff -ruN a/tests/hermes_cli/test_kanban_diagnostics.py b/tests/hermes_cli/test_kanban_diagnostics.py
+--- a/tests/hermes_cli/test_kanban_diagnostics.py	2026-06-05 05:47:06.657131043 -0400
++++ b/tests/hermes_cli/test_kanban_diagnostics.py	2026-06-05 05:47:06.671650112 -0400
+@@ -184,6 +184,80 @@
+     assert d.actions
+ 
+ 
++
++def test_legacy_prose_payload_is_reclassified_with_resolver():
++    task = _task(status="done")
++    events = [
++        _event("completed", ts=100, summary="legacy payload"),
++        _event(
++            "suspected_hallucinated_references",
++            ts=101,
++            phantom_refs=["t_deadbeef99", "t_badbadbad"],
++            source="completion_summary",
++        ),
++    ]
++
++    def resolver(ids):
++        assert ids == ["t_deadbeef99", "t_badbadbad"]
++        return [{
++            "id": "t_deadbeef99",
++            "board": "default",
++            "db": "legacy/default Kanban DB",
++        }]
++
++    diags = kd.compute_task_diagnostics(
++        task,
++        events,
++        [],
++        config={
++            "prose_ref_resolver": resolver,
++            "current_board": "agent-requests",
++        },
++    )
++    assert len(diags) == 1
++    d = diags[0]
++    assert d.title == "Completion summary has unresolved and cross-board task ids"
++    assert d.data["phantom_refs"] == ["t_badbadbad"]
++    assert d.data["cross_board_refs"] == [{
++        "id": "t_deadbeef99",
++        "board": "default",
++        "db": "legacy/default Kanban DB",
++    }]
++
++
++def test_legacy_prose_payload_reclassified_cross_board_only_is_informational():
++    task = _task(status="done")
++    events = [
++        _event("completed", ts=100, summary="legacy payload"),
++        _event(
++            "suspected_hallucinated_references",
++            ts=101,
++            phantom_refs=["t_deadbeef99"],
++            source="completion_summary",
++        ),
++    ]
++
++    diags = kd.compute_task_diagnostics(
++        task,
++        events,
++        [],
++        config={
++            "prose_ref_resolver": lambda ids: [{
++                "id": "t_deadbeef99",
++                "board": "default",
++                "db": "legacy/default Kanban DB",
++            }],
++            "current_board": "agent-requests",
++        },
++    )
++    assert len(diags) == 1
++    d = diags[0]
++    assert d.title == "Completion summary references another Kanban board"
++    assert d.actions == []
++    assert d.data["phantom_refs"] == []
++    assert d.data["cross_board_refs"][0]["id"] == "t_deadbeef99"
++
++
+ def test_repeated_failures_fires_at_threshold_on_spawn():
+     """A task with multiple spawn_failed runs gets a spawn-flavoured
+     diagnostic (title mentions 'spawn', suggested action is ``doctor``).
