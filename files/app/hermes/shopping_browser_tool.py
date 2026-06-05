@@ -470,23 +470,56 @@ GUARDRAIL_SCHEMA = {
     },
 }
 
-for schema, handler, emoji in [
-    (STATUS_SCHEMA, shopping_browser_status_tool, "🛡️"),
-    (INSPECT_PRODUCT_SCHEMA, shopping_browser_inspect_product_tool, "🛒"),
-    (INSPECT_CART_SCHEMA, shopping_browser_inspect_cart_tool, "🧾"),
-    (CURRENT_PAGE_SUMMARY_SCHEMA, shopping_browser_current_page_summary_tool, "📄"),
-    (GUARDRAIL_SCHEMA, shopping_browser_guardrail_check_tool, "🚫"),
-]:
-    registry.register(
-        name=schema["name"],
-        toolset=TOOLSET,
-        schema=schema,
-        handler=handler,
-        check_fn=_check_shopping_browser,
-        description=schema["description"],
-        emoji=emoji,
-        max_result_size_chars=MAX_RESULT_CHARS,
-    )
+registry.register(
+    name=STATUS_SCHEMA["name"],
+    toolset=TOOLSET,
+    schema=STATUS_SCHEMA,
+    handler=shopping_browser_status_tool,
+    check_fn=_check_shopping_browser,
+    description=STATUS_SCHEMA["description"],
+    emoji="🛡️",
+    max_result_size_chars=MAX_RESULT_CHARS,
+)
+registry.register(
+    name=INSPECT_PRODUCT_SCHEMA["name"],
+    toolset=TOOLSET,
+    schema=INSPECT_PRODUCT_SCHEMA,
+    handler=shopping_browser_inspect_product_tool,
+    check_fn=_check_shopping_browser,
+    description=INSPECT_PRODUCT_SCHEMA["description"],
+    emoji="🛒",
+    max_result_size_chars=MAX_RESULT_CHARS,
+)
+registry.register(
+    name=INSPECT_CART_SCHEMA["name"],
+    toolset=TOOLSET,
+    schema=INSPECT_CART_SCHEMA,
+    handler=shopping_browser_inspect_cart_tool,
+    check_fn=_check_shopping_browser,
+    description=INSPECT_CART_SCHEMA["description"],
+    emoji="🧾",
+    max_result_size_chars=MAX_RESULT_CHARS,
+)
+registry.register(
+    name=CURRENT_PAGE_SUMMARY_SCHEMA["name"],
+    toolset=TOOLSET,
+    schema=CURRENT_PAGE_SUMMARY_SCHEMA,
+    handler=shopping_browser_current_page_summary_tool,
+    check_fn=_check_shopping_browser,
+    description=CURRENT_PAGE_SUMMARY_SCHEMA["description"],
+    emoji="📄",
+    max_result_size_chars=MAX_RESULT_CHARS,
+)
+registry.register(
+    name=GUARDRAIL_SCHEMA["name"],
+    toolset=TOOLSET,
+    schema=GUARDRAIL_SCHEMA,
+    handler=shopping_browser_guardrail_check_tool,
+    check_fn=_check_shopping_browser,
+    description=GUARDRAIL_SCHEMA["description"],
+    emoji="🚫",
+    max_result_size_chars=MAX_RESULT_CHARS,
+)
 
 
 if __name__ == "__main__":
