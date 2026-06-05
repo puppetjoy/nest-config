@@ -131,7 +131,7 @@
                  return tool_error(f"could not unblock {tid} (not blocked or unknown)")
 +            _notify_agent_request_event(
 +                kb, conn, task_id=str(tid), action="unblocked",
-+                summary="Task returned to ready", event_kind="unblocked",
++                summary="Approved/unblocked/resumed; task is eligible to continue.", event_kind="unblocked",
 +            )
              return _ok(task_id=str(tid), status="ready")
          finally:
