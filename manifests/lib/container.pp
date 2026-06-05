@@ -11,6 +11,7 @@ define nest::lib::container (
   Optional[String]     $pod        = undef,
   Array[String]        $publish    = [],
   Hash[String, String] $secrets    = {},
+  Optional[String]     $shm_size   = undef,
   Array[String]        $tmpfs      = [],
   Array[String]        $volumes    = [],
 ) {
@@ -122,6 +123,11 @@ define nest::lib::container (
         "--secret=${secret_name},target=${secret_target},type=env"
       }
 
+      $shm_size_args = $shm_size ? {
+        undef   => [],
+        default => ["--shm-size=${shm_size}"],
+      }
+
       $tmpfs_args = $tmpfs.map |$t| {
         "--tmpfs=${t}"
       }
@@ -142,6 +148,7 @@ define nest::lib::container (
         $pod_args,
         $publish_args,
         $secrets_args,
+        $shm_size_args,
         $tmpfs_args,
         $volumes_args,
         "--label=nest.podman.version=${facts['podman_version']}",

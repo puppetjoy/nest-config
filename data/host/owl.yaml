@@ -2,6 +2,7 @@
 nest::classes:
   - 'nest::app::codex'
   - 'nest::app::hermes'
+  - 'nest::service::kasm_shopping_browser'
   - 'nest::service::gitlab_runner'
   - 'nest::service::kubernetes'
   - 'nest::tool::bolt'
