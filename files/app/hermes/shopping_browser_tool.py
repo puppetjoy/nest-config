@@ -29,6 +29,9 @@ WORKLOAD = os.environ.get("SHOPPING_BROWSER_WORKLOAD", "deployment/shopping")
 REMOTE_DEBUG_PORT = int(os.environ.get("SHOPPING_BROWSER_CDP_PORT", "9222"))
 MAX_RESULT_CHARS = 16000
 MAX_PRODUCT_IMAGES = 6
+DEFAULT_MAX_REVIEWS = 5
+MAX_REVIEWS = 10
+REVIEW_EXCERPT_CHARS = 900
 PORT_FORWARD_TIMEOUT_SECONDS = 20
 PAGE_LOAD_TIMEOUT_SECONDS = 15
 
@@ -171,6 +174,105 @@ CART_EXTRACT_JS = r"""
 })()
 """
 
+
+REVIEWS_EXTRACT_JS = r"""
+(() => {
+  const maxReviews = __MAX_REVIEWS__;
+  const excerptChars = __EXCERPT_CHARS__;
+  const clean = (value) => (value || '').replace(/\s+/g, ' ').trim();
+  const cleanNodeText = (node) => {
+    if (!node) return '';
+    const clone = node.cloneNode(true);
+    clone.querySelectorAll('script, style, noscript, input, button').forEach((child) => child.remove());
+    return clean(clone.textContent);
+  };
+  const text = (selector) => cleanNodeText(document.querySelector(selector));
+  const firstText = (selectors) => {
+    for (const selector of selectors) {
+      const value = text(selector);
+      if (value) return value;
+    }
+    return '';
+  };
+  const attrText = (node, selectors, attr) => {
+    for (const selector of selectors) {
+      const found = node.querySelector(selector);
+      if (!found) continue;
+      const value = clean(found.getAttribute(attr) || '');
+      if (value) return value;
+    }
+    return '';
+  };
+  const shorten = (value, limit) => {
+    const cleaned = clean(value);
+    if (cleaned.length <= limit) return cleaned;
+    return cleaned.slice(0, limit).replace(/\s+\S*$/, '') + '…';
+  };
+  const pageText = clean(document.body ? document.body.innerText : '');
+  const lowerPageText = pageText.toLowerCase();
+  const blockedReason = (() => {
+    if (document.querySelector('form[action*="validateCaptcha"], input[name="field-keywords"] + input[type="submit"][alt*="Continue shopping"]')) return 'Amazon CAPTCHA or robot-check page is visible.';
+    if (lowerPageText.includes('enter the characters you see below')) return 'Amazon CAPTCHA or robot-check page is visible.';
+    if (lowerPageText.includes('sorry, we just need to make sure you\'re not a robot')) return 'Amazon CAPTCHA or robot-check page is visible.';
+    if (lowerPageText.includes('sign in') && lowerPageText.includes('to see customer reviews')) return 'Amazon requires sign-in before reviews are visible.';
+    return '';
+  })();
+  const histogram = {};
+  document.querySelectorAll('#histogramTable tr, table#histogramTable tr, .histogram-row, [aria-label*="star"][aria-label*="%"]')
+    .forEach((row) => {
+      const label = clean(row.getAttribute('aria-label') || row.textContent);
+      const starMatch = label.match(/([1-5])\s*star/i);
+      const percentMatch = label.match(/(\d{1,3})\s*%/);
+      if (starMatch && percentMatch) histogram[`${starMatch[1]}_star`] = `${percentMatch[1]}%`;
+    });
+  const reviewNodes = Array.from(document.querySelectorAll('[data-hook="review"], .review, [id^="customer_review-"]'));
+  const reviews = reviewNodes.map((node) => {
+    const rating = attrText(node, ['[data-hook="review-star-rating"]', '[data-hook="cmps-review-star-rating"]', '.review-rating'], 'aria-label')
+      || cleanNodeText(node.querySelector('[data-hook="review-star-rating"], [data-hook="cmps-review-star-rating"], .review-rating'));
+    const titleNode = node.querySelector('[data-hook="review-title"], .review-title');
+    let title = cleanNodeText(titleNode);
+    if (rating && title.startsWith(rating)) title = clean(title.slice(rating.length));
+    return {
+      star_rating: rating,
+      title: title,
+      date: cleanNodeText(node.querySelector('[data-hook="review-date"], .review-date')),
+      verified_purchase: Boolean(node.querySelector('[data-hook="avp-badge"], .avp-badge')) || /verified purchase/i.test(cleanNodeText(node)),
+      reviewer: cleanNodeText(node.querySelector('.a-profile-name, [data-hook="genome-widget"] .a-profile-name')),
+      body_excerpt: shorten(cleanNodeText(node.querySelector('[data-hook="review-body"], .review-text, .review-text-content')), excerptChars)
+    };
+  }).filter((review) => review.star_rating || review.title || review.body_excerpt).slice(0, maxReviews);
+  const topReviews = {};
+  const positive = document.querySelector('[data-hook="positive-review"], #viewpoint-R1, .cr-lighthouse-term');
+  const critical = document.querySelector('[data-hook="critical-review"], #viewpoint-R2');
+  if (positive) topReviews.positive_excerpt = shorten(cleanNodeText(positive), excerptChars);
+  if (critical) topReviews.critical_excerpt = shorten(cleanNodeText(critical), excerptChars);
+  const phraseSelectors = [
+    '[data-hook="cr-insights-widget"] .a-size-base',
+    '[data-hook="cr-insights-widget"] .a-badge-text',
+    '.cr-lighthouse-term',
+    '.review-keyword'
+  ];
+  const commonPhrases = Array.from(new Set(phraseSelectors.flatMap((selector) => Array.from(document.querySelectorAll(selector)).map(cleanNodeText).filter(Boolean)))).slice(0, 20);
+  const result = {
+    page_title: document.title || '',
+    product_title: firstText(['#cm_cr-product_info .a-size-large', '[data-hook="product-title"]', '#productTitle', 'h1']),
+    overall_rating: firstText(['[data-hook="rating-out-of-text"]', '#acrPopover .a-icon-alt', '.AverageCustomerReviews .a-icon-alt', '.reviewNumericalSummary .a-icon-alt']),
+    review_count: firstText(['[data-hook="total-review-count"]', '#acrCustomerReviewText', '#filter-info-section .a-size-base', '.cr-filter-info-review-rating-count']),
+    rating_histogram: histogram,
+    top_reviews: topReviews,
+    common_phrases: commonPhrases,
+    reviews,
+    extraction: {
+      status: blockedReason ? 'blocked' : (reviews.length || Object.keys(histogram).length || firstText(['[data-hook="rating-out-of-text"]', '#acrPopover .a-icon-alt']) ? 'ok' : 'unavailable'),
+      reason: blockedReason || (reviews.length ? '' : 'No public review excerpts were visible in supported Amazon review selectors.'),
+      requested_max_reviews: maxReviews,
+      returned_reviews: reviews.length
+    }
+  };
+  return result;
+})()
+"""
+
 SUMMARY_EXTRACT_JS = r"""
 (() => {
   const clean = (value) => (value || '').replace(/\s+/g, ' ').trim();
@@ -234,13 +336,49 @@ def _normalize_product_images(result: dict[str, Any]) -> None:
         }
 
 
-def _validate_amazon_url(value: str) -> str:
+def _validate_amazon_url(value: str, operation: str = "inspect_product") -> str:
     parsed = urlparse(value)
     if parsed.scheme != "https" or not AMAZON_HOST_RE.search(parsed.netloc):
-        raise ValueError("inspect_product only accepts https://*.amazon.* product URLs")
+        raise ValueError(f"{operation} only accepts https://*.amazon.* URLs")
     if any(word in parsed.path.lower() for word in ("cart", "checkout", "buy", "gp/your-account", "hz/mycd", "orders", "addresses", "wallet")):
         raise ValueError("URL path is outside the read-only product inspection scope")
     return value
+
+
+
+def _extract_asin(value: str) -> str | None:
+    parsed = urlparse(value)
+    candidates = [part for part in parsed.path.split('/') if part]
+    for index, part in enumerate(candidates):
+        if part in ('dp', 'product', 'product-reviews') and index + 1 < len(candidates):
+            asin = candidates[index + 1]
+            if re.fullmatch(r'[A-Z0-9]{10}', asin, re.IGNORECASE):
+                return asin.upper()
+    for part in candidates:
+        if re.fullmatch(r'[A-Z0-9]{10}', part, re.IGNORECASE):
+            return part.upper()
+    return None
+
+
+def _review_url(value: str) -> tuple[str, str | None]:
+    safe_url = _validate_amazon_url(value, operation='inspect_reviews')
+    parsed = urlparse(safe_url)
+    asin = _extract_asin(safe_url)
+    if asin:
+        return urlunparse((parsed.scheme, parsed.netloc, f'/product-reviews/{asin}', '', '', '')), asin
+    return safe_url, None
+
+
+def _bounded_max_reviews(value: Any) -> int:
+    if value in (None, ''):
+        return DEFAULT_MAX_REVIEWS
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        raise ValueError('max_reviews must be an integer') from None
+    if parsed < 1:
+        raise ValueError('max_reviews must be at least 1')
+    return min(parsed, MAX_REVIEWS)
 
 
 def _reject_unsafe_operation(operation: str) -> dict[str, Any]:
@@ -250,7 +388,7 @@ def _reject_unsafe_operation(operation: str) -> dict[str, Any]:
             "allowed": False,
             "error": "OPERATION_NOT_ALLOWED",
             "operation": op,
-            "message": "Star's shopping bridge is read-only: product/cart/page inspection only. Joy handles login, Bitwarden, passkeys, 2FA, CAPTCHA, checkout, account, address, payment, and order actions manually.",
+            "message": "Star's shopping bridge is read-only: product/review/cart/page inspection only. Joy handles login, Bitwarden, passkeys, 2FA, CAPTCHA, checkout, account, address, payment, and order actions manually.",
         }
     return {"allowed": True, "operation": op}
 
@@ -406,6 +544,28 @@ def _inspect_product(url: str) -> dict[str, Any]:
     return _with_browser(run)
 
 
+def _inspect_reviews(url: str, max_reviews: int) -> dict[str, Any]:
+    reviews_url, asin = _review_url(url)
+    expression = REVIEWS_EXTRACT_JS.replace('__MAX_REVIEWS__', str(max_reviews)).replace('__EXCERPT_CHARS__', str(REVIEW_EXCERPT_CHARS))
+
+    def run(browser: CdpSession) -> dict[str, Any]:
+        target_id = str(browser.call("Target.createTarget", {"url": "about:blank"})["targetId"])
+        session_id = _attach(browser, target_id)
+        try:
+            _navigate_and_wait(browser, session_id, reviews_url)
+            result = _evaluate(browser, session_id, expression) or {}
+            result["url"] = _sanitize_url(reviews_url)
+            result["operation"] = "inspect_reviews"
+            if asin:
+                result["asin"] = asin
+            return result
+        finally:
+            with contextlib.suppress(Exception):
+                browser.call("Target.closeTarget", {"targetId": target_id})
+
+    return _with_browser(run)
+
+
 def _inspect_cart() -> dict[str, Any]:
     cart_url = "https://www.amazon.com/gp/cart/view.html"
 
@@ -446,7 +606,7 @@ def shopping_browser_status_tool(args: dict[str, Any], **_kw: Any) -> str:
         "workload": WORKLOAD,
         "kubectl_available": shutil.which("kubectl") is not None,
         "remote_debug_port": REMOTE_DEBUG_PORT,
-        "read_only_operations": ["inspect_product", "inspect_cart", "current_page_summary"],
+        "read_only_operations": ["inspect_product", "inspect_reviews", "inspect_cart", "current_page_summary"],
         "blocked_operations": sorted(UNSAFE_OPERATIONS),
         "secret_policy": "No raw CDP URLs, cookies, local storage, request headers, screenshots, downloads, vault contents, passwords, passkeys, 2FA, or CAPTCHA data are returned.",
     }
@@ -461,6 +621,17 @@ def shopping_browser_inspect_product_tool(args: dict[str, Any], **_kw: Any) -> s
         return _json(_inspect_product(url))
     except Exception as exc:
         return _json({"error": "INSPECT_PRODUCT_FAILED", "message": str(exc)[:1000], "operation": "inspect_product"})
+
+
+def shopping_browser_inspect_reviews_tool(args: dict[str, Any], **_kw: Any) -> str:
+    url = str(args.get("url") or "").strip()
+    if not url:
+        return _json({"error": "url is required"})
+    try:
+        max_reviews = _bounded_max_reviews(args.get("max_reviews"))
+        return _json(_inspect_reviews(url, max_reviews))
+    except Exception as exc:
+        return _json({"error": "INSPECT_REVIEWS_FAILED", "message": str(exc)[:1000], "operation": "inspect_reviews"})
 
 
 def shopping_browser_inspect_cart_tool(args: dict[str, Any], **_kw: Any) -> str:
@@ -497,6 +668,19 @@ INSPECT_PRODUCT_SCHEMA = {
         "type": "object",
         "properties": {
             "url": {"type": "string", "description": "HTTPS Amazon product URL to inspect"},
+        },
+        "required": ["url"],
+    },
+}
+
+INSPECT_REVIEWS_SCHEMA = {
+    "name": "shopping_browser_inspect_reviews",
+    "description": "Read-only Amazon review inspection through the Kasm shopping session. Returns only bounded public review metadata and excerpts visible from the product/review page; max_reviews is capped at 10. Does not expose cookies, local storage, request headers, raw CDP, screenshots, or browser handles.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "url": {"type": "string", "description": "HTTPS Amazon product or product-reviews URL to inspect"},
+            "max_reviews": {"type": "integer", "description": "Maximum review excerpts to return; capped at 10", "minimum": 1, "maximum": 10, "default": DEFAULT_MAX_REVIEWS},
         },
         "required": ["url"],
     },
@@ -547,6 +731,16 @@ registry.register(
     max_result_size_chars=MAX_RESULT_CHARS,
 )
 registry.register(
+    name=INSPECT_REVIEWS_SCHEMA["name"],
+    toolset=TOOLSET,
+    schema=INSPECT_REVIEWS_SCHEMA,
+    handler=shopping_browser_inspect_reviews_tool,
+    check_fn=_check_shopping_browser,
+    description=INSPECT_REVIEWS_SCHEMA["description"],
+    emoji="⭐",
+    max_result_size_chars=MAX_RESULT_CHARS,
+)
+registry.register(
     name=INSPECT_CART_SCHEMA["name"],
     toolset=TOOLSET,
     schema=INSPECT_CART_SCHEMA,
@@ -583,6 +777,10 @@ if __name__ == "__main__":
     assert _reject_unsafe_operation("checkout")["allowed"] is False
     assert _reject_unsafe_operation("local_storage")["allowed"] is False
     assert _reject_unsafe_operation("inspect_cart")["allowed"] is True
+    assert _reject_unsafe_operation("inspect_reviews")["allowed"] is True
+    assert _extract_asin("https://www.amazon.com/example/dp/B09JJNBB9C?x=1") == "B09JJNBB9C"
+    assert _review_url("https://www.amazon.com/example/dp/B09JJNBB9C?x=1")[0] == "https://www.amazon.com/product-reviews/B09JJNBB9C"
+    assert _bounded_max_reviews(99) == MAX_REVIEWS
     assert not any(word in json.dumps(STATUS_SCHEMA).lower() for word in ("cookie", "localstorage"))
     product = {"image_url_candidates": ["https://m.media-amazon.com/images/I/example._AC_SX679_.jpg?x=1", "https://example.com/not-amazon.jpg"]}
     _normalize_product_images(product)
