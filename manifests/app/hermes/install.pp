@@ -95,7 +95,7 @@ class nest::app::hermes::install {
 
   exec { 'reset_hermes_source_for_removed_kanban_diagnostic_patches':
     command => "/usr/sbin/git -C ${source_dir} reset --hard HEAD",
-    onlyif  => "/bin/grep -RqE '_resolve_cross_board_task_refs|_reclassify_legacy_prose_payload|prose_ref_current_board_checker' ${source_dir}/hermes_cli ${source_dir}/plugins ${source_dir}/tests",
+    onlyif  => "/bin/sh -c '/usr/sbin/git -C ${source_dir} diff --quiet -G \"_resolve_cross_board_task_refs|_reclassify_legacy_prose_payload|prose_ref_current_board_checker\" -- hermes_cli plugins tests; test $? -eq 1'",
     require => Vcsrepo[$source_dir],
     before  => Exec[$patch_execs],
   }
