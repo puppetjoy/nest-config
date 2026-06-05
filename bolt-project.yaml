@@ -15,7 +15,7 @@ modules:
   #   ref: main
   #   resolve: false
   - name: reboot
-    git: https://gitlab.joyfullee.me/nest/forks/puppet-reboot.git
+    git: git@gitlab.joyfullee.me:nest/forks/puppet-reboot.git
     ref: main
     resolve: false
   - puppetlabs-ruby_task_helper
