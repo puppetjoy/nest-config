@@ -446,7 +446,7 @@ class nest::app::hermes::install {
 
   exec { 'patch_hermes_agent_request_review_handoff_flow':
     command => "/usr/sbin/git -C ${broker_source_dir} reset --hard HEAD && /bin/rm -f ${broker_source_dir}/src/agent_request_broker/kanban_backend.py.orig ${broker_source_dir}/src/agent_request_broker/kanban_backend.py.rej ${broker_source_dir}/tests/test_agent_request_broker.py.orig ${broker_source_dir}/tests/test_agent_request_broker.py.rej ${broker_source_dir}/bin/agent-request-accept-review && /usr/bin/patch -N -p1 -d ${broker_source_dir} < ${install_dir}/agent-request-review-handoff-flow.patch",
-    unless  => "/bin/grep -q 'agent_request_review_handoff' ${broker_source_dir}/src/tools/agent_request_tool.py && /bin/grep -q 'trusted_accept_review' ${broker_source_dir}/src/agent_request_broker/kanban_backend.py && /bin/grep -q 'REVIEW_ACCEPTANCE_PREFIX' ${broker_source_dir}/src/agent_request_broker/kanban_backend.py",
+    unless  => "/bin/grep -q 'agent_request_review_handoff' ${broker_source_dir}/src/tools/agent_request_tool.py && /bin/grep -q 'trusted_accept_review' ${broker_source_dir}/src/agent_request_broker/kanban_backend.py && /bin/grep -q 'REVIEW_ACCEPTANCE_PREFIX' ${broker_source_dir}/src/agent_request_broker/kanban_backend.py && /usr/bin/test -x ${broker_source_dir}/bin/agent-request-accept-review",
     require => [
       File["${install_dir}/agent-request-review-handoff-flow.patch"],
       Vcsrepo[$broker_source_dir],
