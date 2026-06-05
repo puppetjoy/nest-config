@@ -2,7 +2,7 @@ class nest::app::hermes (
   Stdlib::Absolutepath           $install_dir                 = '/opt/hermes-agent',
   String[1]                      $git_url                     = 'https://github.com/NousResearch/hermes-agent.git',
   String[1]                      $git_ref                     = 'main',
-  String[1]                      $broker_git_url              = 'https://gitlab.joyfullee.me/joy/hermes-agent-request-broker.git',
+  String[1]                      $broker_git_url              = 'gitlab.joyfullee.me:joy/hermes-agent-request-broker.git',
   String[1]                      $broker_git_ref              = 'main',
   String[1]                      $agent_request_kanban_board  = 'agent-requests',
   String[1]                      $gitlab_url                  = 'https://gitlab.joyfullee.me',

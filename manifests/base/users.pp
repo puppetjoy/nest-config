@@ -116,6 +116,12 @@ class nest::base::users {
     }
   }
 
+  $dotfiles_git_source   = 'gitlab.joyfullee.me:joy/dotfiles.git'
+  $dotfiles_git_identity = $facts['os']['family'] ? {
+    'Darwin' => "/Users/${nest::user}/.ssh/id_ed25519",
+    default  => "/home/${nest::user}/.ssh/id_ed25519",
+  }
+
   $homes.each |$user, $dir| {
     case $facts['os']['family'] {
       'windows': {
@@ -136,9 +142,10 @@ class nest::base::users {
     vcsrepo { $home_dir:
       ensure   => latest,
       provider => git,
-      source   => 'https://gitlab.joyfullee.me/joy/dotfiles.git',
+      source   => $dotfiles_git_source,
       revision => 'main',
       user     => $exec_user,
+      identity => $dotfiles_git_identity,
     }
     ~>
     exec { "refresh-${home_dir}":
