@@ -58,7 +58,7 @@ index 2a1b72c..63f9539 100644
  
  ## Workspace policy
 diff --git a/src/agent_request_broker/kanban_backend.py b/src/agent_request_broker/kanban_backend.py
-index f429326..de24324 100644
+index f429326..98b3861 100644
 --- a/src/agent_request_broker/kanban_backend.py
 +++ b/src/agent_request_broker/kanban_backend.py
 @@ -37,7 +37,7 @@ URGENCY_PRIORITIES = {
@@ -251,7 +251,7 @@ index f429326..de24324 100644
  def record_proposal(conn: Any, *, request_id: str, comment_id: int, proposal: str, proposed_by: str) -> str:
      digest = proposal_hash(proposal)
      conn.execute(
-@@ -718,6 +826,122 @@ def current_approval(conn: Any, request_id: str) -> dict[str, Any] | None:
+@@ -718,6 +826,141 @@ def current_approval(conn: Any, request_id: str) -> dict[str, Any] | None:
      return dict(row) if row else None
  
  
@@ -371,10 +371,29 @@ index f429326..de24324 100644
 +    return True, None
 +
 +
++def resume_blocked_task_from_reply(conn: Any, task_id: str, *, actor: str, action: str) -> tuple[bool, str | None, str | None]:
++    """Return a blocked task to ready after Joy supplies requested text."""
++    kanban = require_kanban()
++    with kanban.write_txn(conn):
++        cur = conn.execute(
++            "UPDATE tasks SET status = 'ready', claim_lock = NULL, claim_expires = NULL, worker_pid = NULL WHERE id = ? AND status = 'blocked'",
++            (task_id,),
++        )
++        if cur.rowcount == 1:
++            kanban._append_event(conn, task_id, "unblocked", {"actor": actor, "reason": f"Telegram {action} reply recorded"})
++            return True, None, "ready"
++        row = conn.execute("SELECT status FROM tasks WHERE id = ?", (task_id,)).fetchone()
++        if row and row["status"] in {"ready", "running", "done"}:
++            return True, None, row["status"]
++        if row:
++            return False, f"task {task_id} is {row['status']}, not blocked", row["status"]
++        return False, f"task {task_id} was not found", None
++
++
  def require_current_approval(conn: Any, request_id: str) -> dict[str, Any] | str:
      proposal = latest_proposal(conn, request_id)
      if not proposal:
-@@ -1066,6 +1290,7 @@ def public_request(conn: Any, item: AgentRequestIndex) -> dict[str, Any]:
+@@ -1066,6 +1309,7 @@ def public_request(conn: Any, item: AgentRequestIndex) -> dict[str, Any]:
      title_meta = stored_title_metadata(item, task.title)
      disposition = latest_disposition(conn, item.request_id)
      approval = approval_metadata(conn, item.request_id, task_id=item.task_id)
@@ -382,7 +401,7 @@ index f429326..de24324 100644
      diagnostics = request_diagnostics(conn, item, task)
      request_status = effective_request_status(item.status, task)
      work_status = work_status_for_task(task)
-@@ -1080,8 +1305,10 @@ def public_request(conn: Any, item: AgentRequestIndex) -> dict[str, Any]:
+@@ -1080,8 +1324,10 @@ def public_request(conn: Any, item: AgentRequestIndex) -> dict[str, Any]:
          "kanban_task_id": task.id,
          "status": request_status,
          "approval_status": "approved" if approval["status"] == "approved" else approval["status"],
@@ -394,7 +413,7 @@ index f429326..de24324 100644
          "title": title_meta.display,
          "title_raw": title_meta.raw,
          "title_icon": title_meta.icon,
-@@ -1130,6 +1357,10 @@ def event_label(action: str) -> str:
+@@ -1130,6 +1376,10 @@ def event_label(action: str) -> str:
          "received": "request received",
          "commented": "request comment",
          "proposed": "proposal ready",
@@ -405,7 +424,7 @@ index f429326..de24324 100644
          "approved": "Joy approved",
          "denied": "request denied",
          "needs_info": "needs info",
-@@ -1453,6 +1684,7 @@ def record_callback_token(
+@@ -1453,6 +1703,7 @@ def record_callback_token(
      action: str,
      actor: str = "joy",
      proposal: dict[str, Any] | None = None,
@@ -413,7 +432,7 @@ index f429326..de24324 100644
  ) -> str:
      if action not in CALLBACK_ACTIONS:
          raise ValueError(f"unsupported callback action: {action}")
-@@ -1461,8 +1693,8 @@ def record_callback_token(
+@@ -1461,8 +1712,8 @@ def record_callback_token(
          """
          INSERT INTO agent_request_callback_tokens
              (token, request_id, task_id, action, proposal_comment_id,
@@ -424,7 +443,7 @@ index f429326..de24324 100644
          """,
          (
              token,
-@@ -1471,6 +1703,8 @@ def record_callback_token(
+@@ -1471,6 +1722,8 @@ def record_callback_token(
              action,
              int(proposal["proposal_comment_id"]) if proposal else None,
              proposal["proposal_hash"] if proposal else None,
@@ -433,7 +452,7 @@ index f429326..de24324 100644
              actor,
              now_ts(),
          ),
-@@ -1483,6 +1717,7 @@ def actionable_reply_markup(conn: Any, *, item: AgentRequestIndex, action: str)
+@@ -1483,6 +1736,7 @@ def actionable_reply_markup(conn: Any, *, item: AgentRequestIndex, action: str)
      """Build Telegram inline controls for current actionable agent-request states."""
      rows: list[list[dict[str, str]]] = []
      proposal = latest_proposal(conn, item.request_id)
@@ -441,7 +460,7 @@ index f429326..de24324 100644
      if action == "proposed" and proposal:
          rows.append([
              {"text": "✅ Approve", "callback_data": _callback_data(record_callback_token(conn, item=item, action="approve", proposal=proposal))},
-@@ -1495,22 +1730,194 @@ def actionable_reply_markup(conn: Any, *, item: AgentRequestIndex, action: str)
+@@ -1495,22 +1749,216 @@ def actionable_reply_markup(conn: Any, *, item: AgentRequestIndex, action: str)
          rows.append([
              {"text": "✏️ Answer / steer", "callback_data": _callback_data(record_callback_token(conn, item=item, action="needs_info_answer"))},
          ])
@@ -619,14 +638,36 @@ index f429326..de24324 100644
 +            joy_steering=response,
 +        )
 +        require_kanban().add_comment(conn, prompt["task_id"], actor, comment_body)
++        resumed = False
++        resume_status = task.status
++        if task.status == "blocked":
++            resumed, resume_error, resume_status = resume_blocked_task_from_reply(
++                conn, prompt["task_id"], actor=actor, action=prompt["action"]
++            )
++            if not resumed:
++                _mark_reply_prompt_used(conn, prompt["prompt_token"])
++                return {
++                    "handled": True,
++                    "ok": False,
++                    "error": "resume_failed",
++                    "request_id": prompt["request_id"],
++                    "task_id": prompt["task_id"],
++                    "action": prompt["action"],
++                    "message": f"Recorded reply for {prompt['request_id']} / {prompt['task_id']}, but could not resume the blocked task: {resume_error}. Please reopen the Kanban task manually.",
++                }
 +        _mark_reply_prompt_used(conn, prompt["prompt_token"])
++        message = f"Recorded reply for {prompt['request_id']} / {prompt['task_id']}."
++        if resumed:
++            message += " Task resumed and is eligible to continue."
 +        return {
 +            "handled": True,
 +            "ok": True,
 +            "request_id": prompt["request_id"],
 +            "task_id": prompt["task_id"],
 +            "action": prompt["action"],
-+            "message": f"Recorded reply for {prompt['request_id']} / {prompt['task_id']}.",
++            "resumed": resumed,
++            "kanban_status": resume_status,
++            "message": message,
 +        }
 +    finally:
 +        conn.close()
@@ -641,7 +682,7 @@ index f429326..de24324 100644
          FROM agent_request_callback_tokens
          WHERE token = ?
          """,
-@@ -1535,6 +1942,15 @@ def validate_callback_token(conn: Any, token: str) -> dict[str, Any]:
+@@ -1535,6 +1983,15 @@ def validate_callback_token(conn: Any, token: str) -> dict[str, Any]:
              or current["proposal_hash"] != row["proposal_hash"]
          ):
              return {"ok": False, "error": "stale_callback", "message": "This button is stale because the proposal changed."}
@@ -657,7 +698,7 @@ index f429326..de24324 100644
      return {"ok": True, "callback": row}
  
  
-@@ -1543,7 +1959,14 @@ def mark_callback_used(conn: Any, token: str) -> None:
+@@ -1543,7 +2000,14 @@ def mark_callback_used(conn: Any, token: str) -> None:
      conn.commit()
  
  
@@ -673,7 +714,7 @@ index f429326..de24324 100644
      """Resolve a trusted Telegram agent-request callback.
  
      The gateway only supplies callbacks from authorized Telegram users. This
-@@ -1586,6 +2009,16 @@ def handle_telegram_callback(token: str, *, actor: str = "joy") -> dict[str, Any
+@@ -1586,6 +2050,16 @@ def handle_telegram_callback(token: str, *, actor: str = "joy") -> dict[str, Any
          )
          if result.get("error"):
              return {"ok": False, "error": "deny_failed", "message": result["error"], "result": result}
@@ -690,7 +731,7 @@ index f429326..de24324 100644
      else:
          conn = connect()
          try:
-@@ -1604,16 +2037,15 @@ def handle_telegram_callback(token: str, *, actor: str = "joy") -> dict[str, Any
+@@ -1604,16 +2078,15 @@ def handle_telegram_callback(token: str, *, actor: str = "joy") -> dict[str, Any
              )
              require_kanban().add_comment(conn, row["task_id"], actor, comment_body)
              result = {"request": public_request(conn, item), "board": board_name(), "action": action}
@@ -713,7 +754,7 @@ index f429326..de24324 100644
          finally:
              conn.close()
  
-@@ -2018,6 +2450,8 @@ def request_matches_status_filter(request: dict[str, Any], status_filter: str) -
+@@ -2018,6 +2491,8 @@ def request_matches_status_filter(request: dict[str, Any], status_filter: str) -
          return True
      if request.get("approval_status") == status_filter:
          return True
@@ -722,7 +763,7 @@ index f429326..de24324 100644
      if status_filter == "needs_maintenance":
          return bool(request.get("diagnostics", {}).get("warnings")) or request.get("status") in MAINTENANCE_STATUSES
      if status_filter == "completed" and request.get("status") == COMPLETED_WITH_FOLLOWUP:
-@@ -2125,6 +2559,94 @@ def propose(args: dict[str, Any], *, actor: str) -> dict[str, Any]:
+@@ -2125,6 +2600,94 @@ def propose(args: dict[str, Any], *, actor: str) -> dict[str, Any]:
          conn.close()
  
  
@@ -817,7 +858,7 @@ index f429326..de24324 100644
  def update(args: dict[str, Any], *, actor: str) -> dict[str, Any]:
      kanban = require_kanban()
      request_id = clean_text(args.get("request_id"), max_len=80)
-@@ -2155,9 +2677,12 @@ def update(args: dict[str, Any], *, actor: str) -> dict[str, Any]:
+@@ -2155,9 +2718,12 @@ def update(args: dict[str, Any], *, actor: str) -> dict[str, Any]:
          if task is None:
              return {"error": f"Kanban task not found for request {request_id}: {item.task_id}"}
          if status_value in CHANGE_STATUSES:
@@ -833,7 +874,7 @@ index f429326..de24324 100644
  
          action_status = status_value
          if status_value == "completed":
-@@ -2205,6 +2730,78 @@ def update(args: dict[str, Any], *, actor: str) -> dict[str, Any]:
+@@ -2205,6 +2771,78 @@ def update(args: dict[str, Any], *, actor: str) -> dict[str, Any]:
          conn.close()
  
  
@@ -992,7 +1033,7 @@ index 034c719..2646877 100644
      name="agent_request_propose",
      toolset=TOOLSET,
 diff --git a/tests/test_agent_request_broker.py b/tests/test_agent_request_broker.py
-index 2346dda..0c8d405 100755
+index 2346dda..017facd 100755
 --- a/tests/test_agent_request_broker.py
 +++ b/tests/test_agent_request_broker.py
 @@ -124,6 +124,7 @@ def test_model_facing_registry_is_kanban_only():
@@ -1003,7 +1044,7 @@ index 2346dda..0c8d405 100755
              "agent_request_propose",
          ]
          assert not hasattr(mod, "agent_request_update_tool")
-@@ -401,6 +402,117 @@ def test_proposal_notifications_include_bound_telegram_actions_and_callbacks():
+@@ -401,6 +402,189 @@ def test_proposal_notifications_include_bound_telegram_actions_and_callbacks():
              backend.telegram_send = old_send
  
  
@@ -1118,10 +1159,82 @@ index 2346dda..0c8d405 100755
 +            backend.telegram_send = old_send
 +
 +
++def test_needs_info_reply_records_payload_and_resumes_blocked_task():
++    if not require_hermes_src():
++        return
++    with kanban_env() as tmp:
++        from agent_request_broker import kanban_backend as backend
++
++        old_send = backend.telegram_send
++        backend.telegram_send = lambda message, *, profile="", reply_markup=None: {"sent": True, "test": True}
++        try:
++            talon = load_tool("talon", tmp)
++            submitted = call(talon.agent_request_submit_tool({
++                "title": "Needs-info reply resume smoke",
++                "request": "Ask for harmless typed input and then continue.",
++                "target": "talon",
++            }))
++            request = submitted["request"]
++            request_id = request["id"]
++            task_id = request["kanban_task_id"]
++
++            conn = backend.connect()
++            try:
++                kanban = backend.require_kanban()
++                assert kanban.block_task(conn, task_id, reason="needs-info: harmless smoke input")
++                item = backend.index_for_request(conn, request_id)
++                markup = backend.actionable_reply_markup(conn, item=item, action="needs_info")
++                assert markup is not None
++                token = markup["inline_keyboard"][0][0]["callback_data"].split(":", 1)[1]
++                task = kanban.get_task(conn, task_id)
++                assert task.status == "blocked"
++            finally:
++                conn.close()
++
++            prompt = backend.handle_telegram_callback(
++                token,
++                actor="joy",
++                chat_id="chat-1",
++                thread_id="topic-1",
++                prompt_message_id=333,
++            )
++            assert prompt["ok"] is True
++            assert prompt["result"]["awaiting_reply"]["action"] == "needs_info_answer"
++
++            answered = backend.handle_telegram_reply(
++                chat_id="chat-1",
++                thread_id="topic-1",
++                reply_to_message_id=333,
++                text="This is the durable answer that should resume the task.",
++                actor="joy",
++            )
++            assert answered["handled"] is True
++            assert answered["ok"] is True
++            assert answered["resumed"] is True
++            assert answered["kanban_status"] == "ready"
++            assert "Task resumed" in answered["message"]
++
++            conn = backend.connect()
++            try:
++                kanban = backend.require_kanban()
++                task = kanban.get_task(conn, task_id)
++                comments = "\n".join(comment.body for comment in kanban.list_comments(conn, task_id))
++                public = backend.public_request(conn, backend.index_for_request(conn, request_id))
++            finally:
++                conn.close()
++            assert task.status == "ready"
++            assert public["kanban_status"] == "ready"
++            assert public["work_status"] == "ready"
++            assert "needs_info_answer_response" in comments
++            assert "This is the durable answer" in comments
++        finally:
++            backend.telegram_send = old_send
++
++
  def test_stale_proposal_callback_rejects_changed_proposal_hash():
      if not require_hermes_src():
          return
-@@ -514,6 +626,189 @@ def test_duplicate_generic_title_approval_notifications_are_self_identifying():
+@@ -514,6 +698,189 @@ def test_duplicate_generic_title_approval_notifications_are_self_identifying():
          finally:
              backend.telegram_send = old_send
  
@@ -1311,7 +1424,7 @@ index 2346dda..0c8d405 100755
  def test_notification_adapter_dedupes_structured_comments_and_generic_in_progress():
      if not require_hermes_src():
          return
-@@ -1189,6 +1484,7 @@ if __name__ == "__main__":
+@@ -1189,6 +1556,7 @@ if __name__ == "__main__":
      test_model_facing_registry_is_kanban_only()
      test_kanban_default_and_event_comment_helpers()
      test_submit_status_propose_trusted_approve_and_complete()
@@ -1319,75 +1432,3 @@ index 2346dda..0c8d405 100755
      test_notification_adapter_dedupes_structured_comments_and_generic_in_progress()
      test_submit_assigns_worktree_for_repo_matched_code_tasks()
      test_star_shopping_browser_tool_enhancement_routes_to_nest_config_worktree()
-diff --git a/bin/agent-request-accept-review b/bin/agent-request-accept-review
-new file mode 100755
-index 0000000..b5f5f5f
---- /dev/null
-+++ b/bin/agent-request-accept-review
-@@ -0,0 +1,66 @@
-+#!/usr/bin/env python3
-+"""Record trusted Joy review acceptance for a Kanban-backed agent request.
-+
-+This command is intentionally an operator surface, not a Hermes model-facing
-+tool. It binds acceptance to the latest structured review handoff comment/hash
-+recorded by the Kanban backend.
-+"""
-+from __future__ import annotations
-+
-+import argparse
-+import json
-+import os
-+import sys
-+from pathlib import Path
-+
-+ROOT = Path(__file__).resolve().parents[1]
-+HERMES_SRC = Path(os.environ.get("HERMES_SRC", "/opt/hermes-agent/src"))
-+if HERMES_SRC.exists() and HERMES_SRC != ROOT / "src":
-+    sys.path.insert(0, str(HERMES_SRC))
-+sys.path.insert(0, str(ROOT / "src"))
-+
-+from agent_request_broker import kanban_backend  # noqa: E402
-+
-+
-+def parser() -> argparse.ArgumentParser:
-+    p = argparse.ArgumentParser(
-+        description="Record trusted Joy acceptance for the latest review handoff on a Kanban-backed agent request.",
-+    )
-+    p.add_argument("request_id", help="Agent request id, for example ar-20260604-...")
-+    p.add_argument("--acceptance", help="Acceptance text from Joy")
-+    p.add_argument("--steering", dest="joy_steering", help="Optional constraints or steering from Joy")
-+    p.add_argument("--approver", default="joy", help="Trusted approver identity to record, default: joy")
-+    p.add_argument("--board", help="Kanban board slug; sets AGENT_REQUEST_KANBAN_BOARD for this invocation")
-+    p.add_argument("--json", action="store_true", help="Print full JSON result instead of a short summary")
-+    return p
-+
-+
-+def main(argv: list[str] | None = None) -> int:
-+    args = parser().parse_args(argv)
-+    if args.board:
-+        os.environ["AGENT_REQUEST_KANBAN_BOARD"] = args.board
-+    result = kanban_backend.trusted_accept_review(
-+        {
-+            "request_id": args.request_id,
-+            "acceptance": args.acceptance or "",
-+            "joy_steering": args.joy_steering or "",
-+        },
-+        approver=args.approver,
-+    )
-+    if args.json:
-+        print(json.dumps(result, ensure_ascii=False, indent=2))
-+    elif "error" in result:
-+        print(f"error: {result['error']}", file=sys.stderr)
-+    else:
-+        acceptance = result["review_acceptance"]
-+        request = result["request"]
-+        print(
-+            f"accepted review for {request['id']} on {result['board']}: "
-+            f"{acceptance['acceptance_id']} review_comment={acceptance['review_comment_id']} "
-+            f"hash={acceptance['review_hash'][:12]}"
-+        )
-+    return 1 if "error" in result else 0
-+
-+
-+if __name__ == "__main__":
-+    raise SystemExit(main())
