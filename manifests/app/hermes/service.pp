@@ -106,6 +106,7 @@ class nest::app::hermes::service {
 
   [
     'agent-request-approve',
+    'agent-request-accept-review',
     'agent-request-propose',
     'agent-request-maintain',
     'agent-request-supersede',
@@ -117,7 +118,7 @@ class nest::app::hermes::service {
       target  => "${broker_source_dir}/bin/${agent_request_command}",
       require => [
         File["${install_dir}/bin"],
-        Vcsrepo[$broker_source_dir],
+        Exec['patch_hermes_agent_request_review_handoff_flow'],
       ],
     }
   }

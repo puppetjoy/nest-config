@@ -89,6 +89,7 @@ class nest::app::hermes::install {
     'patch_hermes_kanban_actionable_attention',
     'patch_hermes_kanban_frontend_actionable_attention',
     'patch_hermes_kanban_review_lane_metadata',
+    'patch_hermes_kanban_agent_request_review_dispatch_gate',
     'patch_hermes_dashboard_rich_art_spans',
     'patch_hermes_dashboard_chat_truecolor_env',
     'patch_hermes_dashboard_skin_branding',
@@ -112,7 +113,7 @@ class nest::app::hermes::install {
 
   exec { 'install_hermes_agent':
     command     => "${venv_pip} install --upgrade --force-reinstall ${source_dir} && git -C ${source_dir} rev-parse HEAD > ${git_revision_file}",
-    unless      => "test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent')\" && /bin/grep -q 'app.state.allow_public = allow_public' ${venv_dir}/lib/python*/site-packages/hermes_cli/web_server.py && /bin/grep -q 'if _pl <= 0:' ${venv_dir}/lib/python*/site-packages/gateway/run.py && /bin/grep -q 'handle_telegram_callback' ${venv_dir}/lib/python*/site-packages/gateway/platforms/telegram.py && /bin/grep -q '_banner_hero_renderable' ${venv_dir}/lib/python*/site-packages/hermes_cli/banner.py && /bin/grep -q 'banner_subtitle' ${venv_dir}/lib/python*/site-packages/hermes_cli/banner.py && /bin/grep -q 'discover_builtin_tools()' ${venv_dir}/lib/python*/site-packages/cli.py && /bin/grep -q '_notify_agent_request_event' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q 'Approved/unblocked/resumed; task is eligible to continue' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q '_notify_agent_request_dispatch_event' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_db.py && /bin/grep -q 'dispatcher_profile=dispatcher_profile' ${venv_dir}/lib/python*/site-packages/gateway/run.py && /bin/grep -q '_attention_summary_for_task' ${venv_dir}/lib/python*/site-packages/plugins/kanban/dashboard/plugin_api.py && /bin/grep -q 'taskAttentionSummary' ${venv_dir}/lib/python*/site-packages/plugins/kanban/dashboard/dist/index.js && /bin/grep -q 'BOARD_COLUMN_METADATA' ${venv_dir}/lib/python*/site-packages/plugins/kanban/dashboard/plugin_api.py",
+    unless      => "test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent')\" && /bin/grep -q 'app.state.allow_public = allow_public' ${venv_dir}/lib/python*/site-packages/hermes_cli/web_server.py && /bin/grep -q 'if _pl <= 0:' ${venv_dir}/lib/python*/site-packages/gateway/run.py && /bin/grep -q 'handle_telegram_callback' ${venv_dir}/lib/python*/site-packages/gateway/platforms/telegram.py && /bin/grep -q '_banner_hero_renderable' ${venv_dir}/lib/python*/site-packages/hermes_cli/banner.py && /bin/grep -q 'banner_subtitle' ${venv_dir}/lib/python*/site-packages/hermes_cli/banner.py && /bin/grep -q 'discover_builtin_tools()' ${venv_dir}/lib/python*/site-packages/cli.py && /bin/grep -q '_notify_agent_request_event' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q 'Approved/unblocked/resumed; task is eligible to continue' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q '_notify_agent_request_dispatch_event' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_db.py && /bin/grep -q 'dispatcher_profile=dispatcher_profile' ${venv_dir}/lib/python*/site-packages/gateway/run.py && /bin/grep -q '_attention_summary_for_task' ${venv_dir}/lib/python*/site-packages/plugins/kanban/dashboard/plugin_api.py && /bin/grep -q 'taskAttentionSummary' ${venv_dir}/lib/python*/site-packages/plugins/kanban/dashboard/dist/index.js && /bin/grep -q 'BOARD_COLUMN_METADATA' ${venv_dir}/lib/python*/site-packages/plugins/kanban/dashboard/plugin_api.py && /bin/grep -q 'Agent-request review handoffs are different' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_db.py",
     environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
     path        => ['/bin', '/usr/bin'],
     require     => [
@@ -130,6 +131,7 @@ class nest::app::hermes::install {
       Exec['patch_hermes_kanban_actionable_attention'],
       Exec['patch_hermes_kanban_frontend_actionable_attention'],
       Exec['patch_hermes_kanban_review_lane_metadata'],
+      Exec['patch_hermes_kanban_agent_request_review_dispatch_gate'],
       File["${source_dir}/tools/agent_request_tool.py"],
       File["${source_dir}/tools/google_workspace_tool.py"],
       File["${source_dir}/tools/shopping_browser_tool.py"],
@@ -357,6 +359,22 @@ class nest::app::hermes::install {
     ],
   }
 
+  file { "${install_dir}/kanban-agent-request-review-dispatch-gate.patch":
+    ensure => file,
+    source => 'puppet:///modules/nest/app/hermes/kanban-agent-request-review-dispatch-gate.patch',
+    mode   => '0644',
+    owner  => 'root',
+    group  => 'root',
+  }
+
+  exec { 'patch_hermes_kanban_agent_request_review_dispatch_gate':
+    command => "/usr/bin/patch -N -p1 -d ${source_dir} < ${install_dir}/kanban-agent-request-review-dispatch-gate.patch",
+    unless  => "/bin/grep -q 'Agent-request review handoffs are different' ${source_dir}/hermes_cli/kanban_db.py && /bin/grep -q 'test_dispatcher_leaves_agent_request_review_handoffs_for_trusted_acceptance' ${source_dir}/tests/hermes_cli/test_kanban_db.py",
+    require => [
+      File["${install_dir}/kanban-agent-request-review-dispatch-gate.patch"],
+      Exec['patch_hermes_kanban_review_lane_metadata'],
+    ],
+  }
 
   file { "${install_dir}/dashboard-rich-art-spans.patch":
     ensure => file,
@@ -418,14 +436,31 @@ class nest::app::hermes::install {
     ],
   }
 
+  file { "${install_dir}/agent-request-review-handoff-flow.patch":
+    ensure => file,
+    source => 'puppet:///modules/nest/app/hermes/agent-request-review-handoff-flow.patch',
+    mode   => '0644',
+    owner  => 'root',
+    group  => 'root',
+  }
+
+  exec { 'patch_hermes_agent_request_review_handoff_flow':
+    command => "/usr/bin/patch -N -p1 -d ${broker_source_dir} < ${install_dir}/agent-request-review-handoff-flow.patch",
+    unless  => "/bin/grep -q 'agent_request_review_handoff' ${broker_source_dir}/src/tools/agent_request_tool.py && /bin/grep -q 'trusted_accept_review' ${broker_source_dir}/src/agent_request_broker/kanban_backend.py",
+    require => [
+      File["${install_dir}/agent-request-review-handoff-flow.patch"],
+      Vcsrepo[$broker_source_dir],
+    ],
+  }
+
   exec { 'install_hermes_agent_request_broker':
     command     => "${venv_pip} install --upgrade --force-reinstall ${broker_source_dir} && git -C ${broker_source_dir} rev-parse HEAD > ${broker_git_revision_file}",
-    unless      => "test \"$(git -C ${broker_source_dir} rev-parse HEAD)\" = \"$(cat ${broker_git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent-request-broker'); import agent_request_broker\"",
+    unless      => "test \"$(git -C ${broker_source_dir} rev-parse HEAD)\" = \"$(cat ${broker_git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent-request-broker'); import agent_request_broker.kanban_backend as kb; assert hasattr(kb, 'trusted_accept_review')\"",
     environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
     path        => ['/bin', '/usr/bin'],
     require     => [
       Exec['create_hermes_venv'],
-      Vcsrepo[$broker_source_dir],
+      Exec['patch_hermes_agent_request_review_handoff_flow'],
     ],
   }
 
