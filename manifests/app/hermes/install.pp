@@ -87,6 +87,7 @@ class nest::app::hermes::install {
     'patch_hermes_kanban_agent_request_dispatch_notification_hook',
     'patch_hermes_kanban_dispatcher_profile_scope',
     'patch_hermes_kanban_actionable_attention',
+    'patch_hermes_kanban_frontend_actionable_attention',
     'patch_hermes_kanban_review_lane_metadata',
     'patch_hermes_dashboard_rich_art_spans',
     'patch_hermes_dashboard_chat_truecolor_env',
@@ -111,7 +112,7 @@ class nest::app::hermes::install {
 
   exec { 'install_hermes_agent':
     command     => "${venv_pip} install --upgrade --force-reinstall ${source_dir} && git -C ${source_dir} rev-parse HEAD > ${git_revision_file}",
-    unless      => "test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent')\" && /bin/grep -q 'app.state.allow_public = allow_public' ${venv_dir}/lib/python*/site-packages/hermes_cli/web_server.py && /bin/grep -q 'if _pl <= 0:' ${venv_dir}/lib/python*/site-packages/gateway/run.py && /bin/grep -q 'handle_telegram_callback' ${venv_dir}/lib/python*/site-packages/gateway/platforms/telegram.py && /bin/grep -q '_banner_hero_renderable' ${venv_dir}/lib/python*/site-packages/hermes_cli/banner.py && /bin/grep -q 'banner_subtitle' ${venv_dir}/lib/python*/site-packages/hermes_cli/banner.py && /bin/grep -q 'discover_builtin_tools()' ${venv_dir}/lib/python*/site-packages/cli.py && /bin/grep -q '_notify_agent_request_event' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q 'Approved/unblocked/resumed; task is eligible to continue' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q '_notify_agent_request_dispatch_event' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_db.py && /bin/grep -q 'dispatcher_profile=dispatcher_profile' ${venv_dir}/lib/python*/site-packages/gateway/run.py && /bin/grep -q '_attention_summary_for_task' ${venv_dir}/lib/python*/site-packages/plugins/kanban/dashboard/plugin_api.py && /bin/grep -q 'BOARD_COLUMN_METADATA' ${venv_dir}/lib/python*/site-packages/plugins/kanban/dashboard/plugin_api.py",
+    unless      => "test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent')\" && /bin/grep -q 'app.state.allow_public = allow_public' ${venv_dir}/lib/python*/site-packages/hermes_cli/web_server.py && /bin/grep -q 'if _pl <= 0:' ${venv_dir}/lib/python*/site-packages/gateway/run.py && /bin/grep -q 'handle_telegram_callback' ${venv_dir}/lib/python*/site-packages/gateway/platforms/telegram.py && /bin/grep -q '_banner_hero_renderable' ${venv_dir}/lib/python*/site-packages/hermes_cli/banner.py && /bin/grep -q 'banner_subtitle' ${venv_dir}/lib/python*/site-packages/hermes_cli/banner.py && /bin/grep -q 'discover_builtin_tools()' ${venv_dir}/lib/python*/site-packages/cli.py && /bin/grep -q '_notify_agent_request_event' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q 'Approved/unblocked/resumed; task is eligible to continue' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q '_notify_agent_request_dispatch_event' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_db.py && /bin/grep -q 'dispatcher_profile=dispatcher_profile' ${venv_dir}/lib/python*/site-packages/gateway/run.py && /bin/grep -q '_attention_summary_for_task' ${venv_dir}/lib/python*/site-packages/plugins/kanban/dashboard/plugin_api.py && /bin/grep -q 'taskAttentionSummary' ${venv_dir}/lib/python*/site-packages/plugins/kanban/dashboard/dist/index.js && /bin/grep -q 'BOARD_COLUMN_METADATA' ${venv_dir}/lib/python*/site-packages/plugins/kanban/dashboard/plugin_api.py",
     environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
     path        => ['/bin', '/usr/bin'],
     require     => [
@@ -127,6 +128,7 @@ class nest::app::hermes::install {
       Exec['patch_hermes_kanban_agent_request_dispatch_notification_hook'],
       Exec['patch_hermes_kanban_dispatcher_profile_scope'],
       Exec['patch_hermes_kanban_actionable_attention'],
+      Exec['patch_hermes_kanban_frontend_actionable_attention'],
       Exec['patch_hermes_kanban_review_lane_metadata'],
       File["${source_dir}/tools/agent_request_tool.py"],
       File["${source_dir}/tools/google_workspace_tool.py"],
@@ -321,6 +323,23 @@ class nest::app::hermes::install {
     ],
   }
 
+  file { "${install_dir}/kanban-frontend-actionable-attention.patch":
+    ensure => file,
+    source => 'puppet:///modules/nest/app/hermes/kanban-frontend-actionable-attention.patch',
+    mode   => '0644',
+    owner  => 'root',
+    group  => 'root',
+  }
+
+  exec { 'patch_hermes_kanban_frontend_actionable_attention':
+    command => "/usr/bin/patch -N -p1 -d ${source_dir} < ${install_dir}/kanban-frontend-actionable-attention.patch",
+    unless  => "/bin/grep -q 'taskAttentionSummary' ${source_dir}/plugins/kanban/dashboard/dist/index.js",
+    require => [
+      File["${install_dir}/kanban-frontend-actionable-attention.patch"],
+      Exec['patch_hermes_kanban_actionable_attention'],
+    ],
+  }
+
   file { "${install_dir}/kanban-review-lane-metadata.patch":
     ensure => file,
     source => 'puppet:///modules/nest/app/hermes/kanban-review-lane-metadata.patch',
@@ -334,7 +353,7 @@ class nest::app::hermes::install {
     unless  => "/bin/grep -q 'BOARD_COLUMN_METADATA' ${source_dir}/plugins/kanban/dashboard/plugin_api.py && /bin/grep -q 'hermes-kanban-dot-review' ${source_dir}/plugins/kanban/dashboard/dist/index.js && /bin/grep -q 'Awaiting human review' ${source_dir}/web/src/i18n/en.ts && /bin/grep -q 'test_board_columns_include_review_metadata' ${source_dir}/tests/plugins/test_kanban_dashboard_plugin.py",
     require => [
       File["${install_dir}/kanban-review-lane-metadata.patch"],
-      Exec['patch_hermes_kanban_actionable_attention'],
+      Exec['patch_hermes_kanban_frontend_actionable_attention'],
     ],
   }
 
