@@ -217,6 +217,7 @@ nest::app::hermes::instances:
         session_search: '📝'
         messaging: '💬'
         agent_requests: '🦋'
+        shopping_browser: '🛒'
         kanban: '📋'
     gitlab_enabled: false
     honcho_workspace: 'hermes'
@@ -232,13 +233,13 @@ nest::app::hermes::instances:
     dashboard_theme: 'rose'
     toolsets:
       - agent_requests
-      - browser
       - clarify
       - memory
       - messaging
       - session_search
       - skills
       - google_workspace
+      - shopping_browser
       - kanban
       - cronjob
       - todo

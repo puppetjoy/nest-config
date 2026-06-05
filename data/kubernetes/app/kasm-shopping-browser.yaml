@@ -15,6 +15,8 @@ app_args: >-
   --start-maximized
   --disable-gpu
   --disable-features=UseChromeOSDirectVideoDecoder
+  --remote-debugging-address=0.0.0.0
+  --remote-debugging-port=9222
 storage_class: owl-crypt
 profile_storage_size: 8Gi
 bitwarden_extension_id: nngceckbapebfimnlniiiahkandclblb
@@ -92,6 +94,7 @@ resources:
         3. Recreate the managed resources: bolt plan run nest::eyrie::ai::deploy_shopping_browser
         4. Rotate the KasmVNC UI password by updating the private eyaml key nest::service::kasm_shopping_browser::vnc_password and redeploying.
         This milestone intentionally exposes only the authenticated Kasm UI. Do not expose CDP, raw VNC, cookies, local storage, vault contents, or credential material to Star.
+        Milestone 2 intentionally keeps Chrome CDP unexposed by Service/Ingress; only the Puppet-managed Hermes shopping_browser bridge may reach it via kubectl port-forward and return safe read-only structured fields.
 
   profile-storage:
     apiVersion: v1
@@ -158,6 +161,8 @@ resources:
               ports:
                 - name: https
                   containerPort: 6901
+                - name: cdp
+                  containerPort: 9222
               readinessProbe:
                 exec:
                   command:
