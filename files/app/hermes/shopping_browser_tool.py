@@ -200,8 +200,10 @@ class PortForward:
             "-n",
             NAMESPACE,
             "port-forward",
+            "--address",
+            "127.0.0.1",
             WORKLOAD,
-            f"127.0.0.1:{self.local_port}:{REMOTE_DEBUG_PORT}",
+            f"{self.local_port}:{REMOTE_DEBUG_PORT}",
         ]
         env = os.environ.copy()
         env.setdefault("HOME", "/home/joy")

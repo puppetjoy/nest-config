@@ -15,6 +15,7 @@ app_args: >-
   --start-maximized
   --disable-gpu
   --disable-features=UseChromeOSDirectVideoDecoder
+  --user-data-dir=/home/kasm-user/.config/google-chrome
   --remote-debugging-address=0.0.0.0
   --remote-debugging-port=9222
 storage_class: owl-crypt
