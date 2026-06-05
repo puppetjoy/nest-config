@@ -120,7 +120,7 @@ nest::cnames:
   llm.eyrie: 'ingress-compute.eyrie'
   talon.eyrie: 'ingress-compute.eyrie'
   star.eyrie: 'ingress-compute.eyrie'
-  shopping.eyrie: 'owl.nest'
+  shopping.eyrie: 'ingress-compute.eyrie'
   llama-util.nest: 'kestrel.nest'
 
   # Local services

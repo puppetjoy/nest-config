@@ -37,6 +37,11 @@ parameters:
     type: Boolean
     default: true
 
+  shopping_browser:
+    description: 'Deploy Kasm Shopping Browser'
+    type: Boolean
+    default: true
+
   init:
     description: 'Deploy initial revision'
     type: Boolean
@@ -74,3 +79,8 @@ steps:
     plan: nest::eyrie::ai::deploy_star
     parameters:
       deploy: $deploy and $star
+
+  - description: 'Deploy Kasm Shopping Browser'
+    plan: nest::eyrie::ai::deploy_shopping_browser
+    parameters:
+      deploy: $deploy and $shopping_browser
