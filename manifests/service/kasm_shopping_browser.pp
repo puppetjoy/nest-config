@@ -6,7 +6,7 @@ class nest::service::kasm_shopping_browser (
   Stdlib::Absolutepath             $policy_root       = '/srv/kasm/shopping/policies',
   String                           $bitwarden_id      = 'nngceckbapebfimnlniiiahkandclblb',
   String                           $extension_updates = 'https://clients2.google.com/service/update2/crx',
-  Array[Stdlib::Host]              $launch_urls       = ['https://www.amazon.com/', 'https://bitwarden.eyrie/'],
+  Array[String]                    $launch_urls       = ['https://www.amazon.com/', 'https://bitwarden.eyrie/'],
   Array[Enum['home', 'internal']]  $firewall_zones    = ['home', 'internal'],
 ) {
   unless $facts['is_container'] {
