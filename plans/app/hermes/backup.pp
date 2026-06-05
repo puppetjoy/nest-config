@@ -7,8 +7,7 @@ plan nest::app::hermes::backup (
   String[1]           $backup_dir   = '/nest/backup/hermes',
   Boolean             $quick        = false,
   String[1]           $user         = 'joy',
-  Optional[String[1]] $namespace    = undef,
-  Optional[String[1]] $service      = undef,
+  # Deprecated alias for profile.
   String[1]           $service_name = 'talon',
   Optional[String[1]] $profile      = undef,
 ) {

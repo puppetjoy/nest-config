@@ -17,11 +17,23 @@ plan nest::app::hermes::restore (
   $command = @("COMMAND"/L)
     set -euo pipefail
     test -f ${archive.shellquote}
+    gateway_was_active=0
+    dashboard_was_active=0
+    if systemctl --user -M ${user}@ is-active --quiet hermes-gateway@${profile}.service; then
+      gateway_was_active=1
+    fi
+    if systemctl --user -M ${user}@ is-active --quiet hermes-dashboard@${profile}.service; then
+      dashboard_was_active=1
+    fi
     systemctl --user -M ${user}@ stop hermes-gateway@${profile}.service || true
     systemctl --user -M ${user}@ stop hermes-dashboard@${profile}.service || true
     runuser -u ${user.shellquote} -- /opt/hermes-agent/venv/bin/hermes --profile ${profile.shellquote} import ${force_flag} ${archive.shellquote}
-    systemctl --user -M ${user}@ start hermes-gateway@${profile}.service || true
-    systemctl --user -M ${user}@ start hermes-dashboard@${profile}.service || true
+    if [ "$${gateway_was_active}" = 1 ]; then
+      systemctl --user -M ${user}@ start hermes-gateway@${profile}.service || true
+    fi
+    if [ "$${dashboard_was_active}" = 1 ]; then
+      systemctl --user -M ${user}@ start hermes-dashboard@${profile}.service || true
+    fi
     | COMMAND
 
   return run_command($command, $target, 'Restore Hermes backup')

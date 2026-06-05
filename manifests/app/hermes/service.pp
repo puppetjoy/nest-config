@@ -214,7 +214,7 @@ class nest::app::hermes::service {
     ],
   }
 
-  [
+  $legacy_agent_request_units = [
     'hermes-agent-request-watch.service',
     'hermes-agent-request-watch.timer',
     'hermes-agent-request-response-watch-talon.service',
@@ -227,9 +227,29 @@ class nest::app::hermes::service {
     'hermes-agent-request-peer-watch-star.timer',
     'hermes-agent-request-review-watch-talon.service',
     'hermes-agent-request-review-watch-talon.timer',
-  ].each |String $legacy_agent_request_unit| {
+  ]
+
+  exec { 'disable_legacy_hermes_agent_request_units':
+    command => "/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user disable --now ${legacy_agent_request_units.join(' ')} || true'",
+    unless  => "/bin/sh -c '! XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user list-unit-files --no-legend \"hermes-agent-request*\" | /bin/grep -q .'",
+    user    => $nest::user,
+    require => File[$systemd_user_dir],
+  }
+
+  $legacy_agent_request_units.each |String $legacy_agent_request_unit| {
     file { "${systemd_user_dir}/${legacy_agent_request_unit}":
       ensure => absent,
+      notify => Exec['hermes-systemd-user-daemon-reload'],
+    }
+
+    file { "${systemd_user_dir}/default.target.wants/${legacy_agent_request_unit}":
+      ensure => absent,
+      notify => Exec['hermes-systemd-user-daemon-reload'],
+    }
+
+    file { "${systemd_user_dir}/timers.target.wants/${legacy_agent_request_unit}":
+      ensure => absent,
+      notify => Exec['hermes-systemd-user-daemon-reload'],
     }
   }
 

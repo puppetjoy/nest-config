@@ -329,6 +329,7 @@ class nest::app::hermes::install {
         import sys
 
         os.environ['SHLVL'] = '1'
+        os.environ['PYTHONPATH'] = '${source_dir}:${broker_source_dir}/src'
         os.execv('${venv_dir}/bin/hermes', ['${venv_dir}/bin/hermes', '--profile', '${wrapper_profile}', *sys.argv[1:]])
         | PY
       require => Exec['install_hermes_agent'],

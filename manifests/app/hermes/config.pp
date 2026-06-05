@@ -57,10 +57,9 @@ class nest::app::hermes::config {
   }
 
   file { $requests_dir:
-    ensure  => directory,
-    mode    => '0700',
-    owner   => $nest::user,
-    group   => $nest::user,
+    ensure  => absent,
+    force   => true,
+    recurse => true,
     require => File[$hermes_home_dir],
   }
 

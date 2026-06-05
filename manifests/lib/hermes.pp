@@ -436,6 +436,22 @@ ${dashboard_theme_yaml}
         Exec["configure_hermes_managed_config_${profile}"],
       ],
     }
+
+    exec { "restart_hermes_gateway_${profile}":
+      command     => "/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user try-reload-or-restart hermes-gateway@${profile}.service'",
+      refreshonly => true,
+      user        => $user,
+      subscribe   => [
+        Exec['install_hermes_agent'],
+        Exec['install_hermes_agent_request_broker'],
+        File[$hermes_env_path],
+        File["${profile_dir}/systemd.env"],
+        File[$hermes_managed_config_path],
+        File[$hermes_honcho_config_path],
+        Exec["configure_hermes_managed_config_${profile}"],
+      ],
+      require     => Exec["enable_hermes_gateway_${profile}"],
+    }
   } else {
     exec { "disable_hermes_gateway_${profile}":
       command => "/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user disable --now hermes-gateway@${profile}.service || true'",
@@ -456,6 +472,19 @@ ${dashboard_theme_yaml}
         File["${profile_dir}/systemd.env"],
         Exec["configure_hermes_managed_config_${profile}"],
       ],
+    }
+
+    exec { "restart_hermes_dashboard_${profile}":
+      command     => "/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user try-reload-or-restart hermes-dashboard@${profile}.service'",
+      refreshonly => true,
+      user        => $user,
+      subscribe   => [
+        Exec['install_hermes_agent'],
+        File["${profile_dir}/systemd.env"],
+        File[$hermes_managed_config_path],
+        Exec["configure_hermes_managed_config_${profile}"],
+      ],
+      require     => Exec["enable_hermes_dashboard_${profile}"],
     }
   } else {
     exec { "disable_hermes_dashboard_${profile}":
