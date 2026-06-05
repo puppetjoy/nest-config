@@ -11,6 +11,10 @@ ingress_class: contour-compute
 node_role: compute
 image: docker.io/kasmweb/chrome:1.18.0
 launch_url: https://www.amazon.com/
+app_args: >-
+  --start-maximized
+  --disable-gpu
+  --disable-features=UseChromeOSDirectVideoDecoder
 storage_class: owl-crypt
 profile_storage_size: 8Gi
 bitwarden_extension_id: nngceckbapebfimnlniiiahkandclblb
@@ -149,6 +153,8 @@ resources:
                   value: "%{lookup('launch_url')}"
                 - name: KASM_RESTRICTED_FILE_CHOOSER
                   value: '1'
+                - name: APP_ARGS
+                  value: "%{lookup('app_args')}"
               ports:
                 - name: https
                   containerPort: 6901
@@ -181,6 +187,8 @@ resources:
                   mountPath: "/usr/share/chromium/extensions/%{lookup('bitwarden_extension_id')}.json"
                   subPath: "%{lookup('bitwarden_extension_id')}.json"
                   readOnly: true
+                - name: dshm
+                  mountPath: /dev/shm
           volumes:
             - name: profile
               persistentVolumeClaim:
@@ -188,6 +196,10 @@ resources:
             - name: browser-policy
               configMap:
                 name: "%{nest::kubernetes::service}-browser-policy"
+            - name: dshm
+              emptyDir:
+                medium: Memory
+                sizeLimit: 1Gi
 
   service:
     apiVersion: v1
