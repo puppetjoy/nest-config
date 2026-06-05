@@ -28,10 +28,12 @@ NAMESPACE = os.environ.get("SHOPPING_BROWSER_NAMESPACE", "ai")
 WORKLOAD = os.environ.get("SHOPPING_BROWSER_WORKLOAD", "deployment/shopping")
 REMOTE_DEBUG_PORT = int(os.environ.get("SHOPPING_BROWSER_CDP_PORT", "9222"))
 MAX_RESULT_CHARS = 16000
+MAX_PRODUCT_IMAGES = 6
 PORT_FORWARD_TIMEOUT_SECONDS = 20
 PAGE_LOAD_TIMEOUT_SECONDS = 15
 
 AMAZON_HOST_RE = re.compile(r"(^|\.)amazon\.[a-z.]+$", re.IGNORECASE)
+AMAZON_IMAGE_HOST_RE = re.compile(r"(^|\.)(m\.media-amazon|images-na\.ssl-images-amazon|ssl-images-amazon)\.com$", re.IGNORECASE)
 UNSAFE_OPERATIONS = {
     "add_to_cart",
     "remove_from_cart",
@@ -70,6 +72,29 @@ PRODUCT_EXTRACT_JS = r"""
     }
     return '';
   };
+  const addImage = (urls, value) => {
+    if (!value || typeof value !== 'string') return;
+    const clean = value.trim();
+    if (clean.startsWith('https://')) urls.push(clean);
+  };
+  const imageUrls = [];
+  const landingImage = document.querySelector('#landingImage, #imgBlkFront, #ebooksImgBlkFront');
+  if (landingImage) {
+    addImage(imageUrls, landingImage.getAttribute('data-old-hires'));
+    addImage(imageUrls, landingImage.getAttribute('src'));
+    const dynamicImage = landingImage.getAttribute('data-a-dynamic-image');
+    if (dynamicImage) {
+      try {
+        Object.keys(JSON.parse(dynamicImage)).forEach((url) => addImage(imageUrls, url));
+      } catch (_err) {
+        // Ignore malformed Amazon widget metadata; safe extraction reports empty below.
+      }
+    }
+  }
+  document.querySelectorAll('#altImages img, #imageBlock img, .imgTagWrapper img').forEach((img) => {
+    addImage(imageUrls, img.getAttribute('data-old-hires'));
+    addImage(imageUrls, img.getAttribute('src'));
+  });
   return {
     page_title: document.title || '',
     product_title: firstText(['#productTitle', '#title', 'h1']),
@@ -97,7 +122,8 @@ PRODUCT_EXTRACT_JS = r"""
       '#tabular-buybox [tabular-attribute-name="Ships from"] .tabular-buybox-text',
       '#fulfillerInfoFeature_feature_div',
       '#merchant-info'
-    ])
+    ]),
+    image_url_candidates: Array.from(new Set(imageUrls)).slice(0, 12)
   };
 })()
 """
@@ -177,6 +203,35 @@ def _check_shopping_browser() -> bool:
 def _sanitize_url(value: str) -> str:
     parsed = urlparse(value)
     return urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", "", ""))
+
+
+def _sanitize_product_image_url(value: str) -> str | None:
+    parsed = urlparse(value)
+    if parsed.scheme != "https" or not AMAZON_IMAGE_HOST_RE.search(parsed.netloc):
+        return None
+    if not parsed.path.startswith("/images/"):
+        return None
+    return urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", "", ""))
+
+
+def _normalize_product_images(result: dict[str, Any]) -> None:
+    candidates = result.pop("image_url_candidates", None) or []
+    image_urls: list[str] = []
+    for candidate in candidates:
+        sanitized = _sanitize_product_image_url(str(candidate))
+        if sanitized and sanitized not in image_urls:
+            image_urls.append(sanitized)
+        if len(image_urls) >= MAX_PRODUCT_IMAGES:
+            break
+    result["primary_image_url"] = image_urls[0] if image_urls else None
+    result["image_urls"] = image_urls
+    if image_urls:
+        result["image_extraction"] = {"status": "ok", "count": len(image_urls)}
+    else:
+        result["image_extraction"] = {
+            "status": "failed",
+            "reason": "No public Amazon product image URLs were visible in the supported product image selectors.",
+        }
 
 
 def _validate_amazon_url(value: str) -> str:
@@ -340,6 +395,7 @@ def _inspect_product(url: str) -> dict[str, Any]:
         try:
             _navigate_and_wait(browser, session_id, safe_url)
             result = _evaluate(browser, session_id, PRODUCT_EXTRACT_JS) or {}
+            _normalize_product_images(result)
             result["url"] = _sanitize_url(safe_url)
             result["operation"] = "inspect_product"
             return result
@@ -436,7 +492,7 @@ STATUS_SCHEMA = {
 
 INSPECT_PRODUCT_SCHEMA = {
     "name": "shopping_browser_inspect_product",
-    "description": "Read-only Amazon product inspection through the Kasm shopping session. Returns product title, logged-in price, delivery/Prime text, availability, seller, and ship-from text. Does not expose cookies, local storage, request headers, raw CDP, screenshots, or browser handles.",
+    "description": "Read-only Amazon product inspection through the Kasm shopping session. Returns product title, logged-in price, delivery/Prime text, availability, seller, ship-from text, and public Amazon product image URLs when visible. Does not expose cookies, local storage, request headers, raw CDP, screenshots, or browser handles.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -528,4 +584,8 @@ if __name__ == "__main__":
     assert _reject_unsafe_operation("local_storage")["allowed"] is False
     assert _reject_unsafe_operation("inspect_cart")["allowed"] is True
     assert not any(word in json.dumps(STATUS_SCHEMA).lower() for word in ("cookie", "localstorage"))
+    product = {"image_url_candidates": ["https://m.media-amazon.com/images/I/example._AC_SX679_.jpg?x=1", "https://example.com/not-amazon.jpg"]}
+    _normalize_product_images(product)
+    assert product["primary_image_url"] == "https://m.media-amazon.com/images/I/example._AC_SX679_.jpg"
+    assert product["image_urls"] == ["https://m.media-amazon.com/images/I/example._AC_SX679_.jpg"]
     print("shopping_browser_tool smoke ok")
