@@ -158,8 +158,6 @@ class nest::app::hermes::service {
       Environment="SSL_CERT_DIR=/etc/ssl/certs"
       Restart=always
       RestartSec=5
-      RestartMaxDelaySec=300
-      RestartSteps=5
       RestartForceExitStatus=75
       KillMode=mixed
       KillSignal=SIGTERM
