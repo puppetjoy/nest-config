@@ -454,7 +454,7 @@ class nest::app::hermes::install {
 
   exec { 'patch_hermes_agent_request_review_handoff_flow':
     command => "/usr/sbin/git -C ${broker_source_dir} reset --hard HEAD && /bin/rm -f ${broker_source_dir}/src/agent_request_broker/kanban_backend.py.orig ${broker_source_dir}/src/agent_request_broker/kanban_backend.py.rej ${broker_source_dir}/tests/test_agent_request_broker.py.orig ${broker_source_dir}/tests/test_agent_request_broker.py.rej ${broker_source_dir}/bin/agent-request-accept-review && /usr/bin/patch -N -p1 -d ${broker_source_dir} < ${install_dir}/agent-request-review-handoff-flow.patch",
-    unless  => "/bin/grep -q 'agent_request_review_handoff' ${broker_source_dir}/src/tools/agent_request_tool.py && /bin/grep -q 'trusted_accept_review' ${broker_source_dir}/src/agent_request_broker/kanban_backend.py && /bin/grep -q 'REVIEW_ACCEPTANCE_PREFIX' ${broker_source_dir}/src/agent_request_broker/kanban_backend.py && /bin/grep -q 'REVIEW_BUTTON_ACTIONS' ${broker_source_dir}/src/agent_request_broker/kanban_backend.py && /bin/grep -q 'handle_telegram_reply' ${broker_source_dir}/src/agent_request_broker/kanban_backend.py && /bin/grep -q 'resume_blocked_task_from_reply' ${broker_source_dir}/src/agent_request_broker/kanban_backend.py",
+    unless  => "/bin/grep -q 'agent_request_review_handoff' ${broker_source_dir}/src/tools/agent_request_tool.py && /bin/grep -q 'trusted_accept_review' ${broker_source_dir}/src/agent_request_broker/kanban_backend.py && /bin/grep -q 'REVIEW_ACCEPTANCE_PREFIX' ${broker_source_dir}/src/agent_request_broker/kanban_backend.py && /bin/grep -q 'REVIEW_BUTTON_ACTIONS' ${broker_source_dir}/src/agent_request_broker/kanban_backend.py && /bin/grep -q 'handle_telegram_reply' ${broker_source_dir}/src/agent_request_broker/kanban_backend.py && /bin/grep -q 'resume_blocked_task_from_reply' ${broker_source_dir}/src/agent_request_broker/kanban_backend.py && /bin/grep -q '_reply_prompt_stale_reason' ${broker_source_dir}/src/agent_request_broker/kanban_backend.py && /bin/grep -q '_active_reply_prompts' ${broker_source_dir}/src/agent_request_broker/kanban_backend.py",
     require => [
       File["${install_dir}/agent-request-review-handoff-flow.patch"],
       Vcsrepo[$broker_source_dir],
@@ -463,7 +463,7 @@ class nest::app::hermes::install {
 
   exec { 'install_hermes_agent_request_broker':
     command     => "${venv_pip} install --upgrade --force-reinstall ${broker_source_dir} && git -C ${broker_source_dir} rev-parse HEAD > ${broker_git_revision_file}",
-    unless      => "test \"$(git -C ${broker_source_dir} rev-parse HEAD)\" = \"$(cat ${broker_git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent-request-broker'); import agent_request_broker.kanban_backend as kb; assert hasattr(kb, 'trusted_accept_review'); assert hasattr(kb, 'resume_blocked_task_from_reply')\"",
+    unless      => "test \"$(git -C ${broker_source_dir} rev-parse HEAD)\" = \"$(cat ${broker_git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent-request-broker'); import agent_request_broker.kanban_backend as kb; assert hasattr(kb, 'trusted_accept_review'); assert hasattr(kb, 'resume_blocked_task_from_reply'); assert hasattr(kb, '_reply_prompt_stale_reason'); assert hasattr(kb, '_active_reply_prompts')\"",
     environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
     path        => ['/bin', '/usr/bin'],
     require     => [
