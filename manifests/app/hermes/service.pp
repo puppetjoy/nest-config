@@ -5,23 +5,7 @@ class nest::app::hermes::service {
   $source_dir              = "${install_dir}/src"
   $broker_source_dir            = "${install_dir}/agent-request-broker"
   $pythonpath                   = "${source_dir}:${broker_source_dir}/src"
-  $agent_request_backend        = $nest::app::hermes::agent_request_backend
-  $agent_request_legacy_enabled = $agent_request_backend == 'json'
-  $agent_request_unit_ensure    = $agent_request_legacy_enabled ? {
-    true    => file,
-    default => absent,
-  }
   $hermes_home_dir              = "/home/${nest::user}/.hermes"
-  $response_watch_profiles = $nest::app::hermes::instances.filter |String[1] $_instance_name, Hash $instance_config| {
-    pick($instance_config['agent_request_response_watch_enabled'], false)
-  }.map |String[1] $instance_name, Hash $instance_config| {
-    pick($instance_config['profile'], $instance_name)
-  }
-  $peer_watch_profiles     = $nest::app::hermes::instances.filter |String[1] $_instance_name, Hash $instance_config| {
-    pick($instance_config['agent_request_peer_watch_enabled'], false)
-  }.map |String[1] $instance_name, Hash $instance_config| {
-    pick($instance_config['profile'], $instance_name)
-  }
   $systemd_user_dir        = "/home/${nest::user}/.config/systemd/user"
   $systemd_main_pid        = '$MAINPID'
 
@@ -120,64 +104,32 @@ class nest::app::hermes::service {
     ],
   }
 
-  file { "${install_dir}/bin/agent-request-watch":
-    ensure  => link,
-    target  => "${broker_source_dir}/bin/agent-request-watch",
-    require => [
-      File["${install_dir}/bin"],
-      Vcsrepo[$broker_source_dir],
-    ],
-  }
-
-  file { "${install_dir}/bin/agent-request-response-watch":
-    ensure  => link,
-    target  => "${broker_source_dir}/bin/agent-request-response-watch",
-    require => [
-      File["${install_dir}/bin"],
-      Vcsrepo[$broker_source_dir],
-    ],
-  }
-
-  file { "${install_dir}/bin/agent-request-peer-watch":
-    ensure  => link,
-    target  => "${broker_source_dir}/bin/agent-request-peer-watch",
-    require => [
-      File["${install_dir}/bin"],
-      Vcsrepo[$broker_source_dir],
-    ],
-  }
-
-  file { "${install_dir}/bin/agent-request-review-watch":
-    ensure  => link,
-    target  => "${broker_source_dir}/bin/agent-request-review-watch",
-    require => [
-      File["${install_dir}/bin"],
-      Vcsrepo[$broker_source_dir],
-    ],
-  }
-
-  file { "${install_dir}/bin/agent-request-propose":
-    ensure  => link,
-    target  => "${broker_source_dir}/bin/agent-request-propose",
-    require => [
-      File["${install_dir}/bin"],
-      Vcsrepo[$broker_source_dir],
-    ],
-  }
-
   [
+    'agent-request-approve',
+    'agent-request-propose',
     'agent-request-maintain',
     'agent-request-supersede',
     'agent-request-cancel',
     'agent-request-deny',
-  ].each |String $agent_request_maintenance_command| {
-    file { "${install_dir}/bin/${agent_request_maintenance_command}":
+  ].each |String $agent_request_command| {
+    file { "${install_dir}/bin/${agent_request_command}":
       ensure  => link,
-      target  => "${broker_source_dir}/bin/${agent_request_maintenance_command}",
+      target  => "${broker_source_dir}/bin/${agent_request_command}",
       require => [
         File["${install_dir}/bin"],
         Vcsrepo[$broker_source_dir],
       ],
+    }
+  }
+
+  [
+    'agent-request-watch',
+    'agent-request-response-watch',
+    'agent-request-peer-watch',
+    'agent-request-review-watch',
+  ].each |String $legacy_agent_request_command| {
+    file { "${install_dir}/bin/${legacy_agent_request_command}":
+      ensure => absent,
     }
   }
 
@@ -262,208 +214,23 @@ class nest::app::hermes::service {
     ],
   }
 
-  file { "${systemd_user_dir}/hermes-agent-request-watch.service":
-    ensure  => $agent_request_unit_ensure,
-    mode    => '0644',
-    owner   => $nest::user,
-    group   => $nest::user,
-    content => @("UNIT"),
-      [Unit]
-      Description=Watch Hermes agent requests for Talon review
-      After=network-online.target
-      Wants=network-online.target
-
-      [Service]
-      Type=oneshot
-      EnvironmentFile=${hermes_home_dir}/profiles/talon/systemd.env
-      EnvironmentFile=${hermes_home_dir}/profiles/talon/.env
-      ExecStart=${install_dir}/bin/agent-request-watch
-      WorkingDirectory=/home/${nest::user}
-      Environment="PATH=${venv_dir}/bin:/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-      Environment="VIRTUAL_ENV=${venv_dir}"
-      Environment="PYTHONPATH=${pythonpath}"
-      Environment="HERMES_HOME=${hermes_home_dir}"
-      Environment="SSL_CERT_FILE="
-      Environment="SSL_CERT_DIR=/etc/ssl/certs"
-      StandardOutput=journal
-      StandardError=journal
-      | UNIT
-    require => File["${install_dir}/bin/agent-request-watch"],
-  }
-
-  file { "${systemd_user_dir}/hermes-agent-request-watch.timer":
-    ensure  => $agent_request_unit_ensure,
-    mode    => '0644',
-    owner   => $nest::user,
-    group   => $nest::user,
-    content => @("UNIT"),
-      [Unit]
-      Description=Poll Hermes agent requests for Talon review
-
-      [Timer]
-      OnBootSec=1min
-      OnUnitActiveSec=1min
-      AccuracySec=15s
-      Unit=hermes-agent-request-watch.service
-
-      [Install]
-      WantedBy=timers.target
-      | UNIT
-    require => File["${systemd_user_dir}/hermes-agent-request-watch.service"],
-  }
-
-  $response_watch_profiles.each |String[1] $response_watch_profile| {
-    file { "${systemd_user_dir}/hermes-agent-request-response-watch-${response_watch_profile}.service":
-      ensure  => $agent_request_unit_ensure,
-      mode    => '0644',
-      owner   => $nest::user,
-      group   => $nest::user,
-      content => @("UNIT"),
-        [Unit]
-        Description=Deliver Hermes agent-request responses to ${response_watch_profile}
-        After=network-online.target
-        Wants=network-online.target
-
-        [Service]
-        Type=oneshot
-        EnvironmentFile=${hermes_home_dir}/profiles/${response_watch_profile}/systemd.env
-        EnvironmentFile=${hermes_home_dir}/profiles/${response_watch_profile}/.env
-        ExecStart=${install_dir}/bin/agent-request-response-watch ${response_watch_profile}
-        WorkingDirectory=/home/${nest::user}
-        Environment="PATH=${venv_dir}/bin:/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-        Environment="VIRTUAL_ENV=${venv_dir}"
-        Environment="PYTHONPATH=${pythonpath}"
-        Environment="HERMES_HOME=${hermes_home_dir}"
-        Environment="SSL_CERT_FILE="
-        Environment="SSL_CERT_DIR=/etc/ssl/certs"
-        StandardOutput=journal
-        StandardError=journal
-        | UNIT
-      require => File["${install_dir}/bin/agent-request-response-watch"],
+  [
+    'hermes-agent-request-watch.service',
+    'hermes-agent-request-watch.timer',
+    'hermes-agent-request-response-watch-talon.service',
+    'hermes-agent-request-response-watch-talon.timer',
+    'hermes-agent-request-response-watch-star.service',
+    'hermes-agent-request-response-watch-star.timer',
+    'hermes-agent-request-peer-watch-talon.service',
+    'hermes-agent-request-peer-watch-talon.timer',
+    'hermes-agent-request-peer-watch-star.service',
+    'hermes-agent-request-peer-watch-star.timer',
+    'hermes-agent-request-review-watch-talon.service',
+    'hermes-agent-request-review-watch-talon.timer',
+  ].each |String $legacy_agent_request_unit| {
+    file { "${systemd_user_dir}/${legacy_agent_request_unit}":
+      ensure => absent,
     }
-
-    file { "${systemd_user_dir}/hermes-agent-request-response-watch-${response_watch_profile}.timer":
-      ensure  => $agent_request_unit_ensure,
-      mode    => '0644',
-      owner   => $nest::user,
-      group   => $nest::user,
-      content => @("UNIT"),
-        [Unit]
-        Description=Poll Hermes agent-request responses for ${response_watch_profile}
-
-        [Timer]
-        OnBootSec=1min
-        OnUnitActiveSec=1min
-        AccuracySec=15s
-        Unit=hermes-agent-request-response-watch-${response_watch_profile}.service
-
-        [Install]
-        WantedBy=timers.target
-        | UNIT
-      require => File["${systemd_user_dir}/hermes-agent-request-response-watch-${response_watch_profile}.service"],
-    }
-  }
-
-  $peer_watch_profiles.each |String[1] $peer_watch_profile| {
-    file { "${systemd_user_dir}/hermes-agent-request-peer-watch-${peer_watch_profile}.service":
-      ensure  => $agent_request_unit_ensure,
-      mode    => '0644',
-      owner   => $nest::user,
-      group   => $nest::user,
-      content => @("UNIT"),
-        [Unit]
-        Description=Run ${peer_watch_profile} on targeted Hermes peer requests
-        After=network-online.target
-        Wants=network-online.target
-
-        [Service]
-        Type=oneshot
-        EnvironmentFile=${hermes_home_dir}/profiles/${peer_watch_profile}/systemd.env
-        EnvironmentFile=${hermes_home_dir}/profiles/${peer_watch_profile}/.env
-        ExecStart=${install_dir}/bin/agent-request-peer-watch ${peer_watch_profile}
-        WorkingDirectory=/home/${nest::user}
-        Environment="PATH=${venv_dir}/bin:/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-        Environment="VIRTUAL_ENV=${venv_dir}"
-        Environment="PYTHONPATH=${pythonpath}"
-        Environment="HERMES_HOME=${hermes_home_dir}"
-        Environment="SSL_CERT_FILE="
-        Environment="SSL_CERT_DIR=/etc/ssl/certs"
-        StandardOutput=journal
-        StandardError=journal
-        | UNIT
-      require => File["${install_dir}/bin/agent-request-peer-watch"],
-    }
-
-    file { "${systemd_user_dir}/hermes-agent-request-peer-watch-${peer_watch_profile}.timer":
-      ensure  => $agent_request_unit_ensure,
-      mode    => '0644',
-      owner   => $nest::user,
-      group   => $nest::user,
-      content => @("UNIT"),
-        [Unit]
-        Description=Poll Hermes peer requests for ${peer_watch_profile}
-
-        [Timer]
-        OnBootSec=1min
-        OnUnitActiveSec=1min
-        AccuracySec=15s
-        Unit=hermes-agent-request-peer-watch-${peer_watch_profile}.service
-
-        [Install]
-        WantedBy=timers.target
-        | UNIT
-      require => File["${systemd_user_dir}/hermes-agent-request-peer-watch-${peer_watch_profile}.service"],
-    }
-  }
-
-  file { "${systemd_user_dir}/hermes-agent-request-review-watch-talon.service":
-    ensure  => $agent_request_unit_ensure,
-    mode    => '0644',
-    owner   => $nest::user,
-    group   => $nest::user,
-    content => @("UNIT"),
-      [Unit]
-      Description=Run Talon on Hermes agent requests marked for review
-      After=network-online.target
-      Wants=network-online.target
-
-      [Service]
-      Type=oneshot
-      EnvironmentFile=${hermes_home_dir}/profiles/talon/systemd.env
-      EnvironmentFile=${hermes_home_dir}/profiles/talon/.env
-      ExecStart=${install_dir}/bin/agent-request-review-watch talon
-      WorkingDirectory=/home/${nest::user}
-      Environment="PATH=${venv_dir}/bin:/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-      Environment="VIRTUAL_ENV=${venv_dir}"
-      Environment="PYTHONPATH=${pythonpath}"
-      Environment="HERMES_HOME=${hermes_home_dir}"
-      Environment="SSL_CERT_FILE="
-      Environment="SSL_CERT_DIR=/etc/ssl/certs"
-      StandardOutput=journal
-      StandardError=journal
-      | UNIT
-    require => File["${install_dir}/bin/agent-request-review-watch"],
-  }
-
-  file { "${systemd_user_dir}/hermes-agent-request-review-watch-talon.timer":
-    ensure  => $agent_request_unit_ensure,
-    mode    => '0644',
-    owner   => $nest::user,
-    group   => $nest::user,
-    content => @("UNIT"),
-      [Unit]
-      Description=Poll Hermes agent requests for Talon agent review
-
-      [Timer]
-      OnBootSec=1min
-      OnUnitActiveSec=1min
-      AccuracySec=15s
-      Unit=hermes-agent-request-review-watch-talon.service
-
-      [Install]
-      WantedBy=timers.target
-      | UNIT
-    require => File["${systemd_user_dir}/hermes-agent-request-review-watch-talon.service"],
   }
 
   file { "${systemd_user_dir}/hermes-gateway.service":
@@ -506,42 +273,6 @@ class nest::app::hermes::service {
   ~>
   Exec['hermes-systemd-user-daemon-reload']
 
-  File["${systemd_user_dir}/hermes-agent-request-watch.service"]
-  ~>
-  Exec['hermes-systemd-user-daemon-reload']
-
-  File["${systemd_user_dir}/hermes-agent-request-watch.timer"]
-  ~>
-  Exec['hermes-systemd-user-daemon-reload']
-
-  $response_watch_profiles.each |String[1] $response_watch_profile| {
-    File["${systemd_user_dir}/hermes-agent-request-response-watch-${response_watch_profile}.service"]
-    ~>
-    Exec['hermes-systemd-user-daemon-reload']
-
-    File["${systemd_user_dir}/hermes-agent-request-response-watch-${response_watch_profile}.timer"]
-    ~>
-    Exec['hermes-systemd-user-daemon-reload']
-  }
-
-  $peer_watch_profiles.each |String[1] $peer_watch_profile| {
-    File["${systemd_user_dir}/hermes-agent-request-peer-watch-${peer_watch_profile}.service"]
-    ~>
-    Exec['hermes-systemd-user-daemon-reload']
-
-    File["${systemd_user_dir}/hermes-agent-request-peer-watch-${peer_watch_profile}.timer"]
-    ~>
-    Exec['hermes-systemd-user-daemon-reload']
-  }
-
-  File["${systemd_user_dir}/hermes-agent-request-review-watch-talon.service"]
-  ~>
-  Exec['hermes-systemd-user-daemon-reload']
-
-  File["${systemd_user_dir}/hermes-agent-request-review-watch-talon.timer"]
-  ~>
-  Exec['hermes-systemd-user-daemon-reload']
-
   File["${systemd_user_dir}/hermes-gateway.service"]
   ~>
   Exec['hermes-systemd-user-daemon-reload']
@@ -557,71 +288,7 @@ class nest::app::hermes::service {
   }
 
   exec { 'enable_hermes_gateway_linger':
-    command => "/usr/bin/loginctl enable-linger ${nest::user}",
-    unless  => "/usr/bin/loginctl show-user ${nest::user} -p Linger --value | /bin/grep -qx yes",
-  }
-
-  if $agent_request_legacy_enabled {
-    exec { 'enable_hermes_agent_request_watch_timer':
-      command => '/bin/sh -c \'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user enable --now hermes-agent-request-watch.timer\'',
-      unless  => '/bin/sh -c \'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-enabled --quiet hermes-agent-request-watch.timer && XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-active --quiet hermes-agent-request-watch.timer\'',
-      user    => $nest::user,
-      require => [
-        Exec['enable_hermes_gateway_linger'],
-        File["${systemd_user_dir}/hermes-agent-request-watch.timer"],
-      ],
-    }
-
-    $response_watch_profiles.each |String[1] $response_watch_profile| {
-      exec { "enable_hermes_agent_request_response_watch_${response_watch_profile}_timer":
-        command => "/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user enable --now hermes-agent-request-response-watch-${response_watch_profile}.timer'",
-        unless  => "/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-enabled --quiet hermes-agent-request-response-watch-${response_watch_profile}.timer && XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-active --quiet hermes-agent-request-response-watch-${response_watch_profile}.timer'",
-        user    => $nest::user,
-        require => [
-          Exec['enable_hermes_gateway_linger'],
-          File["${systemd_user_dir}/hermes-agent-request-response-watch-${response_watch_profile}.timer"],
-        ],
-      }
-    }
-
-    $peer_watch_profiles.each |String[1] $peer_watch_profile| {
-      exec { "enable_hermes_agent_request_peer_watch_${peer_watch_profile}_timer":
-        command => "/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user enable --now hermes-agent-request-peer-watch-${peer_watch_profile}.timer'",
-        unless  => "/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-enabled --quiet hermes-agent-request-peer-watch-${peer_watch_profile}.timer && XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-active --quiet hermes-agent-request-peer-watch-${peer_watch_profile}.timer'",
-        user    => $nest::user,
-        require => [
-          Exec['enable_hermes_gateway_linger'],
-          File["${systemd_user_dir}/hermes-agent-request-peer-watch-${peer_watch_profile}.timer"],
-        ],
-      }
-    }
-
-    exec { 'enable_hermes_agent_request_review_watch_talon_timer':
-      command => '/bin/sh -c \'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user enable --now hermes-agent-request-review-watch-talon.timer\'',
-      unless  => '/bin/sh -c \'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-enabled --quiet hermes-agent-request-review-watch-talon.timer && XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-active --quiet hermes-agent-request-review-watch-talon.timer\'',
-      user    => $nest::user,
-      require => [
-        Exec['enable_hermes_gateway_linger'],
-        File["${systemd_user_dir}/hermes-agent-request-review-watch-talon.timer"],
-      ],
-    }
-  } else {
-    $agent_request_timer_units = [
-      'hermes-agent-request-watch.timer',
-      'hermes-agent-request-review-watch-talon.timer',
-    ] + $response_watch_profiles.map |String[1] $response_watch_profile| {
-      "hermes-agent-request-response-watch-${response_watch_profile}.timer"
-    } + $peer_watch_profiles.map |String[1] $peer_watch_profile| {
-      "hermes-agent-request-peer-watch-${peer_watch_profile}.timer"
-    }
-
-    $agent_request_timer_units.each |String[1] $agent_request_timer_unit| {
-      exec { "disable_${agent_request_timer_unit}":
-        command => "/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user disable --now ${agent_request_timer_unit} || true'",
-        unless  => "/bin/sh -c '! XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-enabled --quiet ${agent_request_timer_unit} && ! XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-active --quiet ${agent_request_timer_unit}'",
-        user    => $nest::user,
-        before  => Exec['hermes-systemd-user-daemon-reload'],
-      }
-    }
+    command => sprintf('/usr/bin/loginctl enable-linger %s', $nest::user),
+    unless  => sprintf('/usr/bin/loginctl show-user %s -p Linger --value | /bin/grep -qx yes', $nest::user),
   }
 }

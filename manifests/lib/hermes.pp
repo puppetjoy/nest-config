@@ -28,7 +28,6 @@ define nest::lib::hermes (
   Optional[String[1]]  $dashboard_theme          = undef,
   Optional[String[1]]  $dashboard_oauth_client_id= undef,
   Optional[String[1]]  $dashboard_oauth_portal_url= undef,
-  String[1]            $agent_request_backend    = 'kanban',
   String[1]            $agent_request_kanban_board= 'agent-requests',
   Boolean              $gateway_enabled          = true,
   Optional[String[1]]  $ssh_auth_sock            = undef,
@@ -223,7 +222,6 @@ define nest::lib::hermes (
   }
 
   $agent_request_env_lines = [
-    "AGENT_REQUEST_BACKEND=${agent_request_backend}",
     "AGENT_REQUEST_KANBAN_BOARD=${agent_request_kanban_board}",
   ]
   $systemd_env_lines = [
