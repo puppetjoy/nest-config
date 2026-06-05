@@ -139,6 +139,14 @@ class nest::base::users {
       }
     }
 
+    exec { "set-dotfiles-remote-${home_dir}":
+      command => "/usr/bin/git -C ${home_dir} remote set-url origin ${dotfiles_git_source}",
+      onlyif  => "/bin/test -d ${home_dir}/.git",
+      unless  => "/usr/bin/test \"$(/usr/bin/git -C ${home_dir} remote get-url origin)\" = '${dotfiles_git_source}'",
+      user    => $exec_user,
+      before  => Vcsrepo[$home_dir],
+    }
+
     vcsrepo { $home_dir:
       ensure   => latest,
       provider => git,
