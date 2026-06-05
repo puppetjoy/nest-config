@@ -1,9 +1,10 @@
---- a/tools/kanban_tools.py	2026-05-27 10:10:04.135419507 -0400
-+++ b/tools/kanban_tools.py	2026-06-04 17:10:30.664722036 -0400
-@@ -252,6 +252,70 @@
+--- a/tools/kanban_tools.py
++++ b/tools/kanban_tools.py
+@@ -251,6 +251,70 @@
+ # ---------------------------------------------------------------------------
  # Handlers
  # ---------------------------------------------------------------------------
- 
++
 +
 +
 +def _latest_event(kb, conn, task_id: str, kind: str):
@@ -67,11 +68,28 @@
 +        )
 +    except Exception:
 +        logger.exception("agent-request notification hook failed for %s", task_id)
-+
+
  def _handle_show(args: dict, **kw) -> str:
      """Read a task's full state: task row, parents, children, comments,
-     runs (attempt history), and the last N events."""
-@@ -501,6 +565,10 @@
+@@ -470,6 +534,17 @@
+         kb, conn = _connect(board=board)
+         try:
+             try:
++                try:
++                    from agent_request_broker import kanban_backend as agent_requests
++                except Exception:
++                    agent_requests = None
++                if agent_requests is not None:
++                    actor = os.environ.get("HERMES_PROFILE") or os.environ.get("HERMES_KANBAN_ASSIGNEE") or "worker"
++                    guard = agent_requests.agent_request_completion_guard(
++                        conn, task_id=tid, metadata=metadata, actor=actor,
++                    )
++                    if not guard.get("ok"):
++                        return tool_error(str(guard.get("error") or "agent-request completion blocked"))
+                 ok = kb.complete_task(
+                     conn, tid,
+                     result=result, summary=summary, metadata=metadata,
+@@ -501,6 +576,10 @@
                      f"could not complete {tid} (unknown id or already terminal)"
                  )
              run = kb.latest_run(conn, tid)
@@ -82,7 +100,7 @@
              return _ok(task_id=tid, run_id=run.id if run else None)
          finally:
              conn.close()
-@@ -539,6 +607,10 @@
+@@ -539,6 +618,10 @@
                      f"running/ready)"
                  )
              run = kb.latest_run(conn, tid)
@@ -93,7 +111,7 @@
              return _ok(task_id=tid, run_id=run.id if run else None)
          finally:
              conn.close()
-@@ -625,7 +697,12 @@
+@@ -625,7 +708,12 @@
      try:
          kb, conn = _connect(board=board)
          try:
@@ -107,7 +125,7 @@
              return _ok(task_id=tid, comment_id=cid)
          finally:
              conn.close()
-@@ -738,6 +815,10 @@
+@@ -738,6 +826,10 @@
              ok = kb.unblock_task(conn, str(tid))
              if not ok:
                  return tool_error(f"could not unblock {tid} (not blocked or unknown)")
