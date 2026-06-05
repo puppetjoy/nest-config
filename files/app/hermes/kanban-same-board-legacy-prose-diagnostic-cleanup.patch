@@ -1,0 +1,136 @@
+--- a/hermes_cli/kanban_diagnostics.py
++++ b/hermes_cli/kanban_diagnostics.py
+@@ -502,9 +502,10 @@
+     """Reclassify pre-cross-board prose diagnostics at render time.
+ 
+     Older ``suspected_hallucinated_references`` events only persisted
+-    ``phantom_refs``. When the caller supplies a bounded resolver, move ids
+-    that now resolve outside the current board into ``cross_board_refs`` while
+-    leaving true missing-everywhere ids in ``phantom_refs``.
++    ``phantom_refs``. When the caller supplies bounded resolvers, drop ids
++    that now resolve on the current board and move ids that resolve outside
++    the current board into ``cross_board_refs`` while leaving true
++    missing-everywhere ids in ``phantom_refs``.
+     """
+     if not isinstance(payload, dict):
+         return {}
+@@ -516,15 +517,34 @@
+     if not phantom_refs or payload.get("cross_board_refs") is not None:
+         return payload
+ 
++    current_board_checker = cfg.get("prose_ref_current_board_checker")
++    same_board_ids: set[str] = set()
++    if callable(current_board_checker):
++        try:
++            current_matches = current_board_checker(phantom_refs)
++        except Exception:
++            current_matches = []
++        if isinstance(current_matches, (list, tuple, set)):
++            same_board_ids = {ref for ref in current_matches if isinstance(ref, str)}
++
+     resolver = cfg.get("prose_ref_resolver")
+     if not callable(resolver):
+-        return payload
++        if not same_board_ids:
++            return payload
++        out = dict(payload)
++        out["phantom_refs"] = [ref for ref in phantom_refs if ref not in same_board_ids]
++        out.setdefault("cross_board_refs", [])
++        if not out.get("current_board") and cfg.get("current_board"):
++            out["current_board"] = cfg.get("current_board")
++        return out
+     try:
+         resolved = resolver(phantom_refs)
+     except Exception:
+-        return payload
+-    if not isinstance(resolved, list) or not resolved:
+-        return payload
++        if not same_board_ids:
++            return payload
++        resolved = []
++    if not isinstance(resolved, list):
++        resolved = []
+ 
+     cross_board_refs: list[dict] = []
+     for ref in resolved:
+@@ -533,12 +553,13 @@
+         tid = ref.get("id")
+         if tid and tid in phantom_refs and all(existing.get("id") != tid for existing in cross_board_refs):
+             cross_board_refs.append(ref)
+-    if not cross_board_refs:
++    if not cross_board_refs and not same_board_ids:
+         return payload
+ 
+     cross_ids = {ref.get("id") for ref in cross_board_refs}
++    resolved_ids = cross_ids | same_board_ids
+     out = dict(payload)
+-    out["phantom_refs"] = [ref for ref in phantom_refs if ref not in cross_ids]
++    out["phantom_refs"] = [ref for ref in phantom_refs if ref not in resolved_ids]
+     out["cross_board_refs"] = cross_board_refs
+     if not out.get("current_board") and cfg.get("current_board"):
+         out["current_board"] = cfg.get("current_board")
+@@ -571,6 +592,8 @@
+             tid = ref.get("id")
+             if tid and all(existing.get("id") != tid for existing in cross_board_refs):
+                 cross_board_refs.append(ref)
++    if not phantom_refs and not cross_board_refs:
++        return []
+     running = _task_field(task, "status") == "running"
+     if cross_board_refs and not phantom_refs:
+         title = "Completion summary references another Kanban board"
+--- a/plugins/kanban/dashboard/plugin_api.py
++++ b/plugins/kanban/dashboard/plugin_api.py
+@@ -239,6 +239,19 @@
+     # persisted on active diagnostic events for the current dashboard board.
+     from hermes_cli import kanban_db
+     diag_config["prose_ref_resolver"] = lambda ids: kanban_db._resolve_cross_board_task_refs(conn, ids)
++    def _same_board_refs(ids):
++        refs = [ref for ref in ids if isinstance(ref, str)]
++        if not refs:
++            return []
++        placeholders = ",".join(["?"] * len(refs))
++        return [
++            row["id"]
++            for row in conn.execute(
++                f"SELECT id FROM tasks WHERE id IN ({placeholders})",
++                tuple(refs),
++            ).fetchall()
++        ]
++    diag_config["prose_ref_current_board_checker"] = _same_board_refs
+     diag_config["current_board"] = kanban_db._board_slug_for_conn(conn)
+ 
+     # Build the candidate task list. We need each task's row + its
+--- a/tests/hermes_cli/test_kanban_diagnostics.py
++++ b/tests/hermes_cli/test_kanban_diagnostics.py
+@@ -259,6 +259,31 @@
+     assert d.data["phantom_refs"] == []
+     assert d.data["cross_board_refs"][0]["id"] == "t_deadbeef99"
+ 
++
++
++def test_legacy_prose_payload_drops_same_board_refs():
++    task = _task(status="done")
++    events = [
++        _event("completed", ts=100, summary="legacy payload"),
++        _event(
++            "suspected_hallucinated_references",
++            ts=101,
++            phantom_refs=["t_sameboard"],
++            source="completion_summary",
++        ),
++    ]
++
++    diags = kd.compute_task_diagnostics(
++        task,
++        events,
++        [],
++        config={
++            "prose_ref_current_board_checker": lambda ids: ["t_sameboard"],
++            "prose_ref_resolver": lambda ids: [],
++            "current_board": "agent-requests",
++        },
++    )
++    assert diags == []
+ 
+ def test_repeated_failures_fires_at_threshold_on_spawn():
+     """A task with multiple spawn_failed runs gets a spawn-flavoured
