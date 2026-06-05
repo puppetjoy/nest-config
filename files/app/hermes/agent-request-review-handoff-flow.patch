@@ -3,7 +3,7 @@ index 2a1b72c..63f9539 100644
 --- a/README.md
 +++ b/README.md
 @@ -9,10 +9,11 @@ request-aware Telegram notifications, and trusted approval helpers.
-
+ 
  - Durable substrate: Hermes Kanban board `agent-requests`.
  - Test/shadow board: `agent-requests-dev`, retained only for probes and history.
 -- Model-facing toolset: `agent_request_submit`, `agent_request_status`, and
@@ -16,7 +16,7 @@ index 2a1b72c..63f9539 100644
 +  finished implementation work needs Joy/operator review before follow-through.
  - Trusted approval: operator/Joy CLI path, not model-authored prose.
  - Notifications: event-driven request-aware adapter over Kanban records.
-
+ 
 @@ -25,6 +26,9 @@ request notification adapter instead.
  - `agent_request_submit` creates a native Kanban task and returns the compatibility `ar-*`
    request view for existing callers. New peer-to-peer work can use `kanban_create` directly.
@@ -26,7 +26,7 @@ index 2a1b72c..63f9539 100644
 +  review before push, merge, deploy, Puppet apply, restarts, or live side effects.
  - `agent_request_propose` records a structured, hash-bound proposal comment and blocks the task
    until Joy approves it through the trusted path.
-
+ 
 @@ -39,6 +43,7 @@ These are trusted/operator surfaces and are normally exposed through the managed
  ```sh
  agent-request-propose <request-id> --actor star --summary 'approval-required: ...' --proposal '...'
@@ -36,7 +36,7 @@ index 2a1b72c..63f9539 100644
  agent-request-supersede <request-id> --by <replacement-request-id> --reason '...'
  agent-request-cancel <request-id> --reason '...'
 @@ -47,7 +52,10 @@ agent-request-deny <request-id> --reason '...'
-
+ 
  `agent-request-approve` binds approval to the latest structured proposal comment id and proposal
  hash. It intentionally refuses plain proposal-looking comments with `No structured proposal is
 -recorded for this request`.
@@ -44,9 +44,9 @@ index 2a1b72c..63f9539 100644
 +the latest structured review handoff comment id and review hash, records Joy/operator
 +attribution, and returns the Kanban task to `ready` so the worker resumes the listed
 +follow-through actions.
-
+ 
  ## Status projection
-
+ 
 @@ -60,6 +68,9 @@ The public request `status` describes work state. Approval is separate metadata:
    parent request cannot finalize while open children are unclassified or
    classified as `blocking`.
@@ -55,10 +55,10 @@ index 2a1b72c..63f9539 100644
 +  and a Kanban `review` task; accepted review reports `status=review_accepted`,
 +  `review_status=accepted`, and a Kanban `ready` task that the dispatcher can resume.
  - invalid plain/prose proposal attempts can be diagnosed as `approval_status=invalid_proposal`.
-
+ 
  ## Workspace policy
 diff --git a/src/agent_request_broker/kanban_backend.py b/src/agent_request_broker/kanban_backend.py
-index f429326..bf4a0a8 100644
+index f429326..de24324 100644
 --- a/src/agent_request_broker/kanban_backend.py
 +++ b/src/agent_request_broker/kanban_backend.py
 @@ -37,7 +37,7 @@ URGENCY_PRIORITIES = {
@@ -70,10 +70,12 @@ index f429326..bf4a0a8 100644
  COMPLETED_WITH_FOLLOWUP = "completed_with_followup"
  MAINTENANCE_STATUSES = {"superseded", "cancelled", "denied", "failed_probe", "invalid_proposal"}
  BLOCKING_COMPAT_STATUSES = {"proposed", "needs_info"}
-@@ -46,9 +46,12 @@ REVIEW_ACCEPTED = "review_accepted"
+@@ -46,9 +46,14 @@ REVIEW_ACCEPTED = "review_accepted"
  CHANGE_STATUSES = {"in_progress", "completed"}
  CALLBACK_ACTIONS = {"approve", "deny", "steer", "review_accept", "review_changes", "review_question", "needs_info_answer"}
  CALLBACK_BINDING_ACTIONS = {"approve", "deny", "steer"}
++REVIEW_CALLBACK_BINDING_ACTIONS = {"review_accept", "review_changes", "review_question"}
++REVIEW_BUTTON_ACTIONS = {"review", "review_required", "review_handoff", "review_requested", REVIEW_REQUESTED}
 +REPLY_PROMPT_ACTIONS = {"steer", "needs_info_answer", "review_changes", "review_question"}
 +REPLY_PROMPT_TTL_SECONDS = 60 * 60
  COMMENT_PREFIX = "<!-- agent-request:event "
@@ -83,7 +85,7 @@ index f429326..bf4a0a8 100644
  CODE_TASK_TERMS = (
      "code", "repo", "repository", "worktree", "branch", "commit", "diff",
      "patch", "implement", "extend", "enhancement", "tool surface", "fix",
-@@ -492,6 +495,43 @@ def init_index(conn: Any) -> None:
+@@ -492,6 +497,43 @@ def init_index(conn: Any) -> None:
          "CREATE INDEX IF NOT EXISTS idx_agent_request_proposals_latest "
          "ON agent_request_proposals(request_id, created_at, proposal_comment_id)"
      )
@@ -127,10 +129,23 @@ index f429326..bf4a0a8 100644
      conn.execute(
          """
          CREATE TABLE IF NOT EXISTS agent_request_approvals (
-@@ -556,6 +596,33 @@ def init_index(conn: Any) -> None:
+@@ -546,6 +588,8 @@ def init_index(conn: Any) -> None:
+             action TEXT NOT NULL,
+             proposal_comment_id INTEGER,
+             proposal_hash TEXT,
++            review_comment_id INTEGER,
++            review_hash TEXT,
+             actor TEXT NOT NULL,
+             created_at INTEGER NOT NULL,
+             used_at INTEGER
+@@ -556,6 +600,43 @@ def init_index(conn: Any) -> None:
          "CREATE INDEX IF NOT EXISTS idx_agent_request_callback_request "
          "ON agent_request_callback_tokens(request_id, created_at)"
      )
++    callback_columns = {row["name"] for row in conn.execute("PRAGMA table_info(agent_request_callback_tokens)").fetchall()}
++    for column, column_type in (("review_comment_id", "INTEGER"), ("review_hash", "TEXT")):
++        if column not in callback_columns:
++            conn.execute(f"ALTER TABLE agent_request_callback_tokens ADD COLUMN {column} {column_type}")
 +    conn.execute(
 +        """
 +        CREATE TABLE IF NOT EXISTS agent_request_reply_prompts (
@@ -140,6 +155,8 @@ index f429326..bf4a0a8 100644
 +            action TEXT NOT NULL,
 +            proposal_comment_id INTEGER,
 +            proposal_hash TEXT,
++            review_comment_id INTEGER,
++            review_hash TEXT,
 +            actor TEXT NOT NULL,
 +            chat_id TEXT NOT NULL,
 +            thread_id TEXT NOT NULL,
@@ -158,10 +175,14 @@ index f429326..bf4a0a8 100644
 +        "CREATE INDEX IF NOT EXISTS idx_agent_request_reply_prompts_message "
 +        "ON agent_request_reply_prompts(chat_id, prompt_message_id)"
 +    )
++    prompt_columns = {row["name"] for row in conn.execute("PRAGMA table_info(agent_request_reply_prompts)").fetchall()}
++    for column, column_type in (("review_comment_id", "INTEGER"), ("review_hash", "TEXT")):
++        if column not in prompt_columns:
++            conn.execute(f"ALTER TABLE agent_request_reply_prompts ADD COLUMN {column} {column_type}")
      conn.execute(
          """
          CREATE TABLE IF NOT EXISTS agent_request_child_dispositions (
-@@ -582,6 +649,10 @@ def init_index(conn: Any) -> None:
+@@ -582,6 +663,10 @@ def init_index(conn: Any) -> None:
          "CREATE INDEX IF NOT EXISTS idx_agent_request_approvals_request "
          "ON agent_request_approvals(request_id, proposal_comment_id, proposal_hash)"
      )
@@ -170,9 +191,9 @@ index f429326..bf4a0a8 100644
 +        "ON agent_request_review_acceptances(request_id, review_comment_id, review_hash)"
 +    )
      conn.commit()
-
-
-@@ -619,9 +690,9 @@ def render_task_body(
+ 
+ 
+@@ -619,9 +704,9 @@ def render_task_body(
          "",
          "Protocol:",
          "- Treat this as a native Kanban task, not a separate broker workflow.",
@@ -183,8 +204,8 @@ index f429326..bf4a0a8 100644
 +        "- Use agent_request_review_handoff for implementation review; use blocked only for true blockers.",
      ])
      return "\n".join(body)
-
-@@ -639,11 +710,17 @@ def event_comment(*, request_id: str, actor: str, action: str, summary: str, **f
+ 
+@@ -639,11 +724,17 @@ def event_comment(*, request_id: str, actor: str, action: str, summary: str, **f
      visible = [f"Summary: {summary}"]
      for label, key in [
          ("Proposal", "proposal"),
@@ -202,10 +223,10 @@ index f429326..bf4a0a8 100644
          ("Workspace warning", "workspace_error"),
      ]:
          value = fields.get(key)
-@@ -668,10 +745,27 @@ def proposal_hash(proposal: str) -> str:
+@@ -668,10 +759,27 @@ def proposal_hash(proposal: str) -> str:
      return hashlib.sha256(proposal.encode("utf-8")).hexdigest()
-
-
+ 
+ 
 +def review_hash_payload(*, worktree_path: str, branch_name: str, commit_refs: str, changed_files: str, tests_run: str, remaining_actions: str, side_effects_deferred: str) -> str:
 +    payload = {
 +        "worktree_path": worktree_path,
@@ -221,8 +242,8 @@ index f429326..bf4a0a8 100644
 +
  def make_approval_id() -> str:
      return f"{APPROVAL_PREFIX}{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}-{secrets.token_hex(3)}"
-
-
+ 
+ 
 +def make_review_acceptance_id() -> str:
 +    return f"{REVIEW_ACCEPTANCE_PREFIX}{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}-{secrets.token_hex(3)}"
 +
@@ -230,10 +251,10 @@ index f429326..bf4a0a8 100644
  def record_proposal(conn: Any, *, request_id: str, comment_id: int, proposal: str, proposed_by: str) -> str:
      digest = proposal_hash(proposal)
      conn.execute(
-@@ -718,6 +812,122 @@ def current_approval(conn: Any, request_id: str) -> dict[str, Any] | None:
+@@ -718,6 +826,122 @@ def current_approval(conn: Any, request_id: str) -> dict[str, Any] | None:
      return dict(row) if row else None
-
-
+ 
+ 
 +def record_review_handoff(conn: Any, *, request_id: str, comment_id: int, requested_by: str, worktree_path: str, branch_name: str, commit_refs: str, changed_files: str, tests_run: str, remaining_actions: str, side_effects_deferred: str) -> str:
 +    digest = review_hash_payload(
 +        worktree_path=worktree_path,
@@ -353,7 +374,7 @@ index f429326..bf4a0a8 100644
  def require_current_approval(conn: Any, request_id: str) -> dict[str, Any] | str:
      proposal = latest_proposal(conn, request_id)
      if not proposal:
-@@ -1066,6 +1276,7 @@ def public_request(conn: Any, item: AgentRequestIndex) -> dict[str, Any]:
+@@ -1066,6 +1290,7 @@ def public_request(conn: Any, item: AgentRequestIndex) -> dict[str, Any]:
      title_meta = stored_title_metadata(item, task.title)
      disposition = latest_disposition(conn, item.request_id)
      approval = approval_metadata(conn, item.request_id, task_id=item.task_id)
@@ -361,7 +382,7 @@ index f429326..bf4a0a8 100644
      diagnostics = request_diagnostics(conn, item, task)
      request_status = effective_request_status(item.status, task)
      work_status = work_status_for_task(task)
-@@ -1080,8 +1291,10 @@ def public_request(conn: Any, item: AgentRequestIndex) -> dict[str, Any]:
+@@ -1080,8 +1305,10 @@ def public_request(conn: Any, item: AgentRequestIndex) -> dict[str, Any]:
          "kanban_task_id": task.id,
          "status": request_status,
          "approval_status": "approved" if approval["status"] == "approved" else approval["status"],
@@ -373,7 +394,7 @@ index f429326..bf4a0a8 100644
          "title": title_meta.display,
          "title_raw": title_meta.raw,
          "title_icon": title_meta.icon,
-@@ -1130,6 +1343,10 @@ def event_label(action: str) -> str:
+@@ -1130,6 +1357,10 @@ def event_label(action: str) -> str:
          "received": "request received",
          "commented": "request comment",
          "proposed": "proposal ready",
@@ -384,10 +405,61 @@ index f429326..bf4a0a8 100644
          "approved": "Joy approved",
          "denied": "request denied",
          "needs_info": "needs info",
-@@ -1506,6 +1723,167 @@ def actionable_reply_markup(conn: Any, *, item: AgentRequestIndex, action: str)
+@@ -1453,6 +1684,7 @@ def record_callback_token(
+     action: str,
+     actor: str = "joy",
+     proposal: dict[str, Any] | None = None,
++    review: dict[str, Any] | None = None,
+ ) -> str:
+     if action not in CALLBACK_ACTIONS:
+         raise ValueError(f"unsupported callback action: {action}")
+@@ -1461,8 +1693,8 @@ def record_callback_token(
+         """
+         INSERT INTO agent_request_callback_tokens
+             (token, request_id, task_id, action, proposal_comment_id,
+-             proposal_hash, actor, created_at, used_at)
+-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)
++             proposal_hash, review_comment_id, review_hash, actor, created_at, used_at)
++        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+         """,
+         (
+             token,
+@@ -1471,6 +1703,8 @@ def record_callback_token(
+             action,
+             int(proposal["proposal_comment_id"]) if proposal else None,
+             proposal["proposal_hash"] if proposal else None,
++            int(review["review_comment_id"]) if review else None,
++            review["review_hash"] if review else None,
+             actor,
+             now_ts(),
+         ),
+@@ -1483,6 +1717,7 @@ def actionable_reply_markup(conn: Any, *, item: AgentRequestIndex, action: str)
+     """Build Telegram inline controls for current actionable agent-request states."""
+     rows: list[list[dict[str, str]]] = []
+     proposal = latest_proposal(conn, item.request_id)
++    review = latest_review(conn, item.request_id)
+     if action == "proposed" and proposal:
+         rows.append([
+             {"text": "✅ Approve", "callback_data": _callback_data(record_callback_token(conn, item=item, action="approve", proposal=proposal))},
+@@ -1495,22 +1730,194 @@ def actionable_reply_markup(conn: Any, *, item: AgentRequestIndex, action: str)
+         rows.append([
+             {"text": "✏️ Answer / steer", "callback_data": _callback_data(record_callback_token(conn, item=item, action="needs_info_answer"))},
+         ])
+-    elif action in {"review", "review_required", "review_handoff"}:
++    elif action in REVIEW_BUTTON_ACTIONS and review:
+         rows.append([
+-            {"text": "✅ Accept review", "callback_data": _callback_data(record_callback_token(conn, item=item, action="review_accept"))},
++            {"text": "✅ Accept review", "callback_data": _callback_data(record_callback_token(conn, item=item, action="review_accept", review=review))},
+         ])
+         rows.append([
+-            {"text": "🔁 Request changes", "callback_data": _callback_data(record_callback_token(conn, item=item, action="review_changes"))},
+-            {"text": "❓ Ask question", "callback_data": _callback_data(record_callback_token(conn, item=item, action="review_question"))},
++            {"text": "🔁 Request changes", "callback_data": _callback_data(record_callback_token(conn, item=item, action="review_changes", review=review))},
++            {"text": "❓ Ask question", "callback_data": _callback_data(record_callback_token(conn, item=item, action="review_question", review=review))},
+         ])
      return {"inline_keyboard": rows} if rows else None
-
-
+ 
+ 
 +
 +def record_reply_prompt(
 +    conn: Any,
@@ -405,9 +477,9 @@ index f429326..bf4a0a8 100644
 +        """
 +        INSERT INTO agent_request_reply_prompts
 +            (prompt_token, request_id, task_id, action, proposal_comment_id,
-+             proposal_hash, actor, chat_id, thread_id, prompt_message_id,
-+             created_at, expires_at, used_at)
-+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
++             proposal_hash, review_comment_id, review_hash, actor, chat_id,
++             thread_id, prompt_message_id, created_at, expires_at, used_at)
++        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
 +        """,
 +        (
 +            prompt_token,
@@ -416,6 +488,8 @@ index f429326..bf4a0a8 100644
 +            callback["action"],
 +            callback.get("proposal_comment_id"),
 +            callback.get("proposal_hash"),
++            callback.get("review_comment_id"),
++            callback.get("review_hash"),
 +            actor,
 +            clean_text(chat_id, max_len=80),
 +            clean_text(thread_id or "", max_len=80),
@@ -518,6 +592,15 @@ index f429326..bf4a0a8 100644
 +                or current["proposal_hash"] != prompt["proposal_hash"]
 +            ):
 +                return {"handled": True, "ok": False, "error": "stale_prompt", "message": "That reply prompt is stale because the proposal changed. Please retry from the latest action button."}
++        if prompt["action"] in REVIEW_CALLBACK_BINDING_ACTIONS:
++            current_review = latest_review(conn, prompt["request_id"])
++            if not current_review:
++                return {"handled": True, "ok": False, "error": "stale_prompt", "message": "No current review handoff remains for this request. Please retry from a fresh action button."}
++            if (
++                int(current_review["review_comment_id"]) != int(prompt["review_comment_id"] or -1)
++                or current_review["review_hash"] != prompt["review_hash"]
++            ):
++                return {"handled": True, "ok": False, "error": "stale_prompt", "message": "That reply prompt is stale because the review handoff changed. Please retry from the latest action button."}
 +        item = index_for_request(conn, prompt["request_id"])
 +        task = require_kanban().get_task(conn, prompt["task_id"])
 +        if not item or not task:
@@ -552,10 +635,32 @@ index f429326..bf4a0a8 100644
  def _callback_row(conn: Any, token: str) -> dict[str, Any] | None:
      row = conn.execute(
          """
-@@ -1543,7 +1921,14 @@ def mark_callback_used(conn: Any, token: str) -> None:
+         SELECT token, request_id, task_id, action, proposal_comment_id,
+-               proposal_hash, actor, created_at, used_at
++               proposal_hash, review_comment_id, review_hash, actor, created_at, used_at
+         FROM agent_request_callback_tokens
+         WHERE token = ?
+         """,
+@@ -1535,6 +1942,15 @@ def validate_callback_token(conn: Any, token: str) -> dict[str, Any]:
+             or current["proposal_hash"] != row["proposal_hash"]
+         ):
+             return {"ok": False, "error": "stale_callback", "message": "This button is stale because the proposal changed."}
++    if row["action"] in REVIEW_CALLBACK_BINDING_ACTIONS:
++        current_review = latest_review(conn, row["request_id"])
++        if not current_review:
++            return {"ok": False, "error": "stale_callback", "message": "No current review handoff remains for this request."}
++        if (
++            int(current_review["review_comment_id"]) != int(row["review_comment_id"] or -1)
++            or current_review["review_hash"] != row["review_hash"]
++        ):
++            return {"ok": False, "error": "stale_callback", "message": "This button is stale because the review handoff changed."}
+     return {"ok": True, "callback": row}
+ 
+ 
+@@ -1543,7 +1959,14 @@ def mark_callback_used(conn: Any, token: str) -> None:
      conn.commit()
-
-
+ 
+ 
 -def handle_telegram_callback(token: str, *, actor: str = "joy") -> dict[str, Any]:
 +def handle_telegram_callback(
 +    token: str,
@@ -566,25 +671,49 @@ index f429326..bf4a0a8 100644
 +    prompt_message_id: int | None = None,
 +) -> dict[str, Any]:
      """Resolve a trusted Telegram agent-request callback.
-
+ 
      The gateway only supplies callbacks from authorized Telegram users. This
-@@ -1604,6 +1989,15 @@ def handle_telegram_callback(token: str, *, actor: str = "joy") -> dict[str, Any
+@@ -1586,6 +2009,16 @@ def handle_telegram_callback(token: str, *, actor: str = "joy") -> dict[str, Any
+         )
+         if result.get("error"):
+             return {"ok": False, "error": "deny_failed", "message": result["error"], "result": result}
++    elif action == "review_accept":
++        result = trusted_accept_review(
++            {
++                "request_id": row["request_id"],
++                "acceptance": "Review accepted from Telegram inline button.",
++            },
++            approver=actor,
++        )
++        if result.get("error"):
++            return {"ok": False, "error": "review_accept_failed", "message": result["error"], "result": result}
+     else:
+         conn = connect()
+         try:
+@@ -1604,16 +2037,15 @@ def handle_telegram_callback(token: str, *, actor: str = "joy") -> dict[str, Any
              )
              require_kanban().add_comment(conn, row["task_id"], actor, comment_body)
              result = {"request": public_request(conn, item), "board": board_name(), "action": action}
+-            if action == "review_accept":
+-                promoted, reason = require_kanban().promote_task(
 +            if action in REPLY_PROMPT_ACTIONS:
 +                result["awaiting_reply"] = record_reply_prompt(
-+                    conn,
+                     conn,
+-                    row["task_id"],
 +                    callback=row,
-+                    actor=actor,
+                     actor=actor,
+-                    reason="Joy accepted review from Telegram",
+-                    force=True,
 +                    chat_id=chat_id,
 +                    thread_id=thread_id,
 +                    prompt_message_id=prompt_message_id,
-+                )
-             if action == "review_accept":
-                 promoted, reason = require_kanban().promote_task(
-                     conn,
-@@ -2018,6 +2412,8 @@ def request_matches_status_filter(request: dict[str, Any], status_filter: str) -
+                 )
+-                result["promoted"] = promoted
+-                result["promotion_reason"] = reason
+         finally:
+             conn.close()
+ 
+@@ -2018,6 +2450,8 @@ def request_matches_status_filter(request: dict[str, Any], status_filter: str) -
          return True
      if request.get("approval_status") == status_filter:
          return True
@@ -593,10 +722,10 @@ index f429326..bf4a0a8 100644
      if status_filter == "needs_maintenance":
          return bool(request.get("diagnostics", {}).get("warnings")) or request.get("status") in MAINTENANCE_STATUSES
      if status_filter == "completed" and request.get("status") == COMPLETED_WITH_FOLLOWUP:
-@@ -2125,6 +2521,94 @@ def propose(args: dict[str, Any], *, actor: str) -> dict[str, Any]:
+@@ -2125,6 +2559,94 @@ def propose(args: dict[str, Any], *, actor: str) -> dict[str, Any]:
          conn.close()
-
-
+ 
+ 
 +def request_review(args: dict[str, Any], *, actor: str) -> dict[str, Any]:
 +    """Record a first-class implementation review handoff and park task in review."""
 +    kanban = require_kanban()
@@ -688,7 +817,7 @@ index f429326..bf4a0a8 100644
  def update(args: dict[str, Any], *, actor: str) -> dict[str, Any]:
      kanban = require_kanban()
      request_id = clean_text(args.get("request_id"), max_len=80)
-@@ -2155,9 +2639,12 @@ def update(args: dict[str, Any], *, actor: str) -> dict[str, Any]:
+@@ -2155,9 +2677,12 @@ def update(args: dict[str, Any], *, actor: str) -> dict[str, Any]:
          if task is None:
              return {"error": f"Kanban task not found for request {request_id}: {item.task_id}"}
          if status_value in CHANGE_STATUSES:
@@ -701,13 +830,13 @@ index f429326..bf4a0a8 100644
 +                    return {"error": approval}
 +            if latest_review(conn, request_id) and not current_review_acceptance(conn, request_id):
 +                return {"error": "Latest review handoff has not been accepted through the trusted path"}
-
+ 
          action_status = status_value
          if status_value == "completed":
-@@ -2205,6 +2692,78 @@ def update(args: dict[str, Any], *, actor: str) -> dict[str, Any]:
+@@ -2205,6 +2730,78 @@ def update(args: dict[str, Any], *, actor: str) -> dict[str, Any]:
          conn.close()
-
-
+ 
+ 
 +def trusted_accept_review(args: dict[str, Any], *, approver: str = "joy") -> dict[str, Any]:
 +    """Record trusted Joy/operator acceptance for the latest review handoff."""
 +    kanban = require_kanban()
@@ -782,7 +911,7 @@ index f429326..bf4a0a8 100644
 +
  def trusted_approve(args: dict[str, Any], *, approver: str = "joy") -> dict[str, Any]:
      """Record a Joy-origin approval for the latest structured proposal.
-
+ 
 diff --git a/src/tools/agent_request_tool.py b/src/tools/agent_request_tool.py
 index 034c719..2646877 100644
 --- a/src/tools/agent_request_tool.py
@@ -797,8 +926,8 @@ index 034c719..2646877 100644
      "denied",
 @@ -67,6 +68,14 @@ def agent_request_propose_tool(args: dict[str, Any], **_kw) -> str:
          return _json_error(f"Kanban agent-request backend failed: {exc}")
-
-
+ 
+ 
 +def agent_request_review_handoff_tool(args: dict[str, Any], **_kw) -> str:
 +    """Record a structured implementation review handoff that Joy can accept."""
 +    try:
@@ -813,7 +942,7 @@ index 034c719..2646877 100644
 @@ -102,6 +111,36 @@ STATUS_SCHEMA = {
      },
  }
-
+ 
 +REVIEW_HANDOFF_SCHEMA = {
 +    "name": "agent_request_review_handoff",
 +    "description": (
@@ -863,7 +992,7 @@ index 034c719..2646877 100644
      name="agent_request_propose",
      toolset=TOOLSET,
 diff --git a/tests/test_agent_request_broker.py b/tests/test_agent_request_broker.py
-index 2346dda..1b4f839 100755
+index 2346dda..0c8d405 100755
 --- a/tests/test_agent_request_broker.py
 +++ b/tests/test_agent_request_broker.py
 @@ -124,6 +124,7 @@ def test_model_facing_registry_is_kanban_only():
@@ -876,8 +1005,8 @@ index 2346dda..1b4f839 100755
          assert not hasattr(mod, "agent_request_update_tool")
 @@ -401,6 +402,117 @@ def test_proposal_notifications_include_bound_telegram_actions_and_callbacks():
              backend.telegram_send = old_send
-
-
+ 
+ 
 +def test_telegram_freeform_replies_route_to_originating_prompt_not_recency():
 +    if not require_hermes_src():
 +        return
@@ -992,10 +1121,10 @@ index 2346dda..1b4f839 100755
  def test_stale_proposal_callback_rejects_changed_proposal_hash():
      if not require_hermes_src():
          return
-@@ -514,6 +626,82 @@ def test_duplicate_generic_title_approval_notifications_are_self_identifying():
+@@ -514,6 +626,189 @@ def test_duplicate_generic_title_approval_notifications_are_self_identifying():
          finally:
              backend.telegram_send = old_send
-
+ 
 +def test_review_handoff_and_trusted_acceptance_resume_followthrough():
 +    if not require_hermes_src():
 +        return
@@ -1004,7 +1133,14 @@ index 2346dda..1b4f839 100755
 +
 +        old_send = backend.telegram_send
 +        messages = []
-+        backend.telegram_send = lambda message, profile=None: messages.append(message) or {"sent": True, "test": True}
++        markups = []
++
++        def fake_send(message, profile=None, reply_markup=None):
++            messages.append(message)
++            markups.append(reply_markup)
++            return {"sent": True, "test": True}
++
++        backend.telegram_send = fake_send
 +        try:
 +            talon = load_tool("talon", tmp)
 +            submitted = call(talon.agent_request_submit_tool({
@@ -1033,6 +1169,17 @@ index 2346dda..1b4f839 100755
 +            assert handoff["request"]["review"]["remaining_actions"].startswith("push branch")
 +            assert len(handoff["review"]["review_hash"]) == 64
 +            assert any("Agent request review requested" in message for message in messages)
++            review_markup = next(markup for markup in markups if markup and any(
++                button["text"] == "✅ Accept review"
++                for row in markup["inline_keyboard"]
++                for button in row
++            ))
++            review_labels = {
++                button["text"]
++                for row in review_markup["inline_keyboard"]
++                for button in row
++            }
++            assert review_labels == {"✅ Accept review", "🔁 Request changes", "❓ Ask question"}
 +
 +            premature = backend.update({
 +                "request_id": request["id"],
@@ -1072,10 +1219,99 @@ index 2346dda..1b4f839 100755
 +            backend.telegram_send = old_send
 +
 +
++def test_review_requested_callback_rejects_stale_review_handoff():
++    if not require_hermes_src():
++        return
++    with kanban_env() as tmp:
++        from agent_request_broker import kanban_backend as backend
++
++        old_send = backend.telegram_send
++        markups = []
++
++        def fake_send(message, profile=None, reply_markup=None):
++            del message, profile
++            markups.append(reply_markup)
++            return {"sent": True, "test": True}
++
++        backend.telegram_send = fake_send
++        try:
++            talon = load_tool("talon", tmp)
++            submitted = call(talon.agent_request_submit_tool({
++                "title": "Stale review smoke",
++                "request": "Produce source work and hand it off for review",
++                "target": "talon",
++            }))
++            request = submitted["request"]
++            handoff = call(talon.agent_request_review_handoff_tool({
++                "request_id": request["id"],
++                "summary": "review-required: first handoff ready",
++                "worktree_path": "/tmp/worktrees/t_review",
++                "branch_name": "talon/t_review",
++                "commit_refs": "abc1234",
++                "changed_files": "src/example.py",
++                "tests_run": "pytest tests/test_example.py -q (passed)",
++                "remaining_actions": "push branch; merge to main; deploy; apply Puppet; restart Hermes; verify live",
++                "side_effects_deferred": "push/merge/deploy/apply/restart intentionally not performed before review",
++            }))
++            assert handoff["request_notification"]["notified"] is True
++            review_markup = next(markup for markup in markups if markup)
++            stale_token = next(
++                button["callback_data"].split(":", 1)[1]
++                for row in review_markup["inline_keyboard"]
++                for button in row
++                if button["text"] == "✅ Accept review"
++            )
++
++            conn = backend.connect()
++            try:
++                comment_id = backend.require_kanban().add_comment(
++                    conn,
++                    request["kanban_task_id"],
++                    "talon",
++                    backend.event_comment(
++                        request_id=request["id"],
++                        actor="talon",
++                        action="review_requested",
++                        summary="review-required: revised handoff ready",
++                        review_summary="review-required: revised handoff ready",
++                        worktree_path="/tmp/worktrees/t_review",
++                        branch_name="talon/t_review",
++                        commit_refs="def5678",
++                        changed_files="src/example.py\ntests/test_example.py",
++                        tests_run="pytest tests/test_example.py -q (passed)",
++                        remaining_actions="push branch; merge to main; deploy; apply Puppet; restart Hermes; verify live",
++                        side_effects_deferred="push/merge/deploy/apply/restart intentionally not performed before review",
++                    ),
++                )
++                newer_hash = backend.record_review_handoff(
++                    conn,
++                    request_id=request["id"],
++                    comment_id=comment_id,
++                    requested_by="talon",
++                    worktree_path="/tmp/worktrees/t_review",
++                    branch_name="talon/t_review",
++                    commit_refs="def5678",
++                    changed_files="src/example.py\ntests/test_example.py",
++                    tests_run="pytest tests/test_example.py -q (passed)",
++                    remaining_actions="push branch; merge to main; deploy; apply Puppet; restart Hermes; verify live",
++                    side_effects_deferred="push/merge/deploy/apply/restart intentionally not performed before review",
++                )
++            finally:
++                conn.close()
++            assert newer_hash != handoff["review"]["review_hash"]
++
++            rejected = backend.handle_telegram_callback(stale_token, actor="joy")
++            assert rejected["ok"] is False
++            assert rejected["error"] == "stale_callback"
++            assert "review handoff changed" in rejected["message"]
++        finally:
++            backend.telegram_send = old_send
++
++
  def test_notification_adapter_dedupes_structured_comments_and_generic_in_progress():
      if not require_hermes_src():
          return
-@@ -1189,6 +1377,7 @@ if __name__ == "__main__":
+@@ -1189,6 +1484,7 @@ if __name__ == "__main__":
      test_model_facing_registry_is_kanban_only()
      test_kanban_default_and_event_comment_helpers()
      test_submit_status_propose_trusted_approve_and_complete()
