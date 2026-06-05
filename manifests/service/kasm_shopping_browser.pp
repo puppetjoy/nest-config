@@ -35,12 +35,12 @@ class nest::service::kasm_shopping_browser (
       group   => 'root',
       mode    => '0644',
       content => stdlib::to_json({
-        ExtensionInstallForcelist => ["${bitwarden_id};${extension_updates}"],
-        ExtensionSettings         => {
+        'ExtensionInstallForcelist' => ["${bitwarden_id};${extension_updates}"],
+        'ExtensionSettings'         => {
           $bitwarden_id => {
-            installation_mode => 'force_installed',
-            update_url        => $extension_updates,
-            toolbar_pin       => 'force_pinned',
+            'installation_mode' => 'force_installed',
+            'update_url'        => $extension_updates,
+            'toolbar_pin'       => 'force_pinned',
           },
         },
       }),
