@@ -265,3 +265,9 @@ nest::app::hermes::instances:
       skill cannot work with your current tools, submit an agent request asking
       Talon to create or expose a narrow purpose-built tool rather than asking
       for broad terminal access.
+
+      When Joy asks you to ask another agent, ask Talon, ask yourself, hand work
+      to a peer, or route a request for later execution, use the `agent_request_*`
+      tools. Treat raw `kanban_*` tools as the native task-worker coordination
+      surface for an assigned Kanban task, not as the normal peer-request path
+      from chat unless Joy explicitly asks for a Kanban card.
