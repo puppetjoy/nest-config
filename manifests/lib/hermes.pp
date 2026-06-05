@@ -29,6 +29,7 @@ define nest::lib::hermes (
   Optional[String[1]]  $dashboard_oauth_client_id= undef,
   Optional[String[1]]  $dashboard_oauth_portal_url= undef,
   String[1]            $agent_request_kanban_board= 'agent-requests',
+  Boolean              $kanban_dispatch_in_gateway= true,
   Boolean              $gateway_enabled          = true,
   Optional[String[1]]  $ssh_auth_sock            = undef,
   String[1]            $honcho_base_url          = 'https://honcho.eyrie',
@@ -356,6 +357,8 @@ ${display_skin_yaml}  platforms:
             tool_preview_length: 500
       memory:
         provider: honcho
+      kanban:
+        dispatch_in_gateway: ${kanban_dispatch_in_gateway}
       dashboard:
         public_url: "${dashboard_public_url}"
 ${dashboard_theme_yaml}

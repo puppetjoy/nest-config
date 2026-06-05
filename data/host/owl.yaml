@@ -223,6 +223,7 @@ nest::app::hermes::instances:
     honcho_user_peer: 'joy'
     honcho_ai_peer: 'star'
     gateway_enabled: true
+    kanban_dispatch_in_gateway: false
     dashboard_enabled: true
     dashboard_port: 9121
     dashboard_public_url: 'https://star.eyrie'

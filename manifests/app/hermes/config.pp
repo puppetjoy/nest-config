@@ -146,6 +146,7 @@ class nest::app::hermes::config {
       default => $config['dashboard_oauth_portal_url'],
     }
     $instance_gateway_enabled   = pick($config['gateway_enabled'], true)
+    $instance_kanban_dispatch   = pick($config['kanban_dispatch_in_gateway'], true)
     $instance_honcho_base_url   = pick($config['honcho_base_url'], 'https://honcho.eyrie')
     $instance_honcho_workspace  = pick($config['honcho_workspace'], 'hermes')
     $instance_honcho_user_peer  = pick($config['honcho_user_peer'], 'joy')
@@ -193,6 +194,7 @@ class nest::app::hermes::config {
       dashboard_oauth_client_id  => $instance_oauth_client_id,
       dashboard_oauth_portal_url => $instance_oauth_portal_url,
       agent_request_kanban_board => $agent_request_kanban_board,
+      kanban_dispatch_in_gateway => $instance_kanban_dispatch,
       gateway_enabled            => $instance_gateway_enabled,
       honcho_base_url            => $instance_honcho_base_url,
       honcho_workspace           => $instance_honcho_workspace,
