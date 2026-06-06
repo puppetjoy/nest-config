@@ -120,8 +120,21 @@ class nest::app::hermes::service {
 
   $agent_request_review_commands.each |String $agent_request_command| {
     file { "${install_dir}/bin/${agent_request_command}":
-      ensure  => link,
-      target  => "${broker_source_dir}/bin/${agent_request_command}",
+      ensure  => file,
+      mode    => '0755',
+      owner   => 'root',
+      group   => 'root',
+      content => [
+        '#!/bin/sh',
+        'set -eu',
+        "export PATH=${venv_dir}/bin:/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "export VIRTUAL_ENV=${venv_dir}",
+        "export HERMES_SRC=${source_dir}",
+        "export HERMES_HOME=${hermes_home_dir}",
+        "export PYTHONPATH=${pythonpath}",
+        ["exec ${venv_python} ${broker_source_dir}/bin/${agent_request_command} ", '"$@"'].join(''),
+        '',
+      ].join("\n"),
       require => [
         File["${install_dir}/bin"],
         Exec['patch_hermes_agent_request_review_handoff_flow'],
@@ -131,8 +144,21 @@ class nest::app::hermes::service {
 
   $agent_request_worktree_cleanup_commands.each |String $agent_request_command| {
     file { "${install_dir}/bin/${agent_request_command}":
-      ensure  => link,
-      target  => "${broker_source_dir}/bin/${agent_request_command}",
+      ensure  => file,
+      mode    => '0755',
+      owner   => 'root',
+      group   => 'root',
+      content => [
+        '#!/bin/sh',
+        'set -eu',
+        "export PATH=${venv_dir}/bin:/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "export VIRTUAL_ENV=${venv_dir}",
+        "export HERMES_SRC=${source_dir}",
+        "export HERMES_HOME=${hermes_home_dir}",
+        "export PYTHONPATH=${pythonpath}",
+        ["exec ${venv_python} ${broker_source_dir}/bin/${agent_request_command} ", '"$@"'].join(''),
+        '',
+      ].join("\n"),
       require => [
         File["${install_dir}/bin"],
         Exec['patch_hermes_agent_request_worktree_cleanup'],
