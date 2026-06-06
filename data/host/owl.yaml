@@ -128,6 +128,13 @@ nest::app::hermes::instances:
     dashboard_port: 9119
     dashboard_public_url: 'https://talon.eyrie'
     dashboard_theme: 'midnight'
+    voice_auto_tts: true
+    stt_enabled: true
+    stt_provider: 'openai'
+    stt_model: 'gpt-4o-mini-transcribe'
+    tts_provider: 'openai'
+    tts_openai_model: 'gpt-4o-mini-tts'
+    tts_openai_voice: 'alloy'
     soul_content: |
       # Talon
 
@@ -245,6 +252,13 @@ nest::app::hermes::instances:
       - todo
       - web
     google_workspace_enabled: true
+    voice_auto_tts: true
+    stt_enabled: true
+    stt_provider: 'openai'
+    stt_model: 'gpt-4o-mini-transcribe'
+    tts_provider: 'openai'
+    tts_openai_model: 'gpt-4o-mini-tts'
+    tts_openai_voice: 'nova'
     soul_content: |
       # Star
 

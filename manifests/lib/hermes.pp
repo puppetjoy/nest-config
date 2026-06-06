@@ -44,6 +44,13 @@ define nest::lib::hermes (
   Any                  $toolsets                 = undef,
   Any                  $telegram_toolsets        = undef,
   Boolean              $google_workspace_enabled = false,
+  Boolean              $voice_auto_tts           = false,
+  Boolean              $stt_enabled              = false,
+  String[1]            $stt_provider             = 'openai',
+  String[1]            $stt_model                = 'gpt-4o-mini-transcribe',
+  String[1]            $tts_provider             = 'openai',
+  String[1]            $tts_openai_model         = 'gpt-4o-mini-tts',
+  String[1]            $tts_openai_voice         = 'alloy',
   Array[String[1]]     $extra_packages           = [],
 ) {
   $venv_dir                         = "${install_dir}/venv"
@@ -210,8 +217,8 @@ define nest::lib::hermes (
   $openai_env_lines = $openai_api_key ? {
     undef   => [],
     default => $openai_api_key =~ Sensitive[String[1]] ? {
-      true    => ["OPENAI_API_KEY=${openai_api_key.unwrap}"],
-      default => ["OPENAI_API_KEY=${openai_api_key}"],
+      true    => ["OPENAI_API_KEY=${openai_api_key.unwrap}", "VOICE_TOOLS_OPENAI_KEY=${openai_api_key.unwrap}"],
+      default => ["OPENAI_API_KEY=${openai_api_key}", "VOICE_TOOLS_OPENAI_KEY=${openai_api_key}"],
     },
   }
 
@@ -228,7 +235,11 @@ define nest::lib::hermes (
 
   $agent_request_env_lines = [
     "AGENT_REQUEST_KANBAN_BOARD=${agent_request_kanban_board}",
-  ]
+    $voice_auto_tts ? {
+      true    => ['AGENT_REQUEST_TELEGRAM_VOICE_NOTIFY=true'],
+      default => [],
+    },
+  ].flatten
   $systemd_env_lines = [
     "HERMES_DASHBOARD_BIND_HOST=${dashboard_bind_host}",
     "HERMES_DASHBOARD_PORT=${dashboard_port}",
@@ -339,7 +350,19 @@ ${profile_toolsets_yaml}
       web:
         backend: tavily
         search_backend: tavily
-${image_gen_yaml}
+${image_gen_yaml}      voice:
+        auto_tts: ${voice_auto_tts}
+      stt:
+        enabled: ${stt_enabled}
+        provider: "${stt_provider}"
+        openai:
+          model: "${stt_model}"
+      tts:
+        provider: "${tts_provider}"
+        openai:
+          model: "${tts_openai_model}"
+          voice: "${tts_openai_voice}"
+
       auxiliary:
         compression:
           provider: "${auxiliary_provider}"

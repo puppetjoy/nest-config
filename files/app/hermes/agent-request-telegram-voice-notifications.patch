@@ -1,0 +1,109 @@
+--- a/src/agent_request_broker/common.py	2026-06-05 20:28:35.617721650 -0400
++++ b/src/agent_request_broker/common.py	2026-06-05 20:58:17.364972943 -0400
+@@ -6,8 +6,10 @@
+ import os
+ import re
+ import sys
++import tempfile
+ import urllib.parse
+ import urllib.request
++import uuid
+ from pathlib import Path
+ from typing import Any
+
+@@ -143,6 +145,79 @@
+                     os.environ[key] = value
+
+
++def _telegram_voice_notifications_enabled() -> bool:
++    value = (os.environ.get("AGENT_REQUEST_TELEGRAM_VOICE_NOTIFY") or "").strip().lower()
++    return value in {"1", "true", "yes", "on"}
++
++
++def _voice_summary_for_notification(message: str, *, max_chars: int = 700) -> str:
++    text = clean_text(message, max_len=2000)
++    text = re.sub(r"https?://\S+", "link", text)
++    text = re.sub(r"[`*_#>\[\]()]", "", text)
++    text = re.sub(r"\s+", " ", text).strip()
++    if not text:
++        return ""
++
++    # Agent-request notifications usually put the actionable headline first.
++    # Keep that shape, but make it conversational for a voice alert.
++    text = re.sub(r"^(?:[\W_]*)(?:Agent request|Kanban|Task)[:：]?\s*", "", text, flags=re.I)
++    if len(text) > max_chars:
++        text = text[:max_chars].rsplit(" ", 1)[0].strip() + "…"
++    return f"Joy, Talon needs your attention: {text}"
++
++
++def _telegram_send_voice_notification(token: str, chat_id: str, message: str) -> dict[str, Any]:
++    summary = _voice_summary_for_notification(message)
++    if not summary:
++        return {"sent": False, "reason": "empty voice summary"}
++
++    try:
++        hermes_src = Path(os.environ.get("HERMES_SRC", "/opt/hermes-agent/src"))
++        if hermes_src.exists() and str(hermes_src) not in sys.path:
++            sys.path.insert(0, str(hermes_src))
++        from tools.tts_tool import text_to_speech_tool
++
++        audio_dir = Path(tempfile.gettempdir()) / "hermes_agent_request_voice"
++        audio_dir.mkdir(parents=True, exist_ok=True)
++        audio_path = audio_dir / f"agent_request_{uuid.uuid4().hex[:12]}.ogg"
++        result_json = text_to_speech_tool(summary, output_path=str(audio_path))
++        result = json.loads(result_json)
++        actual_path = Path(result.get("file_path") or audio_path)
++        if not result.get("success") or not actual_path.is_file():
++            return {"sent": False, "reason": result.get("error") or "TTS failed"}
++
++        try:
++            boundary = f"----hermes-agent-request-{uuid.uuid4().hex}"
++            body = bytearray()
++            body.extend(f"--{boundary}\r\n".encode())
++            body.extend(f'Content-Disposition: form-data; name="chat_id"\r\n\r\n{chat_id}\r\n'.encode())
++            body.extend(f"--{boundary}\r\n".encode())
++            body.extend(f'Content-Disposition: form-data; name="voice"; filename="{actual_path.name}"\r\n'.encode())
++            body.extend(b"Content-Type: audio/ogg\r\n\r\n")
++            body.extend(actual_path.read_bytes())
++            body.extend(f"\r\n--{boundary}--\r\n".encode())
++            request = urllib.request.Request(
++                f"https://api.telegram.org/bot{token}/sendVoice",
++                data=bytes(body),
++                method="POST",
++                headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
++            )
++            with urllib.request.urlopen(request, timeout=20) as response:
++                payload = json.loads(response.read().decode("utf-8"))
++            return {
++                "sent": bool(payload.get("ok")),
++                "ok": payload.get("ok"),
++                "message_id": ((payload.get("result") or {}).get("message_id")),
++            }
++        finally:
++            try:
++                actual_path.unlink()
++            except OSError:
++                pass
++    except Exception as exc:  # noqa: BLE001 - voice notification remains best-effort
++        return {"sent": False, "reason": str(exc)}
++
++
+ def telegram_send(
+     message: str,
+     *,
+@@ -170,11 +245,14 @@
+     try:
+         with urllib.request.urlopen(request, timeout=10) as response:
+             payload = json.loads(response.read().decode("utf-8"))
+-        return {
++        result = {
+             "sent": bool(payload.get("ok")),
+             "ok": payload.get("ok"),
+             "message_id": ((payload.get("result") or {}).get("message_id")),
+             "profile": profile or None,
+         }
++        if result["sent"] and _telegram_voice_notifications_enabled():
++            result["voice"] = _telegram_send_voice_notification(token, chat_id, message)
++        return result
+     except Exception as exc:  # noqa: BLE001 - report best-effort notification failure
+         return {"sent": False, "reason": str(exc), "profile": profile or None}

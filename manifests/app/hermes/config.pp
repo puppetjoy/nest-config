@@ -161,6 +161,13 @@ class nest::app::hermes::config {
     }
     $instance_profile_toolsets  = pick($config['profile_toolsets'], ['hermes-cli', 'kanban'])
     $instance_google_workspace  = pick($config['google_workspace_enabled'], false)
+    $instance_voice_auto_tts    = pick($config['voice_auto_tts'], false)
+    $instance_stt_enabled       = pick($config['stt_enabled'], $instance_voice_auto_tts)
+    $instance_stt_provider      = pick($config['stt_provider'], 'openai')
+    $instance_stt_model         = pick($config['stt_model'], 'gpt-4o-mini-transcribe')
+    $instance_tts_provider      = pick($config['tts_provider'], 'openai')
+    $instance_tts_openai_model  = pick($config['tts_openai_model'], 'gpt-4o-mini-tts')
+    $instance_tts_openai_voice  = pick($config['tts_openai_voice'], 'alloy')
     $instance_extra_packages    = pick($config['extra_packages'], [])
 
     nest::lib::hermes { $instance_name:
@@ -208,6 +215,13 @@ class nest::app::hermes::config {
       profile_toolsets           => $instance_profile_toolsets,
       toolsets                   => $instance_toolsets,
       google_workspace_enabled   => $instance_google_workspace,
+      voice_auto_tts             => $instance_voice_auto_tts,
+      stt_enabled                => $instance_stt_enabled,
+      stt_provider               => $instance_stt_provider,
+      stt_model                  => $instance_stt_model,
+      tts_provider               => $instance_tts_provider,
+      tts_openai_model           => $instance_tts_openai_model,
+      tts_openai_voice           => $instance_tts_openai_voice,
       extra_packages             => $instance_extra_packages,
     }
   }
