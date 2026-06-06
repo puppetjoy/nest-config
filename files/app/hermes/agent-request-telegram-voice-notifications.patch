@@ -20,13 +20,67 @@
 +    return value in {"1", "true", "yes", "on"}
 +
 +
-+def _voice_summary_part(value: str, *, max_chars: int = 120) -> str:
++_VOICE_DANGLING_WORDS = {
++    "a",
++    "an",
++    "and",
++    "as",
++    "at",
++    "by",
++    "for",
++    "from",
++    "in",
++    "into",
++    "of",
++    "on",
++    "or",
++    "the",
++    "to",
++    "with",
++    "without",
++}
++
++
++def _clean_voice_text(value: str, *, max_chars: int = 500) -> str:
 +    text = clean_text(value, max_len=max(max_chars * 4, max_chars + 20))
 +    text = re.sub(r"https?://\S+", "link", text)
 +    text = re.sub(r"[`*_#>\[\]()]", "", text)
-+    text = re.sub(r"\s+", " ", text).strip(" -–—:.;")
-+    if len(text) > max_chars:
-+        text = text[:max_chars].rsplit(" ", 1)[0].strip(" -–—:.;") + "…"
++    return re.sub(r"\s+", " ", text).strip(" -–—:.;")
++
++
++def _strip_dangling_voice_tail(text: str) -> str:
++    text = text.strip(" -–—:.;")
++    while text:
++        match = re.search(r"\b([A-Za-z]+)$", text)
++        if not match or match.group(1).casefold() not in _VOICE_DANGLING_WORDS:
++            break
++        text = text[: match.start()].strip(" -–—:.;")
++    return text
++
++
++def _voice_summary_part(value: str, *, max_chars: int = 120) -> str:
++    text = _clean_voice_text(value, max_chars=max_chars)
++    if len(text) <= max_chars:
++        return text
++
++    clipped = text[:max_chars].rstrip()
++    sentence_breaks = [match.end() for match in re.finditer(r"[.!?](?=\s|$)", clipped)]
++    if sentence_breaks:
++        return _strip_dangling_voice_tail(clipped[: sentence_breaks[-1]])
++
++    clause_breaks = [match.start() for match in re.finditer(r"[,;:–—-](?=\s|$)", clipped)]
++    if clause_breaks and clause_breaks[-1] >= max_chars // 2:
++        return _strip_dangling_voice_tail(clipped[: clause_breaks[-1]])
++
++    if " " in clipped:
++        clipped = clipped.rsplit(" ", 1)[0]
++    return _strip_dangling_voice_tail(clipped)
++
++
++def _finish_voice_sentence(text: str) -> str:
++    text = _strip_dangling_voice_tail(text)
++    if text and not text.endswith(('.', '!', '?')):
++        text += "."
 +    return text
 +
 +
@@ -57,12 +111,22 @@
 +        parts.append(subject)
 +    if next_step:
 +        parts.append(next_step)
-+    summary = ". ".join(part for part in parts if part).strip()
-+    if not summary.endswith(('.', '!', '?', '…')):
-+        summary += "."
-+    if len(summary) > max_chars:
-+        summary = summary[:max_chars].rsplit(" ", 1)[0].strip(" -–—:.;") + "…"
-+    return summary
++
++    kept: list[str] = []
++    for part in parts:
++        candidate = ". ".join([*kept, part])
++        if len(_finish_voice_sentence(candidate)) <= max_chars:
++            kept.append(part)
++    if not kept:
++        kept = [_voice_summary_part(parts[0], max_chars=max_chars - 1)]
++    if len(kept) == 1 and subject:
++        budget = max_chars - len(_finish_voice_sentence(kept[0])) - 2
++        trimmed_subject = _voice_summary_part(subject, max_chars=max(40, budget))
++        candidate = ". ".join([kept[0], trimmed_subject])
++        if trimmed_subject and len(_finish_voice_sentence(candidate)) <= max_chars:
++            kept.append(trimmed_subject)
++
++    return _finish_voice_sentence(". ".join(part for part in kept if part))
 +
 +
 +def _telegram_send_voice_notification(token: str, chat_id: str, message: str, *, reply_to_message_id: int | None = None) -> dict[str, Any]:
@@ -185,6 +249,28 @@
 +    assert "ar-20260606" not in summary
 +    assert "t_deadbeef" not in summary
 +    assert "verbose proposal body" not in summary
++
++
++def test_voice_summary_prefers_complete_sentence_over_mid_clause_truncation():
++    from agent_request_broker import common
++
++    message = (
++        "Agent request completed\n"
++        "Subject: Completed the accepted rollout for review-question Ask Question replies. "
++        "The source-managed patch is merged on origin/main, deployed on owl, and verified with "
++        "a live Telegram smoke that recorded the prompt and reply binding.\n"
++        "Next: No action needed unless Joy wants another smoke."
++    )
++
++    summary = common._voice_summary_for_notification(message)
++    last_word = summary.rstrip(".!?").rsplit(" ", 1)[-1].casefold()
++
++    assert len(summary) <= 220
++    assert summary.endswith(".")
++    assert "merged on" not in summary
++    assert not summary.endswith("on…")
++    assert last_word not in {"on", "in", "with", "for", "to"}
++    assert "Completed the accepted rollout for review-question Ask Question replies." in summary
 +
 +
 +def test_telegram_voice_notification_replies_to_text_message_with_summary():
