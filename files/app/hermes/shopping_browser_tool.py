@@ -680,16 +680,34 @@ CHECKOUT_PREP_CONTROLS_JS = r"""
     }
     return path.join(' > ');
   };
+  const tagName = (el) => clean(el.tagName || '').toUpperCase();
   const labelFor = (el) => {
     const labelledBy = clean(el.getAttribute('aria-labelledby') || '').split(/\s+/)
       .map((id) => clean((document.getElementById(id) || {}).textContent || ''))
       .filter(Boolean)
       .join(' ');
     const own = clean(el.innerText || el.value || el.getAttribute('aria-label') || el.getAttribute('title') || el.textContent || '');
+    const controlTarget = tagName(el) === 'LABEL' && el.getAttribute('for') ? document.getElementById(el.getAttribute('for')) : null;
+    const controlTargetText = controlTarget ? clean([controlTarget.value, controlTarget.getAttribute('aria-label'), controlTarget.name, controlTarget.id].join(' ')) : '';
     const contextNode = el.closest('label, li, tr, fieldset, [role="radio"], [role="checkbox"], [role="option"]');
     const rawContext = clean((contextNode || el).innerText || '');
     const context = rawContext.length <= 220 && !/place\s+(your\s+)?order|buy\s+now|submit\s+order|complete\s+purchase|purchase\s+now|confirm\s+(purchase|order)/i.test(rawContext) ? rawContext : '';
-    return redact([labelledBy, own, context].filter(Boolean).join(' | ')).slice(0, 240);
+    return redact([labelledBy, own, controlTargetText, context].filter(Boolean).join(' | ')).slice(0, 240);
+  };
+  const stateFor = (el) => {
+    const controlTarget = tagName(el) === 'LABEL' && el.getAttribute('for') ? document.getElementById(el.getAttribute('for')) : null;
+    const target = controlTarget || el;
+    const targetTag = tagName(target);
+    const targetRole = clean(target.getAttribute('role') || '').toLowerCase();
+    const targetType = clean(target.getAttribute('type') || '').toLowerCase();
+    const supportsBooleanState = targetTag === 'OPTION' || ['radio', 'checkbox'].includes(targetType) || ['radio', 'checkbox', 'option'].includes(targetRole);
+    const checked = Boolean(target.checked || target.getAttribute('aria-checked') === 'true');
+    const selected = Boolean(target.selected || target.getAttribute('aria-selected') === 'true' || checked);
+    return {
+      checked,
+      selected,
+      state: supportsBooleanState ? (selected ? 'selected' : 'not_selected') : 'not_applicable'
+    };
   };
   const regionFor = (label) => {
     if (/subscribe|subscription|delivery every|one[-\s]?time|purchase option/i.test(label)) return 'purchase_mode';
@@ -720,7 +738,7 @@ CHECKOUT_PREP_CONTROLS_JS = r"""
   const seen = new Set();
   for (const el of candidates) {
     if (!visible(el)) continue;
-    const tag = clean(el.tagName || '').toUpperCase();
+    const tag = tagName(el);
     const type = clean(el.getAttribute('type') || '').toLowerCase();
     const role = clean(el.getAttribute('role') || '');
     if (tag === 'INPUT' && ['hidden', 'password'].includes(type)) continue;
@@ -742,6 +760,7 @@ CHECKOUT_PREP_CONTROLS_JS = r"""
     if (!selector || seen.has(selector)) continue;
     seen.add(selector);
     const rect = el.getBoundingClientRect();
+    const controlState = stateFor(el);
     controls.push({
       selector,
       label: label || redact(rawBits).slice(0, 160),
@@ -750,7 +769,9 @@ CHECKOUT_PREP_CONTROLS_JS = r"""
       input_type: type,
       region: regionFor(label || rawBits),
       approved_effect_hints: effectHintsFor(label || rawBits, tag, type),
-      checked: Boolean(el.checked || el.getAttribute('aria-checked') === 'true' || el.getAttribute('aria-selected') === 'true'),
+      checked: controlState.checked,
+      selected: controlState.selected,
+      state: controlState.state,
       disabled: Boolean(el.disabled || el.getAttribute('aria-disabled') === 'true'),
       viewport_rect: {x: Math.round(rect.left), y: Math.round(rect.top), width: Math.round(rect.width), height: Math.round(rect.height)}
     });
@@ -786,7 +807,40 @@ ORDER_REVIEW_EXTRACT_JS = r"""
     .replace(/\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/g, '[phone redacted]');
   const paymentLabels = pick([/ending in \d{4}/i, /\b(?:visa|mastercard|amex|american express|discover|gift card)\b/i], 4)
     .map((line) => clean(line.replace(/\b(?:card|account)?\s*\d{5,}\b/g, 'ending in [redacted except visible last four]')));
-  const surpriseFlags = pick([/subscribe|subscription|save and subscribe|warranty|protection plan|used|renewed|refurbished|digital|restricted|age[- ]?restricted|shipping speed|delivery option/i], 12);
+  const purchaseState = (() => {
+    const controlNodes = Array.from(document.querySelectorAll('input[type="radio"], input[type="checkbox"], [role="radio"], [role="checkbox"], option, [role="option"]'));
+    const labelForControl = (el) => {
+      const labelledBy = clean(el.getAttribute('aria-labelledby') || '').split(/\s+/)
+        .map((id) => clean((document.getElementById(id) || {}).textContent || ''))
+        .filter(Boolean)
+        .join(' ');
+      const explicitLabel = el.id ? clean((document.querySelector(`label[for="${CSS.escape(el.id)}"]`) || {}).innerText || '') : '';
+      const contextNode = el.closest('label, li, tr, fieldset, [role="radio"], [role="checkbox"], [role="option"]');
+      const context = clean((contextNode || el).innerText || '');
+      return clean([labelledBy, explicitLabel, el.getAttribute('aria-label'), el.value, el.name, el.id, context].filter(Boolean).join(' | '));
+    };
+    const controlState = (el) => Boolean(el.checked || el.selected || el.getAttribute('aria-checked') === 'true' || el.getAttribute('aria-selected') === 'true');
+    const controls = controlNodes
+      .map((el) => ({label: labelForControl(el), selected: controlState(el), disabled: Boolean(el.disabled || el.getAttribute('aria-disabled') === 'true')}))
+      .filter((item) => /subscribe|subscription|save and subscribe|delivery every|one[-\s]?time|purchase option/i.test(item.label));
+    const subscriptionControls = controls.filter((item) => /subscribe|subscription|save and subscribe|delivery every/i.test(item.label));
+    const oneTimeControls = controls.filter((item) => /one[-\s]?time/i.test(item.label));
+    const subscriptionOfferVisible = /subscribe|subscription|save and subscribe|delivery every/i.test(pageText);
+    const subscriptionSelected = subscriptionControls.some((item) => item.selected);
+    const oneTimeSelected = oneTimeControls.some((item) => item.selected);
+    const purchaseMode = subscriptionSelected ? 'subscription_selected' : (oneTimeSelected ? 'one_time_confirmed' : (subscriptionOfferVisible ? 'subscription_offer_visible_only' : 'not_detected'));
+    return {
+      purchase_mode: purchaseMode,
+      subscription_offer_visible: subscriptionOfferVisible,
+      subscription_selected: subscriptionSelected,
+      subscription_control_visible: subscriptionControls.length > 0,
+      one_time_selected: oneTimeSelected,
+      purchase_mode_controls: controls.slice(0, 8).map((item) => ({label: redactAddress(item.label).slice(0, 160), selected: item.selected, disabled: item.disabled}))
+    };
+  })();
+  const rawSurpriseFlags = pick([/subscribe|subscription|save and subscribe|warranty|protection plan|used|renewed|refurbished|digital|restricted|age[- ]?restricted|shipping speed|delivery option/i], 12);
+  const surpriseFlags = purchaseState.subscription_selected ? rawSurpriseFlags : rawSurpriseFlags.filter((line) => !/subscribe|subscription|save and subscribe|delivery every/i.test(line));
+  const informationalFlags = purchaseState.subscription_offer_visible && !purchaseState.subscription_selected ? pick([/subscribe|subscription|save and subscribe|delivery every/i], 6) : [];
   const totalLines = pick([/subtotal|shipping|tax|estimated tax|order total|total/i], 12);
   const delivery = pick([/delivery|arrives|ship|shipping speed|window/i], 8);
   const items = pick([/qty|quantity|sold by|seller|\$\d/i], 15);
@@ -799,6 +853,13 @@ ORDER_REVIEW_EXTRACT_JS = r"""
     delivery,
     shipping_destination_label_or_city_state: destination,
     payment_method_label_last_four_only: paymentLabels,
+    purchase_mode: purchaseState.purchase_mode,
+    subscription_offer_visible: purchaseState.subscription_offer_visible,
+    subscription_selected: purchaseState.subscription_selected,
+    subscription_control_visible: purchaseState.subscription_control_visible,
+    one_time_selected: purchaseState.one_time_selected,
+    purchase_mode_controls: purchaseState.purchase_mode_controls,
+    informational_flags: informationalFlags,
     surprise_flags: surpriseFlags,
     policy: 'Sanitized checkout-prep/order-review summary only: street addresses, full payment/account/card numbers, emails, phone numbers, raw DOM, cookies, storage, and request headers are not returned. Star must pause for Joy on login, Bitwarden, passkeys, 2FA, CAPTCHA, suspicious security prompts, payment/address/account edits, or sensitive-information prompts.'
   };
@@ -1397,6 +1458,8 @@ def _sanitize_checkout_controls(value: Any) -> list[dict[str, Any]]:
             "region": region,
             "approved_effect_hints": hints,
             "checked": bool(item.get("checked")),
+            "selected": bool(item.get("selected")),
+            "state": str(item.get("state") or "")[:40],
             "disabled": bool(item.get("disabled")),
             "viewport_rect": clean_rect,
         })
@@ -1458,6 +1521,13 @@ def _sanitize_checkout_summary(summary: dict[str, Any], safety: dict[str, Any], 
         "delivery": _sanitize_checkout_detail_list(summary.get("delivery"), limit=6, field="delivery"),
         "shipping_destination_city_state_or_label": shipping_destination,
         "payment_method_label_last_four_only": _sanitize_checkout_payment_list(summary.get("payment_method_label_last_four_only")),
+        "purchase_mode": str(summary.get("purchase_mode") or "not_detected"),
+        "subscription_offer_visible": bool(summary.get("subscription_offer_visible")),
+        "subscription_selected": bool(summary.get("subscription_selected")),
+        "subscription_control_visible": bool(summary.get("subscription_control_visible")),
+        "one_time_selected": bool(summary.get("one_time_selected")),
+        "purchase_mode_controls": _sanitize_checkout_value(summary.get("purchase_mode_controls") or [], "purchase_mode_controls"),
+        "informational_flags": _sanitize_checkout_detail_list(summary.get("informational_flags"), limit=6),
         "surprise_flags": _sanitize_checkout_detail_list(summary.get("surprise_flags"), limit=10),
         "checkout_prep_controls": checkout_prep_controls,
         "checkout_prep_control_policy": "Star may inspect and use sanitized selectors/labels for ordinary checkout-prep controls only with an explicit approved_effect. Final purchase controls and address/payment/account/security edits remain blocked or Joy-only.",
@@ -1470,6 +1540,10 @@ def _sanitize_checkout_summary(summary: dict[str, Any], safety: dict[str, Any], 
         "delivery": sanitized["delivery"],
         "shipping_destination_city_state_or_label": sanitized["shipping_destination_city_state_or_label"],
         "payment_method_label_last_four_only": sanitized["payment_method_label_last_four_only"],
+        "purchase_mode": sanitized["purchase_mode"],
+        "subscription_offer_visible": sanitized["subscription_offer_visible"],
+        "subscription_selected": sanitized["subscription_selected"],
+        "informational_flags": sanitized["informational_flags"],
         "surprise_flags": sanitized["surprise_flags"],
         "url": sanitized["url"],
         "final_purchase_controls_present": blocked_metadata["final_purchase_controls_present"],
