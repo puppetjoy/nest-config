@@ -137,7 +137,7 @@
  def telegram_send(
      message: str,
      *,
-@@ -170,11 +291,14 @@
+@@ -170,12 +291,15 @@
      try:
          with urllib.request.urlopen(request, timeout=10) as response:
              payload = json.loads(response.read().decode("utf-8"))
@@ -147,6 +147,7 @@
              "ok": payload.get("ok"),
              "message_id": ((payload.get("result") or {}).get("message_id")),
              "profile": profile or None,
+             "disable_notification": disable_notification,
          }
 +        if result["sent"] and _telegram_voice_notifications_enabled():
 +            result["voice"] = _telegram_send_voice_notification(token, chat_id, message, reply_to_message_id=result.get("message_id"))
