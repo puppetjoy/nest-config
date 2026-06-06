@@ -26,7 +26,7 @@ from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from urllib.parse import urlparse, urlunparse
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 import websockets.sync.client
 from tools.registry import registry
@@ -43,6 +43,7 @@ MAX_LINKS = 80
 MAX_QUERY_RESULT_CHARS = 8000
 MAX_TYPE_CHARS = 2000
 SCREENSHOT_DIR = os.environ.get("SHOPPING_BROWSER_SCREENSHOT_DIR", os.path.expanduser("~/.hermes/profiles/star/shopping-browser-screenshots"))
+OWNER_CHECKOUT_REVIEW_DIR = os.environ.get("SHOPPING_BROWSER_OWNER_REVIEW_DIR", os.path.expanduser("~/.hermes/profiles/star/shopping-browser-owner-checkout-reviews"))
 AUDIT_LOG = os.environ.get("SHOPPING_BROWSER_AUDIT_LOG", os.path.expanduser("~/.hermes/profiles/star/shopping-browser-audit.log"))
 MAX_PRODUCT_IMAGES = 6
 DEFAULT_MAX_REVIEWS = 5
@@ -50,6 +51,7 @@ MAX_REVIEWS = 10
 REVIEW_EXCERPT_CHARS = 900
 MAX_VISUAL_CROPS = 6
 MAX_VISUAL_REGIONS = 60
+MAX_OWNER_REVIEW_VIEWPORTS = 12
 MAX_CROP_PADDING = 80
 MIN_CROP_SIZE = 8
 MAX_CROP_NAME_CHARS = 80
@@ -1319,6 +1321,115 @@ def _write_screenshot(output_path: str, data: bytes) -> None:
     os.chmod(output_path, 0o600)
 
 
+def _safe_owner_review_path(name: Any) -> str:
+    os.makedirs(OWNER_CHECKOUT_REVIEW_DIR, mode=0o700, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    stem = _safe_artifact_stem(name, "owner-checkout-review")
+    return os.path.join(OWNER_CHECKOUT_REVIEW_DIR, f"shopping-browser-{stamp}-{os.getpid()}-{stem}.png")
+
+
+def _profile_env_candidates() -> list[str]:
+    candidates = []
+    hermes_home = os.environ.get("HERMES_HOME")
+    profile = os.environ.get("HERMES_PROFILE") or os.environ.get("HERMES_PROFILE_NAME")
+    if hermes_home:
+        candidates.append(os.path.join(hermes_home, ".env"))
+    if profile:
+        candidates.append(os.path.expanduser(f"~/.hermes/profiles/{profile}/.env"))
+    candidates.append(os.path.expanduser("~/.hermes/profiles/star/.env"))
+    candidates.append(os.path.expanduser("~/.hermes/.env"))
+    deduped: list[str] = []
+    for candidate in candidates:
+        if candidate not in deduped:
+            deduped.append(candidate)
+    return deduped
+
+
+def _dotenv_value(path: str, key: str) -> str:
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            for raw_line in handle:
+                line = raw_line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                line_key, line_value = line.split("=", 1)
+                if line_key.strip() != key:
+                    continue
+                value = line_value.strip()
+                if (value.startswith("'") and value.endswith("'")) or (value.startswith('"') and value.endswith('"')):
+                    value = value[1:-1]
+                return value
+    except OSError:
+        return ""
+    return ""
+
+
+def _env_or_dotenv(key: str) -> str:
+    value = os.environ.get(key, "").strip()
+    if value:
+        return value
+    for path in _profile_env_candidates():
+        value = _dotenv_value(path, key).strip()
+        if value:
+            return value
+    return ""
+
+
+def _telegram_owner_destination() -> tuple[str, str | None]:
+    target = _env_or_dotenv("SHOPPING_BROWSER_OWNER_TELEGRAM_CHAT") or _env_or_dotenv("TELEGRAM_HOME_CHANNEL")
+    target = target.strip()
+    if not target:
+        raise RuntimeError("owner-only checkout review requires TELEGRAM_HOME_CHANNEL or SHOPPING_BROWSER_OWNER_TELEGRAM_CHAT")
+    if target.startswith("telegram:"):
+        target = target.split(":", 1)[1]
+    thread_id = _env_or_dotenv("SHOPPING_BROWSER_OWNER_TELEGRAM_THREAD")
+    if not thread_id and target.count(":") == 1 and target.split(":", 1)[0].lstrip("-").isdigit():
+        target, thread_id = target.split(":", 1)
+    return target, (thread_id or None)
+
+
+def _multipart_request(fields: dict[str, str], files: dict[str, tuple[str, bytes, str]]) -> tuple[bytes, str]:
+    boundary = f"shopping-browser-{os.getpid()}-{int(time.time() * 1000)}"
+    chunks: list[bytes] = []
+    for key, value in fields.items():
+        chunks.append(f"--{boundary}\r\n".encode("utf-8"))
+        chunks.append(f'Content-Disposition: form-data; name="{key}"\r\n\r\n'.encode("utf-8"))
+        chunks.append(str(value).encode("utf-8"))
+        chunks.append(b"\r\n")
+    for key, (filename, data, content_type) in files.items():
+        chunks.append(f"--{boundary}\r\n".encode("utf-8"))
+        chunks.append(f'Content-Disposition: form-data; name="{key}"; filename="{filename}"\r\n'.encode("utf-8"))
+        chunks.append(f"Content-Type: {content_type}\r\n\r\n".encode("utf-8"))
+        chunks.append(data)
+        chunks.append(b"\r\n")
+    chunks.append(f"--{boundary}--\r\n".encode("utf-8"))
+    return b"".join(chunks), f"multipart/form-data; boundary={boundary}"
+
+
+def _telegram_send_document(path: str, caption: str) -> dict[str, Any]:
+    token = _env_or_dotenv("TELEGRAM_BOT_TOKEN")
+    if not token:
+        raise RuntimeError("owner-only checkout review requires TELEGRAM_BOT_TOKEN")
+    chat_id, thread_id = _telegram_owner_destination()
+    with open(path, "rb") as handle:
+        data = handle.read()
+    fields = {
+        "chat_id": chat_id,
+        "caption": caption[:1024],
+        "disable_notification": "false",
+    }
+    if thread_id:
+        fields["message_thread_id"] = thread_id
+    body, content_type = _multipart_request(fields, {"document": (os.path.basename(path), data, "image/png")})
+    request = Request(f"https://api.telegram.org/bot{token}/sendDocument", data=body, headers={"Content-Type": content_type})
+    with urlopen(request, timeout=20) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    if not payload.get("ok"):
+        raise RuntimeError("Telegram owner-review delivery failed")
+    result = payload.get("result") or {}
+    return {"message_id": result.get("message_id"), "chat_id": ((result.get("chat") or {}).get("id"))}
+
+
 def _safe_artifact_stem(value: Any, fallback: str) -> str:
     stem = re.sub(r"[^A-Za-z0-9_.-]+", "-", str(value or fallback).strip().lower()).strip("-._")
     return (stem or fallback)[:MAX_CROP_NAME_CHARS]
@@ -1897,6 +2008,114 @@ def _screenshot(full_page: bool = False) -> dict[str, Any]:
             browser.close()
 
 
+def _capture_cdp_png(browser: CdpSession, session_id: str, full_page: bool) -> bytes:
+    params = {"format": "png", "fromSurface": True, "captureBeyondViewport": bool(full_page)}
+    captured = browser.call("Page.captureScreenshot", params, session_id=session_id)
+    encoded = str(captured.get("data") or "")
+    if not encoded:
+        raise RuntimeError("shopping browser did not return screenshot data")
+    return base64.b64decode(encoded, validate=True)
+
+
+def _owner_checkout_review_caption(review_id: str, index: int, count: int, binding: str, mode: str, checkout_review: dict[str, Any]) -> str:
+    total_note = ""
+    totals = checkout_review.get("totals") or []
+    if totals:
+        total_note = f"\nSanitized totals clue: {str(totals[-1])[:160]}"
+    return (
+        "🔐 Sensitive owner-only checkout review\n"
+        f"Review: {review_id} ({index}/{count}, {mode})\n"
+        f"Material summary binding: {binding}\n"
+        "Inspect shipping address, payment label/details, items, delivery, taxes/total, discounts, and final Place Order state.\n"
+        "Star received only the redacted acknowledgement/summary; final purchase remains blocked until trusted approval."
+        f"{total_note}"
+    )
+
+
+def _owner_checkout_review(send_to_telegram: bool = True, retain_local: bool = False) -> dict[str, Any]:
+    if not send_to_telegram:
+        raise ValueError("owner-only checkout review currently requires send_to_telegram=true so sensitive evidence is not returned to Star")
+    if not _env_or_dotenv("TELEGRAM_BOT_TOKEN"):
+        raise RuntimeError("owner-only checkout review requires TELEGRAM_BOT_TOKEN")
+    _telegram_owner_destination()
+
+    def run(browser: CdpSession) -> dict[str, Any]:
+        page_info = _target_page_info(browser.port) if browser.port is not None else {}
+        url = str(page_info.get("url") or "")
+        title = str(page_info.get("title") or "")
+        parsed = urlparse(url)
+        checkoutish = re.search(r"checkout|buy|payselect|ship|spc|review|ordering", " ".join([parsed.path, parsed.query, title]), re.IGNORECASE)
+        if not (parsed.scheme == "https" and AMAZON_HOST_RE.search(parsed.netloc) and checkoutish):
+            raise ValueError("owner-only checkout review currently requires an Amazon checkout/order-review page")
+        target_id = page_info.get("id") or _first_page_target(browser)
+        session_id = _attach(browser, str(target_id))
+        safety = _evaluate(browser, session_id, CHECKOUT_PAGE_SAFETY_JS) or {}
+        if safety.get("blocked_reason"):
+            raise ValueError(str(safety.get("blocked_reason")))
+        checkout_review = _checkout_summary_from_browser(browser, session_id)
+        binding = str(checkout_review.get("material_summary_binding") or "")
+        if not binding:
+            raise RuntimeError("checkout review did not produce a material summary binding")
+        review_id = hashlib.sha256(f"{binding}:{time.time_ns()}".encode("utf-8")).hexdigest()[:16]
+        artifacts: list[tuple[str, bytes, str]] = []
+        capture_mode = "full-page"
+        try:
+            artifacts.append(("full-page", _capture_cdp_png(browser, session_id, full_page=True), "full-page"))
+        except Exception:
+            capture_mode = "viewport-sequence"
+            layout = _evaluate(browser, session_id, "(() => ({width: Math.max(document.documentElement.scrollWidth, document.body ? document.body.scrollWidth : 0, window.innerWidth), height: Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0, window.innerHeight), viewport_width: window.innerWidth, viewport_height: window.innerHeight, original_x: window.scrollX, original_y: window.scrollY}))()") or {}
+            viewport_height = max(1, int(layout.get("viewport_height") or 900))
+            document_height = max(viewport_height, int(layout.get("height") or viewport_height))
+            positions = list(range(0, document_height, viewport_height))[:MAX_OWNER_REVIEW_VIEWPORTS]
+            if positions and positions[-1] + viewport_height < document_height:
+                positions.append(max(0, document_height - viewport_height))
+            for seq, y in enumerate(positions[:MAX_OWNER_REVIEW_VIEWPORTS], 1):
+                _evaluate(browser, session_id, f"window.scrollTo(0, {int(y)})")
+                time.sleep(0.2)
+                artifacts.append((f"viewport-{seq:02d}", _capture_cdp_png(browser, session_id, full_page=False), "viewport"))
+            _evaluate(browser, session_id, f"window.scrollTo({int(layout.get('original_x') or 0)}, {int(layout.get('original_y') or 0)})")
+        if not artifacts:
+            raise RuntimeError("owner-only checkout review captured no visual evidence")
+
+        deliveries = []
+        artifact_hashes = []
+        paths_to_remove = []
+        try:
+            for index, (name, png_data, mode) in enumerate(artifacts, 1):
+                artifact_hashes.append(hashlib.sha256(png_data).hexdigest())
+                output_path = _safe_owner_review_path(f"{review_id}-{name}")
+                _write_screenshot(output_path, png_data)
+                if not retain_local:
+                    paths_to_remove.append(output_path)
+                caption = _owner_checkout_review_caption(review_id, index, len(artifacts), binding, mode, checkout_review)
+                deliveries.append(_telegram_send_document(output_path, caption))
+        finally:
+            if not retain_local:
+                for path in paths_to_remove:
+                    with contextlib.suppress(OSError):
+                        os.remove(path)
+        evidence_binding = hashlib.sha256(json.dumps({"material_summary_binding": binding, "artifact_hashes": artifact_hashes}, sort_keys=True).encode("utf-8")).hexdigest()
+        result = {
+            "operation": "owner_checkout_review",
+            "status": "sent_owner_only",
+            "review_id": review_id,
+            "url": _sanitize_url(url),
+            "page_title": title,
+            "material_summary_binding": binding,
+            "owner_visual_evidence_binding": evidence_binding,
+            "capture_mode": capture_mode,
+            "artifact_count": len(artifacts),
+            "telegram_message_ids": [item.get("message_id") for item in deliveries],
+            "checkout_review": checkout_review,
+            "retention": "sensitive PNG artifacts were deleted locally after Telegram delivery" if not retain_local else "sensitive PNG artifacts retained locally with 0600 files under owner review directory",
+            "safety_boundary": "Complete checkout screenshots were sent directly to Joy's configured Telegram destination and are not returned as MEDIA handles, file paths, raw DOM, cookies, storage, request headers, CDP endpoints, credentials, passkeys, 2FA/CAPTCHA, or structured address/payment text to Star. Final Place Order remains blocked from ordinary shopping tools.",
+        }
+        _audit("owner_checkout_review", {"review_id": review_id, "url": result["url"], "page_title": title, "material_summary_binding": binding, "owner_visual_evidence_binding": evidence_binding, "capture_mode": capture_mode, "artifact_count": len(artifacts), "retained_local": retain_local})
+        return result
+
+    return _with_browser(run)
+
+
 def _visual_regions(browser: CdpSession, session_id: str) -> dict[str, Any]:
     expression = VISUAL_REGIONS_JS.replace("__MAX_REGIONS__", str(MAX_VISUAL_REGIONS))
     result = _evaluate(browser, session_id, expression) or {}
@@ -2258,18 +2477,20 @@ def shopping_browser_status_tool(args: dict[str, Any], **_kw: Any) -> str:
         "workload": WORKLOAD,
         "kubectl_available": shutil.which("kubectl") is not None,
         "remote_debug_port": REMOTE_DEBUG_PORT,
-        "browser_operations": ["navigate", "page_snapshot", "query", "click", "type", "screenshot", "visual_evidence", "current_page_summary"],
+        "browser_operations": ["navigate", "page_snapshot", "query", "click", "type", "screenshot", "visual_evidence", "current_page_summary", "owner_checkout_review"],
         "supervised_checkout_prep": {
             "status": "available",
             "approved_click_effects": ["checkout_prep", "select_shipping_option", "apply_checkout_option"],
             "boundary": "Star may navigate/click ordinary checkout-prep controls under Joy's live supervision and may receive sanitized order-review summaries. Star must pause for login, Bitwarden, passkeys, 2FA, CAPTCHA, suspicious security prompts, payment/address/account edits, or sensitive-information prompts.",
             "sanitization": "Checkout-prep snapshots/current-page summaries return isolated structured item/totals/delivery/surprise fields plus destination city-state/abstract label and payment labels. Mixed blobs, sensitive redaction-marker text, and final purchase controls are removed from ordinary summary fields.",
             "visual_confirmation": "shopping_browser_visual_evidence returns a bounded visual proof bundle: a local PNG screenshot, sanitized suggested regions, and optional focused crops. Amazon checkout/order-review pages are allowed only as redacted checkout-prep viewport evidence; login/account/payment/address/security pages remain Joy-only.",
+            "owner_only_confirmation": "shopping_browser_owner_checkout_review can send complete unredacted checkout screenshots directly to Joy's configured Telegram destination without returning paths, MEDIA handles, raw DOM, cookies, storage, request headers, CDP endpoints, or address/payment text to Star.",
         },
         "approval_gated_operations": {
             "add_to_cart": "available only through the broad shopping_browser_click flow with approved_effect='add_to_cart' and a human-readable approval reference",
             "remove_from_cart": "available only through shopping_browser_click with approved_effect='remove_from_cart', a human-readable approval reference, and a visible Delete/Remove cart line-item control on an Amazon cart page",
             "place_order": "blocked from ordinary tool use; requires a trusted Telegram action approval bound to the exact material_summary_binding from the current checkout review and expires on material changes",
+            "owner_checkout_review": "available only as owner-only Telegram delivery of complete checkout visual evidence tied to the same material_summary_binding; it does not expose sensitive evidence to Star",
         },
         "removed_legacy_helpers": ["shopping_browser_inspect_product", "shopping_browser_inspect_reviews", "shopping_browser_inspect_cart", "shopping_browser_add_to_cart"],
         "screenshot_dir": SCREENSHOT_DIR,
@@ -2382,6 +2603,13 @@ def shopping_browser_current_page_summary_tool(args: dict[str, Any], **_kw: Any)
         return _json(_current_page_summary())
     except Exception as exc:
         return _json({"error": "CURRENT_PAGE_SUMMARY_FAILED", "message": str(exc)[:1000], "operation": "current_page_summary"})
+
+
+def shopping_browser_owner_checkout_review_tool(args: dict[str, Any], **_kw: Any) -> str:
+    try:
+        return _json(_owner_checkout_review(bool(args.get("send_to_telegram", True)), bool(args.get("retain_local", False))))
+    except Exception as exc:
+        return _json({"error": "OWNER_CHECKOUT_REVIEW_FAILED", "message": str(exc)[:1000], "operation": "owner_checkout_review"})
 
 
 def shopping_browser_guardrail_check_tool(args: dict[str, Any], **_kw: Any) -> str:
@@ -2560,6 +2788,19 @@ CURRENT_PAGE_SUMMARY_SCHEMA = {
     "parameters": {"type": "object", "properties": {}, "required": []},
 }
 
+OWNER_CHECKOUT_REVIEW_SCHEMA = {
+    "name": "shopping_browser_owner_checkout_review",
+    "description": "Send complete sensitive checkout/order-review visual evidence directly to Joy's configured Telegram destination for owner-only review. Intended for final pre-purchase verification of address, payment, item, delivery, tax/total, discounts, and final controls. Returns only a redacted acknowledgement, material_summary_binding, owner visual-evidence binding, and sanitized checkout summary to Star; it never returns image paths, MEDIA handles, raw DOM, cookies, storage, request headers, CDP endpoints, credentials, passkeys, 2FA/CAPTCHA data, or structured address/payment details. Final Place Order remains blocked pending trusted approval.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "send_to_telegram": {"type": "boolean", "description": "Must remain true; sensitive evidence is delivered directly to Joy instead of returned to Star", "default": True},
+            "retain_local": {"type": "boolean", "description": "Retain temporary sensitive PNGs locally after Telegram delivery for operator debugging; default false deletes local files after successful send", "default": False},
+        },
+        "required": [],
+    },
+}
+
 GUARDRAIL_SCHEMA = {
     "name": "shopping_browser_guardrail_check",
     "description": "Check whether a shopping-browser operation is allowed. Checkout now means supervised checkout-prep only; final place_order remains blocked pending trusted Telegram approval bound to a material order-summary hash. Raw session/account/payment/address/secret operations are rejected.",
@@ -2660,6 +2901,16 @@ registry.register(
     check_fn=_check_shopping_browser,
     description=CURRENT_PAGE_SUMMARY_SCHEMA["description"],
     emoji="📄",
+    max_result_size_chars=MAX_RESULT_CHARS,
+)
+registry.register(
+    name=OWNER_CHECKOUT_REVIEW_SCHEMA["name"],
+    toolset=TOOLSET,
+    schema=OWNER_CHECKOUT_REVIEW_SCHEMA,
+    handler=shopping_browser_owner_checkout_review_tool,
+    check_fn=_check_shopping_browser,
+    description=OWNER_CHECKOUT_REVIEW_SCHEMA["description"],
+    emoji="🔐",
     max_result_size_chars=MAX_RESULT_CHARS,
 )
 registry.register(
@@ -2785,10 +3036,17 @@ if __name__ == "__main__":
     except ValueError:
         pass
     assert json.loads(shopping_browser_visual_evidence_tool({"crops": "not-a-list"}))["error"] == "INVALID_CROPS"
+    disabled_owner_review = json.loads(shopping_browser_owner_checkout_review_tool({"send_to_telegram": False}))
+    assert disabled_owner_review["error"] == "OWNER_CHECKOUT_REVIEW_FAILED"
+    assert disabled_owner_review["operation"] == "owner_checkout_review"
+    body, content_type = _multipart_request({"chat_id": "123"}, {"document": ("review.png", b"png", "image/png")})
+    assert b"review.png" in body and content_type.startswith("multipart/form-data")
     status = json.loads(shopping_browser_status_tool({}))
     assert "screenshot" in status["browser_operations"]
     assert "visual_evidence" in status["browser_operations"]
+    assert "owner_checkout_review" in status["browser_operations"]
     assert status["supervised_checkout_prep"]["status"] == "available"
+    assert "owner_checkout_review" in status["approval_gated_operations"]
     assert "place_order" in status["approval_gated_operations"]
     assert "inspect_product" not in status["browser_operations"]
     assert _extract_asin("https://www.amazon.com/example/dp/B09JJNBB9C?x=1") == "B09JJNBB9C"
@@ -2799,7 +3057,8 @@ if __name__ == "__main__":
     assert "text('#ppd')" not in ADD_TO_CART_PRECHECK_JS
     assert "condition_summary" in ADD_TO_CART_PRECHECK_JS
     assert "product_condition" in PRODUCT_EXTRACT_JS
-    active_schema_names = [STATUS_SCHEMA["name"], NAVIGATE_SCHEMA["name"], PAGE_SNAPSHOT_SCHEMA["name"], QUERY_SCHEMA["name"], SCREENSHOT_SCHEMA["name"], VISUAL_EVIDENCE_SCHEMA["name"], CLICK_SCHEMA["name"], TYPE_SCHEMA["name"], CURRENT_PAGE_SUMMARY_SCHEMA["name"], GUARDRAIL_SCHEMA["name"]]
+    active_schema_names = [STATUS_SCHEMA["name"], NAVIGATE_SCHEMA["name"], PAGE_SNAPSHOT_SCHEMA["name"], QUERY_SCHEMA["name"], SCREENSHOT_SCHEMA["name"], VISUAL_EVIDENCE_SCHEMA["name"], CLICK_SCHEMA["name"], TYPE_SCHEMA["name"], CURRENT_PAGE_SUMMARY_SCHEMA["name"], OWNER_CHECKOUT_REVIEW_SCHEMA["name"], GUARDRAIL_SCHEMA["name"]]
+    assert "shopping_browser_owner_checkout_review" in active_schema_names
     assert "shopping_browser_inspect_product" not in active_schema_names
     assert "shopping_browser_inspect_reviews" not in active_schema_names
     assert "shopping_browser_inspect_cart" not in active_schema_names
