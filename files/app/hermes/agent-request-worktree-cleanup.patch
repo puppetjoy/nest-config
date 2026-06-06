@@ -1,9 +1,9 @@
 diff --git a/bin/agent-request-cleanup-terminal-resources b/bin/agent-request-cleanup-terminal-resources
 new file mode 100755
-index 0000000..306bff5
+index 0000000..79a8607
 --- /dev/null
 +++ b/bin/agent-request-cleanup-terminal-resources
-@@ -0,0 +1,57 @@
+@@ -0,0 +1,60 @@
 +#!/usr/bin/env python3
 +"""Sweep terminal Kanban task worktrees, task branches, and registry repositories."""
 +from __future__ import annotations
@@ -31,6 +31,7 @@ index 0000000..306bff5
 +    p.add_argument("--limit", type=int, help="Maximum number of terminal tasks to inspect")
 +    p.add_argument("--delete-remote-branches", action="store_true", help="Actually delete safe merged remote task branches")
 +    p.add_argument("--delete-registry-repositories", action="store_true", help="Actually delete matching GitLab task registry repositories")
++    p.add_argument("--delete-eyrie-registry-repositories", action="store_true", help="Actually delete matching Eyrie Docker Registry v2 task repository tags")
 +    p.add_argument("--json", action="store_true", help="Print full JSON result")
 +    return p
 +
@@ -43,6 +44,8 @@ index 0000000..306bff5
 +        os.environ[kanban_backend.REMOTE_BRANCH_DELETE_ENV] = "true"
 +    if args.delete_registry_repositories:
 +        os.environ[kanban_backend.REGISTRY_DELETE_ENV] = "true"
++    if args.delete_eyrie_registry_repositories:
++        os.environ[kanban_backend.EYRIE_REGISTRY_DELETE_ENV] = "true"
 +    result = kanban_backend.cleanup_terminal_task_sweep(
 +        actor=args.actor,
 +        include_archived=args.include_archived,
@@ -62,7 +65,7 @@ index 0000000..306bff5
 +if __name__ == "__main__":
 +    raise SystemExit(main())
 diff --git a/src/agent_request_broker/kanban_backend.py b/src/agent_request_broker/kanban_backend.py
-index f429326..ca8fcce 100644
+index f429326..474c12f 100644
 --- a/src/agent_request_broker/kanban_backend.py
 +++ b/src/agent_request_broker/kanban_backend.py
 @@ -14,6 +14,9 @@ import re
@@ -75,7 +78,7 @@ index f429326..ca8fcce 100644
  from dataclasses import asdict, dataclass, replace
  import unicodedata
  from datetime import datetime, timezone
-@@ -445,6 +448,343 @@ def update_task_workspace(conn: Any, *, task_id: str, policy: WorkspacePolicy) -
+@@ -445,6 +448,440 @@ def update_task_workspace(conn: Any, *, task_id: str, policy: WorkspacePolicy) -
      conn.commit()
  
  
@@ -85,6 +88,16 @@ index f429326..ca8fcce 100644
 +REGISTRY_IMAGE_ARCH_TAGS = ("haswell", "cortex-a53", "sifive-u74")
 +REMOTE_BRANCH_DELETE_ENV = "AGENT_REQUEST_CLEANUP_DELETE_REMOTE_BRANCHES"
 +REGISTRY_DELETE_ENV = "AGENT_REQUEST_CLEANUP_DELETE_REGISTRY_REPOSITORIES"
++EYRIE_REGISTRY_DELETE_ENV = "AGENT_REQUEST_CLEANUP_DELETE_EYRIE_REGISTRY_REPOSITORIES"
++EYRIE_REGISTRY_HOSTS = ("registry.eyrie", "registry-test.eyrie")
++DOCKER_MANIFEST_ACCEPT = ", ".join(
++    (
++        "application/vnd.docker.distribution.manifest.v2+json",
++        "application/vnd.oci.image.manifest.v1+json",
++        "application/vnd.docker.distribution.manifest.list.v2+json",
++        "application/vnd.oci.image.index.v1+json",
++    )
++)
 +GITLAB_TOKEN_ENVS = ("AGENT_REQUEST_GITLAB_TOKEN", "GITLAB_TOKEN", "GITLAB_PRIVATE_TOKEN")
 +
 +
@@ -130,8 +143,9 @@ index f429326..ca8fcce 100644
 +        return []
 +    candidates = [f"${{CI_REGISTRY}}/{repo}:{tag}" for tag in REGISTRY_IMAGE_ARCH_TAGS]
 +    candidates.append(f"${{CI_REGISTRY}}/{repo}:latest")
-+    candidates.extend([f"registry.eyrie/{repo}:{tag}" for tag in REGISTRY_IMAGE_ARCH_TAGS])
-+    candidates.append(f"registry.eyrie/{repo}:latest")
++    for host in EYRIE_REGISTRY_HOSTS:
++        candidates.extend([f"{host}/{repo}:{tag}" for tag in REGISTRY_IMAGE_ARCH_TAGS])
++        candidates.append(f"{host}/{repo}:latest")
 +    return candidates
 +
 +
@@ -228,6 +242,85 @@ index f429326..ca8fcce 100644
 +    return result
 +
 +
++def eyrie_registry_url(host: str, repo: str, suffix: str) -> str:
++    return f"https://{host}/v2/{repo}/{suffix}"
++
++
++def docker_registry_json_request(method: str, url: str, *, accept_manifest: bool = False) -> tuple[int, Any, dict[str, str]]:
++    request = urllib.request.Request(url, method=method)
++    if accept_manifest:
++        request.add_header("Accept", DOCKER_MANIFEST_ACCEPT)
++    with urllib.request.urlopen(request, timeout=20) as response:  # noqa: S310 - operator-scoped internal registry URL
++        body = response.read().decode("utf-8")
++        headers = {key.lower(): value for key, value in response.headers.items()}
++        parsed = json.loads(body) if body else None
++        return response.status, parsed, headers
++
++
++def delete_eyrie_registry_repository(*, repo_path: Path, branch: str) -> dict[str, Any]:
++    repo = registry_repository_path(repo_path=repo_path, branch=branch)
++    result: dict[str, Any] = {
++        "enabled": env_flag(EYRIE_REGISTRY_DELETE_ENV),
++        "deleted": [],
++        "repositories": [f"{host}/{repo}" for host in EYRIE_REGISTRY_HOSTS] if repo else [],
++    }
++    if not result["enabled"]:
++        result["reason"] = f"{EYRIE_REGISTRY_DELETE_ENV} is not true"
++        return result
++    if not repo:
++        result["reason"] = "could not determine Eyrie registry repository path"
++        return result
++    try:
++        for host in EYRIE_REGISTRY_HOSTS:
++            tags_url = eyrie_registry_url(host, repo, "tags/list")
++            try:
++                _, tags_payload, _ = docker_registry_json_request("GET", tags_url)
++            except urllib.error.HTTPError as exc:
++                if exc.code == 404:
++                    continue
++                raise
++            tags = sorted(str(tag) for tag in (tags_payload or {}).get("tags") or [])
++            for tag in tags:
++                manifest_url = eyrie_registry_url(host, repo, f"manifests/{urllib.parse.quote(tag, safe='')}")
++                _, _, headers = docker_registry_json_request("HEAD", manifest_url, accept_manifest=True)
++                digest = headers.get("docker-content-digest")
++                if not digest:
++                    result.setdefault("skipped", []).append(f"{host}/{repo}:{tag} has no Docker-Content-Digest")
++                    continue
++                delete_url = eyrie_registry_url(host, repo, f"manifests/{urllib.parse.quote(digest, safe=':')}")
++                docker_registry_json_request("DELETE", delete_url, accept_manifest=True)
++                result["deleted"].append(f"{host}/{repo}:{tag}")
++    except urllib.error.HTTPError as exc:
++        result["reason"] = f"Eyrie registry HTTP {exc.code}"
++    except (OSError, ValueError) as exc:
++        result["reason"] = str(exc)
++    if not result["deleted"] and "reason" not in result:
++        result["reason"] = "matching Eyrie registry repository not found"
++    return result
++
++
++def git_commit_ref_exists(*, repo_path: Path, ref: str) -> bool:
++    result = run_git(["-C", str(repo_path), "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"])
++    return result.returncode == 0
++
++
++def cleanup_branch_ref(*, repo_path: Path, branch: str) -> tuple[str, str]:
++    if git_commit_ref_exists(repo_path=repo_path, ref=branch):
++        return branch, "local"
++    remote_ref = f"origin/{branch}"
++    if git_commit_ref_exists(repo_path=repo_path, ref=remote_ref):
++        return remote_ref, "remote"
++    return branch, "missing"
++
++
++def cleanup_repo_path_for_workspace(workspace_path: Path) -> Path:
++    repo_name = workspace_path.parent.name
++    for policy in repo_policies():
++        if policy.name == repo_name:
++            return Path(policy.canonical_path).expanduser()
++    return worktree_root() / repo_name
++
++
 +def workspace_under_cleanup_root(path: Path) -> bool:
 +    try:
 +        path.resolve().relative_to(worktree_root().resolve())
@@ -244,10 +337,13 @@ index f429326..ca8fcce 100644
 +
 +
 +def branch_merged_to_base(*, repo_path: Path, branch: str, base_ref: str = "origin/main") -> tuple[bool, str]:
-+    result = run_git(["-C", str(repo_path), "merge-base", "--is-ancestor", branch, base_ref])
++    branch_ref, ref_source = cleanup_branch_ref(repo_path=repo_path, branch=branch)
++    if ref_source == "missing":
++        return False, f"neither {branch} nor origin/{branch} exists; resources retained"
++    result = run_git(["-C", str(repo_path), "merge-base", "--is-ancestor", branch_ref, base_ref])
 +    if result.returncode == 0:
 +        return True, ""
-+    return False, (result.stderr or result.stdout or f"{branch} is not merged to {base_ref}").strip()
++    return False, (result.stderr or result.stdout or f"{branch_ref} is not merged to {base_ref}").strip()
 +
 +
 +def cleanup_task_workspace(task: Any) -> dict[str, Any]:
@@ -289,7 +385,7 @@ index f429326..ca8fcce 100644
 +        return result
 +    if not workspace_path.exists():
 +        result["skipped"].append("workspace path is already absent")
-+        repo_path = worktree_root() / workspace_path.parent.name
++        repo_path = cleanup_repo_path_for_workspace(workspace_path)
 +    else:
 +        repo_probe = run_git(["-C", str(workspace_path), "rev-parse", "--show-toplevel"])
 +        if repo_probe.returncode != 0:
@@ -340,8 +436,12 @@ index f429326..ca8fcce 100644
 +
 +    registry_cleanup = delete_gitlab_registry_repository(repo_path=repo_path, branch=branch)
 +    result["registry_repository_cleanup"] = registry_cleanup
-+    if registry_cleanup.get("deleted"):
-+        result["removed_registry_repositories"] = registry_cleanup["deleted"]
++    registry_deleted = list(registry_cleanup.get("deleted") or [])
++    eyrie_registry_cleanup = delete_eyrie_registry_repository(repo_path=repo_path, branch=branch)
++    result["eyrie_registry_repository_cleanup"] = eyrie_registry_cleanup
++    registry_deleted.extend(eyrie_registry_cleanup.get("deleted") or [])
++    if registry_deleted:
++        result["removed_registry_repositories"] = registry_deleted
 +    else:
 +        result["queued_registry_images"] = registry_cleanup_candidates(repo_path=repo_path, branch=branch)
 +    return result
@@ -419,7 +519,7 @@ index f429326..ca8fcce 100644
  def urgency_to_priority(urgency: str) -> int:
      return URGENCY_PRIORITIES[urgency]
  
-@@ -2193,14 +2533,19 @@ def update(args: dict[str, Any], *, actor: str) -> dict[str, Any]:
+@@ -2193,14 +2630,19 @@ def update(args: dict[str, Any], *, actor: str) -> dict[str, Any]:
          request_notification = notify_structured_comment(
              conn, task_id=item.task_id, comment_id=comment_id, body=comment_body,
          )
@@ -440,7 +540,7 @@ index f429326..ca8fcce 100644
      finally:
          conn.close()
  
-@@ -2392,14 +2737,18 @@ def disposition(args: dict[str, Any], *, actor: str = "talon") -> dict[str, Any]
+@@ -2392,14 +2834,18 @@ def disposition(args: dict[str, Any], *, actor: str = "talon") -> dict[str, Any]
          )
          update_index_status(conn, request_id, disposition_value)
          archived = False
@@ -460,10 +560,10 @@ index f429326..ca8fcce 100644
              "request_notification": request_notification,
          }
 diff --git a/tests/test_agent_request_broker.py b/tests/test_agent_request_broker.py
-index 89b2d14..e34c300 100755
+index 89b2d14..f83a68b 100755
 --- a/tests/test_agent_request_broker.py
 +++ b/tests/test_agent_request_broker.py
-@@ -1229,6 +1229,113 @@ def test_maintenance_diagnose_and_supersede_failed_probe():
+@@ -1229,6 +1229,186 @@ def test_maintenance_diagnose_and_supersede_failed_probe():
              backend.telegram_send = old_send
  
  
@@ -574,10 +674,83 @@ index 89b2d14..e34c300 100755
 +    assert any("not merged" in item or "resources retained" in item for item in result["skipped"])
 +
 +
++def test_cleanup_deletes_merged_remote_branch_when_local_branch_and_workspace_are_absent(tmp_path, monkeypatch):
++    from agent_request_broker import kanban_backend as backend
++
++    repo = tmp_path / "repo"
++    remote = tmp_path / "remote.git"
++    repo.mkdir()
++    subprocess.run(["git", "init", "-b", "main"], cwd=repo, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
++    subprocess.run(["git", "config", "user.email", "test@example.invalid"], cwd=repo, check=True)
++    subprocess.run(["git", "config", "user.name", "Test"], cwd=repo, check=True)
++    (repo / "README.md").write_text("base\n", encoding="utf-8")
++    subprocess.run(["git", "add", "README.md"], cwd=repo, check=True)
++    subprocess.run(["git", "commit", "-m", "base"], cwd=repo, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
++    subprocess.run(["git", "init", "--bare", remote], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
++    subprocess.run(["git", "remote", "add", "origin", str(remote)], cwd=repo, check=True)
++    subprocess.run(["git", "push", "-u", "origin", "main"], cwd=repo, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
++    branch = "talon/t_1234abcd-cleanup-test"
++    subprocess.run(["git", "branch", branch, "origin/main"], cwd=repo, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
++    subprocess.run(["git", "push", "origin", branch], cwd=repo, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
++    subprocess.run(["git", "branch", "-D", branch], cwd=repo, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
++
++    root = tmp_path / "worktrees"
++    monkeypatch.setenv("AGENT_REQUEST_WORKTREE_ROOT", str(root))
++    monkeypatch.setenv("AGENT_REQUEST_CLEANUP_DELETE_REMOTE_BRANCHES", "true")
++    monkeypatch.setenv("AGENT_REQUEST_REPO_POLICIES_JSON", json.dumps([{"name": "nest-config", "canonical_path": str(repo), "match": ["nest config"]}]))
++    path = root / "nest-config" / "t_1234abcd"
++    task = types.SimpleNamespace(id="t_1234abcd", status="done", workspace_kind="worktree", workspace_path=str(path), branch_name=branch)
++
++    result = backend.cleanup_task_workspace(task)
++
++    assert result["removed_worktree"] is False
++    assert result["removed_local_branch"] is False
++    assert result["removed_remote_branch"] is True
++    assert "workspace path is already absent" in result["skipped"]
++    assert not subprocess.run(["git", "ls-remote", "--exit-code", "--heads", str(remote), branch], stdout=subprocess.PIPE, stderr=subprocess.PIPE).returncode == 0
++
++
++def test_cleanup_eyrie_registry_deletion_is_env_gated_and_uses_docker_registry_v2(tmp_path, monkeypatch):
++    from agent_request_broker import kanban_backend as backend
++
++    repo = tmp_path / "repo"
++    repo.mkdir()
++    subprocess.run(["git", "init", "-b", "main"], cwd=repo, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
++    subprocess.run(["git", "remote", "add", "origin", "git@gitlab.joyfullee.me:nest/config.git"], cwd=repo, check=True)
++    branch = "talon/t_1234abcd-cleanup-test"
++
++    disabled = backend.delete_eyrie_registry_repository(repo_path=repo, branch=branch)
++    assert disabled["enabled"] is False
++    assert disabled["deleted"] == []
++
++    monkeypatch.setenv("AGENT_REQUEST_CLEANUP_DELETE_EYRIE_REGISTRY_REPOSITORIES", "true")
++    calls = []
++
++    def fake_registry_request(method, url, *, accept_manifest=False):
++        calls.append((method, url, accept_manifest))
++        if url.endswith("/tags/list"):
++            return 200, {"tags": ["latest", "haswell"]}, {}
++        if method == "HEAD":
++            tag = url.rsplit("/", 1)[-1]
++            return 200, None, {"docker-content-digest": f"sha256:{tag}digest"}
++        if method == "DELETE":
++            return 202, None, {}
++        raise AssertionError(f"unexpected registry request: {method} {url}")
++
++    monkeypatch.setattr(backend, "docker_registry_json_request", fake_registry_request)
++    result = backend.delete_eyrie_registry_repository(repo_path=repo, branch=branch)
++
++    assert result["enabled"] is True
++    assert "registry.eyrie/nest/config/talon/t_1234abcd-cleanup-test:latest" in result["deleted"]
++    assert "registry-test.eyrie/nest/config/talon/t_1234abcd-cleanup-test:haswell" in result["deleted"]
++    assert any(call[0] == "HEAD" and call[2] is True for call in calls)
++    assert any(call[0] == "DELETE" and "sha256:" in call[1] for call in calls)
++
++
  if __name__ == "__main__":
      test_model_facing_registry_is_kanban_only()
      test_kanban_default_and_event_comment_helpers()
-@@ -1246,4 +1353,25 @@ if __name__ == "__main__":
+@@ -1246,4 +1426,25 @@ if __name__ == "__main__":
      test_old_request_rows_without_title_metadata_get_computed_display_fields()
      test_operator_propose_and_approve_clis()
      test_maintenance_diagnose_and_supersede_failed_probe()
