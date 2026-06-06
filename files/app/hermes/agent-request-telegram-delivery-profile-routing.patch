@@ -1,0 +1,420 @@
+diff --git a/src/agent_request_broker/kanban_backend.py b/src/agent_request_broker/kanban_backend.py
+index 641a81c..ed821ed 100644
+--- a/src/agent_request_broker/kanban_backend.py
++++ b/src/agent_request_broker/kanban_backend.py
+@@ -1110,6 +1110,7 @@ def init_index(conn: Any) -> None:
+             review_comment_id INTEGER,
+             review_hash TEXT,
+             actor TEXT NOT NULL,
++            delivery_profile TEXT NOT NULL DEFAULT '',
+             created_at INTEGER NOT NULL,
+             used_at INTEGER
+         )
+@@ -1120,7 +1121,7 @@ def init_index(conn: Any) -> None:
+         "ON agent_request_callback_tokens(request_id, created_at)"
+     )
+     callback_columns = {row["name"] for row in conn.execute("PRAGMA table_info(agent_request_callback_tokens)").fetchall()}
+-    for column, column_type in (("review_comment_id", "INTEGER"), ("review_hash", "TEXT")):
++    for column, column_type in (("review_comment_id", "INTEGER"), ("review_hash", "TEXT"), ("delivery_profile", "TEXT NOT NULL DEFAULT ''")):
+         if column not in callback_columns:
+             conn.execute(f"ALTER TABLE agent_request_callback_tokens ADD COLUMN {column} {column_type}")
+     conn.execute(
+@@ -1135,6 +1136,7 @@ def init_index(conn: Any) -> None:
+             review_comment_id INTEGER,
+             review_hash TEXT,
+             actor TEXT NOT NULL,
++            delivery_profile TEXT NOT NULL DEFAULT '',
+             chat_id TEXT NOT NULL,
+             thread_id TEXT NOT NULL,
+             prompt_message_id INTEGER,
+@@ -1154,7 +1156,7 @@ def init_index(conn: Any) -> None:
+         "ON agent_request_reply_prompts(chat_id, prompt_message_id)"
+     )
+     prompt_columns = {row["name"] for row in conn.execute("PRAGMA table_info(agent_request_reply_prompts)").fetchall()}
+-    for column, column_type in (("review_comment_id", "INTEGER"), ("review_hash", "TEXT"), ("retired_reason", "TEXT NOT NULL DEFAULT ''")):
++    for column, column_type in (("review_comment_id", "INTEGER"), ("review_hash", "TEXT"), ("retired_reason", "TEXT NOT NULL DEFAULT ''"), ("delivery_profile", "TEXT NOT NULL DEFAULT ''")):
+         if column not in prompt_columns:
+             conn.execute(f"ALTER TABLE agent_request_reply_prompts ADD COLUMN {column} {column_type}")
+     conn.execute(
+@@ -2897,6 +2899,7 @@ def record_callback_token(
+     item: AgentRequestIndex,
+     action: str,
+     actor: str = "joy",
++    delivery_profile: str = "",
+     proposal: dict[str, Any] | None = None,
+     review: dict[str, Any] | None = None,
+ ) -> str:
+@@ -2907,8 +2910,8 @@ def record_callback_token(
+         """
+         INSERT INTO agent_request_callback_tokens
+             (token, request_id, task_id, action, proposal_comment_id,
+-             proposal_hash, review_comment_id, review_hash, actor, created_at, used_at)
+-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
++             proposal_hash, review_comment_id, review_hash, actor, delivery_profile, created_at, used_at)
++        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+         """,
+         (
+             token,
+@@ -2920,6 +2923,7 @@ def record_callback_token(
+             int(review["review_comment_id"]) if review else None,
+             review["review_hash"] if review else None,
+             actor,
++            clean_text(delivery_profile, max_len=80).lower(),
+             now_ts(),
+         ),
+     )
+@@ -2927,30 +2931,30 @@ def record_callback_token(
+     return token
+
+
+-def actionable_reply_markup(conn: Any, *, item: AgentRequestIndex, action: str) -> dict[str, Any] | None:
++def actionable_reply_markup(conn: Any, *, item: AgentRequestIndex, action: str, delivery_profile: str = "") -> dict[str, Any] | None:
+     """Build Telegram inline controls for current actionable agent-request states."""
+     rows: list[list[dict[str, str]]] = []
+     proposal = latest_proposal(conn, item.request_id)
+     review = latest_review(conn, item.request_id)
+     if action == "proposed" and proposal:
+         rows.append([
+-            {"text": "✅ Approve", "callback_data": _callback_data(record_callback_token(conn, item=item, action="approve", proposal=proposal))},
+-            {"text": "❌ Deny", "callback_data": _callback_data(record_callback_token(conn, item=item, action="deny", proposal=proposal))},
++            {"text": "✅ Approve", "callback_data": _callback_data(record_callback_token(conn, item=item, delivery_profile=delivery_profile, action="approve", proposal=proposal))},
++            {"text": "❌ Deny", "callback_data": _callback_data(record_callback_token(conn, item=item, delivery_profile=delivery_profile, action="deny", proposal=proposal))},
+         ])
+         rows.append([
+-            {"text": "✏️ Steer / request changes", "callback_data": _callback_data(record_callback_token(conn, item=item, action="steer", proposal=proposal))},
++            {"text": "✏️ Steer / request changes", "callback_data": _callback_data(record_callback_token(conn, item=item, delivery_profile=delivery_profile, action="steer", proposal=proposal))},
+         ])
+     elif action in {"blocked", "needs_info"}:
+         rows.append([
+-            {"text": "✏️ Answer / steer", "callback_data": _callback_data(record_callback_token(conn, item=item, action="needs_info_answer"))},
++            {"text": "✏️ Answer / steer", "callback_data": _callback_data(record_callback_token(conn, item=item, delivery_profile=delivery_profile, action="needs_info_answer"))},
+         ])
+     elif action in REVIEW_BUTTON_ACTIONS and review:
+         rows.append([
+-            {"text": "✅ Accept review", "callback_data": _callback_data(record_callback_token(conn, item=item, action="review_accept", review=review))},
++            {"text": "✅ Accept review", "callback_data": _callback_data(record_callback_token(conn, item=item, delivery_profile=delivery_profile, action="review_accept", review=review))},
+         ])
+         rows.append([
+-            {"text": "🔁 Request changes", "callback_data": _callback_data(record_callback_token(conn, item=item, action="review_changes", review=review))},
+-            {"text": "❓ Ask question", "callback_data": _callback_data(record_callback_token(conn, item=item, action="review_question", review=review))},
++            {"text": "🔁 Request changes", "callback_data": _callback_data(record_callback_token(conn, item=item, delivery_profile=delivery_profile, action="review_changes", review=review))},
++            {"text": "❓ Ask question", "callback_data": _callback_data(record_callback_token(conn, item=item, delivery_profile=delivery_profile, action="review_question", review=review))},
+         ])
+     return {"inline_keyboard": rows} if rows else None
+
+@@ -2964,6 +2968,7 @@ def record_reply_prompt(
+     chat_id: str,
+     thread_id: str = "",
+     prompt_message_id: int | None = None,
++    delivery_profile: str = "",
+ ) -> dict[str, Any]:
+     """Persist a bounded Telegram free-form reply prompt."""
+     prompt_token = _make_callback_token()
+@@ -2978,17 +2983,18 @@ def record_reply_prompt(
+            SET used_at = ?, retired_reason = 'superseded by newer prompt'
+          WHERE request_id = ?
+            AND action = ?
++           AND delivery_profile = ?
+            AND used_at IS NULL
+         """,
+-        (created_at, request_id, action),
++        (created_at, request_id, action, clean_text(delivery_profile, max_len=80).lower()),
+     )
+     conn.execute(
+         """
+         INSERT INTO agent_request_reply_prompts
+             (prompt_token, request_id, task_id, action, proposal_comment_id,
+-             proposal_hash, review_comment_id, review_hash, actor, chat_id,
++             proposal_hash, review_comment_id, review_hash, actor, delivery_profile, chat_id,
+              thread_id, prompt_message_id, created_at, expires_at, used_at)
+-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
++        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+         """,
+         (
+             prompt_token,
+@@ -3000,6 +3006,7 @@ def record_reply_prompt(
+             callback.get("review_comment_id"),
+             callback.get("review_hash"),
+             actor,
++            clean_text(delivery_profile, max_len=80).lower(),
+             clean_text(chat_id, max_len=80),
+             clean_text(thread_id or "", max_len=80),
+             int(prompt_message_id) if prompt_message_id is not None else None,
+@@ -3013,6 +3020,7 @@ def record_reply_prompt(
+         "request_id": request_id,
+         "task_id": callback["task_id"],
+         "action": action,
++        "delivery_profile": clean_text(delivery_profile, max_len=80).lower(),
+         "expires_at": created_at + REPLY_PROMPT_TTL_SECONDS,
+     }
+     if callback.get("proposal_comment_id") is not None:
+@@ -3299,6 +3307,7 @@ def handle_telegram_unstuck(
+     thread_id: str = "",
+     text: str = "",
+     command: str = "unstuck",
++    delivery_profile: str = "",
+ ) -> dict[str, Any]:
+     """List, retire, or route active Telegram agent-request reply prompts."""
+     conn = connect()
+@@ -3308,7 +3317,7 @@ def handle_telegram_unstuck(
+         if stripped_text.casefold() in UNSTUCK_HELP_TERMS:
+             return {"handled": True, "ok": True, "message": _format_unstuck_help()}
+
+-        prompts = _reply_prompt_candidates(conn, chat_id=chat_id, thread_id=thread_id)
++        prompts = _reply_prompt_candidates(conn, chat_id=chat_id, thread_id=thread_id, delivery_profile=delivery_profile)
+         prompts, duplicate_tokens = _newest_prompts_by_request_action(prompts)
+         retired_duplicates = _retire_reply_prompts(conn, duplicate_tokens, reason="older duplicate retired by unstuck") if duplicate_tokens else 0
+
+@@ -3450,10 +3459,12 @@ def _reply_prompt_candidates(
+     chat_id: str,
+     thread_id: str = "",
+     reply_to_message_id: int | None = None,
++    delivery_profile: str = "",
+ ) -> list[dict[str, Any]]:
+     now = now_ts()
+     chat_id = clean_text(chat_id, max_len=80)
+     thread_id = clean_text(thread_id or "", max_len=80)
++    delivery_profile = clean_text(delivery_profile, max_len=80).lower()
+     if reply_to_message_id is not None:
+         rows = conn.execute(
+             """
+@@ -3461,11 +3472,12 @@ def _reply_prompt_candidates(
+             FROM agent_request_reply_prompts
+             WHERE chat_id = ?
+               AND prompt_message_id = ?
++              AND (? = '' OR delivery_profile = '' OR delivery_profile = ?)
+               AND used_at IS NULL
+               AND expires_at >= ?
+             ORDER BY created_at DESC
+             """,
+-            (chat_id, int(reply_to_message_id), now),
++            (chat_id, int(reply_to_message_id), delivery_profile, delivery_profile, now),
+         ).fetchall()
+     else:
+         rows = conn.execute(
+@@ -3474,12 +3486,13 @@ def _reply_prompt_candidates(
+             FROM agent_request_reply_prompts
+             WHERE chat_id = ?
+               AND thread_id = ?
++              AND (? = '' OR delivery_profile = '' OR delivery_profile = ?)
+               AND used_at IS NULL
+               AND expires_at >= ?
+             ORDER BY created_at DESC
+             LIMIT 8
+             """,
+-            (chat_id, thread_id, now),
++            (chat_id, thread_id, delivery_profile, delivery_profile, now),
+         ).fetchall()
+     return _active_reply_prompts(rows, conn)
+
+@@ -3518,12 +3531,13 @@ def handle_telegram_reply(
+     actor: str = "joy",
+     thread_id: str = "",
+     reply_to_message_id: int | None = None,
++    delivery_profile: str = "",
+ ) -> dict[str, Any]:
+     """Route a Telegram free-form reply through its originating action prompt."""
+     response = clean_text(text, max_len=4000)
+     is_unstuck, command, command_tail = _split_unstuck_command(response)
+     if is_unstuck:
+-        return handle_telegram_unstuck(chat_id=chat_id, actor=actor, thread_id=thread_id, text=command_tail, command=command)
++        return handle_telegram_unstuck(chat_id=chat_id, actor=actor, thread_id=thread_id, text=command_tail, command=command, delivery_profile=delivery_profile)
+     if not response:
+         return {"handled": False, "ok": False, "error": "empty_reply", "message": "Empty agent-request reply."}
+     conn = connect()
+@@ -3533,6 +3547,7 @@ def handle_telegram_reply(
+             chat_id=chat_id,
+             thread_id=thread_id,
+             reply_to_message_id=reply_to_message_id,
++            delivery_profile=delivery_profile,
+         )
+         if not candidates:
+             return {"handled": False, "ok": False, "error": "no_prompt", "message": "No active agent-request reply prompt matched this message."}
+@@ -3596,7 +3611,7 @@ def _callback_row(conn: Any, token: str) -> dict[str, Any] | None:
+     row = conn.execute(
+         """
+         SELECT token, request_id, task_id, action, proposal_comment_id,
+-               proposal_hash, review_comment_id, review_hash, actor, created_at, used_at
++               proposal_hash, review_comment_id, review_hash, actor, delivery_profile, created_at, used_at
+         FROM agent_request_callback_tokens
+         WHERE token = ?
+         """,
+@@ -3605,7 +3620,7 @@ def _callback_row(conn: Any, token: str) -> dict[str, Any] | None:
+     return dict(row) if row else None
+
+
+-def validate_callback_token(conn: Any, token: str) -> dict[str, Any]:
++def validate_callback_token(conn: Any, token: str, *, delivery_profile: str = "") -> dict[str, Any]:
+     _callback_board, callback_token = parse_callback_token(token)
+     token = clean_text(callback_token, max_len=80)
+     row = _callback_row(conn, token)
+@@ -3613,6 +3628,10 @@ def validate_callback_token(conn: Any, token: str) -> dict[str, Any]:
+         return {"ok": False, "error": "unknown_callback", "message": "This button is no longer recognized."}
+     if row.get("used_at"):
+         return {"ok": False, "error": "callback_used", "message": "This button was already used."}
++    delivery_profile = clean_text(delivery_profile, max_len=80).lower()
++    row_profile = clean_text(row.get("delivery_profile") or "", max_len=80).lower()
++    if delivery_profile and row_profile and delivery_profile != row_profile:
++        return {"ok": False, "error": "wrong_delivery_profile", "message": "This button belongs to a different agent-request recipient profile."}
+     if row["action"] in CALLBACK_BINDING_ACTIONS:
+         current = latest_proposal(conn, row["request_id"])
+         if not current:
+@@ -3646,6 +3665,7 @@ def handle_telegram_callback(
+     chat_id: str = "",
+     thread_id: str = "",
+     prompt_message_id: int | None = None,
++    delivery_profile: str = "",
+ ) -> dict[str, Any]:
+     """Resolve a trusted Telegram agent-request callback.
+
+@@ -3661,6 +3681,7 @@ def handle_telegram_callback(
+             chat_id=chat_id,
+             thread_id=thread_id,
+             prompt_message_id=prompt_message_id,
++            delivery_profile=delivery_profile,
+         )
+
+
+@@ -3671,10 +3692,11 @@ def _handle_telegram_callback_on_current_board(
+     chat_id: str = "",
+     thread_id: str = "",
+     prompt_message_id: int | None = None,
++    delivery_profile: str = "",
+ ) -> dict[str, Any]:
+     conn = connect()
+     try:
+-        validation = validate_callback_token(conn, token)
++        validation = validate_callback_token(conn, token, delivery_profile=delivery_profile)
+         if not validation.get("ok"):
+             return validation
+         row = validation["callback"]
+@@ -3744,6 +3766,7 @@ def _handle_telegram_callback_on_current_board(
+                     chat_id=chat_id,
+                     thread_id=thread_id,
+                     prompt_message_id=prompt_message_id,
++                    delivery_profile=delivery_profile,
+                 )
+         finally:
+             conn.close()
+@@ -3923,7 +3946,7 @@ def notify_kanban_event(
+                     "reason": "in_progress already delivered",
+                 })
+                 continue
+-            reply_markup = actionable_reply_markup(conn, item=item, action=action)
++            reply_markup = actionable_reply_markup(conn, item=item, action=action, delivery_profile=delivery_profile)
+             urgency_detail = notification_urgency_detail(action, reply_markup=reply_markup)
+             result = send_request_notification(
+                 message,
+diff --git a/tests/test_agent_request_broker.py b/tests/test_agent_request_broker.py
+index 5546b34..3d62766 100755
+--- a/tests/test_agent_request_broker.py
++++ b/tests/test_agent_request_broker.py
+@@ -1122,6 +1122,108 @@ def test_telegram_freeform_replies_route_to_originating_prompt_not_recency():
+             backend.telegram_send = old_send
+
+
++def test_reply_prompts_and_callbacks_are_scoped_to_delivery_profile():
++    if not require_hermes_src():
++        return
++    with kanban_env() as tmp:
++        from agent_request_broker import kanban_backend as backend
++
++        old_send = backend.telegram_send
++        deliveries = []
++        backend.telegram_send = lambda message, *, profile="", reply_markup=None: deliveries.append((profile, reply_markup)) or {"sent": True, "test": True}
++        try:
++            first = backend.submit({
++                "title": "Profile scoped first prompt",
++                "request": "First profile should receive only its own reply.",
++                "target": "star",
++            }, requester="talon")
++            second = backend.submit({
++                "title": "Profile scoped second prompt",
++                "request": "Second profile should receive only its own reply.",
++                "target": "star",
++            }, requester="talon")
++            first_id = first["request"]["id"]
++            second_id = second["request"]["id"]
++            backend.propose({"request_id": first_id, "summary": "approval-required: first profile", "proposal": "First profile proposal."}, actor="star")
++            backend.propose({"request_id": second_id, "summary": "approval-required: second profile", "proposal": "Second profile proposal."}, actor="star")
++
++            def steer_token_for(request_id, delivery_profile):
++                conn = backend.connect()
++                try:
++                    for profile, markup in deliveries:
++                        if profile != delivery_profile or not markup:
++                            continue
++                        for row in markup["inline_keyboard"]:
++                            for button in row:
++                                if button["text"] != "✏️ Steer / request changes":
++                                    continue
++                                token = button["callback_data"].split(":", 1)[1]
++                                validation = backend.validate_callback_token(conn, token, delivery_profile=delivery_profile)
++                                if validation.get("ok") and validation["callback"]["request_id"] == request_id:
++                                    return token
++                finally:
++                    conn.close()
++                raise AssertionError(f"no {delivery_profile} steer token for {request_id}")
++
++            first_talon = steer_token_for(first_id, "talon")
++            second_star = steer_token_for(second_id, "star")
++            wrong_profile = backend.handle_telegram_callback(
++                first_talon,
++                actor="joy",
++                chat_id="chat-1",
++                thread_id="topic-1",
++                prompt_message_id=111,
++                delivery_profile="star",
++            )
++            assert wrong_profile["ok"] is False
++            assert wrong_profile["error"] == "wrong_delivery_profile"
++
++            first_prompt = backend.handle_telegram_callback(
++                first_talon,
++                actor="joy",
++                chat_id="chat-1",
++                thread_id="topic-1",
++                prompt_message_id=111,
++                delivery_profile="talon",
++            )
++            assert first_prompt["ok"] is True
++            assert first_prompt["result"]["awaiting_reply"]["delivery_profile"] == "talon"
++            second_prompt = backend.handle_telegram_callback(
++                second_star,
++                actor="joy",
++                chat_id="chat-1",
++                thread_id="topic-1",
++                prompt_message_id=222,
++                delivery_profile="star",
++            )
++            assert second_prompt["ok"] is True
++            assert second_prompt["result"]["awaiting_reply"]["delivery_profile"] == "star"
++
++            talon_routed = backend.handle_telegram_reply(
++                chat_id="chat-1",
++                thread_id="topic-1",
++                text="Talon-profile response.",
++                actor="joy",
++                delivery_profile="talon",
++            )
++            assert talon_routed["handled"] is True
++            assert talon_routed["ok"] is True
++            assert talon_routed["request_id"] == first_id
++
++            star_routed = backend.handle_telegram_reply(
++                chat_id="chat-1",
++                thread_id="topic-1",
++                text="Star-profile response.",
++                actor="joy",
++                delivery_profile="star",
++            )
++            assert star_routed["handled"] is True
++            assert star_routed["ok"] is True
++            assert star_routed["request_id"] == second_id
++        finally:
++            backend.telegram_send = old_send
++
++
+ def test_stale_reply_prompts_are_removed_from_active_consideration():
+     if not require_hermes_src():
+         return

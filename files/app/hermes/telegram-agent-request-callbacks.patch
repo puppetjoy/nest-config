@@ -2,7 +2,7 @@ diff --git a/gateway/platforms/telegram.py b/gateway/platforms/telegram.py
 index 300fc49c0..9675fa91a 100644
 --- a/gateway/platforms/telegram.py
 +++ b/gateway/platforms/telegram.py
-@@ -3126,6 +3126,52 @@ class TelegramAdapter(BasePlatformAdapter):
+@@ -3126,6 +3126,53 @@ class TelegramAdapter(BasePlatformAdapter):
              )
              return
 
@@ -30,6 +30,7 @@ index 300fc49c0..9675fa91a 100644
 +                    chat_id=str(query_chat_id or ""),
 +                    thread_id=str(query_thread_id or ""),
 +                    prompt_message_id=getattr(getattr(query, "message", None), "message_id", None),
++                    delivery_profile=str(self.name or ""),
 +                )
 +            except Exception as exc:
 +                logger.error("[%s] agent-request callback failed: %s", self.name, exc, exc_info=True)
@@ -55,7 +56,7 @@ index 300fc49c0..9675fa91a 100644
          # --- Exec approval callbacks (ea:choice:id) ---
          if data.startswith("ea:"):
              parts = data.split(":", 2)
-@@ -4963,6 +5009,33 @@ class TelegramAdapter(BasePlatformAdapter):
+@@ -4963,6 +5010,34 @@ class TelegramAdapter(BasePlatformAdapter):
              return
          await self._ensure_forum_commands(update.message)
 
@@ -70,6 +71,7 @@ index 300fc49c0..9675fa91a 100644
 +                reply_to_message_id=reply_to,
 +                text=msg.text,
 +                actor=str(user_display or "joy"),
++                delivery_profile=str(self.name or ""),
 +            )
 +        except Exception as exc:
 +            logger.error("[%s] agent-request reply routing failed: %s", self.name, exc, exc_info=True)
