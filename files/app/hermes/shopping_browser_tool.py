@@ -107,6 +107,7 @@ SENSITIVE_TYPED_TEXT_RE = re.compile(
     re.IGNORECASE,
 )
 CHECKOUTISH_PAGE_RE = re.compile(r"checkout|buy|payselect|ship|spc|review|ordering", re.IGNORECASE)
+CHECKOUT_QUERY_PAGE_RE = re.compile(r"checkout|payselect|spc|ordering|place[-\s]?order|review\s+your\s+order|order\s+review|/gp/buy|/buy|shipping\s+(address|option|speed|method)|delivery\s+(option|date|window)", re.IGNORECASE)
 SAFE_CHECKOUT_SENSITIVE_LABEL_RE = re.compile(r"shipping\s+(speed|option|method)|delivery\s+(option|date|window)|gift(?!\s*card\s*(number|code))|gift\s+card\s+balance|use\s+a\s+gift\s+card|coupon|promo|promotion|claim\s+code|payment\s+(summary|method|option)|paying\s+with|quantity|qty|delete|remove|one[-\s]?time|subscribe|subscription|cart", re.IGNORECASE)
 MUTATING_QUERY_RE = re.compile(r"\b(click|submit|fetch|XMLHttpRequest|sendBeacon|localStorage|sessionStorage|indexedDB|cookie|setAttribute|removeAttribute|appendChild|removeChild|innerHTML\s*=|location\s*=|open\s*\()\b", re.IGNORECASE)
 
@@ -1068,6 +1069,34 @@ def _safe_read_only_query(value: Any) -> str:
     if MUTATING_QUERY_RE.search(expression):
         raise ValueError("expression contains mutating, network, storage, cookie, or navigation tokens")
     return expression
+
+
+def _is_amazon_checkoutish_page(url: str, title: str = "") -> bool:
+    parsed = urlparse(str(url or ""))
+    page_material = " ".join([parsed.path, parsed.query, str(title or "")])
+    return bool(parsed.scheme == "https" and AMAZON_HOST_RE.search(parsed.netloc) and CHECKOUT_QUERY_PAGE_RE.search(page_material))
+
+
+def _is_checkoutish_page(url: str, title: str = "") -> bool:
+    parsed = urlparse(str(url or ""))
+    page_material = " ".join([parsed.path, parsed.query, str(title or "")])
+    return bool(CHECKOUT_QUERY_PAGE_RE.search(page_material))
+
+
+def _checkout_query_summary_response(checkout_review: dict[str, Any], expression: str, url: str = "", title: str = "") -> dict[str, Any]:
+    result = dict(checkout_review)
+    result["operation"] = "checkout_query_summary"
+    result["status"] = "ok"
+    result["requested_expression_sha256"] = hashlib.sha256(str(expression or "").encode("utf-8")).hexdigest()
+    result["query_boundary"] = (
+        "Generic shopping_browser_query is restricted on checkout/order-review pages. "
+        "The requested JavaScript was not returned directly; this result contains only the sanitized checkout-prep summary and non-secret controls."
+    )
+    if url and not result.get("url"):
+        result["url"] = _sanitize_url(url)
+    if title and not result.get("page_title"):
+        result["page_title"] = _sanitize_checkout_text(title)
+    return result
 
 
 def _json_literal(value: Any) -> str:
@@ -2165,8 +2194,16 @@ def _query(expression: str) -> dict[str, Any]:
     wrapped = f"(() => {{ const value = ({safe_expression}); return value; }})()"
 
     def run(browser: CdpSession) -> dict[str, Any]:
-        target_id = _first_page_target(browser)
-        session_id = _attach(browser, target_id)
+        page_info = _target_page_info(browser.port) if browser.port is not None else {}
+        target_id = page_info.get("id") or _first_page_target(browser)
+        session_id = _attach(browser, str(target_id))
+        url = str(_evaluate(browser, session_id, "location.href") or page_info.get("url") or "")
+        title = str(_evaluate(browser, session_id, "document.title") or page_info.get("title") or "")
+        if _is_amazon_checkoutish_page(url, title):
+            checkout_review = _checkout_summary_from_browser(browser, session_id)
+            return _checkout_query_summary_response(checkout_review, safe_expression, url=url, title=title)
+        if _is_checkoutish_page(url, title):
+            raise ValueError("generic shopping_browser_query is unavailable on checkout/order-review pages outside the Amazon checkout-prep sanitizer boundary")
         value = _evaluate(browser, session_id, wrapped)
         payload = json.dumps(value, ensure_ascii=False, sort_keys=True)
         if len(payload) > MAX_QUERY_RESULT_CHARS:
@@ -2912,7 +2949,7 @@ PAGE_SNAPSHOT_SCHEMA = {
 
 QUERY_SCHEMA = {
     "name": "shopping_browser_query",
-    "description": "Evaluate a limited read-only JavaScript expression on the current shopping page for structured visible-page facts. Runtime guardrails reject obvious mutation, network, storage, cookie, and navigation tokens; do not use this for side effects or secrets.",
+    "description": "Evaluate a limited read-only JavaScript expression on the current shopping page for structured visible-page facts. Runtime guardrails reject obvious mutation, network, storage, cookie, and navigation tokens. On checkout/order-review pages this tool does not return the raw query result; it returns only the sanitized checkout-prep summary and non-secret controls, while complete checkout evidence remains Joy-only.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -3207,6 +3244,9 @@ if __name__ == "__main__":
     amazon_checkout_policy = _screenshot_policy("https://www.amazon.com/gp/buy/spc/handlers/display.html", "Review your order")
     assert amazon_checkout_policy["mode"] == "checkout_prep_redacted"
     assert amazon_checkout_policy["redaction_required"] is True
+    assert _is_amazon_checkoutish_page("https://www.amazon.com/gp/buy/spc/handlers/display.html", "Review your order") is True
+    assert _is_amazon_checkoutish_page("https://www.amazon.com/product-reviews/B01J01XGPK", "Customer reviews") is False
+    assert _is_checkoutish_page("https://shop.example.test/checkout/payment", "Payment") is True
     try:
         _screenshot_policy("https://shop.example.test/checkout/payment", "Payment")
         raise AssertionError("non-Amazon checkout/payment screenshot should be blocked")
@@ -3282,6 +3322,73 @@ if __name__ == "__main__":
     assert "Return policy" not in mixed_json
     assert "Order total" not in mixed_json
     assert "Example Street" not in mixed_json
+    generic_checkout_review = _sanitize_checkout_summary(
+        {
+            "items": ["Pipe screens Qty: 1 Sold by Gray Caravan"],
+            "delivery": ["Arrives Monday to 123 Example Street Apt 4, Sampletown, NY 12345"],
+            "shipping_destination_label_or_city_state": ["Ship to Joy, 123 Example Street Apt 4, Sampletown, NY 12345"],
+            "payment_method_label_last_four_only": ["Visa 4111 1111 1111 1234 ending in 1234"],
+        },
+        {"final_purchase_controls_visible": ["Place Order"], "checkout_prep_state": "checkout_prep_visible"},
+        {
+            "safe_controls": [
+                {
+                    "selector": "#sns-item-v2-checkbox-0",
+                    "label": "Subscribe & Save checkbox",
+                    "role": "checkbox",
+                    "tag": "input",
+                    "input_type": "checkbox",
+                    "region": "purchase_mode",
+                    "approved_effect_hints": ["fix_purchase_mode"],
+                    "checked": False,
+                    "disabled": False,
+                    "viewport_rect": {"x": 10, "y": 20, "width": 15, "height": 15},
+                },
+            ],
+        },
+    )
+
+    class _FakeBrowser:
+        port = 9222
+
+    original_with_browser = _with_browser
+    original_target_page_info = _target_page_info
+    original_attach = _attach
+    original_evaluate = _evaluate
+    original_checkout_summary_from_browser = _checkout_summary_from_browser
+    try:
+        globals()["_with_browser"] = lambda fn: fn(_FakeBrowser())
+        globals()["_target_page_info"] = lambda _port: {"id": "checkout-target", "url": "https://www.amazon.com/gp/buy/spc/handlers/display.html", "title": "Review your order"}
+        globals()["_attach"] = lambda _browser, _target_id: "checkout-session"
+
+        def _fake_evaluate(_browser, _session_id, expression):
+            if expression == "location.href":
+                return "https://www.amazon.com/gp/buy/spc/handlers/display.html?hasWorkingJavascript=1"
+            if expression == "document.title":
+                return "Review your order"
+            raise AssertionError("checkout query should not evaluate the requested JavaScript expression")
+
+        globals()["_evaluate"] = _fake_evaluate
+        globals()["_checkout_summary_from_browser"] = lambda _browser, _session_id: generic_checkout_review
+        query_result = _query("Array.from(document.querySelectorAll('button,input')).map((node) => node.textContent || node.value || node.getAttribute('aria-label'))")
+    finally:
+        globals()["_with_browser"] = original_with_browser
+        globals()["_target_page_info"] = original_target_page_info
+        globals()["_attach"] = original_attach
+        globals()["_evaluate"] = original_evaluate
+        globals()["_checkout_summary_from_browser"] = original_checkout_summary_from_browser
+
+    query_json = json.dumps(query_result, ensure_ascii=False)
+    assert query_result["operation"] == "checkout_query_summary"
+    assert query_result["status"] == "ok"
+    assert "value" not in query_result
+    assert query_result["requested_expression_sha256"]
+    assert query_result["checkout_prep_controls"][0]["selector"] == "#sns-item-v2-checkbox-0"
+    assert query_result["checkout_prep_controls"][0]["checked"] is False
+    assert "Example Street" not in query_json
+    assert "12345" not in query_json
+    assert "4111" not in query_json
+    assert "Place Order" in query_json
     try:
         _check_human_takeover_text("Proceed to checkout")
         raise AssertionError("ordinary browse click should block checkout-prep controls")
