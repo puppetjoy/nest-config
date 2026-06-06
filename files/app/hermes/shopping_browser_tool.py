@@ -624,8 +624,13 @@ CHECKOUT_PAGE_SAFETY_JS = r"""
 ORDER_REVIEW_EXTRACT_JS = r"""
 (() => {
   const clean = (value) => (value || '').replace(/\s+/g, ' ').trim();
-  const pageText = clean(document.body ? document.body.innerText : '');
-  const lines = pageText.split(/(?<=\$[0-9][0-9,.]*|\.)\s+|\n+/).map(clean).filter(Boolean);
+  const pageText = document.body ? document.body.innerText : '';
+  const lines = pageText
+    .split(/\n+/)
+    .flatMap((line) => clean(line).split(/(?<=\$[0-9][0-9,.]*|\.)\s+/))
+    .map(clean)
+    .filter(Boolean)
+    .filter((line) => line.length <= 500);
   const pick = (patterns, limit = 5) => lines.filter((line) => patterns.some((re) => re.test(line))).slice(0, limit);
   const redactAddress = (value) => clean(value)
     .replace(/\b\d{1,6}\s+[^,]{2,80}\b(?:,\s*)?/g, '[street address redacted] ')
@@ -831,6 +836,12 @@ _LONG_PAYMENT_NUMBER_RE = re.compile(r"\b(?:\d[ -]?){5,}\d\b")
 _FULL_CARD_RE = re.compile(r"\b(?:\d[ -]?){12,18}\d\b")
 _PAYMENT_BRAND_RE = re.compile(r"\b(visa|mastercard|amex|american express|discover|gift card)\b", re.IGNORECASE)
 _LAST_FOUR_RE = re.compile(r"(?:ending\s+in|last\s+four|\*{2,}|•{2,}|x{2,})\s*(\d{4})\b", re.IGNORECASE)
+_SHIPPING_DESTINATION_CUE_RE = re.compile(r"\b(ship\s+to|deliver\s+to|delivery\s+address|shipping\s+address|billing\s+to)\b", re.IGNORECASE)
+_CHECKOUT_ADMIN_FRAGMENT_RE = re.compile(
+    r"\b(promo(?:tion)?\s+code|claim\s+code|gift\s+card|change|return\s+policy|terms|conditions|privacy|place\s+(?:your\s+)?order|"
+    r"payment\s+method|wallet|shipping\s+address|delivery\s+address|ship\s+to|deliver\s+to|subtotal|estimated\s+tax|order\s+total)\b",
+    re.IGNORECASE,
+)
 
 
 def _sanitize_checkout_text(value: str) -> str:
@@ -937,11 +948,29 @@ def _as_checkout_list(value: Any) -> list[Any]:
     return [value]
 
 
-def _sanitize_checkout_detail_text(value: Any) -> str:
+def _checkout_text_is_wrong_detail_bucket(value: str, field: str) -> bool:
+    field = str(field or "").lower()
+    text = str(value or "")
+    if field in ("items", "delivery") and _CHECKOUT_ADMIN_FRAGMENT_RE.search(text):
+        return True
+    if field == "items" and not re.search(r"\b(qty|quantity|sold\s+by|seller)\b|\$\d", text, re.IGNORECASE):
+        return True
+    if field == "delivery" and re.search(
+        r"\b(payment\s+method|wallet|card|visa|mastercard|amex|american express|discover|subtotal|estimated\s+tax|order\s+total|qty|quantity|sold\s+by|seller)\b",
+        text,
+        re.IGNORECASE,
+    ):
+        return True
+    return False
+
+
+def _sanitize_checkout_detail_text(value: Any, field: str = "") -> str:
     text = _sanitize_checkout_text(str(value or ""))
     if not text:
         return ""
     if FINAL_PURCHASE_RE.search(text):
+        return ""
+    if _checkout_text_is_wrong_detail_bucket(text, field):
         return ""
     if _checkout_text_has_sensitive_marker(text) or _checkout_text_has_mixed_summary(text):
         return "[checkout detail redacted]"
@@ -950,12 +979,22 @@ def _sanitize_checkout_detail_text(value: Any) -> str:
     return text
 
 
-def _sanitize_checkout_detail_list(value: Any, limit: int = 12) -> list[str]:
-    return _dedupe_checkout_values([_sanitize_checkout_detail_text(item) for item in _as_checkout_list(value)])[:limit]
+def _sanitize_checkout_detail_list(value: Any, limit: int = 12, field: str = "") -> list[str]:
+    return _dedupe_checkout_values([_sanitize_checkout_detail_text(item, field=field) for item in _as_checkout_list(value)])[:limit]
 
 
 def _sanitize_checkout_destination_list(value: Any) -> list[str]:
-    return _dedupe_checkout_values([_sanitize_checkout_destination_text(item) for item in _as_checkout_list(value)])[:4]
+    destinations: list[str] = []
+    for item in _as_checkout_list(value):
+        raw = str(item or "")
+        text = _sanitize_checkout_destination_text(raw)
+        if not text:
+            continue
+        if text != "[shipping destination redacted]" or _SHIPPING_DESTINATION_CUE_RE.search(raw) or _STREET_ADDRESS_RE.search(raw):
+            destinations.append(text)
+    deduped = _dedupe_checkout_values(destinations)
+    specific = [item for item in deduped if item != "[shipping destination redacted]"]
+    return (specific or deduped)[:4]
 
 
 def _sanitize_checkout_payment_list(value: Any) -> list[str]:
@@ -992,6 +1031,13 @@ def _sanitize_checkout_value(value: Any, field_name: str = "") -> Any:
 
 def _sanitize_checkout_summary(summary: dict[str, Any], safety: dict[str, Any]) -> dict[str, Any]:
     final_purchase_controls = _sanitize_final_purchase_controls(safety.get("final_purchase_controls_visible") or summary.get("final_purchase_controls_visible") or [])
+    shipping_destination = _sanitize_checkout_destination_list(summary.get("shipping_destination_label_or_city_state"))
+    if not shipping_destination:
+        fallback_destination_candidates = []
+        for item in _as_checkout_list([summary.get("delivery"), summary.get("items"), summary.get("payment_method_label_last_four_only")]):
+            if _SHIPPING_DESTINATION_CUE_RE.search(str(item or "")) or _STREET_ADDRESS_RE.search(str(item or "")):
+                fallback_destination_candidates.append(item)
+        shipping_destination = _sanitize_checkout_destination_list(fallback_destination_candidates)
     blocked_metadata: dict[str, Any] = {
         "final_purchase_controls_present": bool(final_purchase_controls),
         "final_purchase_control_count": len(final_purchase_controls),
@@ -1007,10 +1053,10 @@ def _sanitize_checkout_summary(summary: dict[str, Any], safety: dict[str, Any]) 
         "url": _sanitize_url(str(summary.get("url") or safety.get("url") or "")),
         "checkout_prep_state": str(safety.get("checkout_prep_state") or "checkout_prep_visible"),
         "human_takeover_required": bool(safety.get("blocked_reason")),
-        "items": _sanitize_checkout_detail_list(summary.get("items"), limit=10),
-        "totals": _sanitize_checkout_detail_list(summary.get("totals"), limit=8),
-        "delivery": _sanitize_checkout_detail_list(summary.get("delivery"), limit=6),
-        "shipping_destination_city_state_or_label": _sanitize_checkout_destination_list(summary.get("shipping_destination_label_or_city_state")),
+        "items": _sanitize_checkout_detail_list(summary.get("items"), limit=10, field="items"),
+        "totals": _sanitize_checkout_detail_list(summary.get("totals"), limit=8, field="totals"),
+        "delivery": _sanitize_checkout_detail_list(summary.get("delivery"), limit=6, field="delivery"),
+        "shipping_destination_city_state_or_label": shipping_destination,
         "payment_method_label_last_four_only": _sanitize_checkout_payment_list(summary.get("payment_method_label_last_four_only")),
         "surprise_flags": _sanitize_checkout_detail_list(summary.get("surprise_flags"), limit=10),
         "blocked_metadata": blocked_metadata,
@@ -2269,7 +2315,11 @@ if __name__ == "__main__":
     assert _reject_unsafe_operation("local_storage")["allowed"] is False
     assert _reject_unsafe_operation("screenshot")["allowed"] is True
     assert _reject_unsafe_operation("screenshot_sensitive_page")["allowed"] is False
-    assert _screenshot_policy("https://www.amazon.com/gp/buy/spc/handlers/display.html", "Review your order")["mode"] == "checkout_prep_redacted"
+    try:
+        _screenshot_policy("https://www.amazon.com/gp/buy/spc/handlers/display.html", "Review your order")
+        raise AssertionError("checkout/order-review screenshot should be blocked")
+    except ValueError:
+        pass
     try:
         _screenshot_policy("https://www.amazon.com/ap/signin", "Amazon Sign In")
         raise AssertionError("login screenshot should be blocked")
@@ -2310,6 +2360,36 @@ if __name__ == "__main__":
     assert "4111" not in flattened_checkout
     assert sanitized_checkout["shipping_destination_label_or_city_state"] == ["Sampletown, NY"]
     assert sanitized_checkout["payment_method_label_last_four_only"] == ["Visa ending in 1234"]
+    mixed_checkout_summary = _sanitize_checkout_summary(
+        {
+            "items": [
+                "Widget Qty: 1 Sold by Example Seller",
+                "Gift card, promotion code, or voucher Change Return policy",
+                "Order total $19.99",
+            ],
+            "delivery": [
+                "Delivery Monday to 123 Example Street, Sampletown, NY 12345",
+                "Payment method Visa ending in 1234 Change",
+                "Return policy applies",
+            ],
+            "shipping_destination_label_or_city_state": [],
+            "payment_method_label_last_four_only": [
+                "Ship to Example Recipient Payment method Visa ending in 1234 Order total $19.99",
+            ],
+        },
+        {"final_purchase_controls_visible": ["Place Order"], "checkout_prep_state": "checkout_prep_visible"},
+    )
+    mixed_json = json.dumps(mixed_checkout_summary, ensure_ascii=False)
+    assert mixed_checkout_summary["items"] == ["Widget Qty: 1 Sold by Example Seller"]
+    assert mixed_checkout_summary["delivery"] == ["[checkout detail redacted]"]
+    assert mixed_checkout_summary["shipping_destination_city_state_or_label"] == ["Sampletown, NY"]
+    assert mixed_checkout_summary["payment_method_label_last_four_only"] == ["Visa ending in 1234"]
+    assert mixed_checkout_summary["blocked_metadata"]["final_purchase_controls_visible"] == ["Place Order"]
+    assert "Gift card" not in mixed_json
+    assert "Change" not in mixed_json
+    assert "Return policy" not in mixed_json
+    assert "Order total" not in mixed_json
+    assert "Example Street" not in mixed_json
     try:
         _check_human_takeover_text("Proceed to checkout")
         raise AssertionError("ordinary browse click should block checkout-prep controls")
