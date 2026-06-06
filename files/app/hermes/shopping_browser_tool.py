@@ -3,13 +3,16 @@
 This custom Hermes toolset exposes browser-like control of the Puppet/KubeCM
 managed Kasm shopping browser while keeping the raw Chrome DevTools endpoint,
 cookies, local storage, request headers, downloads, and credential material out
-of model-visible tool results.  Policy lives in the tool descriptions, bounded
-argument schemas, lightweight runtime guardrails, and a high-level audit log
-rather than in one-off helpers for every shopping action.
+of model-visible tool results.  Screenshots are scoped to the persistent
+shopping browser viewport and returned only as local media artifacts.  Policy
+lives in the tool descriptions, bounded argument schemas, lightweight runtime
+guardrails, and a high-level audit log rather than in one-off helpers for every
+shopping action.
 """
 
 from __future__ import annotations
 
+import base64
 import contextlib
 import json
 import os
@@ -36,6 +39,7 @@ MAX_TEXT_CHARS = 12000
 MAX_LINKS = 80
 MAX_QUERY_RESULT_CHARS = 8000
 MAX_TYPE_CHARS = 2000
+SCREENSHOT_DIR = os.environ.get("SHOPPING_BROWSER_SCREENSHOT_DIR", os.path.expanduser("~/.hermes/profiles/star/shopping-browser-screenshots"))
 AUDIT_LOG = os.environ.get("SHOPPING_BROWSER_AUDIT_LOG", os.path.expanduser("~/.hermes/profiles/star/shopping-browser-audit.log"))
 MAX_PRODUCT_IMAGES = 6
 DEFAULT_MAX_REVIEWS = 5
@@ -65,6 +69,7 @@ UNSAFE_OPERATIONS = {
     "buy_now",
     "place_order",
     "account_settings",
+    "screenshot_sensitive_page",
     "edit_address",
     "edit_payment",
     "download_account_data",
@@ -612,6 +617,19 @@ def _sanitize_product_image_url(value: str) -> str | None:
     return urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", "", ""))
 
 
+def _safe_screenshot_path() -> str:
+    os.makedirs(SCREENSHOT_DIR, mode=0o700, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return os.path.join(SCREENSHOT_DIR, f"shopping-browser-{stamp}-{os.getpid()}.png")
+
+
+def _assert_screenshot_allowed(url: str, title: str) -> None:
+    parsed = urlparse(url)
+    sensitive_url = " ".join([parsed.path, parsed.query, title]).lower()
+    if re.search(r"(signin|login|ap/signin|checkout|buy|place-order|address|wallet|payment|account|orders|passkey|password|captcha|verification)", sensitive_url):
+        raise ValueError("current page appears to be login, checkout, account, payment, address, order, CAPTCHA, or passkey scope; Joy must take over before screenshots")
+
+
 def _normalize_product_images(result: dict[str, Any]) -> None:
     candidates = result.pop("image_url_candidates", None) or []
     image_urls: list[str] = []
@@ -944,6 +962,38 @@ def _query(expression: str) -> dict[str, Any]:
     return _with_browser(run)
 
 
+def _screenshot(full_page: bool = False) -> dict[str, Any]:
+    def run(browser: CdpSession) -> dict[str, Any]:
+        target_id = _first_page_target(browser)
+        session_id = _attach(browser, target_id)
+        url = str(_evaluate(browser, session_id, "location.href") or "")
+        title = str(_evaluate(browser, session_id, "document.title") or "")
+        _assert_screenshot_allowed(url, title)
+        params = {"format": "png", "fromSurface": True, "captureBeyondViewport": bool(full_page)}
+        captured = browser.call("Page.captureScreenshot", params, session_id=session_id)
+        encoded = str(captured.get("data") or "")
+        if not encoded:
+            raise RuntimeError("shopping browser did not return screenshot data")
+        output_path = _safe_screenshot_path()
+        with open(output_path, "wb") as handle:
+            handle.write(base64.b64decode(encoded, validate=True))
+        os.chmod(output_path, 0o600)
+        result = {
+            "operation": "screenshot",
+            "status": "ok",
+            "path": output_path,
+            "media": f"MEDIA:{output_path}",
+            "url": _sanitize_url(url),
+            "page_title": title,
+            "full_page": bool(full_page),
+            "safety_boundary": "Captured only the persistent shopping browser page as a local PNG artifact. No raw CDP endpoint, cookies, local storage, request headers, vault contents, passwords, passkeys, 2FA/CAPTCHA data, or account/payment/address secrets were returned as structured text.",
+        }
+        _audit("screenshot", {"url": result["url"], "page_title": title, "path": output_path, "full_page": bool(full_page)})
+        return result
+
+    return _with_browser(run)
+
+
 def _click(selector: str, reason: str, approved_effect: str) -> dict[str, Any]:
     safe_selector = _selector_arg(selector)
     effect = str(approved_effect or "browse").strip().lower()
@@ -1152,11 +1202,13 @@ def shopping_browser_status_tool(args: dict[str, Any], **_kw: Any) -> str:
         "workload": WORKLOAD,
         "kubectl_available": shutil.which("kubectl") is not None,
         "remote_debug_port": REMOTE_DEBUG_PORT,
-        "browser_operations": ["navigate", "page_snapshot", "query", "click", "type", "inspect_product", "inspect_reviews", "inspect_cart", "current_page_summary"],
-        "approval_gated_operations": {"add_to_cart": "available through broad click/add_to_cart flow; exact legacy ASIN allowlist is retained only as a compatibility helper"},
+        "browser_operations": ["navigate", "page_snapshot", "query", "click", "type", "screenshot", "current_page_summary"],
+        "approval_gated_operations": {"add_to_cart": "available only through the broad shopping_browser_click flow with approved_effect='add_to_cart' and a human-readable approval reference"},
+        "removed_legacy_helpers": ["shopping_browser_inspect_product", "shopping_browser_inspect_reviews", "shopping_browser_inspect_cart", "shopping_browser_add_to_cart"],
+        "screenshot_dir": SCREENSHOT_DIR,
         "audit_log": AUDIT_LOG,
         "blocked_operations": sorted(UNSAFE_OPERATIONS),
-        "secret_policy": "No raw CDP URLs, cookies, local storage, request headers, screenshots, downloads, vault contents, passwords, passkeys, 2FA, or CAPTCHA data are returned.",
+        "secret_policy": "No raw CDP URLs, cookies, local storage, request headers, downloads, vault contents, passwords, passkeys, 2FA, or CAPTCHA data are returned as structured text. Screenshots are local PNG artifacts from the persistent shopping browser and are refused on obvious account/payment/address/login/security URLs.",
     }
     return _json(status)
 
@@ -1183,6 +1235,13 @@ def shopping_browser_query_tool(args: dict[str, Any], **_kw: Any) -> str:
         return _json(_query(str(args.get("expression") or "")))
     except Exception as exc:
         return _json({"error": "QUERY_FAILED", "message": str(exc)[:1000], "operation": "query"})
+
+
+def shopping_browser_screenshot_tool(args: dict[str, Any], **_kw: Any) -> str:
+    try:
+        return _json(_screenshot(bool(args.get("full_page", False))))
+    except Exception as exc:
+        return _json({"error": "SCREENSHOT_FAILED", "message": str(exc)[:1000], "operation": "screenshot"})
 
 
 def shopping_browser_click_tool(args: dict[str, Any], **_kw: Any) -> str:
@@ -1299,6 +1358,18 @@ QUERY_SCHEMA = {
     },
 }
 
+SCREENSHOT_SCHEMA = {
+    "name": "shopping_browser_screenshot",
+    "description": "Capture the current visible persistent shopping browser page as a local PNG media artifact for delivery. Refuses obvious login, checkout, account, payment, address, order, passkey, CAPTCHA, and verification URLs; logs the high-level capture in the audit log. Returns only a local file path/media handle plus sanitized page metadata, not raw CDP data, cookies, storage, headers, or secrets.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "full_page": {"type": "boolean", "description": "Capture beyond the current viewport when Chromium supports it. Prefer false for visible-page proof.", "default": False},
+        },
+        "required": [],
+    },
+}
+
 CLICK_SCHEMA = {
     "name": "shopping_browser_click",
     "description": "Click a visible element in the persistent shopping browser by CSS selector. Use for browsing, selecting variants/options, applying visible coupons, and explicitly approved add-to-cart only. Blocks obvious checkout/account/payment/address/login-challenge text except for add_to_cart, and logs the high-level action. Never use for Buy Now, Place Order, account/payment/address edits, login, passkeys, 2FA, CAPTCHA, or checkout.",
@@ -1382,7 +1453,7 @@ CURRENT_PAGE_SUMMARY_SCHEMA = {
 
 GUARDRAIL_SCHEMA = {
     "name": "shopping_browser_guardrail_check",
-    "description": "Check whether a shopping-browser operation is allowed. Arbitrary mutations/navigation/account/payment/order/raw-session operations are rejected; add_to_cart is available only through the exact approval-gated tool schema.",
+    "description": "Check whether a shopping-browser operation is allowed. Arbitrary mutations/navigation/account/payment/order/raw-session operations are rejected; screenshot is allowed only through the shopping-browser-scoped media artifact tool, and add_to_cart is available only as an approved broad click effect.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -1433,6 +1504,16 @@ registry.register(
     max_result_size_chars=MAX_RESULT_CHARS,
 )
 registry.register(
+    name=SCREENSHOT_SCHEMA["name"],
+    toolset=TOOLSET,
+    schema=SCREENSHOT_SCHEMA,
+    handler=shopping_browser_screenshot_tool,
+    check_fn=_check_shopping_browser,
+    description=SCREENSHOT_SCHEMA["description"],
+    emoji="📸",
+    max_result_size_chars=MAX_RESULT_CHARS,
+)
+registry.register(
     name=CLICK_SCHEMA["name"],
     toolset=TOOLSET,
     schema=CLICK_SCHEMA,
@@ -1450,46 +1531,6 @@ registry.register(
     check_fn=_check_shopping_browser,
     description=TYPE_SCHEMA["description"],
     emoji="⌨️",
-    max_result_size_chars=MAX_RESULT_CHARS,
-)
-registry.register(
-    name=INSPECT_PRODUCT_SCHEMA["name"],
-    toolset=TOOLSET,
-    schema=INSPECT_PRODUCT_SCHEMA,
-    handler=shopping_browser_inspect_product_tool,
-    check_fn=_check_shopping_browser,
-    description=INSPECT_PRODUCT_SCHEMA["description"],
-    emoji="🛒",
-    max_result_size_chars=MAX_RESULT_CHARS,
-)
-registry.register(
-    name=INSPECT_REVIEWS_SCHEMA["name"],
-    toolset=TOOLSET,
-    schema=INSPECT_REVIEWS_SCHEMA,
-    handler=shopping_browser_inspect_reviews_tool,
-    check_fn=_check_shopping_browser,
-    description=INSPECT_REVIEWS_SCHEMA["description"],
-    emoji="⭐",
-    max_result_size_chars=MAX_RESULT_CHARS,
-)
-registry.register(
-    name=INSPECT_CART_SCHEMA["name"],
-    toolset=TOOLSET,
-    schema=INSPECT_CART_SCHEMA,
-    handler=shopping_browser_inspect_cart_tool,
-    check_fn=_check_shopping_browser,
-    description=INSPECT_CART_SCHEMA["description"],
-    emoji="🧾",
-    max_result_size_chars=MAX_RESULT_CHARS,
-)
-registry.register(
-    name=ADD_TO_CART_SCHEMA["name"],
-    toolset=TOOLSET,
-    schema=ADD_TO_CART_SCHEMA,
-    handler=shopping_browser_add_to_cart_tool,
-    check_fn=_check_shopping_browser,
-    description=ADD_TO_CART_SCHEMA["description"],
-    emoji="🛒",
     max_result_size_chars=MAX_RESULT_CHARS,
 )
 registry.register(
@@ -1529,8 +1570,12 @@ if __name__ == "__main__":
     except ValueError:
         pass
     assert _reject_unsafe_operation("local_storage")["allowed"] is False
-    assert _reject_unsafe_operation("inspect_cart")["allowed"] is True
-    assert _reject_unsafe_operation("inspect_reviews")["allowed"] is True
+    assert _reject_unsafe_operation("screenshot")["allowed"] is True
+    assert _reject_unsafe_operation("screenshot_sensitive_page")["allowed"] is False
+    assert "shopping_browser_screenshot" == SCREENSHOT_SCHEMA["name"]
+    status = json.loads(shopping_browser_status_tool({}))
+    assert "screenshot" in status["browser_operations"]
+    assert "inspect_product" not in status["browser_operations"]
     assert _extract_asin("https://www.amazon.com/example/dp/B09JJNBB9C?x=1") == "B09JJNBB9C"
     assert _review_url("https://www.amazon.com/example/dp/B09JJNBB9C?x=1")[0] == "https://www.amazon.com/product-reviews/B09JJNBB9C"
     assert _bounded_max_reviews(99) == MAX_REVIEWS
@@ -1539,6 +1584,11 @@ if __name__ == "__main__":
     assert "text('#ppd')" not in ADD_TO_CART_PRECHECK_JS
     assert "condition_summary" in ADD_TO_CART_PRECHECK_JS
     assert "product_condition" in PRODUCT_EXTRACT_JS
+    active_schema_names = [STATUS_SCHEMA["name"], NAVIGATE_SCHEMA["name"], PAGE_SNAPSHOT_SCHEMA["name"], QUERY_SCHEMA["name"], SCREENSHOT_SCHEMA["name"], CLICK_SCHEMA["name"], TYPE_SCHEMA["name"], CURRENT_PAGE_SUMMARY_SCHEMA["name"], GUARDRAIL_SCHEMA["name"]]
+    assert "shopping_browser_inspect_product" not in active_schema_names
+    assert "shopping_browser_inspect_reviews" not in active_schema_names
+    assert "shopping_browser_inspect_cart" not in active_schema_names
+    assert "shopping_browser_add_to_cart" not in active_schema_names
     assert not any(word in json.dumps(STATUS_SCHEMA).lower() for word in ("cookie", "localstorage"))
     product = {"image_url_candidates": ["https://m.media-amazon.com/images/I/example._AC_SX679_.jpg?x=1", "https://example.com/not-amazon.jpg"]}
     _normalize_product_images(product)

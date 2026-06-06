@@ -95,7 +95,7 @@ resources:
         3. Recreate the managed resources: bolt plan run nest::eyrie::ai::deploy_shopping_browser
         4. Rotate the KasmVNC UI password by updating the private eyaml key nest::service::kasm_shopping_browser::vnc_password and redeploying.
         This milestone intentionally exposes only the authenticated Kasm UI. Do not expose CDP, raw VNC, cookies, local storage, vault contents, or credential material directly to Star.
-        The Puppet-managed Hermes shopping_browser bridge may reach Chrome CDP via kubectl port-forward and present a bounded browser-like tool surface for Star: navigation, visible page inspection, safe page queries, careful clicks/types, and cart inspection/add-to-cart within Joy's explicit task scope. The bridge must continue to keep raw CDP endpoints, cookies, local storage, request headers, downloads, vault contents, and credential material out of model-visible results.
+        The Puppet-managed Hermes shopping_browser bridge may reach Chrome CDP via kubectl port-forward and present a bounded browser-like tool surface for Star: navigation, visible page inspection, safe page queries, careful clicks/types, shopping-browser-scoped screenshot artifacts, and approval-audited add-to-cart clicks within Joy's explicit task scope. Old narrow Amazon inspection helpers are not part of Star's active tool surface. The bridge must continue to keep raw CDP endpoints, cookies, local storage, request headers, downloads, vault contents, and credential material out of model-visible results.
 
   profile-storage:
     apiVersion: v1
