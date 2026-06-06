@@ -53,6 +53,7 @@ MAX_VISUAL_REGIONS = 60
 MAX_CROP_PADDING = 80
 MIN_CROP_SIZE = 8
 MAX_CROP_NAME_CHARS = 80
+CDP_MAX_MESSAGE_BYTES = 32 * 1024 * 1024
 PORT_FORWARD_TIMEOUT_SECONDS = 20
 PAGE_LOAD_TIMEOUT_SECONDS = 15
 APPROVED_CART_ADDITIONS = {
@@ -1665,7 +1666,7 @@ class PortForward:
 
 class CdpSession:
     def __init__(self, websocket_url: str, port: int | None = None) -> None:
-        self.ws = websockets.sync.client.connect(websocket_url, open_timeout=5, close_timeout=2)
+        self.ws = websockets.sync.client.connect(websocket_url, open_timeout=5, close_timeout=2, max_size=CDP_MAX_MESSAGE_BYTES)
         self.next_id = 1
         self.port = port
 
