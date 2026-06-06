@@ -17,6 +17,10 @@ postgres_storage_class: owl-crypt
 postgres_storage_size: 16Gi
 redis_storage_class: owl-crypt
 redis_storage_size: 1Gi
+representation_batch_max_tokens: '1024'
+representation_subthreshold_ttl: '7 days'
+representation_subthreshold_expiry_schedule: '17 */6 * * *'
+representation_subthreshold_expiry_job_ttl: 21600
 
 .affinity: &affinity
   nodeAffinity:
@@ -118,6 +122,136 @@ resources:
               hostPath:
                 path: '/root/.ssh/id_ed25519_eyrie'
                 type: File
+
+  representation-subthreshold-expiry-dry-run:
+    apiVersion: batch/v1
+    kind: CronJob
+    metadata:
+      name: "%{nest::kubernetes::service}-representation-subthreshold-expiry-dry-run"
+      namespace: "%{nest::kubernetes::namespace}"
+      labels:
+        app: "%{nest::kubernetes::service}"
+        component: representation-subthreshold-expiry
+    spec:
+      concurrencyPolicy: Forbid
+      schedule: "%{lookup('representation_subthreshold_expiry_schedule')}"
+      timeZone: 'America/New_York'
+      successfulJobsHistoryLimit: 3
+      failedJobsHistoryLimit: 3
+      jobTemplate:
+        spec:
+          ttlSecondsAfterFinished: "%{alias('representation_subthreshold_expiry_job_ttl')}"
+          template:
+            metadata:
+              labels:
+                app: "%{nest::kubernetes::service}"
+                component: representation-subthreshold-expiry
+            spec:
+              restartPolicy: Never
+              affinity: *affinity
+              tolerations: *tolerations
+              containers:
+                - name: dry-run
+                  image: "%{lookup('postgres_image')}"
+                  imagePullPolicy: IfNotPresent
+                  command:
+                    - /bin/sh
+                    - -ceu
+                    - |-
+                      echo "honcho representation subthreshold expiry dry-run"
+                      echo "threshold=${REPRESENTATION_BATCH_MAX_TOKENS} ttl=${SUBTHRESHOLD_REPRESENTATION_TTL} mode=dry-run"
+                      psql --no-psqlrc --set=ON_ERROR_STOP=1 \
+                        --set=threshold="${REPRESENTATION_BATCH_MAX_TOKENS}" \
+                        --set=ttl="${SUBTHRESHOLD_REPRESENTATION_TTL}" <<'SQL'
+                      \pset pager off
+                      \pset border 2
+                      \echo candidate summary
+                      WITH grouped AS (
+                        SELECT
+                          q.work_unit_key,
+                          count(*) AS row_count,
+                          coalesce(sum(m.token_count), 0) AS total_tokens,
+                          min(q.created_at) AS oldest_pending_at,
+                          max(q.created_at) AS newest_pending_at
+                        FROM queue q
+                        LEFT JOIN messages m ON m.id = q.message_id
+                        WHERE q.processed = false
+                          AND q.task_type = 'representation'
+                          AND q.work_unit_key IS NOT NULL
+                          AND NOT EXISTS (
+                            SELECT 1
+                            FROM active_queue_sessions a
+                            WHERE a.work_unit_key = q.work_unit_key
+                          )
+                        GROUP BY q.work_unit_key
+                      ), candidates AS (
+                        SELECT *
+                        FROM grouped
+                        WHERE total_tokens < :threshold
+                          AND oldest_pending_at < now() - (:'ttl')::interval
+                      )
+                      SELECT
+                        count(*) AS candidate_work_units,
+                        coalesce(sum(row_count), 0) AS candidate_queue_rows,
+                        coalesce(min(oldest_pending_at), now()) AS oldest_candidate_at,
+                        coalesce(max(newest_pending_at), now()) AS newest_candidate_at,
+                        coalesce(max(now() - oldest_pending_at), interval '0 seconds') AS oldest_candidate_age,
+                        coalesce(round(avg(total_tokens)::numeric, 1), 0) AS avg_tokens
+                      FROM candidates;
+                      \echo oldest candidate samples: work_unit_key is md5-hashed; no message content is selected
+                      WITH grouped AS (
+                        SELECT
+                          q.work_unit_key,
+                          count(*) AS row_count,
+                          coalesce(sum(m.token_count), 0) AS total_tokens,
+                          min(q.created_at) AS oldest_pending_at,
+                          max(q.created_at) AS newest_pending_at
+                        FROM queue q
+                        LEFT JOIN messages m ON m.id = q.message_id
+                        WHERE q.processed = false
+                          AND q.task_type = 'representation'
+                          AND q.work_unit_key IS NOT NULL
+                          AND NOT EXISTS (
+                            SELECT 1
+                            FROM active_queue_sessions a
+                            WHERE a.work_unit_key = q.work_unit_key
+                          )
+                        GROUP BY q.work_unit_key
+                      ), candidates AS (
+                        SELECT *
+                        FROM grouped
+                        WHERE total_tokens < :threshold
+                          AND oldest_pending_at < now() - (:'ttl')::interval
+                      )
+                      SELECT
+                        md5(work_unit_key) AS work_unit_hash,
+                        row_count,
+                        total_tokens,
+                        oldest_pending_at,
+                        newest_pending_at,
+                        now() - oldest_pending_at AS oldest_age
+                      FROM candidates
+                      ORDER BY oldest_pending_at ASC
+                      LIMIT 20;
+                      SQL
+                  env:
+                    - name: PGHOST
+                      value: "%{nest::kubernetes::service}-cnpg-rw"
+                    - name: PGPORT
+                      value: '5432'
+                    - name: PGDATABASE
+                      value: "%{lookup('honcho_database')}"
+                    - name: PGUSER
+                      value: "%{lookup('honcho_user')}"
+                    - name: PGPASSWORD
+                      valueFrom:
+                        secretKeyRef:
+                          name: "%{nest::kubernetes::service}-cnpg-app"
+                          key: password
+                    - name: REPRESENTATION_BATCH_MAX_TOKENS
+                      value: "%{alias('representation_batch_max_tokens')}"
+                    - name: SUBTHRESHOLD_REPRESENTATION_TTL
+                      value: "%{lookup('representation_subthreshold_ttl')}"
 
   certs:
     apiVersion: cert-manager.io/v1
