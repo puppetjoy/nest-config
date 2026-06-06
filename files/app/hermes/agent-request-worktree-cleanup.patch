@@ -65,7 +65,7 @@ index 0000000..79a8607
 +if __name__ == "__main__":
 +    raise SystemExit(main())
 diff --git a/src/agent_request_broker/kanban_backend.py b/src/agent_request_broker/kanban_backend.py
-index f429326..474c12f 100644
+index e8b9232..1e9e2bf 100644
 --- a/src/agent_request_broker/kanban_backend.py
 +++ b/src/agent_request_broker/kanban_backend.py
 @@ -14,6 +14,9 @@ import re
@@ -78,7 +78,7 @@ index f429326..474c12f 100644
  from dataclasses import asdict, dataclass, replace
  import unicodedata
  from datetime import datetime, timezone
-@@ -445,6 +448,440 @@ def update_task_workspace(conn: Any, *, task_id: str, policy: WorkspacePolicy) -
+@@ -451,6 +454,440 @@ def update_task_workspace(conn: Any, *, task_id: str, policy: WorkspacePolicy) -
      conn.commit()
  
  
@@ -519,7 +519,7 @@ index f429326..474c12f 100644
  def urgency_to_priority(urgency: str) -> int:
      return URGENCY_PRIORITIES[urgency]
  
-@@ -2193,14 +2630,19 @@ def update(args: dict[str, Any], *, actor: str) -> dict[str, Any]:
+@@ -3000,10 +3437,12 @@ def update(args: dict[str, Any], *, actor: str) -> dict[str, Any]:
          request_notification = notify_structured_comment(
              conn, task_id=item.task_id, comment_id=comment_id, body=comment_body,
          )
@@ -530,17 +530,26 @@ index f429326..474c12f 100644
              kanban.complete_task(conn, item.task_id, summary=summary)
 +            cleanup_result = cleanup_terminal_task_resources(conn, task_id=item.task_id, actor=actor)
          update_index_status(conn, request_id, action_status)
+         parent_updates = sync_parent_requests_for_child_update(
+             conn,
+@@ -3014,12 +3453,15 @@ def update(args: dict[str, Any], *, actor: str) -> dict[str, Any]:
+         )
          item = index_for_request(conn, request_id)
          assert item is not None
--        return {"request": public_request(conn, item), "board": board_name(), "request_notification": request_notification}
-+        response = {"request": public_request(conn, item), "board": board_name(), "request_notification": request_notification}
+-        return {
++        response = {
+             "request": public_request(conn, item),
+             "board": board_name(),
+             "request_notification": request_notification,
+             "parent_updates": parent_updates,
+         }
 +        if cleanup_result is not None:
 +            response["cleanup"] = cleanup_result
 +        return response
      finally:
          conn.close()
  
-@@ -2392,14 +2834,18 @@ def disposition(args: dict[str, Any], *, actor: str = "talon") -> dict[str, Any]
+@@ -3283,14 +3725,18 @@ def disposition(args: dict[str, Any], *, actor: str = "talon") -> dict[str, Any]
          )
          update_index_status(conn, request_id, disposition_value)
          archived = False
@@ -560,10 +569,10 @@ index f429326..474c12f 100644
              "request_notification": request_notification,
          }
 diff --git a/tests/test_agent_request_broker.py b/tests/test_agent_request_broker.py
-index 89b2d14..f83a68b 100755
+index 5759682..5123542 100755
 --- a/tests/test_agent_request_broker.py
 +++ b/tests/test_agent_request_broker.py
-@@ -1229,6 +1229,186 @@ def test_maintenance_diagnose_and_supersede_failed_probe():
+@@ -1801,6 +1801,186 @@ def test_maintenance_diagnose_and_supersede_failed_probe():
              backend.telegram_send = old_send
  
  
@@ -750,7 +759,7 @@ index 89b2d14..f83a68b 100755
  if __name__ == "__main__":
      test_model_facing_registry_is_kanban_only()
      test_kanban_default_and_event_comment_helpers()
-@@ -1246,4 +1426,25 @@ if __name__ == "__main__":
+@@ -1819,4 +1999,41 @@ if __name__ == "__main__":
      test_old_request_rows_without_title_metadata_get_computed_display_fields()
      test_operator_propose_and_approve_clis()
      test_maintenance_diagnose_and_supersede_failed_probe()
@@ -775,4 +784,20 @@ index 89b2d14..f83a68b 100755
 +        cleanup_path = Path(cleanup_tmp) / "unmerged"
 +        cleanup_path.mkdir()
 +        test_cleanup_preserves_unmerged_terminal_task_resources(cleanup_path, MonkeyPatch())
++    with tempfile.TemporaryDirectory() as cleanup_tmp:
++        class MonkeyPatch:
++            def setenv(self, key, value):
++                os.environ[key] = value
++        cleanup_path = Path(cleanup_tmp) / "absent-remote"
++        cleanup_path.mkdir()
++        test_cleanup_deletes_merged_remote_branch_when_local_branch_and_workspace_are_absent(cleanup_path, MonkeyPatch())
++    with tempfile.TemporaryDirectory() as cleanup_tmp:
++        class MonkeyPatch:
++            def setenv(self, key, value):
++                os.environ[key] = value
++            def setattr(self, obj, name, value):
++                setattr(obj, name, value)
++        cleanup_path = Path(cleanup_tmp) / "eyrie"
++        cleanup_path.mkdir()
++        test_cleanup_eyrie_registry_deletion_is_env_gated_and_uses_docker_registry_v2(cleanup_path, MonkeyPatch())
      print("ok")
