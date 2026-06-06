@@ -142,6 +142,7 @@ class nest::app::hermes::install {
       Exec['patch_hermes_kanban_agent_request_unblocked_summary'],
       Exec['patch_hermes_kanban_agent_request_dispatch_notification_hook'],
       Exec['patch_hermes_kanban_agent_request_failure_notification_hook'],
+      Exec['patch_hermes_kanban_agent_request_failure_notification_posttxn'],
       Exec['patch_hermes_kanban_dispatcher_profile_scope'],
       Exec['patch_hermes_kanban_actionable_attention'],
       Exec['patch_hermes_kanban_frontend_actionable_attention'],
@@ -343,6 +344,23 @@ class nest::app::hermes::install {
     ],
   }
 
+  file { "${install_dir}/kanban-agent-request-failure-notification-posttxn.patch":
+    ensure => file,
+    source => 'puppet:///modules/nest/app/hermes/kanban-agent-request-failure-notification-posttxn.patch',
+    mode   => '0644',
+    owner  => 'root',
+    group  => 'root',
+  }
+
+  exec { 'patch_hermes_kanban_agent_request_failure_notification_posttxn':
+    command => "/usr/bin/patch -N -p1 -d ${source_dir} < ${install_dir}/kanban-agent-request-failure-notification-posttxn.patch",
+    unless  => "/bin/grep -q 'notify_after_failure_txn' ${source_dir}/hermes_cli/kanban_db.py",
+    require => [
+      File["${install_dir}/kanban-agent-request-failure-notification-posttxn.patch"],
+      Exec['patch_hermes_kanban_agent_request_failure_notification_hook'],
+    ],
+  }
+
   file { "${install_dir}/kanban-dispatcher-profile-scope.patch":
     ensure => file,
     source => 'puppet:///modules/nest/app/hermes/kanban-dispatcher-profile-scope.patch',
@@ -356,7 +374,7 @@ class nest::app::hermes::install {
     unless  => "/bin/grep -q 'dispatcher_profile=dispatcher_profile' ${source_dir}/gateway/run.py && /bin/grep -q 'test_dispatcher_profile_scopes_ready_claims' ${source_dir}/tests/hermes_cli/test_kanban_db.py",
     require => [
       File["${install_dir}/kanban-dispatcher-profile-scope.patch"],
-      Exec['patch_hermes_kanban_agent_request_failure_notification_hook'],
+      Exec['patch_hermes_kanban_agent_request_failure_notification_posttxn'],
     ],
   }
 

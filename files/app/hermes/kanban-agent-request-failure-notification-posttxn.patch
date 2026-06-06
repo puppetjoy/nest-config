@@ -1,0 +1,41 @@
+--- a/hermes_cli/kanban_db.py
++++ b/hermes_cli/kanban_db.py
+@@ -5079,6 +5079,7 @@
+     if failure_limit is None:
+         failure_limit = DEFAULT_FAILURE_LIMIT
+     blocked = False
++    notify_after_failure_txn = None
+     with write_txn(conn):
+         row = conn.execute(
+             "SELECT consecutive_failures, status, max_retries "
+@@ -5148,14 +5149,13 @@
+             _append_event(
+                 conn, task_id, "gave_up", payload, run_id=run_id,
+             )
+-            _notify_agent_request_dispatch_event(
+-                conn,
+-                task_id,
+-                action="blocked",
+-                actor="dispatcher",
+-                summary=f"Task auto-blocked after {failures} failures: {error[:200]}",
+-                event_kind="gave_up",
+-            )
++            notify_after_failure_txn = {
++                "task_id": task_id,
++                "action": "blocked",
++                "actor": "dispatcher",
++                "summary": f"Task auto-blocked after {failures} failures: {error[:200]}",
++                "event_kind": "gave_up",
++            }
+             blocked = True
+         else:
+             # Below threshold.
+@@ -5190,6 +5190,8 @@
+                     run_id=run_id,
+                 )
+             # Timeout/crash path's caller already emitted its own event.
++    if notify_after_failure_txn is not None:
++        _notify_agent_request_dispatch_event(conn, **notify_after_failure_txn)
+     return blocked
+ 
+ 
