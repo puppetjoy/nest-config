@@ -1,0 +1,93 @@
+--- a/hermes_cli/kanban_db.py
++++ b/hermes_cli/kanban_db.py
+@@ -4398,7 +4398,19 @@
+     cmd = ["systemctl"]
+     if user:
+         cmd.append("--user")
+-    cmd.extend(["show", service, "-p", "ActiveState", "-p", "ActiveEnterTimestampUSec"])
++    cmd.extend([
++        "show",
++        service,
++        "--timestamp=unix",
++        "-p",
++        "ActiveState",
++        "-p",
++        "ActiveEnterTimestampUSec",
++        "-p",
++        "ActiveEnterTimestamp",
++        "-p",
++        "ExecMainStartTimestamp",
++    ])
+     proc = subprocess.run(
+         cmd,
+         check=False,
+@@ -4433,11 +4445,21 @@
+     if "error" in state:
+         return False, {"service": service, "scope": scope, **state}
+     active_state = state.get("ActiveState") or ""
+-    active_enter_raw = state.get("ActiveEnterTimestampUSec") or "0"
++    active_enter_raw = state.get("ActiveEnterTimestampUSec") or ""
+     try:
+-        active_enter = int(active_enter_raw) // 1_000_000
++        active_enter = int(active_enter_raw) // 1_000_000 if active_enter_raw else 0
+     except ValueError:
+         active_enter = 0
++    if not active_enter:
++        for timestamp_key in ("ActiveEnterTimestamp", "ExecMainStartTimestamp"):
++            timestamp_raw = (state.get(timestamp_key) or "").strip()
++            if not timestamp_raw.startswith("@"):
++                continue
++            try:
++                active_enter = int(float(timestamp_raw[1:].split()[0]))
++                break
++            except (IndexError, ValueError):
++                continue
+     min_started_after = spec.get("started_after", blocked_at)
+     try:
+         min_started_after_int = int(min_started_after)
+--- a/tests/hermes_cli/test_kanban_db.py
++++ b/tests/hermes_cli/test_kanban_db.py
+@@ -4260,6 +4260,43 @@
+     assert "auto_resumed" in [row["kind"] for row in events]
+ 
+ 
++def test_auto_resume_parses_systemd_unix_timestamp_fallback(kanban_home, monkeypatch):
++    with kb.connect() as conn:
++        tid = kb.create_task(conn, title="unix timestamp restart")
++        assert kb.block_task(
++            conn,
++            tid,
++            reason="deployment-required: restart Talon gateway",
++            auto_resume={
++                "kind": "restart_required",
++                "service": "hermes-gateway@talon.service",
++                "scope": "user",
++            },
++        )
++        blocked_event = conn.execute(
++            "SELECT created_at FROM task_events WHERE task_id = ? AND kind = 'blocked'",
++            (tid,),
++        ).fetchone()
++        active_enter = int(blocked_event["created_at"] + 5)
++
++        monkeypatch.setattr(
++            kb,
++            "_systemctl_show_service",
++            lambda service, *, user, timeout=10: {
++                "ActiveState": "active",
++                "ActiveEnterTimestamp": f"@{active_enter}",
++                "ExecMainStartTimestamp": f"@{active_enter}",
++            },
++        )
++
++        resumed = kb.auto_resume_satisfied_blockers(conn)
++        task = kb.get_task(conn, tid)
++
++    assert resumed and resumed[0][0] == tid
++    assert task is not None
++    assert task.status == "ready"
++
++
+ def test_auto_resume_ignores_unstructured_blocker(kanban_home, monkeypatch):
+     with kb.connect() as conn:
+         tid = kb.create_task(conn, title="plain blocker")

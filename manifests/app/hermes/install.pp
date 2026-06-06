@@ -103,6 +103,7 @@ class nest::app::hermes::install {
     'patch_hermes_kanban_prod_smoke_board_guard',
     'patch_hermes_kanban_prod_smoke_lowlevel_guard',
     'patch_hermes_kanban_auto_resume_structured_blockers',
+    'patch_hermes_kanban_auto_resume_systemd_unix_timestamps',
     'patch_hermes_kanban_requeue_interrupted_worker_owner_exit',
     'patch_hermes_telegram_voice_summary',
     'patch_hermes_dashboard_rich_art_spans',
@@ -203,6 +204,7 @@ class nest::app::hermes::install {
       Exec['patch_hermes_kanban_prod_smoke_board_guard'],
       Exec['patch_hermes_kanban_prod_smoke_lowlevel_guard'],
       Exec['patch_hermes_kanban_auto_resume_structured_blockers'],
+      Exec['patch_hermes_kanban_auto_resume_systemd_unix_timestamps'],
       Exec['patch_hermes_kanban_requeue_interrupted_worker_owner_exit'],
       Exec['patch_hermes_telegram_voice_summary'],
       File["${source_dir}/tools/agent_request_tool.py"],
@@ -670,6 +672,23 @@ class nest::app::hermes::install {
     ],
   }
 
+  file { "${install_dir}/kanban-auto-resume-systemd-unix-timestamps.patch":
+    ensure => file,
+    source => 'puppet:///modules/nest/app/hermes/kanban-auto-resume-systemd-unix-timestamps.patch',
+    mode   => '0644',
+    owner  => 'root',
+    group  => 'root',
+  }
+
+  exec { 'patch_hermes_kanban_auto_resume_systemd_unix_timestamps':
+    command => "/usr/bin/patch -N -p1 -d ${source_dir} < ${install_dir}/kanban-auto-resume-systemd-unix-timestamps.patch",
+    unless  => "/bin/grep -q -- '--timestamp=unix' ${source_dir}/hermes_cli/kanban_db.py && /bin/grep -q 'test_auto_resume_parses_systemd_unix_timestamp_fallback' ${source_dir}/tests/hermes_cli/test_kanban_db.py",
+    require => [
+      File["${install_dir}/kanban-auto-resume-systemd-unix-timestamps.patch"],
+      Exec['patch_hermes_kanban_auto_resume_structured_blockers'],
+    ],
+  }
+
   file { "${install_dir}/kanban-requeue-interrupted-worker-owner-exit.patch":
     ensure => file,
     source => 'puppet:///modules/nest/app/hermes/kanban-requeue-interrupted-worker-owner-exit.patch',
@@ -683,7 +702,7 @@ class nest::app::hermes::install {
     unless  => "/bin/grep -q '_claim_owner_alive' ${source_dir}/hermes_cli/kanban_db.py && /bin/grep -q 'test_detect_crashed_workers_requeues_worker_when_claim_owner_exited' ${source_dir}/tests/hermes_cli/test_kanban_db.py",
     require => [
       File["${install_dir}/kanban-requeue-interrupted-worker-owner-exit.patch"],
-      Exec['patch_hermes_kanban_auto_resume_structured_blockers'],
+      Exec['patch_hermes_kanban_auto_resume_systemd_unix_timestamps'],
     ],
   }
 
