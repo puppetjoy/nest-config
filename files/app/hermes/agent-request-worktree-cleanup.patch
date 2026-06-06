@@ -1,6 +1,81 @@
+diff --git a/bin/agent-request-cleanup-terminal-resources b/bin/agent-request-cleanup-terminal-resources
+new file mode 100755
+index 0000000..306bff5
+--- /dev/null
++++ b/bin/agent-request-cleanup-terminal-resources
+@@ -0,0 +1,57 @@
++#!/usr/bin/env python3
++"""Sweep terminal Kanban task worktrees, task branches, and registry repositories."""
++from __future__ import annotations
++
++import argparse
++import json
++import os
++import sys
++from pathlib import Path
++
++ROOT = Path(__file__).resolve().parents[1]
++HERMES_SRC = Path(os.environ.get("HERMES_SRC", "/opt/hermes-agent/src"))
++if HERMES_SRC.exists() and HERMES_SRC != ROOT / "src":
++    sys.path.insert(0, str(HERMES_SRC))
++sys.path.insert(0, str(ROOT / "src"))
++
++from agent_request_broker import kanban_backend  # noqa: E402
++
++
++def parser() -> argparse.ArgumentParser:
++    p = argparse.ArgumentParser(description="Clean safe terminal task resources on a Kanban agent-request board.")
++    p.add_argument("--actor", default="talon", help="Operator identity to record, default: talon")
++    p.add_argument("--board", help="Kanban board slug; sets AGENT_REQUEST_KANBAN_BOARD")
++    p.add_argument("--include-archived", action="store_true", help="Also inspect archived tasks")
++    p.add_argument("--limit", type=int, help="Maximum number of terminal tasks to inspect")
++    p.add_argument("--delete-remote-branches", action="store_true", help="Actually delete safe merged remote task branches")
++    p.add_argument("--delete-registry-repositories", action="store_true", help="Actually delete matching GitLab task registry repositories")
++    p.add_argument("--json", action="store_true", help="Print full JSON result")
++    return p
++
++
++def main(argv: list[str] | None = None) -> int:
++    args = parser().parse_args(argv)
++    if args.board:
++        os.environ["AGENT_REQUEST_KANBAN_BOARD"] = args.board
++    if args.delete_remote_branches:
++        os.environ[kanban_backend.REMOTE_BRANCH_DELETE_ENV] = "true"
++    if args.delete_registry_repositories:
++        os.environ[kanban_backend.REGISTRY_DELETE_ENV] = "true"
++    result = kanban_backend.cleanup_terminal_task_sweep(
++        actor=args.actor,
++        include_archived=args.include_archived,
++        limit=args.limit,
++    )
++    if args.json:
++        print(json.dumps(result, ensure_ascii=False, indent=2))
++    else:
++        print(
++            f"cleaned {result['board']}: checked={result['checked']} "
++            f"worktrees={result['removed_worktrees']} local_branches={result['removed_local_branches']} "
++            f"remote_branches={result['removed_remote_branches']} registry_repositories={result['removed_registry_repositories']}"
++        )
++    return 0
++
++
++if __name__ == "__main__":
++    raise SystemExit(main())
+diff --git a/src/agent_request_broker/kanban_backend.py b/src/agent_request_broker/kanban_backend.py
+index f429326..ca8fcce 100644
 --- a/src/agent_request_broker/kanban_backend.py
 +++ b/src/agent_request_broker/kanban_backend.py
-@@ -450,6 +450,187 @@
+@@ -14,6 +14,9 @@ import re
+ import secrets
+ import subprocess
+ import time
++import urllib.error
++import urllib.parse
++import urllib.request
+ from dataclasses import asdict, dataclass, replace
+ import unicodedata
+ from datetime import datetime, timezone
+@@ -445,6 +448,343 @@ def update_task_workspace(conn: Any, *, task_id: str, policy: WorkspacePolicy) -
      conn.commit()
  
  
@@ -8,6 +83,10 @@
 +TERMINAL_TASK_STATUSES = {"done", "archived"}
 +SAFE_TASK_BRANCH_RE = re.compile(r"^(?:talon|star|rollout)/t_[0-9a-f]{8}(?:[-/].*)?$")
 +REGISTRY_IMAGE_ARCH_TAGS = ("haswell", "cortex-a53", "sifive-u74")
++REMOTE_BRANCH_DELETE_ENV = "AGENT_REQUEST_CLEANUP_DELETE_REMOTE_BRANCHES"
++REGISTRY_DELETE_ENV = "AGENT_REQUEST_CLEANUP_DELETE_REGISTRY_REPOSITORIES"
++GITLAB_TOKEN_ENVS = ("AGENT_REQUEST_GITLAB_TOKEN", "GITLAB_TOKEN", "GITLAB_PRIVATE_TOKEN")
++
 +
 +
 +def run_git(args: list[str], *, cwd: Path | None = None, timeout: int = 60) -> subprocess.CompletedProcess[str]:
@@ -36,16 +115,117 @@
 +    return match.group(1) if match else ""
 +
 +
-+def registry_cleanup_candidates(*, repo_path: Path, branch: str) -> list[str]:
++def env_flag(name: str) -> bool:
++    return (os.environ.get(name) or "").strip().lower() in {"1", "true", "yes", "on"}
++
++
++def registry_repository_path(*, repo_path: Path, branch: str) -> str:
 +    project_path = project_path_from_git_remote(repo_path)
-+    if not project_path or not branch:
++    return f"{project_path}/{branch}" if project_path and branch else ""
++
++
++def registry_cleanup_candidates(*, repo_path: Path, branch: str) -> list[str]:
++    repo = registry_repository_path(repo_path=repo_path, branch=branch)
++    if not repo:
 +        return []
-+    repo = f"{project_path}/{branch}"
 +    candidates = [f"${{CI_REGISTRY}}/{repo}:{tag}" for tag in REGISTRY_IMAGE_ARCH_TAGS]
 +    candidates.append(f"${{CI_REGISTRY}}/{repo}:latest")
 +    candidates.extend([f"registry.eyrie/{repo}:{tag}" for tag in REGISTRY_IMAGE_ARCH_TAGS])
 +    candidates.append(f"registry.eyrie/{repo}:latest")
 +    return candidates
++
++
++def delete_remote_task_branch(*, repo_path: Path, branch: str) -> dict[str, Any]:
++    result: dict[str, Any] = {"enabled": env_flag(REMOTE_BRANCH_DELETE_ENV), "deleted": False, "branch": branch}
++    if not result["enabled"]:
++        result["reason"] = f"{REMOTE_BRANCH_DELETE_ENV} is not true"
++        return result
++    delete = run_git(["-C", str(repo_path), "push", "origin", "--delete", branch], timeout=120)
++    output = (delete.stderr or delete.stdout or "").strip()
++    if delete.returncode == 0:
++        result["deleted"] = True
++    elif "remote ref does not exist" in output or "unable to delete" in output and "not found" in output:
++        result["deleted"] = True
++        result["already_absent"] = True
++    else:
++        result["reason"] = output or "git push --delete failed"
++    return result
++
++
++def gitlab_token() -> str:
++    for env_name in GITLAB_TOKEN_ENVS:
++        token = (os.environ.get(env_name) or "").strip()
++        if token:
++            return token
++    return ""
++
++
++def gitlab_api_url(repo_path: Path) -> str:
++    explicit = (os.environ.get("AGENT_REQUEST_GITLAB_API_V4_URL") or os.environ.get("CI_API_V4_URL") or "").strip().rstrip("/")
++    if explicit:
++        return explicit
++    remote = run_git(["-C", str(repo_path), "remote", "get-url", "origin"]).stdout.strip()
++    match = re.search(r"(?:git@|https?://)([^/:]+)", remote)
++    host = match.group(1) if match else "gitlab.joyfullee.me"
++    return f"https://{host}/api/v4"
++
++
++def gitlab_project_identifier(repo_path: Path) -> str:
++    explicit = (os.environ.get("AGENT_REQUEST_GITLAB_PROJECT_ID") or os.environ.get("CI_PROJECT_ID") or "").strip()
++    if explicit:
++        return explicit
++    return urllib.parse.quote(project_path_from_git_remote(repo_path), safe="")
++
++
++def gitlab_json_request(method: str, url: str, *, token: str) -> Any:
++    request = urllib.request.Request(url, method=method)
++    request.add_header("PRIVATE-TOKEN", token)
++    with urllib.request.urlopen(request, timeout=20) as response:  # noqa: S310 - operator-scoped GitLab API URL
++        body = response.read().decode("utf-8")
++    return json.loads(body) if body else None
++
++
++def delete_gitlab_registry_repository(*, repo_path: Path, branch: str) -> dict[str, Any]:
++    result: dict[str, Any] = {
++        "enabled": env_flag(REGISTRY_DELETE_ENV),
++        "deleted": [],
++        "target_path": registry_repository_path(repo_path=repo_path, branch=branch),
++    }
++    if not result["enabled"]:
++        result["reason"] = f"{REGISTRY_DELETE_ENV} is not true"
++        return result
++    token = gitlab_token()
++    if not token:
++        result["reason"] = "no GitLab API token environment variable is set"
++        return result
++    api = gitlab_api_url(repo_path)
++    project = gitlab_project_identifier(repo_path)
++    if not project or not result["target_path"]:
++        result["reason"] = "could not determine GitLab project or registry repository path"
++        return result
++    try:
++        page = 1
++        while True:
++            url = f"{api}/projects/{project}/registry/repositories?per_page=100&page={page}"
++            repositories = gitlab_json_request("GET", url, token=token) or []
++            if not repositories:
++                break
++            for repository in repositories:
++                repo_path_value = str(repository.get("path") or "")
++                if repo_path_value == result["target_path"]:
++                    repo_id = repository.get("id")
++                    gitlab_json_request("DELETE", f"{api}/projects/{project}/registry/repositories/{repo_id}", token=token)
++                    result["deleted"].append(repo_path_value)
++            if len(repositories) < 100:
++                break
++            page += 1
++    except urllib.error.HTTPError as exc:
++        result["reason"] = f"GitLab API HTTP {exc.code}"
++    except (OSError, ValueError) as exc:
++        result["reason"] = str(exc)
++    if not result["deleted"] and "reason" not in result:
++        result["reason"] = "matching registry repository not found"
++    return result
 +
 +
 +def workspace_under_cleanup_root(path: Path) -> bool:
@@ -79,8 +259,10 @@
 +        "branch_name": getattr(task, "branch_name", "") or "",
 +        "removed_worktree": False,
 +        "removed_local_branch": False,
++        "removed_remote_branch": False,
 +        "queued_remote_branch": False,
 +        "queued_registry_images": [],
++        "removed_registry_repositories": [],
 +        "skipped": [],
 +    }
 +    task_id = result["task_id"]
@@ -127,6 +309,13 @@
 +            result["skipped"].append("branch has local commits not present on a remote")
 +            result["unpushed_commits"] = detail
 +            return result
++
++    merged, merged_detail = branch_merged_to_base(repo_path=repo_path, branch=branch)
++    if not merged:
++        result["skipped"].append(merged_detail or "branch is not merged to origin/main; resources retained")
++        return result
++
++    if workspace_path.exists():
 +        remove = run_git(["-C", str(repo_path), "worktree", "remove", str(workspace_path)])
 +        if remove.returncode == 0:
 +            result["removed_worktree"] = True
@@ -134,23 +323,32 @@
 +            result["skipped"].append((remove.stderr or remove.stdout or "git worktree remove failed").strip())
 +            return result
 +
-+    merged, merged_detail = branch_merged_to_base(repo_path=repo_path, branch=branch)
-+    if merged:
-+        delete_branch = run_git(["-C", str(repo_path), "branch", "-d", branch])
-+        if delete_branch.returncode == 0:
-+            result["removed_local_branch"] = True
-+        else:
-+            result["skipped"].append((delete_branch.stderr or delete_branch.stdout or "git branch -d failed").strip())
++    delete_branch = run_git(["-C", str(repo_path), "branch", "-d", branch])
++    if delete_branch.returncode == 0:
++        result["removed_local_branch"] = True
 +    else:
-+        result["skipped"].append(merged_detail or "branch is not merged to origin/main; local branch retained")
++        branch_delete_output = (delete_branch.stderr or delete_branch.stdout or "git branch -d failed").strip()
++        if "not found" not in branch_delete_output and "branch not found" not in branch_delete_output:
++            result["skipped"].append(branch_delete_output)
 +
-+    result["queued_remote_branch"] = True
-+    result["queued_registry_images"] = registry_cleanup_candidates(repo_path=repo_path, branch=branch)
++    remote_cleanup = delete_remote_task_branch(repo_path=repo_path, branch=branch)
++    result["remote_branch_cleanup"] = remote_cleanup
++    if remote_cleanup.get("deleted"):
++        result["removed_remote_branch"] = True
++    else:
++        result["queued_remote_branch"] = True
++
++    registry_cleanup = delete_gitlab_registry_repository(repo_path=repo_path, branch=branch)
++    result["registry_repository_cleanup"] = registry_cleanup
++    if registry_cleanup.get("deleted"):
++        result["removed_registry_repositories"] = registry_cleanup["deleted"]
++    else:
++        result["queued_registry_images"] = registry_cleanup_candidates(repo_path=repo_path, branch=branch)
 +    return result
 +
 +
 +def record_cleanup_result(conn: Any, *, task_id: str, actor: str, cleanup: dict[str, Any]) -> int:
-+    action = "cleanup_completed" if cleanup.get("removed_worktree") or cleanup.get("removed_local_branch") else "cleanup_queued"
++    action = "cleanup_completed" if cleanup.get("removed_worktree") or cleanup.get("removed_local_branch") or cleanup.get("removed_remote_branch") or cleanup.get("removed_registry_repositories") else "cleanup_queued"
 +    queued_images = cleanup.get("queued_registry_images") or []
 +    skipped = cleanup.get("skipped") or []
 +    summary_parts = []
@@ -158,8 +356,13 @@
 +        summary_parts.append("removed local worktree")
 +    if cleanup.get("removed_local_branch"):
 +        summary_parts.append("removed merged local task branch")
++    if cleanup.get("removed_remote_branch"):
++        summary_parts.append("removed remote task branch")
 +    if cleanup.get("queued_remote_branch"):
 +        summary_parts.append("queued remote branch cleanup")
++    removed_repositories = cleanup.get("removed_registry_repositories") or []
++    if removed_repositories:
++        summary_parts.append(f"removed {len(removed_repositories)} registry repositories")
 +    if queued_images:
 +        summary_parts.append(f"queued {len(queued_images)} registry image tags/repositories for cleanup")
 +    if skipped:
@@ -180,15 +383,43 @@
 +    if task is None:
 +        return {"task_id": task_id, "skipped": ["task not found"]}
 +    cleanup = cleanup_task_workspace(task)
-+    if cleanup.get("removed_worktree") or cleanup.get("removed_local_branch") or cleanup.get("queued_remote_branch") or cleanup.get("queued_registry_images") or cleanup.get("skipped"):
++    if cleanup.get("removed_worktree") or cleanup.get("removed_local_branch") or cleanup.get("removed_remote_branch") or cleanup.get("removed_registry_repositories") or cleanup.get("queued_remote_branch") or cleanup.get("queued_registry_images") or cleanup.get("skipped"):
 +        comment_id = record_cleanup_result(conn, task_id=task_id, actor=actor, cleanup=cleanup)
 +        cleanup["comment_id"] = comment_id
 +    return cleanup
 +
++
++def cleanup_terminal_task_sweep(*, actor: str = "talon", include_archived: bool = False, limit: int | None = None) -> dict[str, Any]:
++    conn = connect()
++    try:
++        statuses = ["done"]
++        if include_archived:
++            statuses.append("archived")
++        placeholders = ",".join("?" for _ in statuses)
++        query = f"SELECT id FROM tasks WHERE status IN ({placeholders}) ORDER BY completed_at DESC, created_at DESC"
++        if limit is not None:
++            query += " LIMIT ?"
++            params: list[Any] = [*statuses, int(limit)]
++        else:
++            params = statuses
++        task_ids = [str(row["id"]) for row in conn.execute(query, params).fetchall()]
++        cleanups = [cleanup_terminal_task_resources(conn, task_id=task_id, actor=actor) for task_id in task_ids]
++        return {
++            "board": board_name(),
++            "checked": len(cleanups),
++            "removed_worktrees": sum(1 for item in cleanups if item.get("removed_worktree")),
++            "removed_local_branches": sum(1 for item in cleanups if item.get("removed_local_branch")),
++            "removed_remote_branches": sum(1 for item in cleanups if item.get("removed_remote_branch")),
++            "removed_registry_repositories": sum(len(item.get("removed_registry_repositories") or []) for item in cleanups),
++            "results": cleanups,
++        }
++    finally:
++        conn.close()
++
  def urgency_to_priority(urgency: str) -> int:
      return URGENCY_PRIORITIES[urgency]
  
-@@ -2842,14 +3023,19 @@
+@@ -2193,14 +2533,19 @@ def update(args: dict[str, Any], *, actor: str) -> dict[str, Any]:
          request_notification = notify_structured_comment(
              conn, task_id=item.task_id, comment_id=comment_id, body=comment_body,
          )
@@ -209,7 +440,7 @@
      finally:
          conn.close()
  
-@@ -3113,14 +3299,18 @@
+@@ -2392,14 +2737,18 @@ def disposition(args: dict[str, Any], *, actor: str = "talon") -> dict[str, Any]
          )
          update_index_status(conn, request_id, disposition_value)
          archived = False
@@ -228,9 +459,11 @@
              "board": board_name(),
              "request_notification": request_notification,
          }
+diff --git a/tests/test_agent_request_broker.py b/tests/test_agent_request_broker.py
+index 89b2d14..e34c300 100755
 --- a/tests/test_agent_request_broker.py
 +++ b/tests/test_agent_request_broker.py
-@@ -1698,6 +1698,74 @@
+@@ -1229,6 +1229,113 @@ def test_maintenance_diagnose_and_supersede_failed_probe():
              backend.telegram_send = old_send
  
  
@@ -302,10 +535,49 @@
 +    assert "registry.eyrie/nest/config/talon/t_1234abcd-cleanup-test:latest" in result["queued_registry_images"]
 +
 +
++def test_cleanup_preserves_unmerged_terminal_task_resources(tmp_path, monkeypatch):
++    from agent_request_broker import kanban_backend as backend
++
++    repo = tmp_path / "repo"
++    remote = tmp_path / "remote.git"
++    repo.mkdir()
++    subprocess.run(["git", "init", "-b", "main"], cwd=repo, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
++    subprocess.run(["git", "config", "user.email", "test@example.invalid"], cwd=repo, check=True)
++    subprocess.run(["git", "config", "user.name", "Test"], cwd=repo, check=True)
++    subprocess.run(["git", "config", "commit.gpgsign", "false"], cwd=repo, check=True)
++    (repo / "README.md").write_text("base\n", encoding="utf-8")
++    subprocess.run(["git", "add", "README.md"], cwd=repo, check=True)
++    subprocess.run(["git", "commit", "--no-gpg-sign", "-m", "base"], cwd=repo, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
++    subprocess.run(["git", "init", "--bare", remote], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
++    subprocess.run(["git", "remote", "add", "origin", str(remote)], cwd=repo, check=True)
++    subprocess.run(["git", "push", "-u", "origin", "main"], cwd=repo, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
++
++    root = tmp_path / "worktrees"
++    monkeypatch.setenv("AGENT_REQUEST_WORKTREE_ROOT", str(root))
++    path = root / "nest-config" / "t_1234abcd"
++    branch = "talon/t_1234abcd-cleanup-test"
++    subprocess.run(["git", "-C", str(repo), "worktree", "add", "-b", branch, str(path), "origin/main"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
++    (path / "change.txt").write_text("change\n", encoding="utf-8")
++    subprocess.run(["git", "-C", str(path), "add", "change.txt"], check=True)
++    subprocess.run(["git", "-C", str(path), "commit", "--no-gpg-sign", "-m", "change"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
++    subprocess.run(["git", "-C", str(path), "push", "-u", "origin", branch], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
++
++    task = types.SimpleNamespace(id="t_1234abcd", status="done", workspace_kind="worktree", workspace_path=str(path), branch_name=branch)
++    result = backend.cleanup_task_workspace(task)
++
++    assert path.exists()
++    assert result["removed_worktree"] is False
++    assert result["removed_local_branch"] is False
++    assert result["removed_remote_branch"] is False
++    assert result["queued_remote_branch"] is False
++    assert result["queued_registry_images"] == []
++    assert any("not merged" in item or "resources retained" in item for item in result["skipped"])
++
++
  if __name__ == "__main__":
      test_model_facing_registry_is_kanban_only()
      test_kanban_default_and_event_comment_helpers()
-@@ -1716,4 +1784,18 @@
+@@ -1246,4 +1353,25 @@ if __name__ == "__main__":
      test_old_request_rows_without_title_metadata_get_computed_display_fields()
      test_operator_propose_and_approve_clis()
      test_maintenance_diagnose_and_supersede_failed_probe()
@@ -323,4 +595,11 @@
 +        cleanup_path = Path(cleanup_tmp) / "clean"
 +        cleanup_path.mkdir()
 +        test_cleanup_removes_clean_terminal_worktree_and_queues_remote_registry(cleanup_path, MonkeyPatch())
++    with tempfile.TemporaryDirectory() as cleanup_tmp:
++        class MonkeyPatch:
++            def setenv(self, key, value):
++                os.environ[key] = value
++        cleanup_path = Path(cleanup_tmp) / "unmerged"
++        cleanup_path.mkdir()
++        test_cleanup_preserves_unmerged_terminal_task_resources(cleanup_path, MonkeyPatch())
      print("ok")

@@ -104,7 +104,7 @@ class nest::app::hermes::service {
     ],
   }
 
-  [
+  $agent_request_review_commands = [
     'agent-request-approve',
     'agent-request-accept-review',
     'agent-request-propose',
@@ -112,13 +112,30 @@ class nest::app::hermes::service {
     'agent-request-supersede',
     'agent-request-cancel',
     'agent-request-deny',
-  ].each |String $agent_request_command| {
+  ]
+
+  $agent_request_worktree_cleanup_commands = [
+    'agent-request-cleanup-terminal-resources',
+  ]
+
+  $agent_request_review_commands.each |String $agent_request_command| {
     file { "${install_dir}/bin/${agent_request_command}":
       ensure  => link,
       target  => "${broker_source_dir}/bin/${agent_request_command}",
       require => [
         File["${install_dir}/bin"],
         Exec['patch_hermes_agent_request_review_handoff_flow'],
+      ],
+    }
+  }
+
+  $agent_request_worktree_cleanup_commands.each |String $agent_request_command| {
+    file { "${install_dir}/bin/${agent_request_command}":
+      ensure  => link,
+      target  => "${broker_source_dir}/bin/${agent_request_command}",
+      require => [
+        File["${install_dir}/bin"],
+        Exec['patch_hermes_agent_request_worktree_cleanup'],
       ],
     }
   }
