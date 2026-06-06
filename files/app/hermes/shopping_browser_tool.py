@@ -665,17 +665,25 @@ def _x11_screenshot() -> bytes:
     return convert.stdout
 
 
-def _target_page_info(port: int) -> dict[str, str]:
+def _page_targets_from_http(port: int) -> list[dict[str, str]]:
     with urlopen(f"http://127.0.0.1:{port}/json/list", timeout=3) as response:
         targets = json.loads(response.read().decode("utf-8"))
+    pages = []
     for target in targets:
         if target.get("type") == "page":
-            return {
-                "id": str(target.get("id") or ""),
-                "url": str(target.get("url") or ""),
-                "title": str(target.get("title") or ""),
-            }
-    return {"id": "", "url": "about:blank", "title": ""}
+            pages.append(
+                {
+                    "id": str(target.get("id") or ""),
+                    "url": str(target.get("url") or ""),
+                    "title": str(target.get("title") or ""),
+                }
+            )
+    return pages
+
+
+def _target_page_info(port: int) -> dict[str, str]:
+    pages = _page_targets_from_http(port)
+    return pages[0] if pages else {"id": "", "url": "about:blank", "title": ""}
 
 
 def _normalize_product_images(result: dict[str, Any]) -> None:
@@ -912,6 +920,16 @@ def _browser_ws_url(port: int) -> str:
 
 
 def _first_page_target(browser: CdpSession) -> str:
+    # Chrome's browser-level Target.getTargets order is not the same as the
+    # visible /json/list order and can return stale Amazon page targets before
+    # the active Kasm tab.  Prefer the HTTP target list when we have a forwarded
+    # port so broad operations act on the same page screenshot/status reports.
+    if browser.port is not None:
+        with contextlib.suppress(Exception):
+            for target in _page_targets_from_http(browser.port):
+                if target.get("id"):
+                    return str(target["id"])
+
     targets = browser.call("Target.getTargets").get("targetInfos") or []
     for target in targets:
         if target.get("type") == "page":
@@ -951,7 +969,7 @@ def _navigate_and_wait(browser: CdpSession, session_id: str, url: str) -> None:
 
 def _with_browser(fn: Any) -> dict[str, Any]:
     with PortForward() as port:
-        browser = CdpSession(_browser_ws_url(port))
+        browser = CdpSession(_browser_ws_url(port), port=port)
         try:
             return fn(browser)
         finally:
