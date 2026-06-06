@@ -1,0 +1,15 @@
+--- a/tests/tools/test_kanban_tools.py
++++ b/tests/tools/test_kanban_tools.py
+@@ -153,6 +153,12 @@
+     home = tmp_path / ".hermes"
+     home.mkdir()
+     monkeypatch.setenv("HERMES_HOME", str(home))
++    # Keep the worker fixture isolated even when pytest inherits a live
++    # gateway/dispatcher environment pinned to a production board.
++    monkeypatch.setenv("HERMES_KANBAN_HOME", str(home))
++    monkeypatch.delenv("HERMES_KANBAN_DB", raising=False)
++    monkeypatch.delenv("HERMES_KANBAN_BOARD", raising=False)
++    monkeypatch.delenv("HERMES_KANBAN_WORKSPACES_ROOT", raising=False)
+     monkeypatch.setenv("HERMES_PROFILE", "test-worker")
+     monkeypatch.delenv("HERMES_SESSION_ID", raising=False)
+     from pathlib import Path as _Path

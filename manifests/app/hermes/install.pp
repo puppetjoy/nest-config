@@ -280,6 +280,23 @@ class nest::app::hermes::install {
     ],
   }
 
+  file { "${install_dir}/kanban-tools-test-isolate-board-env.patch":
+    ensure => file,
+    source => 'puppet:///modules/nest/app/hermes/kanban-tools-test-isolate-board-env.patch',
+    mode   => '0644',
+    owner  => 'root',
+    group  => 'root',
+  }
+
+  exec { 'patch_hermes_kanban_tools_test_isolate_board_env':
+    command => "/usr/bin/patch -N -p1 -d ${source_dir} < ${install_dir}/kanban-tools-test-isolate-board-env.patch",
+    unless  => "/bin/grep -q 'worker fixture isolated' ${source_dir}/tests/tools/test_kanban_tools.py",
+    require => [
+      File["${install_dir}/kanban-tools-test-isolate-board-env.patch"],
+      Vcsrepo[$source_dir],
+    ],
+  }
+
   file { "${install_dir}/kanban-agent-request-notification-hook.patch":
     ensure => file,
     source => 'puppet:///modules/nest/app/hermes/kanban-agent-request-notification-hook.patch',
@@ -293,7 +310,7 @@ class nest::app::hermes::install {
     unless  => "/bin/grep -q '_notify_agent_request_event' ${source_dir}/tools/kanban_tools.py",
     require => [
       File["${install_dir}/kanban-agent-request-notification-hook.patch"],
-      Vcsrepo[$source_dir],
+      Exec['patch_hermes_kanban_tools_test_isolate_board_env'],
     ],
   }
 
