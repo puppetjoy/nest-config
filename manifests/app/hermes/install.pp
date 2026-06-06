@@ -839,6 +839,8 @@ class nest::app::hermes::install {
 
         os.environ['AGENT_REQUEST_KANBAN_BOARD'] = 'agent-requests-dev'
         os.environ['AGENT_REQUEST_KANBAN_BOARD_OVERRIDE'] = 'agent-requests-dev'
+        os.environ['HERMES_KANBAN_BOARD'] = 'agent-requests-dev'
+        os.environ['HERMES_KANBAN_DB'] = '/home/${nest::user}/.hermes/kanban/boards/agent-requests-dev/kanban.db'
         os.environ['SHLVL'] = '1'
         os.environ['PYTHONPATH'] = '${source_dir}:${broker_source_dir}/src'
         os.execv('${venv_dir}/bin/hermes', ['${venv_dir}/bin/hermes', '--profile', '${wrapper_profile}', *sys.argv[1:]])
