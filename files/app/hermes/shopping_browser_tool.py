@@ -65,7 +65,6 @@ APPROVED_CART_ADDITIONS = {
 AMAZON_HOST_RE = re.compile(r"(^|\.)amazon\.[a-z.]+$", re.IGNORECASE)
 AMAZON_IMAGE_HOST_RE = re.compile(r"(^|\.)(m\.media-amazon|images-na\.ssl-images-amazon|ssl-images-amazon)\.com$", re.IGNORECASE)
 UNSAFE_OPERATIONS = {
-    "remove_from_cart",
     "update_cart",
     "checkout",
     "buy_now",
@@ -86,6 +85,9 @@ CHECKOUT_OR_ACCOUNT_RE = re.compile(
     r"\b(place\s+order|buy\s+now|proceed\s+to\s+checkout|checkout|payment|wallet|address|account|orders?|subscribe\s*&\s*save|passkey|password|verification\s+code|captcha)\b",
     re.IGNORECASE,
 )
+CART_URL_RE = re.compile(r"/(gp/)?cart(/|$)", re.IGNORECASE)
+CART_REMOVE_TEXT_RE = re.compile(r"\b(delete|remove)\b", re.IGNORECASE)
+APPROVED_CLICK_EFFECTS = ("browse", "select_option", "apply_visible_coupon", "add_to_cart", "remove_from_cart")
 SENSITIVE_FIELD_RE = re.compile(r"(password|passkey|otp|verification|card|cvv|cvc|security.?code|address|phone|email)", re.IGNORECASE)
 MUTATING_QUERY_RE = re.compile(r"\b(click|submit|fetch|XMLHttpRequest|sendBeacon|localStorage|sessionStorage|indexedDB|cookie|setAttribute|removeAttribute|appendChild|removeChild|innerHTML\s*=|location\s*=|open\s*\()\b", re.IGNORECASE)
 
@@ -514,6 +516,48 @@ CLICK_JS = r"""
 })()
 """
 
+CART_REMOVE_CONTROL_JS = r"""
+(() => {
+  const selector = __SELECTOR__;
+  const node = document.querySelector(selector);
+  const clean = (value) => (value || '').replace(/\s+/g, ' ').trim();
+  if (!node) return {exists: false};
+  const style = window.getComputedStyle(node);
+  const rect = node.getBoundingClientRect();
+  const ariaLabel = clean(node.getAttribute('aria-label') || '');
+  const value = clean(node.value || '');
+  const text = clean(node.innerText || node.textContent || '');
+  const name = clean(node.getAttribute('name') || '');
+  const title = clean(node.getAttribute('title') || '');
+  const id = clean(node.getAttribute('id') || '');
+  const role = clean(node.getAttribute('role') || '');
+  const labelledBy = clean(node.getAttribute('aria-labelledby') || '');
+  const labelledByText = labelledBy.split(/\s+/)
+    .map((idValue) => clean((document.getElementById(idValue) || {}).textContent || ''))
+    .filter(Boolean)
+    .join(' ');
+  const item = node.closest('[data-asin], [data-itemid], .sc-list-item, .sc-item, li, form, [role="listitem"]');
+  return {
+    exists: true,
+    disabled: Boolean(node.disabled || node.getAttribute('aria-disabled') === 'true'),
+    visible: Boolean(rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none'),
+    tag: clean(node.tagName || ''),
+    type: clean(node.getAttribute('type') || ''),
+    role,
+    text,
+    value,
+    aria_label: ariaLabel,
+    labelled_by_text: labelledByText,
+    name,
+    title,
+    id,
+    item_text: clean(item ? item.textContent : '').slice(0, 500),
+    page_title: document.title || '',
+    url: location.href || ''
+  };
+})()
+"""
+
 TYPE_JS = r"""
 (() => {
   const selector = __SELECTOR__;
@@ -599,6 +643,42 @@ def _json_literal(value: Any) -> str:
 def _check_human_takeover_text(text: str) -> None:
     if CHECKOUT_OR_ACCOUNT_RE.search(text):
         raise ValueError("matched element appears to involve checkout/account/payment/address/login challenge scope; Joy must take over")
+
+
+def _check_cart_remove_url(url: str, title: str) -> None:
+    parsed = urlparse(url)
+    if parsed.scheme != "https" or not AMAZON_HOST_RE.search(parsed.netloc):
+        raise ValueError("remove_from_cart clicks are currently limited to https://*.amazon.* cart pages")
+    if not CART_URL_RE.search(parsed.path):
+        raise ValueError("remove_from_cart clicks require the current page to be an Amazon cart page")
+    blocked_text = " ".join([parsed.query, title]).lower()
+    if CHECKOUT_OR_ACCOUNT_RE.search(blocked_text):
+        raise ValueError("current cart page metadata appears to involve checkout/account/payment/address/login challenge scope; Joy must take over")
+
+
+def _assert_cart_remove_click_allowed(metadata: dict[str, Any], reason: str) -> None:
+    if not str(reason or "").strip():
+        raise ValueError("remove_from_cart clicks require a reason/approval reference")
+    if not metadata.get("exists"):
+        raise ValueError("remove_from_cart selector did not match any element")
+    if metadata.get("disabled"):
+        raise ValueError("remove_from_cart selector matched a disabled element")
+    if not metadata.get("visible"):
+        raise ValueError("remove_from_cart selector must match a visible cart line-item removal control")
+
+    tag = str(metadata.get("tag") or "").upper()
+    role = str(metadata.get("role") or "").lower()
+    input_type = str(metadata.get("type") or "").lower()
+    if tag not in ("A", "BUTTON", "INPUT") and role not in ("button", "link"):
+        raise ValueError("remove_from_cart selector must match a visible button, input, link, or equivalent role")
+    if tag == "INPUT" and input_type and input_type not in ("button", "submit"):
+        raise ValueError("remove_from_cart input controls must be button or submit inputs")
+
+    control_text = " ".join(str(metadata.get(key) or "") for key in ("text", "value", "aria_label", "labelled_by_text", "name", "title", "id"))
+    if not CART_REMOVE_TEXT_RE.search(control_text):
+        raise ValueError("remove_from_cart selector must directly identify a Delete/Remove cart item control")
+    _check_human_takeover_text(control_text)
+    _check_cart_remove_url(str(metadata.get("url") or ""), str(metadata.get("page_title") or ""))
 
 
 def _check_shopping_browser() -> bool:
@@ -824,12 +904,19 @@ def _bounded_max_reviews(value: Any) -> int:
 
 def _reject_unsafe_operation(operation: str) -> dict[str, Any]:
     op = str(operation or "").strip().lower()
+    if op == "remove_from_cart":
+        return {
+            "allowed": True,
+            "operation": op,
+            "approval_required": True,
+            "message": "Allowed only through shopping_browser_click with approved_effect='remove_from_cart', a human-readable reason/approval reference, and a visible Delete/Remove cart line-item control on an Amazon cart page.",
+        }
     if op in UNSAFE_OPERATIONS:
         return {
             "allowed": False,
             "error": "OPERATION_NOT_ALLOWED",
             "operation": op,
-            "message": "Star's shopping bridge allows scoped browsing, visible-page inspection, safe queries, careful clicks/types, cart inspection, and explicitly approved add-to-cart. Joy handles login, Bitwarden, passkeys, 2FA, CAPTCHA, checkout, Buy Now, Place Order, account, address, and payment actions manually.",
+            "message": "Star's shopping bridge allows scoped browsing, visible-page inspection, safe queries, careful clicks/types, cart inspection, explicitly approved add-to-cart, and explicitly approved visible cart line-item removal. Joy handles login, Bitwarden, passkeys, 2FA, CAPTCHA, checkout, Buy Now, Place Order, account, address, and payment actions manually.",
         }
     return {"allowed": True, "operation": op}
 
@@ -1084,17 +1171,20 @@ def _screenshot(full_page: bool = False) -> dict[str, Any]:
 def _click(selector: str, reason: str, approved_effect: str) -> dict[str, Any]:
     safe_selector = _selector_arg(selector)
     effect = str(approved_effect or "browse").strip().lower()
-    if effect not in ("browse", "select_option", "apply_visible_coupon", "add_to_cart"):
-        raise ValueError("approved_effect must be browse, select_option, apply_visible_coupon, or add_to_cart")
-    if effect == "add_to_cart" and not str(reason or "").strip():
-        raise ValueError("add_to_cart clicks require a reason/approval reference")
+    if effect not in APPROVED_CLICK_EFFECTS:
+        raise ValueError(f"approved_effect must be {', '.join(APPROVED_CLICK_EFFECTS)}")
+    if effect in ("add_to_cart", "remove_from_cart") and not str(reason or "").strip():
+        raise ValueError(f"{effect} clicks require a reason/approval reference")
 
     def run(browser: CdpSession) -> dict[str, Any]:
         target_id = _first_page_target(browser)
         session_id = _attach(browser, target_id)
         label_expr = f"(() => {{ const n = document.querySelector({_json_literal(safe_selector)}); return n ? ((n.innerText || n.value || n.getAttribute('aria-label') || n.textContent || '').replace(/\\s+/g, ' ').trim()) : ''; }})()"
         label = str(_evaluate(browser, session_id, label_expr) or "")
-        if effect != "add_to_cart":
+        if effect == "remove_from_cart":
+            remove_metadata = _evaluate(browser, session_id, CART_REMOVE_CONTROL_JS.replace("__SELECTOR__", _json_literal(safe_selector))) or {}
+            _assert_cart_remove_click_allowed(remove_metadata, reason)
+        elif effect != "add_to_cart":
             _check_human_takeover_text(label)
         result = _evaluate(browser, session_id, CLICK_JS.replace("__SELECTOR__", _json_literal(safe_selector))) or {}
         time.sleep(1.0)
@@ -1290,7 +1380,10 @@ def shopping_browser_status_tool(args: dict[str, Any], **_kw: Any) -> str:
         "kubectl_available": shutil.which("kubectl") is not None,
         "remote_debug_port": REMOTE_DEBUG_PORT,
         "browser_operations": ["navigate", "page_snapshot", "query", "click", "type", "screenshot", "current_page_summary"],
-        "approval_gated_operations": {"add_to_cart": "available only through the broad shopping_browser_click flow with approved_effect='add_to_cart' and a human-readable approval reference"},
+        "approval_gated_operations": {
+            "add_to_cart": "available only through the broad shopping_browser_click flow with approved_effect='add_to_cart' and a human-readable approval reference",
+            "remove_from_cart": "available only through shopping_browser_click with approved_effect='remove_from_cart', a human-readable approval reference, and a visible Delete/Remove cart line-item control on an Amazon cart page",
+        },
         "removed_legacy_helpers": ["shopping_browser_inspect_product", "shopping_browser_inspect_reviews", "shopping_browser_inspect_cart", "shopping_browser_add_to_cart"],
         "screenshot_dir": SCREENSHOT_DIR,
         "audit_log": AUDIT_LOG,
@@ -1459,13 +1552,13 @@ SCREENSHOT_SCHEMA = {
 
 CLICK_SCHEMA = {
     "name": "shopping_browser_click",
-    "description": "Click a visible element in the persistent shopping browser by CSS selector. Use for browsing, selecting variants/options, applying visible coupons, and explicitly approved add-to-cart only. Blocks obvious checkout/account/payment/address/login-challenge text except for add_to_cart, and logs the high-level action. Never use for Buy Now, Place Order, account/payment/address edits, login, passkeys, 2FA, CAPTCHA, or checkout.",
+    "description": "Click a visible element in the persistent shopping browser by CSS selector. Use for browsing, selecting variants/options, applying visible coupons, explicitly approved add-to-cart, and explicitly approved visible cart line-item Delete/Remove controls only. Cart removal requires approved_effect='remove_from_cart', a human-readable approval reference, an Amazon cart page, and a visible button/input/link whose own label/name/aria/id indicates Delete or Remove. Blocks obvious checkout/account/payment/address/login-challenge text except for add_to_cart. Never use for Buy Now, Place Order, account/payment/address edits, login, passkeys, 2FA, CAPTCHA, or checkout.",
     "parameters": {
         "type": "object",
         "properties": {
             "selector": {"type": "string", "description": "CSS selector from shopping_browser_page_snapshot or a carefully derived selector"},
-            "approved_effect": {"type": "string", "description": "Expected effect of the click", "enum": ["browse", "select_option", "apply_visible_coupon", "add_to_cart"], "default": "browse"},
-            "reason": {"type": "string", "description": "Short human-readable reason/approval reference for audit, required for add_to_cart"},
+            "approved_effect": {"type": "string", "description": "Expected effect of the click", "enum": list(APPROVED_CLICK_EFFECTS), "default": "browse"},
+            "reason": {"type": "string", "description": "Short human-readable reason/approval reference for audit, required for add_to_cart and remove_from_cart"},
         },
         "required": ["selector", "approved_effect", "reason"],
     },
@@ -1540,7 +1633,7 @@ CURRENT_PAGE_SUMMARY_SCHEMA = {
 
 GUARDRAIL_SCHEMA = {
     "name": "shopping_browser_guardrail_check",
-    "description": "Check whether a shopping-browser operation is allowed. Arbitrary mutations/navigation/account/payment/order/raw-session operations are rejected; screenshot is allowed only through the shopping-browser-scoped media artifact tool, and add_to_cart is available only as an approved broad click effect.",
+    "description": "Check whether a shopping-browser operation is allowed. Arbitrary mutations/navigation/account/payment/order/raw-session operations are rejected; screenshot is allowed only through the shopping-browser-scoped media artifact tool, add_to_cart is available only as an approved broad click effect, and remove_from_cart is available only as an approved broad click effect for visible cart line-item Delete/Remove controls.",
     "parameters": {
         "type": "object",
         "properties": {
