@@ -682,19 +682,10 @@ class nest::app::hermes::install {
     ],
   }
 
-  file { "${install_dir}/agent-request-telegram-voice-notifications.patch":
-    ensure => file,
-    source => 'puppet:///modules/nest/app/hermes/agent-request-telegram-voice-notifications.patch',
-    mode   => '0644',
-    owner  => 'root',
-    group  => 'root',
-  }
-
   exec { 'patch_hermes_agent_request_telegram_voice_notifications':
-    command => "/usr/sbin/git -C ${broker_source_dir} reset --hard HEAD && /bin/rm -f ${broker_source_dir}/src/agent_request_broker/kanban_backend.py.orig ${broker_source_dir}/src/agent_request_broker/kanban_backend.py.rej ${broker_source_dir}/src/agent_request_broker/common.py.orig ${broker_source_dir}/src/agent_request_broker/common.py.rej ${broker_source_dir}/tests/test_agent_request_broker.py.orig ${broker_source_dir}/tests/test_agent_request_broker.py.rej ${broker_source_dir}/bin/agent-request-accept-review ${broker_source_dir}/bin/agent-request-cleanup-terminal-resources && /usr/bin/patch -N -p1 -d ${broker_source_dir} < ${install_dir}/agent-request-review-handoff-flow.patch && /usr/bin/patch -N -p1 -d ${broker_source_dir} < ${install_dir}/agent-request-worktree-cleanup.patch && /usr/bin/patch -N -p1 -d ${broker_source_dir} < ${install_dir}/agent-request-telegram-unstuck.patch && /usr/bin/patch -N -p1 -d ${broker_source_dir} < ${install_dir}/agent-request-telegram-voice-notifications.patch",
+    command => "/usr/sbin/git -C ${broker_source_dir} reset --hard HEAD && /bin/rm -f ${broker_source_dir}/src/agent_request_broker/kanban_backend.py.orig ${broker_source_dir}/src/agent_request_broker/kanban_backend.py.rej ${broker_source_dir}/src/agent_request_broker/common.py.orig ${broker_source_dir}/src/agent_request_broker/common.py.rej ${broker_source_dir}/tests/test_agent_request_broker.py.orig ${broker_source_dir}/tests/test_agent_request_broker.py.rej ${broker_source_dir}/bin/agent-request-accept-review ${broker_source_dir}/bin/agent-request-cleanup-terminal-resources && /usr/bin/patch -N -p1 -d ${broker_source_dir} < ${install_dir}/agent-request-review-handoff-flow.patch && /usr/bin/patch -N -p1 -d ${broker_source_dir} < ${install_dir}/agent-request-worktree-cleanup.patch && /usr/bin/patch -N -p1 -d ${broker_source_dir} < ${install_dir}/agent-request-telegram-unstuck.patch",
     unless  => "/bin/grep -q 'TASK_ID_RE' ${broker_source_dir}/src/agent_request_broker/kanban_backend.py && /bin/grep -q 'UNSTUCK_HELP_TERMS' ${broker_source_dir}/src/agent_request_broker/kanban_backend.py && /bin/grep -q '_VOICE_DANGLING_WORDS' ${broker_source_dir}/src/agent_request_broker/common.py && /bin/grep -q 'headline = re.sub(r\"^request' ${broker_source_dir}/src/agent_request_broker/common.py && /bin/grep -q 'reply_parameters' ${broker_source_dir}/src/agent_request_broker/common.py && /bin/grep -q 'test_voice_summary_prefers_complete_sentence_over_mid_clause_truncation' ${broker_source_dir}/tests/test_agent_request_broker.py",
     require => [
-      File["${install_dir}/agent-request-telegram-voice-notifications.patch"],
       Exec['patch_hermes_agent_request_telegram_unstuck'],
     ],
   }
@@ -797,7 +788,24 @@ class nest::app::hermes::install {
     unless  => "/bin/sh -c 'PYTHONPYCACHEPREFIX=/tmp/hermes-broker-pycache-puppet /opt/hermes-agent/venv/bin/python -m py_compile ${broker_source_dir}/src/agent_request_broker/kanban_backend.py && /bin/grep -q agent_request_task_completed ${broker_source_dir}/src/agent_request_broker/kanban_backend.py && /bin/grep -q test_completed_blocking_child_with_blocking_repair_relinks_parent_to_repair_path ${broker_source_dir}/tests/test_agent_request_broker.py'",
     require => [
       File["${install_dir}/agent-request-blocking-child-wakeup.patch"],
-      Exec['patch_hermes_agent_request_blocking_child_review_guard'],
+      Exec['patch_hermes_agent_request_child_task_notifications'],
+    ],
+  }
+
+  file { "${install_dir}/agent-request-superseded-review-parent.patch":
+    ensure => file,
+    source => 'puppet:///modules/nest/app/hermes/agent-request-superseded-review-parent.patch',
+    mode   => '0644',
+    owner  => 'root',
+    group  => 'root',
+  }
+
+  exec { 'patch_hermes_agent_request_superseded_review_parent':
+    command => "/bin/rm -f ${broker_source_dir}/src/agent_request_broker/kanban_backend.py.orig ${broker_source_dir}/src/agent_request_broker/kanban_backend.py.rej ${broker_source_dir}/tests/test_agent_request_broker.py.orig ${broker_source_dir}/tests/test_agent_request_broker.py.rej && /usr/bin/patch -N -p1 -d ${broker_source_dir} < ${install_dir}/agent-request-superseded-review-parent.patch",
+    unless  => "/bin/grep -q 'superseded by the completed blocking-child path' ${broker_source_dir}/src/agent_request_broker/kanban_backend.py && /bin/grep -q 'test_completed_blocking_child_reconciles_superseded_parent_review_to_done' ${broker_source_dir}/tests/test_agent_request_broker.py",
+    require => [
+      File["${install_dir}/agent-request-superseded-review-parent.patch"],
+      Exec['patch_hermes_agent_request_blocking_child_wakeup'],
     ],
   }
 
@@ -814,7 +822,7 @@ class nest::app::hermes::install {
     unless  => "/bin/grep -q 'AGENT_REQUEST_KANBAN_BOARD_OVERRIDE' ${broker_source_dir}/src/agent_request_broker/kanban_backend.py && /bin/grep -q 'test_board_name_override_takes_precedence_over_profile_dotenv_board' ${broker_source_dir}/tests/test_agent_request_broker.py",
     require => [
       File["${install_dir}/agent-request-dev-board-override.patch"],
-      Exec['patch_hermes_agent_request_blocking_child_wakeup'],
+      Exec['patch_hermes_agent_request_blocking_child_review_guard'],
     ],
   }
 
@@ -909,6 +917,7 @@ class nest::app::hermes::install {
       Exec['patch_hermes_agent_request_child_task_notifications'],
       Exec['patch_hermes_agent_request_review_requested_attention'],
       Exec['patch_hermes_agent_request_blocking_child_wakeup'],
+      Exec['patch_hermes_agent_request_superseded_review_parent'],
     ],
   }
 

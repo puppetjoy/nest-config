@@ -1,0 +1,119 @@
+diff --git a/src/agent_request_broker/kanban_backend.py b/src/agent_request_broker/kanban_backend.py
+index 94c78c8..2e63827 100644
+--- a/src/agent_request_broker/kanban_backend.py
++++ b/src/agent_request_broker/kanban_backend.py
+@@ -970,6 +970,53 @@ def sync_parent_requests_for_child_update(
+             f"Blocking child request {child.request_id} ({child.task_id}) reached {child_status}; "
+             "parent request is eligible to continue."
+         )
++        if parent_task is not None and parent_task.status == "review" and child_status in {"completed", COMPLETED_WITH_FOLLOWUP}:
++            parent_summary = (
++                f"Blocking child request {child.request_id} ({child.task_id}) reached {child_status}; "
++                "parent review handoff is superseded by the completed blocking-child path, "
++                "so the parent request is marked done instead of remaining actionable for stale review."
++            )
++            comment_id = kanban.add_comment(
++                conn,
++                parent.task_id,
++                actor,
++                event_comment(
++                    request_id=parent.request_id,
++                    actor=actor,
++                    action="completed",
++                    summary=parent_summary,
++                    response_to_requester=summary,
++                ),
++            )
++            now = int(time.time())
++            conn.execute(
++                """
++                UPDATE tasks
++                   SET status = 'done', result = ?, completed_at = ?,
++                       claim_lock = NULL, claim_expires = NULL, worker_pid = NULL,
++                       current_run_id = NULL
++                 WHERE id = ? AND status = 'review'
++                """,
++                (parent_summary, now, parent.task_id),
++            )
++            kanban._append_event(conn, parent.task_id, "completed", {"summary": parent_summary}, run_id=None)
++            update_index_status(conn, parent.request_id, "completed")
++            notification = notify_kanban_event(
++                task_id=parent.task_id,
++                action="completed",
++                actor=actor,
++                summary=parent_summary,
++                comment_id=comment_id,
++            )
++            updates.append({
++                "parent_request_id": parent.request_id,
++                "parent_task_id": parent.task_id,
++                "status": "completed",
++                "summary": parent_summary,
++                "comment_id": comment_id,
++                "notification": notification,
++            })
++            continue
+         comment_id = kanban.add_comment(
+             conn,
+             parent.task_id,
+diff --git a/tests/test_agent_request_broker.py b/tests/test_agent_request_broker.py
+index b6b0ce2..d3de286 100755
+--- a/tests/test_agent_request_broker.py
++++ b/tests/test_agent_request_broker.py
+@@ -1071,6 +1071,56 @@ def test_blocking_subrequest_marks_parent_waiting_and_child_completion_resumes_p
+         finally:
+             backend.telegram_send = old_send
+
++
++def test_completed_blocking_child_reconciles_superseded_parent_review_to_done():
++    if not require_hermes_src():
++        return
++    with kanban_env():
++        from agent_request_broker import kanban_backend as backend
++        from hermes_cli import kanban_db as kb
++
++        old_send = backend.telegram_send
++        backend.telegram_send = lambda message, **_kw: {"sent": True, "test": True}
++        try:
++            parent = backend.submit({
++                "title": "Parent stale review superseded by child",
++                "request": "Original narrow path should not remain reviewable after child completes.",
++                "target": "talon",
++            }, requester="star")["request"]
++            child = backend.submit({
++                "title": "Blocking child satisfies parent",
++                "request": "Complete the corrected broad path.",
++                "target": "star",
++                "parent_request_id": parent["id"],
++                "parent_child_classification": "blocking",
++                "parent_child_reason": "Parent review is superseded by this corrected implementation path.",
++            }, requester="talon")["request"]
++
++            conn = backend.connect()
++            try:
++                conn.execute("UPDATE tasks SET status = 'review' WHERE id = ?", (parent["kanban_task_id"],))
++                backend.update_index_status(conn, parent["id"], backend.REVIEW_REQUESTED)
++                assert kb.complete_task(conn, child["kanban_task_id"], summary="Corrected child path completed.")
++                completed = backend.agent_request_task_completed(
++                    conn,
++                    task_id=child["kanban_task_id"],
++                    action_status="completed",
++                    actor="star",
++                    summary="Corrected child path completed.",
++                )
++                parent_item = backend.index_for_request(conn, parent["id"])
++                parent_task = kb.get_task(conn, parent["kanban_task_id"])
++            finally:
++                conn.close()
++
++            assert completed["parent_updates"]
++            assert completed["parent_updates"][0]["status"] == "completed"
++            assert "superseded by the completed blocking-child path" in completed["parent_updates"][0]["summary"]
++            assert parent_item.status == "completed"
++            assert parent_task.status == "done"
++        finally:
++            backend.telegram_send = old_send
++
+ def test_failed_notification_rows_can_be_retried():
+     if not require_hermes_src():
+         return
