@@ -788,7 +788,6 @@ class nest::app::hermes::install {
     unless  => "/bin/sh -c 'PYTHONPYCACHEPREFIX=/tmp/hermes-broker-pycache-puppet /opt/hermes-agent/venv/bin/python -m py_compile ${broker_source_dir}/src/agent_request_broker/kanban_backend.py && /bin/grep -q agent_request_task_completed ${broker_source_dir}/src/agent_request_broker/kanban_backend.py && /bin/grep -q test_completed_blocking_child_with_blocking_repair_relinks_parent_to_repair_path ${broker_source_dir}/tests/test_agent_request_broker.py'",
     require => [
       File["${install_dir}/agent-request-blocking-child-wakeup.patch"],
-      Exec['patch_hermes_agent_request_child_task_notifications'],
     ],
   }
 
