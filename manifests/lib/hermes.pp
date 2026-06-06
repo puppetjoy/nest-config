@@ -248,6 +248,8 @@ define nest::lib::hermes (
       undef   => [],
       default => ["SSH_AUTH_SOCK=${ssh_auth_sock}"],
     },
+    $openai_env_lines,
+    $agent_request_env_lines,
     '',
   ].flatten
 
