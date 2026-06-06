@@ -328,12 +328,13 @@ define nest::lib::hermes (
   }
 
   file { "${profile_dir}/systemd.env":
-    ensure  => file,
-    mode    => '0600',
-    owner   => $user,
-    group   => $user,
-    content => $systemd_env_lines.join("\n"),
-    require => File[$profile_dir],
+    ensure    => file,
+    mode      => '0600',
+    owner     => $user,
+    group     => $user,
+    content   => Sensitive($systemd_env_lines.join("\n")),
+    show_diff => false,
+    require   => File[$profile_dir],
   }
 
   file { $hermes_managed_config_path:
