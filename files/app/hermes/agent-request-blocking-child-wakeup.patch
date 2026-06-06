@@ -1,0 +1,259 @@
+--- a/src/agent_request_broker/kanban_backend.py
++++ b/src/agent_request_broker/kanban_backend.py
+@@ -1720,0 +1721,7 @@
++def open_blocking_child_dispositions(conn: Any, item: AgentRequestIndex) -> list[dict[str, Any]]:
++    return [
++        row for row in child_completion_dispositions(conn, item.request_id)
++        if row.get("classification") == "blocking" and row.get("open")
++    ]
++
++
+@@ -1732,0 +1740 @@
++    child_successors = open_blocking_child_dispositions(conn, child)
+@@ -1738,0 +1747,98 @@
++        if child_successors:
++            linked_successors = []
++            for successor in child_successors:
++                reason = (
++                    f"Blocking child request {child.request_id} ({child.task_id}) reached {child_status} "
++                    f"with blocking follow-up {successor['child_task_id']}: {successor.get('reason') or 'follow-up required'}"
++                )
++                record_child_disposition(
++                    conn,
++                    parent=parent,
++                    child_task_id=successor["child_task_id"],
++                    classification="blocking",
++                    reason=reason,
++                    actor=actor,
++                )
++                linked_successors.append(successor)
++            successor_list = ", ".join(
++                f"{row['child_task_id']} ({row.get('title')}, status={row.get('status')})"
++                for row in linked_successors
++            )
++            parent_summary = (
++                f"Blocking child request {child.request_id} ({child.task_id}) reached {child_status}, "
++                f"but spawned blocking follow-up path(s): {successor_list}. "
++                "Parent remains waiting on the current blocking child path."
++            )
++            comment_id = kanban.add_comment(
++                conn,
++                parent.task_id,
++                actor,
++                event_comment(
++                    request_id=parent.request_id,
++                    actor=actor,
++                    action=WAITING_ON_CHILD,
++                    summary=parent_summary,
++                    response_to_requester=summary,
++                ),
++            )
++            update_index_status(conn, parent.request_id, WAITING_ON_CHILD)
++            notification = notify_kanban_event(
++                task_id=parent.task_id,
++                action=WAITING_ON_CHILD,
++                actor=actor,
++                summary=parent_summary,
++                comment_id=comment_id,
++            )
++            updates.append({
++                "parent_request_id": parent.request_id,
++                "parent_task_id": parent.task_id,
++                "status": WAITING_ON_CHILD,
++                "successor_blocking_children": [row["child_task_id"] for row in linked_successors],
++                "comment_id": comment_id,
++                "notification": notification,
++            })
++            continue
++
++        remaining_blocking = [
++            row for row in open_blocking_child_dispositions(conn, parent)
++            if row.get("child_task_id") != child.task_id
++        ]
++        if remaining_blocking:
++            blocking_list = ", ".join(
++                f"{row['child_task_id']} ({row.get('title')}, status={row.get('status')})"
++                for row in remaining_blocking
++            )
++            parent_summary = (
++                f"Blocking child request {child.request_id} ({child.task_id}) reached {child_status}, "
++                f"but parent is still waiting on open blocking child path(s): {blocking_list}."
++            )
++            comment_id = kanban.add_comment(
++                conn,
++                parent.task_id,
++                actor,
++                event_comment(
++                    request_id=parent.request_id,
++                    actor=actor,
++                    action=WAITING_ON_CHILD,
++                    summary=parent_summary,
++                    response_to_requester=summary,
++                ),
++            )
++            update_index_status(conn, parent.request_id, WAITING_ON_CHILD)
++            notification = notify_kanban_event(
++                task_id=parent.task_id,
++                action=WAITING_ON_CHILD,
++                actor=actor,
++                summary=parent_summary,
++                comment_id=comment_id,
++            )
++            updates.append({
++                "parent_request_id": parent.request_id,
++                "parent_task_id": parent.task_id,
++                "status": WAITING_ON_CHILD,
++                "remaining_blocking_children": [row["child_task_id"] for row in remaining_blocking],
++                "comment_id": comment_id,
++                "notification": notification,
++            })
++            continue
++
+@@ -1771,0 +1878 @@
++            "status": "in_progress",
+@@ -1775,0 +1883,27 @@
++
++
++def agent_request_task_completed(
++    conn: Any,
++    *,
++    task_id: str,
++    action_status: str,
++    actor: str,
++    summary: str,
++) -> dict[str, Any]:
++    init_index(conn)
++    item = index_for_task(conn, task_id)
++    if not item:
++        return {"request": None, "parent_updates": []}
++    update_index_status(conn, item.request_id, action_status)
++    parent_updates = sync_parent_requests_for_child_update(
++        conn,
++        child=item,
++        child_status=action_status,
++        actor=actor,
++        summary=summary,
++    )
++    refreshed = index_for_request(conn, item.request_id)
++    return {
++        "request": public_request(conn, refreshed) if refreshed else None,
++        "parent_updates": parent_updates,
++    }
+--- a/tests/test_agent_request_broker.py
++++ b/tests/test_agent_request_broker.py
+@@ -2305,0 +2306,115 @@
++def test_agent_request_task_completed_resumes_parent_after_kanban_completion():
++    if not require_hermes_src():
++        return
++    with kanban_env():
++        from agent_request_broker import kanban_backend as backend
++        from hermes_cli import kanban_db as kb
++
++        old_send = backend.telegram_send
++        messages = []
++        backend.telegram_send = lambda message, **_kw: messages.append(message) or {"sent": True, "test": True}
++        try:
++            parent = backend.submit({
++                "title": "Parent resumes after native kanban complete",
++                "request": "Wake me after the blocking child completes through kanban_complete.",
++                "target": "talon",
++            }, requester="star")["request"]
++            child = backend.submit({
++                "title": "Blocking child native completion",
++                "request": "Finish the prerequisite.",
++                "target": "star",
++                "parent_request_id": parent["id"],
++                "parent_child_classification": "blocking",
++                "parent_child_reason": "Parent cannot continue until this prerequisite is done.",
++            }, requester="talon")["request"]
++
++            conn = backend.connect()
++            try:
++                assert kb.complete_task(conn, child["kanban_task_id"], summary="Child completed through native Kanban tool")
++                completed = backend.agent_request_task_completed(
++                    conn,
++                    task_id=child["kanban_task_id"],
++                    action_status="completed",
++                    actor="star",
++                    summary="Child completed through native Kanban tool",
++                )
++                parent_item = backend.index_for_request(conn, parent["id"])
++                parent_task = kb.get_task(conn, parent["kanban_task_id"])
++            finally:
++                conn.close()
++
++            assert completed["parent_updates"]
++            assert completed["parent_updates"][0]["status"] == "in_progress"
++            assert parent_item.status == "in_progress"
++            assert parent_task.status != "blocked"
++            assert any("eligible to continue" in message for message in messages)
++        finally:
++            backend.telegram_send = old_send
++
++
++def test_completed_blocking_child_with_blocking_repair_relinks_parent_to_repair_path():
++    if not require_hermes_src():
++        return
++    with kanban_env():
++        from agent_request_broker import kanban_backend as backend
++        from hermes_cli import kanban_db as kb
++
++        old_send = backend.telegram_send
++        backend.telegram_send = lambda message, **_kw: {"sent": True, "test": True}
++        try:
++            parent = backend.submit({
++                "title": "Parent waits on current repair path",
++                "request": "Do not stale-wait on a done child if it spawns repair work.",
++                "target": "talon",
++            }, requester="star")["request"]
++            child = backend.submit({
++                "title": "Blocking child that finds repair",
++                "request": "Retest and create repair if still broken.",
++                "target": "star",
++                "parent_request_id": parent["id"],
++                "parent_child_classification": "blocking",
++                "parent_child_reason": "Parent cannot continue until retest/repair path is done.",
++            }, requester="talon")["request"]
++            repair = backend.submit({
++                "title": "Blocking repair follow-up",
++                "request": "Repair the failed retest.",
++                "target": "talon",
++                "parent_request_id": child["id"],
++                "parent_child_classification": "blocking",
++                "parent_child_reason": "The retest failed and requires repair before parent can continue.",
++            }, requester="star")["request"]
++
++            conn = backend.connect()
++            try:
++                assert kb.complete_task(conn, child["kanban_task_id"], summary="Retest finished but left a blocking repair follow-up.")
++                completed = backend.agent_request_task_completed(
++                    conn,
++                    task_id=child["kanban_task_id"],
++                    action_status="completed",
++                    actor="star",
++                    summary="Retest finished but left a blocking repair follow-up.",
++                )
++            finally:
++                conn.close()
++            assert completed["parent_updates"]
++            update = completed["parent_updates"][0]
++            assert update["status"] == backend.WAITING_ON_CHILD
++            assert repair["kanban_task_id"] in update["successor_blocking_children"]
++
++            conn = backend.connect()
++            try:
++                parent_item = backend.index_for_request(conn, parent["id"])
++                parent_task = kb.get_task(conn, parent["kanban_task_id"])
++                context = backend.completion_child_context(conn, parent_item)
++                blocking_open_ids = {row["child_task_id"] for row in context["blocking_open"]}
++            finally:
++                conn.close()
++
++            assert parent_item.status == backend.WAITING_ON_CHILD
++            assert parent_task.status == "blocked"
++            assert repair["kanban_task_id"] in blocking_open_ids
++            assert child["kanban_task_id"] not in blocking_open_ids
++        finally:
++            backend.telegram_send = old_send
++
++

@@ -96,6 +96,7 @@ class nest::app::hermes::install {
     'patch_hermes_kanban_agent_request_review_dispatch_gate',
     'patch_hermes_kanban_completion_worktree_cleanup',
     'patch_hermes_kanban_completion_worktree_cleanup_response_json',
+    'patch_hermes_kanban_agent_request_completion_sync',
     'patch_hermes_telegram_voice_summary',
     'patch_hermes_dashboard_rich_art_spans',
     'patch_hermes_dashboard_chat_truecolor_env',
@@ -127,7 +128,7 @@ class nest::app::hermes::install {
 
   exec { 'install_hermes_agent':
     command     => "${venv_pip} install --upgrade --force-reinstall ${source_dir} && git -C ${source_dir} rev-parse HEAD > ${git_revision_file}",
-    unless      => "test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent')\" && /bin/grep -q 'app.state.allow_public = allow_public' ${venv_dir}/lib/python*/site-packages/hermes_cli/web_server.py && /bin/grep -q 'if _pl <= 0:' ${venv_dir}/lib/python*/site-packages/gateway/run.py && /bin/grep -q 'chat_id=str(query_chat_id or' ${venv_dir}/lib/python*/site-packages/gateway/platforms/telegram.py && /bin/grep -q 'handle_telegram_reply' ${venv_dir}/lib/python*/site-packages/gateway/platforms/telegram.py && /bin/grep -q 'handle_telegram_unstuck' ${venv_dir}/lib/python*/site-packages/gateway/platforms/telegram.py && ! /bin/grep -q 'handle_telegram_callback(token, actor=str' ${venv_dir}/lib/python*/site-packages/gateway/platforms/telegram.py && /bin/grep -q '_banner_hero_renderable' ${venv_dir}/lib/python*/site-packages/hermes_cli/banner.py && /bin/grep -q 'banner_subtitle' ${venv_dir}/lib/python*/site-packages/hermes_cli/banner.py && /bin/grep -q 'discover_builtin_tools()' ${venv_dir}/lib/python*/site-packages/cli.py && /bin/grep -q '_notify_agent_request_event' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q 'Approved/unblocked/resumed; task is eligible to continue' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q '_notify_agent_request_dispatch_event' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_db.py && /bin/grep -q 'Task auto-blocked after' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_db.py && /bin/grep -q 'repair_gave_up_running_divergence' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_db.py && /bin/grep -q 'repair-gave-up-race' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban.py && /bin/grep -q 'dispatcher_profile=dispatcher_profile' ${venv_dir}/lib/python*/site-packages/gateway/run.py && /bin/grep -q '_attention_summary_for_task' ${venv_dir}/lib/python*/site-packages/plugins/kanban/dashboard/plugin_api.py && /bin/grep -q 'taskAttentionSummary' ${venv_dir}/lib/python*/site-packages/plugins/kanban/dashboard/dist/index.js && /bin/grep -q 'BOARD_COLUMN_METADATA' ${venv_dir}/lib/python*/site-packages/plugins/kanban/dashboard/plugin_api.py && /bin/grep -q 'Agent-request review handoffs are different' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_db.py && /bin/grep -q 'cleanup_terminal_task_resources' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q 'json.loads(_ok(task_id=tid, run_id=run.id if run else None))' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q '_summarize_text_for_voice_reply' ${venv_dir}/lib/python*/site-packages/gateway/run.py",
+    unless      => "test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent')\" && /bin/grep -q 'app.state.allow_public = allow_public' ${venv_dir}/lib/python*/site-packages/hermes_cli/web_server.py && /bin/grep -q 'if _pl <= 0:' ${venv_dir}/lib/python*/site-packages/gateway/run.py && /bin/grep -q 'chat_id=str(query_chat_id or' ${venv_dir}/lib/python*/site-packages/gateway/platforms/telegram.py && /bin/grep -q 'handle_telegram_reply' ${venv_dir}/lib/python*/site-packages/gateway/platforms/telegram.py && /bin/grep -q 'handle_telegram_unstuck' ${venv_dir}/lib/python*/site-packages/gateway/platforms/telegram.py && ! /bin/grep -q 'handle_telegram_callback(token, actor=str' ${venv_dir}/lib/python*/site-packages/gateway/platforms/telegram.py && /bin/grep -q '_banner_hero_renderable' ${venv_dir}/lib/python*/site-packages/hermes_cli/banner.py && /bin/grep -q 'banner_subtitle' ${venv_dir}/lib/python*/site-packages/hermes_cli/banner.py && /bin/grep -q 'discover_builtin_tools()' ${venv_dir}/lib/python*/site-packages/cli.py && /bin/grep -q '_notify_agent_request_event' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q 'agent_request_task_completed' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q 'Approved/unblocked/resumed; task is eligible to continue' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q '_notify_agent_request_dispatch_event' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_db.py && /bin/grep -q 'Task auto-blocked after' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_db.py && /bin/grep -q 'repair_gave_up_running_divergence' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_db.py && /bin/grep -q 'repair-gave-up-race' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban.py && /bin/grep -q 'dispatcher_profile=dispatcher_profile' ${venv_dir}/lib/python*/site-packages/gateway/run.py && /bin/grep -q '_attention_summary_for_task' ${venv_dir}/lib/python*/site-packages/plugins/kanban/dashboard/plugin_api.py && /bin/grep -q 'taskAttentionSummary' ${venv_dir}/lib/python*/site-packages/plugins/kanban/dashboard/dist/index.js && /bin/grep -q 'BOARD_COLUMN_METADATA' ${venv_dir}/lib/python*/site-packages/plugins/kanban/dashboard/plugin_api.py && /bin/grep -q 'Agent-request review handoffs are different' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_db.py && /bin/grep -q 'cleanup_terminal_task_resources' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q 'json.loads(_ok(task_id=tid, run_id=run.id if run else None))' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q '_summarize_text_for_voice_reply' ${venv_dir}/lib/python*/site-packages/gateway/run.py",
     environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
     path        => ['/bin', '/usr/bin'],
     require     => [
@@ -152,6 +153,7 @@ class nest::app::hermes::install {
       Exec['patch_hermes_kanban_agent_request_review_dispatch_gate'],
       Exec['patch_hermes_kanban_completion_worktree_cleanup'],
       Exec['patch_hermes_kanban_completion_worktree_cleanup_response_json'],
+      Exec['patch_hermes_kanban_agent_request_completion_sync'],
       Exec['patch_hermes_telegram_voice_summary'],
       File["${source_dir}/tools/agent_request_tool.py"],
       File["${source_dir}/tools/google_workspace_tool.py"],
@@ -499,6 +501,23 @@ class nest::app::hermes::install {
     ],
   }
 
+  file { "${install_dir}/kanban-agent-request-completion-sync.patch":
+    ensure => file,
+    source => 'puppet:///modules/nest/app/hermes/kanban-agent-request-completion-sync.patch',
+    mode   => '0644',
+    owner  => 'root',
+    group  => 'root',
+  }
+
+  exec { 'patch_hermes_kanban_agent_request_completion_sync':
+    command => "/usr/bin/patch -N -p1 -d ${source_dir} < ${install_dir}/kanban-agent-request-completion-sync.patch",
+    unless  => "/bin/grep -q 'agent_request_task_completed' ${source_dir}/tools/kanban_tools.py && /bin/grep -q 'parent_updates' ${source_dir}/tools/kanban_tools.py",
+    require => [
+      File["${install_dir}/kanban-agent-request-completion-sync.patch"],
+      Exec['patch_hermes_kanban_completion_worktree_cleanup_response_json'],
+    ],
+  }
+
   file { "${install_dir}/hermes-telegram-voice-summary.patch":
     ensure => file,
     source => 'puppet:///modules/nest/app/hermes/hermes-telegram-voice-summary.patch',
@@ -512,7 +531,7 @@ class nest::app::hermes::install {
     unless  => "/bin/grep -q '_summarize_text_for_voice_reply' ${source_dir}/gateway/run.py",
     require => [
       File["${install_dir}/hermes-telegram-voice-summary.patch"],
-      Exec['patch_hermes_kanban_completion_worktree_cleanup_response_json'],
+      Exec['patch_hermes_kanban_agent_request_completion_sync'],
     ],
   }
 
@@ -729,6 +748,23 @@ class nest::app::hermes::install {
     ],
   }
 
+  file { "${install_dir}/agent-request-blocking-child-wakeup.patch":
+    ensure => file,
+    source => 'puppet:///modules/nest/app/hermes/agent-request-blocking-child-wakeup.patch',
+    mode   => '0644',
+    owner  => 'root',
+    group  => 'root',
+  }
+
+  exec { 'patch_hermes_agent_request_blocking_child_wakeup':
+    command => "/bin/rm -f ${broker_source_dir}/src/agent_request_broker/kanban_backend.py.orig ${broker_source_dir}/src/agent_request_broker/kanban_backend.py.rej ${broker_source_dir}/tests/test_agent_request_broker.py.orig ${broker_source_dir}/tests/test_agent_request_broker.py.rej && /usr/bin/patch -N -p1 -d ${broker_source_dir} < ${install_dir}/agent-request-blocking-child-wakeup.patch",
+    unless  => "/bin/grep -q 'agent_request_task_completed' ${broker_source_dir}/src/agent_request_broker/kanban_backend.py && /bin/grep -q 'test_completed_blocking_child_with_blocking_repair_relinks_parent_to_repair_path' ${broker_source_dir}/tests/test_agent_request_broker.py",
+    require => [
+      File["${install_dir}/agent-request-blocking-child-wakeup.patch"],
+      Exec['patch_hermes_agent_request_blocking_child_review_guard'],
+    ],
+  }
+
   file { "${install_dir}/agent-request-dev-board-override.patch":
     ensure => file,
     source => 'puppet:///modules/nest/app/hermes/agent-request-dev-board-override.patch',
@@ -742,7 +778,7 @@ class nest::app::hermes::install {
     unless  => "/bin/grep -q 'AGENT_REQUEST_KANBAN_BOARD_OVERRIDE' ${broker_source_dir}/src/agent_request_broker/kanban_backend.py && /bin/grep -q 'test_board_name_override_takes_precedence_over_profile_dotenv_board' ${broker_source_dir}/tests/test_agent_request_broker.py",
     require => [
       File["${install_dir}/agent-request-dev-board-override.patch"],
-      Exec['patch_hermes_agent_request_blocking_child_review_guard'],
+      Exec['patch_hermes_agent_request_blocking_child_wakeup'],
     ],
   }
 
@@ -799,7 +835,7 @@ class nest::app::hermes::install {
 
   exec { 'install_hermes_agent_request_broker':
     command     => "${venv_pip} install --upgrade --force-reinstall ${broker_source_dir} && git -C ${broker_source_dir} rev-parse HEAD > ${broker_git_revision_file}",
-    unless      => "test \"$(git -C ${broker_source_dir} rev-parse HEAD)\" = \"$(cat ${broker_git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent-request-broker'); import agent_request_broker.kanban_backend as kb; import agent_request_broker.common as c; assert hasattr(kb, 'trusted_accept_review'); assert hasattr(kb, 'resume_blocked_task_from_reply'); assert hasattr(kb, '_reply_prompt_stale_reason'); assert hasattr(kb, '_active_reply_prompts'); assert hasattr(kb, 'handle_telegram_unstuck'); assert hasattr(kb, 'TASK_ID_RE'); assert hasattr(kb, 'UNSTUCK_HELP_TERMS'); assert hasattr(kb, 'cleanup_terminal_task_resources'); assert hasattr(kb, 'cleanup_terminal_task_sweep'); assert hasattr(kb, 'delete_eyrie_registry_repository'); assert hasattr(kb, '_create_review_question_answer_task'); assert kb.event_label('commented') == 'comment'; assert kb.event_label('review_question_answer_needed') == 'review question answer needed'; assert hasattr(kb, 'ATTENTION_REQUIRED_NOTIFICATION_ACTIONS'); assert hasattr(kb, 'notification_urgency_detail'); assert kb.notification_urgency_detail('blocked')['telegram_disable_notification'] is False; assert hasattr(c, '_telegram_send_voice_notification'); assert hasattr(c, '_voice_summary_part'); assert hasattr(c, '_text_to_speech_for_profile'); assert hasattr(kb, 'notification_board_label'); assert hasattr(kb, 'parse_callback_token'); assert hasattr(kb, 'open_blocking_child_error'); assert hasattr(kb, '_board_from_hermes_kanban_db'); assert hasattr(kb, 'redact_notification_line'); assert hasattr(kb, 'notifiable_index_for_task'); import os; os.environ['AGENT_REQUEST_KANBAN_BOARD']='agent-requests'; os.environ['AGENT_REQUEST_KANBAN_BOARD_OVERRIDE']='agent-requests-dev'; assert kb.board_name() == 'agent-requests-dev'; os.environ.pop('AGENT_REQUEST_KANBAN_BOARD_OVERRIDE', None); os.environ['HERMES_KANBAN_DB']='/tmp/hermes-kanban/boards/agent-requests-dev/kanban.db'; assert kb.board_name() == 'agent-requests-dev'\"",
+    unless      => "test \"$(git -C ${broker_source_dir} rev-parse HEAD)\" = \"$(cat ${broker_git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent-request-broker'); import agent_request_broker.kanban_backend as kb; import agent_request_broker.common as c; assert hasattr(kb, 'trusted_accept_review'); assert hasattr(kb, 'resume_blocked_task_from_reply'); assert hasattr(kb, '_reply_prompt_stale_reason'); assert hasattr(kb, '_active_reply_prompts'); assert hasattr(kb, 'handle_telegram_unstuck'); assert hasattr(kb, 'TASK_ID_RE'); assert hasattr(kb, 'UNSTUCK_HELP_TERMS'); assert hasattr(kb, 'cleanup_terminal_task_resources'); assert hasattr(kb, 'cleanup_terminal_task_sweep'); assert hasattr(kb, 'delete_eyrie_registry_repository'); assert hasattr(kb, '_create_review_question_answer_task'); assert kb.event_label('commented') == 'comment'; assert kb.event_label('review_question_answer_needed') == 'review question answer needed'; assert hasattr(kb, 'ATTENTION_REQUIRED_NOTIFICATION_ACTIONS'); assert hasattr(kb, 'notification_urgency_detail'); assert kb.notification_urgency_detail('blocked')['telegram_disable_notification'] is False; assert hasattr(c, '_telegram_send_voice_notification'); assert hasattr(c, '_voice_summary_part'); assert hasattr(c, '_text_to_speech_for_profile'); assert hasattr(kb, 'notification_board_label'); assert hasattr(kb, 'parse_callback_token'); assert hasattr(kb, 'open_blocking_child_error'); assert hasattr(kb, 'agent_request_task_completed'); assert hasattr(kb, '_board_from_hermes_kanban_db'); assert hasattr(kb, 'redact_notification_line'); assert hasattr(kb, 'notifiable_index_for_task'); import os; os.environ['AGENT_REQUEST_KANBAN_BOARD']='agent-requests'; os.environ['AGENT_REQUEST_KANBAN_BOARD_OVERRIDE']='agent-requests-dev'; assert kb.board_name() == 'agent-requests-dev'; os.environ.pop('AGENT_REQUEST_KANBAN_BOARD_OVERRIDE', None); os.environ['HERMES_KANBAN_DB']='/tmp/hermes-kanban/boards/agent-requests-dev/kanban.db'; assert kb.board_name() == 'agent-requests-dev'\"",
     environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
     path        => ['/bin', '/usr/bin'],
     require     => [
@@ -817,6 +853,7 @@ class nest::app::hermes::install {
       Exec['patch_hermes_agent_request_dev_board_current_db'],
       Exec['patch_hermes_agent_request_notification_narrow_redaction'],
       Exec['patch_hermes_agent_request_child_task_notifications'],
+      Exec['patch_hermes_agent_request_blocking_child_wakeup'],
     ],
   }
 
