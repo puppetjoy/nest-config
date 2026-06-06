@@ -107,7 +107,7 @@ SENSITIVE_TYPED_TEXT_RE = re.compile(
     re.IGNORECASE,
 )
 CHECKOUTISH_PAGE_RE = re.compile(r"checkout|buy|payselect|ship|spc|review|ordering", re.IGNORECASE)
-SAFE_CHECKOUT_SENSITIVE_LABEL_RE = re.compile(r"shipping\s+(speed|option|method)|delivery\s+(option|date|window)|gift(?!\s*card\s*(number|balance))|coupon|promo|promotion|claim\s+code|quantity|qty|delete|remove|one[-\s]?time|subscribe|subscription|cart", re.IGNORECASE)
+SAFE_CHECKOUT_SENSITIVE_LABEL_RE = re.compile(r"shipping\s+(speed|option|method)|delivery\s+(option|date|window)|gift(?!\s*card\s*(number|code))|gift\s+card\s+balance|use\s+a\s+gift\s+card|coupon|promo|promotion|claim\s+code|payment\s+(summary|method|option)|paying\s+with|quantity|qty|delete|remove|one[-\s]?time|subscribe|subscription|cart", re.IGNORECASE)
 MUTATING_QUERY_RE = re.compile(r"\b(click|submit|fetch|XMLHttpRequest|sendBeacon|localStorage|sessionStorage|indexedDB|cookie|setAttribute|removeAttribute|appendChild|removeChild|innerHTML\s*=|location\s*=|open\s*\()\b", re.IGNORECASE)
 
 PRODUCT_EXTRACT_JS = r"""
@@ -642,6 +642,7 @@ CHECKOUT_PREP_CONTROLS_JS = r"""
 (() => {
   const maxControls = __MAX_CONTROLS__;
   const clean = (value) => (value || '').replace(/\s+/g, ' ').trim();
+  document.querySelectorAll('[data-shopping-browser-checkout-control]').forEach((node) => node.removeAttribute('data-shopping-browser-checkout-control'));
   const redact = (value) => clean(value)
     .replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g, '[email redacted]')
     .replace(/\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/g, '[phone redacted]')
@@ -684,7 +685,9 @@ CHECKOUT_PREP_CONTROLS_JS = r"""
       .filter(Boolean)
       .join(' ');
     const own = clean(el.innerText || el.value || el.getAttribute('aria-label') || el.getAttribute('title') || el.textContent || '');
-    const context = clean((el.closest('label, li, tr, fieldset, .a-box, .a-row, .a-section, [role="radio"], [role="option"]') || el).innerText || '');
+    const contextNode = el.closest('label, li, tr, fieldset, [role="radio"], [role="checkbox"], [role="option"]');
+    const rawContext = clean((contextNode || el).innerText || '');
+    const context = rawContext.length <= 220 && !/place\s+(your\s+)?order|buy\s+now|submit\s+order|complete\s+purchase|purchase\s+now|confirm\s+(purchase|order)/i.test(rawContext) ? rawContext : '';
     return redact([labelledBy, own, context].filter(Boolean).join(' | ')).slice(0, 240);
   };
   const regionFor = (label) => {
@@ -720,9 +723,10 @@ CHECKOUT_PREP_CONTROLS_JS = r"""
     const role = clean(el.getAttribute('role') || '');
     if (tag === 'INPUT' && ['hidden', 'password'].includes(type)) continue;
     const label = labelFor(el);
-    const rawBits = clean([label, el.id, el.getAttribute('name'), el.getAttribute('aria-label'), el.getAttribute('placeholder'), el.getAttribute('autocomplete'), type, role].join(' '));
+    const directBits = clean([el.innerText || el.value || el.getAttribute('aria-label') || el.getAttribute('title') || el.textContent || '', el.id, el.getAttribute('name'), el.getAttribute('aria-label'), el.getAttribute('placeholder'), el.getAttribute('autocomplete'), type, role].join(' '));
+    const rawBits = clean([label, directBits].join(' '));
     if (!label && !rawBits) continue;
-    if (finalControl.test(rawBits)) {
+    if (finalControl.test(directBits)) {
       finalPurchaseControls.push(redact(label || rawBits).slice(0, 120));
       continue;
     }
@@ -730,7 +734,9 @@ CHECKOUT_PREP_CONTROLS_JS = r"""
       skippedSensitiveControls.push(redact(label || rawBits).slice(0, 120));
       continue;
     }
-    const selector = selectorFor(el);
+    const safeControlId = `sb-checkout-${controls.length + 1}`;
+    el.setAttribute('data-shopping-browser-checkout-control', safeControlId);
+    const selector = `[data-shopping-browser-checkout-control="${safeControlId}"]`;
     if (!selector || seen.has(selector)) continue;
     seen.add(selector);
     const rect = el.getBoundingClientRect();
@@ -1433,6 +1439,10 @@ def _checkout_metadata_text(metadata: dict[str, Any]) -> str:
     return " ".join(str(metadata.get(key) or "") for key in ("text", "value", "aria_label", "name", "title", "id", "page_title", "url"))
 
 
+def _checkout_control_identity_text(metadata: dict[str, Any]) -> str:
+    return " ".join(str(metadata.get(key) or "") for key in ("text", "value", "aria_label", "name", "title", "id"))
+
+
 def _checkoutish_page_text(metadata: dict[str, Any]) -> str:
     parsed = urlparse(str(metadata.get("url") or ""))
     return " ".join([parsed.path, parsed.query, str(metadata.get("page_title") or ""), _checkout_metadata_text(metadata)])
@@ -1464,7 +1474,8 @@ def _assert_checkout_click_allowed(metadata: dict[str, Any], effect: str, reason
     if parsed.scheme != "https" or not AMAZON_HOST_RE.search(parsed.netloc):
         raise ValueError(f"{effect} clicks are currently limited to https://*.amazon.* pages")
     control_text = _checkout_metadata_text(metadata)
-    if FINAL_PURCHASE_RE.search(control_text):
+    control_identity_text = _checkout_control_identity_text(metadata)
+    if FINAL_PURCHASE_RE.search(control_identity_text):
         raise ValueError("final purchase controls cannot be clicked by shopping_browser_click; use the trusted Telegram approval path")
     if effect == "checkout_prep":
         if not CART_URL_RE.search(parsed.path):
@@ -1493,7 +1504,7 @@ def _assert_checkout_type_allowed(metadata: dict[str, Any], effect: str, reason:
     if tag == "INPUT" and input_type in ("hidden", "password"):
         raise ValueError("matched checkout field is hidden or sensitive; Joy must take over")
     control_text = _checkout_metadata_text(metadata)
-    if FINAL_PURCHASE_RE.search(control_text):
+    if FINAL_PURCHASE_RE.search(_checkout_control_identity_text(metadata)):
         raise ValueError("final purchase controls cannot be modified by shopping_browser_type; use the trusted Telegram approval path")
     _assert_checkout_page(metadata, effect)
     _assert_checkout_control_not_sensitive(control_text)
