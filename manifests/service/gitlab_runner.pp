@@ -69,6 +69,17 @@ class nest::service::gitlab_runner (
   }
 
   $instances.each |$instance, $attributes| {
+    $registration_token_key = $attributes['registration_token_key']
+    if $registration_token_key {
+      $runner_attributes = $attributes.filter |$key, $_value| {
+        $key != 'registration_token_key'
+      } + {
+        'registration_token' => lookup($registration_token_key),
+      }
+    } else {
+      $runner_attributes = $attributes
+    }
+
     nest::lib::gitlab_runner { $instance:
       require => $runner_require,
       before  => $runner_before,
@@ -77,7 +88,7 @@ class nest::service::gitlab_runner (
         dns    => $dns,
         ensure => $runner_ensure,
         host   => $host,
-      } + $attributes,
+      } + $runner_attributes,
     }
   }
 

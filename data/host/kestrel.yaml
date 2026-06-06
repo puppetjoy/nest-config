@@ -34,6 +34,7 @@ nest::service::gitlab_runner::host: 'gitlab.joyfullee.me'
 nest::service::gitlab_runner::instances:
   builder:
     access_level: 'not_protected'
+    registration_token_key: 'nest::private::gitlab_runner::kestrel_builder_registration_token'
     limit: 4
     bolt: true
     podman: true
