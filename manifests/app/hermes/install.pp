@@ -92,6 +92,7 @@ class nest::app::hermes::install {
     'patch_hermes_kanban_review_lane_metadata',
     'patch_hermes_kanban_agent_request_review_dispatch_gate',
     'patch_hermes_kanban_completion_worktree_cleanup',
+    'patch_hermes_kanban_completion_worktree_cleanup_response_json',
     'patch_hermes_telegram_voice_summary',
     'patch_hermes_dashboard_rich_art_spans',
     'patch_hermes_dashboard_chat_truecolor_env',
@@ -123,7 +124,7 @@ class nest::app::hermes::install {
 
   exec { 'install_hermes_agent':
     command     => "${venv_pip} install --upgrade --force-reinstall ${source_dir} && git -C ${source_dir} rev-parse HEAD > ${git_revision_file}",
-    unless      => "test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent')\" && /bin/grep -q 'app.state.allow_public = allow_public' ${venv_dir}/lib/python*/site-packages/hermes_cli/web_server.py && /bin/grep -q 'if _pl <= 0:' ${venv_dir}/lib/python*/site-packages/gateway/run.py && /bin/grep -q 'chat_id=str(query_chat_id or' ${venv_dir}/lib/python*/site-packages/gateway/platforms/telegram.py && /bin/grep -q 'handle_telegram_reply' ${venv_dir}/lib/python*/site-packages/gateway/platforms/telegram.py && ! /bin/grep -q 'handle_telegram_callback(token, actor=str' ${venv_dir}/lib/python*/site-packages/gateway/platforms/telegram.py && /bin/grep -q '_banner_hero_renderable' ${venv_dir}/lib/python*/site-packages/hermes_cli/banner.py && /bin/grep -q 'banner_subtitle' ${venv_dir}/lib/python*/site-packages/hermes_cli/banner.py && /bin/grep -q 'discover_builtin_tools()' ${venv_dir}/lib/python*/site-packages/cli.py && /bin/grep -q '_notify_agent_request_event' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q 'Approved/unblocked/resumed; task is eligible to continue' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q '_notify_agent_request_dispatch_event' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_db.py && /bin/grep -q 'dispatcher_profile=dispatcher_profile' ${venv_dir}/lib/python*/site-packages/gateway/run.py && /bin/grep -q '_attention_summary_for_task' ${venv_dir}/lib/python*/site-packages/plugins/kanban/dashboard/plugin_api.py && /bin/grep -q 'taskAttentionSummary' ${venv_dir}/lib/python*/site-packages/plugins/kanban/dashboard/dist/index.js && /bin/grep -q 'BOARD_COLUMN_METADATA' ${venv_dir}/lib/python*/site-packages/plugins/kanban/dashboard/plugin_api.py && /bin/grep -q 'Agent-request review handoffs are different' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_db.py && /bin/grep -q 'cleanup_terminal_task_resources' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q '_summarize_text_for_voice_reply' ${venv_dir}/lib/python*/site-packages/gateway/run.py",
+    unless      => "test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent')\" && /bin/grep -q 'app.state.allow_public = allow_public' ${venv_dir}/lib/python*/site-packages/hermes_cli/web_server.py && /bin/grep -q 'if _pl <= 0:' ${venv_dir}/lib/python*/site-packages/gateway/run.py && /bin/grep -q 'chat_id=str(query_chat_id or' ${venv_dir}/lib/python*/site-packages/gateway/platforms/telegram.py && /bin/grep -q 'handle_telegram_reply' ${venv_dir}/lib/python*/site-packages/gateway/platforms/telegram.py && ! /bin/grep -q 'handle_telegram_callback(token, actor=str' ${venv_dir}/lib/python*/site-packages/gateway/platforms/telegram.py && /bin/grep -q '_banner_hero_renderable' ${venv_dir}/lib/python*/site-packages/hermes_cli/banner.py && /bin/grep -q 'banner_subtitle' ${venv_dir}/lib/python*/site-packages/hermes_cli/banner.py && /bin/grep -q 'discover_builtin_tools()' ${venv_dir}/lib/python*/site-packages/cli.py && /bin/grep -q '_notify_agent_request_event' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q 'Approved/unblocked/resumed; task is eligible to continue' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q '_notify_agent_request_dispatch_event' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_db.py && /bin/grep -q 'dispatcher_profile=dispatcher_profile' ${venv_dir}/lib/python*/site-packages/gateway/run.py && /bin/grep -q '_attention_summary_for_task' ${venv_dir}/lib/python*/site-packages/plugins/kanban/dashboard/plugin_api.py && /bin/grep -q 'taskAttentionSummary' ${venv_dir}/lib/python*/site-packages/plugins/kanban/dashboard/dist/index.js && /bin/grep -q 'BOARD_COLUMN_METADATA' ${venv_dir}/lib/python*/site-packages/plugins/kanban/dashboard/plugin_api.py && /bin/grep -q 'Agent-request review handoffs are different' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_db.py && /bin/grep -q 'cleanup_terminal_task_resources' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q 'json.loads(_ok(task_id=tid, run_id=run.id if run else None))' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q '_summarize_text_for_voice_reply' ${venv_dir}/lib/python*/site-packages/gateway/run.py",
     environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
     path        => ['/bin', '/usr/bin'],
     require     => [
@@ -143,6 +144,7 @@ class nest::app::hermes::install {
       Exec['patch_hermes_kanban_review_lane_metadata'],
       Exec['patch_hermes_kanban_agent_request_review_dispatch_gate'],
       Exec['patch_hermes_kanban_completion_worktree_cleanup'],
+      Exec['patch_hermes_kanban_completion_worktree_cleanup_response_json'],
       Exec['patch_hermes_telegram_voice_summary'],
       File["${source_dir}/tools/agent_request_tool.py"],
       File["${source_dir}/tools/google_workspace_tool.py"],
@@ -405,6 +407,23 @@ class nest::app::hermes::install {
     ],
   }
 
+  file { "${install_dir}/kanban-completion-worktree-cleanup-response-json.patch":
+    ensure => file,
+    source => 'puppet:///modules/nest/app/hermes/kanban-completion-worktree-cleanup-response-json.patch',
+    mode   => '0644',
+    owner  => 'root',
+    group  => 'root',
+  }
+
+  exec { 'patch_hermes_kanban_completion_worktree_cleanup_response_json':
+    command => "/usr/bin/patch -N -p1 -d ${source_dir} < ${install_dir}/kanban-completion-worktree-cleanup-response-json.patch",
+    unless  => "/bin/grep -q 'json.loads(_ok(task_id=tid, run_id=run.id if run else None))' ${source_dir}/tools/kanban_tools.py",
+    require => [
+      File["${install_dir}/kanban-completion-worktree-cleanup-response-json.patch"],
+      Exec['patch_hermes_kanban_completion_worktree_cleanup'],
+    ],
+  }
+
   file { "${install_dir}/hermes-telegram-voice-summary.patch":
     ensure => file,
     source => 'puppet:///modules/nest/app/hermes/hermes-telegram-voice-summary.patch',
@@ -418,7 +437,7 @@ class nest::app::hermes::install {
     unless  => "/bin/grep -q '_summarize_text_for_voice_reply' ${source_dir}/gateway/run.py",
     require => [
       File["${install_dir}/hermes-telegram-voice-summary.patch"],
-      Exec['patch_hermes_kanban_completion_worktree_cleanup'],
+      Exec['patch_hermes_kanban_completion_worktree_cleanup_response_json'],
     ],
   }
 

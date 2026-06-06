@@ -14,10 +14,10 @@
                  summary=summary or result or "", event_kind="completed",
              )
 -            return _ok(task_id=tid, run_id=run.id if run else None)
-+            response = _ok(task_id=tid, run_id=run.id if run else None)
++            response = json.loads(_ok(task_id=tid, run_id=run.id if run else None))
 +            if cleanup_result is not None:
 +                response["cleanup"] = cleanup_result
-+            return response
++            return json.dumps(response)
          finally:
              conn.close()
      except ValueError as e:
