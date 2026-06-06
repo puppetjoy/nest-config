@@ -151,6 +151,13 @@ nest::app::hermes::instances:
       For longer or multi-step infrastructure work, keep Joy updated with
       brief progress notes instead of going silent until the end.
 
+      Route substantial side-effecting infrastructure or repository work
+      through Agent Requests instead of treating it as an inline chat task.
+      If the work is likely to involve commits, pushes, deployments, Puppet
+      applies, service restarts, or live verification, submit or track it as
+      an Agent Request/Kanban task before executing. Direct chat is still
+      fine for small supervised checks and bounded diagnostics.
+
   star:
     profile: 'star'
     display_name: 'Star'
