@@ -48,6 +48,11 @@ MAX_PRODUCT_IMAGES = 6
 DEFAULT_MAX_REVIEWS = 5
 MAX_REVIEWS = 10
 REVIEW_EXCERPT_CHARS = 900
+MAX_VISUAL_CROPS = 6
+MAX_VISUAL_REGIONS = 60
+MAX_CROP_PADDING = 80
+MIN_CROP_SIZE = 8
+MAX_CROP_NAME_CHARS = 80
 PORT_FORWARD_TIMEOUT_SECONDS = 20
 PAGE_LOAD_TIMEOUT_SECONDS = 15
 APPROVED_CART_ADDITIONS = {
@@ -738,6 +743,116 @@ CHECKOUT_SCREENSHOT_REDACTION_CLEANUP_JS = r"""
 })()
 """
 
+VISUAL_REGIONS_JS = r"""
+(() => {
+  const maxRegions = __MAX_REGIONS__;
+  const clean = (value) => (value || '').replace(/\s+/g, ' ').trim();
+  const redact = (value) => clean(value)
+    .replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g, '[email redacted]')
+    .replace(/\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/g, '[phone redacted]')
+    .replace(/\b(?:\d[ -]*?){12,19}\b/g, '[payment number redacted]')
+    .replace(/\b\d{1,6}\s+[^\n,]{2,60}\b\s+(?:Apt|Apartment|Unit|Ste|Suite|Road|Rd|Street|St|Avenue|Ave|Lane|Ln|Drive|Dr|Court|Ct|Way|Blvd|Boulevard)\b/gi, '[street address redacted]')
+    .replace(/\b[A-Z]{2}\s+\d{5}(?:-\d{4})?\b/g, '[state/zip redacted]');
+  const selectorFor = (node) => {
+    if (!node || node.nodeType !== Node.ELEMENT_NODE) return '';
+    const id = node.id || '';
+    if (id && !/(password|passkey|otp|verification|captcha|cvv|cvc|card|payment|address|phone|email)/i.test(id)) return `#${CSS.escape(id)}`;
+    const dataAsin = node.getAttribute('data-asin');
+    if (dataAsin && /^[A-Z0-9]{10}$/i.test(dataAsin)) return `[data-asin="${CSS.escape(dataAsin)}"]`;
+    const role = node.getAttribute('role');
+    const tag = node.tagName.toLowerCase();
+    if (role) return `${tag}[role="${CSS.escape(role)}"]`;
+    return tag;
+  };
+  const scoreFor = (category, rect, text) => {
+    const area = Math.max(1, rect.width * rect.height);
+    const categoryBoost = {
+      checkout_totals_block: 1000,
+      checkout_order_summary_block: 950,
+      cart_item: 900,
+      buy_box: 850,
+      product_title: 800,
+      price: 780,
+      delivery_returns: 760,
+      search_result: 740,
+      review_excerpt: 720,
+      final_purchase_control_blocked: 650,
+    }[category] || 100;
+    return categoryBoost + Math.min(area / 100, 400) + Math.min(text.length, 200);
+  };
+  const regions = [];
+  const seen = new Set();
+  const add = (category, node, label) => {
+    if (!node || node.nodeType !== Node.ELEMENT_NODE) return;
+    if (node.closest('[data-shopping-browser-redaction="checkout-prep"]')) return;
+    const rect = node.getBoundingClientRect();
+    if (!rect || rect.width < 8 || rect.height < 8) return;
+    if (rect.bottom + window.scrollY < 0 || rect.right + window.scrollX < 0) return;
+    const docLeft = rect.left + window.scrollX;
+    const docTop = rect.top + window.scrollY;
+    const key = `${category}:${Math.round(docLeft)}:${Math.round(docTop)}:${Math.round(rect.width)}:${Math.round(rect.height)}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    const text = redact(node.innerText || node.textContent || node.getAttribute('aria-label') || node.value || '');
+    const selector = selectorFor(node);
+    regions.push({
+      region_id: `r${regions.length + 1}`,
+      category,
+      label: label || category.replace(/_/g, ' '),
+      selector,
+      text_anchor: text.slice(0, 220),
+      rect: {
+        x: Math.max(0, Math.round(docLeft)),
+        y: Math.max(0, Math.round(docTop)),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height)
+      },
+      score: scoreFor(category, rect, text)
+    });
+  };
+
+  const first = (selectors) => {
+    for (const selector of selectors) {
+      const node = document.querySelector(selector);
+      if (node) return node;
+    }
+    return null;
+  };
+
+  add('product_title', first(['#productTitle', '#title h1', 'h1']), 'product title');
+  add('buy_box', first(['#desktop_buybox', '#buybox', '#rightCol', '[data-feature-name="buybox"]']), 'buy box');
+  add('price', first(['#corePriceDisplay_desktop_feature_div', '#corePrice_feature_div', '.a-price', '[class*="price" i]']), 'price');
+  add('delivery_returns', first(['#mir-layout-DELIVERY_BLOCK', '#deliveryBlockMessage', '#returnsInfoFeature_feature_div', '[data-feature-name*="delivery" i]']), 'delivery and returns');
+  add('checkout_totals_block', first(['#subtotals-marketplace-table', '#spc-order-summary', '[data-testid*="order-summary" i]', '[id*="orderSummary" i]', '[class*="order-summary" i]']), 'checkout totals block');
+  add('checkout_order_summary_block', first(['#orderSummaryPrimaryActionBtn', '#submitOrderButtonId', '[name="placeYourOrder1"]', '[data-testid*="place-order" i]'])?.closest('form, .a-box, .a-section, div') || null, 'order review block');
+
+  Array.from(document.querySelectorAll('.s-result-item[data-asin], [data-component-type="s-search-result"], [role="listitem"], article')).slice(0, 12).forEach((node, index) => add('search_result', node, `search result ${index + 1}`));
+  Array.from(document.querySelectorAll('.sc-list-item, [data-name="Active Items"] [data-asin], [data-testid*="cart-item" i]')).slice(0, 12).forEach((node, index) => add('cart_item', node, `cart item ${index + 1}`));
+  Array.from(document.querySelectorAll('[data-hook="review"], .review, [id*="customer_review"], blockquote')).slice(0, 8).forEach((node, index) => add('review_excerpt', node, `review excerpt ${index + 1}`));
+  Array.from(document.querySelectorAll('button, input[type="submit"], [role="button"], a')).filter((node) => /place\s+(your\s+)?order|buy\s+now|submit\s+order|complete\s+purchase|confirm\s+(purchase|order)/i.test(clean(node.innerText || node.value || node.getAttribute('aria-label') || node.textContent || ''))).slice(0, 6).forEach((node, index) => add('final_purchase_control_blocked', node, `blocked final purchase control ${index + 1}`));
+
+  regions.sort((a, b) => b.score - a.score);
+  regions.slice(0, maxRegions).forEach((region, index) => { region.region_id = `r${index + 1}`; delete region.score; });
+  return {
+    page_title: document.title || '',
+    url: location.href || '',
+    document: {
+      width: Math.ceil(Math.max(document.documentElement.scrollWidth, document.body ? document.body.scrollWidth : 0, window.innerWidth || 0)),
+      height: Math.ceil(Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0, window.innerHeight || 0))
+    },
+    viewport: {
+      x: Math.round(window.scrollX || 0),
+      y: Math.round(window.scrollY || 0),
+      width: Math.round(window.innerWidth || document.documentElement.clientWidth || 0),
+      height: Math.round(window.innerHeight || document.documentElement.clientHeight || 0),
+      device_scale_factor: window.devicePixelRatio || 1
+    },
+    regions: regions.slice(0, maxRegions),
+    safety_note: 'Bounding boxes and text anchors are sanitized page-visible hints only. Cookies, storage, request headers, raw DOM/HTML, credentials, and CDP internals are not returned.'
+  };
+})()
+"""
+
 TYPE_JS = r"""
 (() => {
   const selector = __SELECTOR__;
@@ -1182,11 +1297,13 @@ def _safe_screenshot_path() -> str:
 def _screenshot_policy(url: str, title: str) -> dict[str, Any]:
     parsed = urlparse(url)
     sensitive_url = " ".join([parsed.path, parsed.query, title]).lower()
+    if re.search(r"(signin|login|ap/signin|account|orders|passkey|password|captcha|verification)", sensitive_url):
+        raise ValueError("current page appears to be login, account, order-history, CAPTCHA, passkey, or verification scope; Joy must take over before screenshots")
     checkoutish = re.search(r"checkout|buy|payselect|ship|spc|review|ordering", " ".join([parsed.path, parsed.query, title]), re.IGNORECASE)
     if checkoutish and parsed.scheme == "https" and AMAZON_HOST_RE.search(parsed.netloc):
-        raise ValueError("current Amazon page appears to be checkout/order-review scope; screenshots are blocked there. Use shopping_browser_page_snapshot or shopping_browser_current_page_summary for sanitized checkout-prep fields.")
-    if re.search(r"(signin|login|ap/signin|checkout|buy|place-order|address|wallet|payment|account|orders|passkey|password|captcha|verification)", sensitive_url):
-        raise ValueError("current page appears to be login, checkout, account, payment, address, order, CAPTCHA, or passkey scope; Joy must take over before raw screenshots")
+        return {"mode": "checkout_prep_redacted", "redaction_required": True}
+    if re.search(r"(checkout|buy|place-order|address|wallet|payment)", sensitive_url):
+        raise ValueError("current page appears to be checkout, payment, address, or wallet scope; Joy must take over before raw screenshots")
     return {"mode": "standard", "redaction_required": False}
 
 
@@ -1198,6 +1315,75 @@ def _redaction_hash(redaction: dict[str, Any]) -> str:
 def _write_screenshot(output_path: str, data: bytes) -> None:
     with open(output_path, "wb") as handle:
         handle.write(data)
+    os.chmod(output_path, 0o600)
+
+
+def _safe_artifact_stem(value: Any, fallback: str) -> str:
+    stem = re.sub(r"[^A-Za-z0-9_.-]+", "-", str(value or fallback).strip().lower()).strip("-._")
+    return (stem or fallback)[:MAX_CROP_NAME_CHARS]
+
+
+def _safe_visual_path(name: Any, suffix: str = ".png") -> str:
+    os.makedirs(SCREENSHOT_DIR, mode=0o700, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    stem = _safe_artifact_stem(name, "visual-evidence")
+    return os.path.join(SCREENSHOT_DIR, f"shopping-browser-{stamp}-{os.getpid()}-{stem}{suffix}")
+
+
+def _png_dimensions(path: str) -> tuple[int, int]:
+    with open(path, "rb") as handle:
+        header = handle.read(24)
+    if len(header) < 24 or header[:8] != b"\x89PNG\r\n\x1a\n" or header[12:16] != b"IHDR":
+        raise RuntimeError("screenshot artifact is not a PNG")
+    return int.from_bytes(header[16:20], "big"), int.from_bytes(header[20:24], "big")
+
+
+def _bounded_crop_rect(rect: dict[str, Any], image_width: int, image_height: int, scale_x: float, scale_y: float, padding: int) -> dict[str, int]:
+    try:
+        x = float(rect.get("x", 0)) * scale_x
+        y = float(rect.get("y", 0)) * scale_y
+        width = float(rect.get("width", 0)) * scale_x
+        height = float(rect.get("height", 0)) * scale_y
+    except (TypeError, ValueError):
+        raise ValueError("crop rect must contain numeric x, y, width, and height") from None
+    pad = max(0, min(int(padding), MAX_CROP_PADDING))
+    crop_x = max(0, int(round(x - pad)))
+    crop_y = max(0, int(round(y - pad)))
+    crop_right = min(image_width, int(round(x + width + pad)))
+    crop_bottom = min(image_height, int(round(y + height + pad)))
+    crop_width = crop_right - crop_x
+    crop_height = crop_bottom - crop_y
+    if crop_width < MIN_CROP_SIZE or crop_height < MIN_CROP_SIZE:
+        raise ValueError("crop rectangle is too small or outside the captured image")
+    return {
+        "x": crop_x,
+        "y": crop_y,
+        "width": crop_width,
+        "height": crop_height,
+        "highlight_x": max(0, int(round(x - crop_x))),
+        "highlight_y": max(0, int(round(y - crop_y))),
+        "highlight_width": max(1, min(crop_width, int(round(width)))),
+        "highlight_height": max(1, min(crop_height, int(round(height)))),
+    }
+
+
+def _crop_png(source_path: str, output_path: str, crop: dict[str, int], highlight: bool) -> None:
+    if shutil.which("ffmpeg") is None:
+        raise RuntimeError("ffmpeg is required for shopping browser crop generation")
+    crop_filter = f"crop={crop['width']}:{crop['height']}:{crop['x']}:{crop['y']}"
+    filters = [crop_filter]
+    if highlight:
+        filters.append(f"drawbox=x={crop['highlight_x']}:y={crop['highlight_y']}:w={crop['highlight_width']}:h={crop['highlight_height']}:color=yellow@0.85:t=4")
+    proc = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", source_path, "-vf", ",".join(filters), "-frames:v", "1", output_path],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=XWD_TIMEOUT_SECONDS,
+        check=False,
+    )
+    if proc.returncode != 0:
+        stderr = proc.stderr.decode("utf-8", errors="replace") if isinstance(proc.stderr, bytes) else str(proc.stderr)
+        raise RuntimeError(f"crop generation failed: {stderr[:800]}")
     os.chmod(output_path, 0o600)
 
 
@@ -1710,6 +1896,145 @@ def _screenshot(full_page: bool = False) -> dict[str, Any]:
             browser.close()
 
 
+def _visual_regions(browser: CdpSession, session_id: str) -> dict[str, Any]:
+    expression = VISUAL_REGIONS_JS.replace("__MAX_REGIONS__", str(MAX_VISUAL_REGIONS))
+    result = _evaluate(browser, session_id, expression) or {}
+    if result.get("url"):
+        result["url"] = _sanitize_url(str(result["url"]))
+    return result
+
+
+def _rect_for_selector(browser: CdpSession, session_id: str, selector: str) -> dict[str, Any]:
+    safe_selector = _selector_arg(selector)
+    expression = f"""
+(() => {{
+  const node = document.querySelector({_json_literal(safe_selector)});
+  if (!node) return null;
+  const rect = node.getBoundingClientRect();
+  if (!rect || rect.width < 1 || rect.height < 1) return null;
+  return {{
+    x: Math.max(0, Math.round(rect.left + window.scrollX)),
+    y: Math.max(0, Math.round(rect.top + window.scrollY)),
+    width: Math.round(rect.width),
+    height: Math.round(rect.height)
+  }};
+}})()
+"""
+    rect = _evaluate(browser, session_id, expression)
+    if not rect:
+        raise ValueError("selector did not match a visible element for cropping")
+    return rect
+
+
+def _resolve_crop_rect(spec: dict[str, Any], regions: list[dict[str, Any]], browser: CdpSession, session_id: str) -> tuple[str, str, dict[str, Any]]:
+    name = str(spec.get("name") or spec.get("region_id") or spec.get("category") or spec.get("selector") or "crop")[:MAX_CROP_NAME_CHARS]
+    if isinstance(spec.get("rect"), dict):
+        return name, "manual_rect", spec["rect"]
+    if all(key in spec for key in ("x", "y", "width", "height")):
+        return name, "manual_rect", {"x": spec["x"], "y": spec["y"], "width": spec["width"], "height": spec["height"]}
+    selector = str(spec.get("selector") or "").strip()
+    if selector:
+        return name, "selector", _rect_for_selector(browser, session_id, selector)
+    region_id = str(spec.get("region_id") or "").strip()
+    category = str(spec.get("category") or "").strip()
+    text_anchor = str(spec.get("text_anchor") or "").strip().lower()
+    for region in regions:
+        if region_id and region.get("region_id") != region_id:
+            continue
+        if category and region.get("category") != category:
+            continue
+        if text_anchor and text_anchor not in str(region.get("text_anchor") or "").lower():
+            continue
+        rect = region.get("rect")
+        if isinstance(rect, dict):
+            return name or str(region.get("label") or "crop"), "suggested_region", rect
+    raise ValueError("crop spec did not match any suggested region; use region_id, category, selector, or explicit rect")
+
+
+def _visual_evidence(full_page: bool, include_full_page: bool, crops: list[Any]) -> dict[str, Any]:
+    if len(crops) > MAX_VISUAL_CROPS:
+        raise ValueError(f"at most {MAX_VISUAL_CROPS} crops may be requested at once")
+
+    def run(browser: CdpSession) -> dict[str, Any]:
+        page_info = _target_page_info(browser.port) if browser.port is not None else {}
+        url = str(page_info.get("url") or "")
+        title = str(page_info.get("title") or "")
+        policy = _screenshot_policy(url, title)
+        target_id = page_info.get("id") or _first_page_target(browser)
+        session_id = _attach(browser, str(target_id))
+        regions = _visual_regions(browser, session_id)
+        screenshot = _screenshot(full_page)
+        image_width, image_height = _png_dimensions(str(screenshot["path"]))
+        document = regions.get("document") or {}
+        viewport = regions.get("viewport") or {}
+        if screenshot.get("full_page"):
+            basis_width = max(1, float(document.get("width") or viewport.get("width") or image_width))
+            basis_height = max(1, float(document.get("height") or viewport.get("height") or image_height))
+        else:
+            basis_width = max(1, float(viewport.get("width") or image_width))
+            basis_height = max(1, float(viewport.get("height") or image_height))
+            offset_x = float(viewport.get("x") or 0)
+            offset_y = float(viewport.get("y") or 0)
+            adjusted = []
+            for region in regions.get("regions") or []:
+                rect = region.get("rect") or {}
+                view_rect = dict(rect)
+                view_rect["x"] = float(view_rect.get("x") or 0) - offset_x
+                view_rect["y"] = float(view_rect.get("y") or 0) - offset_y
+                if view_rect["x"] + float(view_rect.get("width") or 0) <= 0 or view_rect["y"] + float(view_rect.get("height") or 0) <= 0:
+                    continue
+                if view_rect["x"] >= basis_width or view_rect["y"] >= basis_height:
+                    continue
+                cloned = dict(region)
+                cloned["rect"] = view_rect
+                adjusted.append(cloned)
+            regions["regions"] = adjusted
+        scale_x = image_width / basis_width
+        scale_y = image_height / basis_height
+        crop_results = []
+        for index, raw_spec in enumerate(crops, 1):
+            if not isinstance(raw_spec, dict):
+                raise ValueError("each crop spec must be an object")
+            name, source, rect = _resolve_crop_rect(raw_spec, list(regions.get("regions") or []), browser, session_id)
+            if not screenshot.get("full_page") and source != "suggested_region":
+                rect = dict(rect)
+                rect["x"] = float(rect.get("x") or 0) - float(viewport.get("x") or 0)
+                rect["y"] = float(rect.get("y") or 0) - float(viewport.get("y") or 0)
+            crop = _bounded_crop_rect(rect, image_width, image_height, scale_x, scale_y, int(raw_spec.get("padding", 24)))
+            output_path = _safe_visual_path(f"crop-{index}-{name}")
+            _crop_png(str(screenshot["path"]), output_path, crop, bool(raw_spec.get("highlight", True)))
+            crop_results.append({
+                "name": name,
+                "source": source,
+                "path": output_path,
+                "media": f"MEDIA:{output_path}",
+                "crop_rect_pixels": {key: crop[key] for key in ("x", "y", "width", "height")},
+                "highlighted": bool(raw_spec.get("highlight", True)),
+            })
+        result = {
+            "operation": "visual_evidence",
+            "status": "ok",
+            "url": screenshot.get("url"),
+            "page_title": screenshot.get("page_title"),
+            "screenshot_mode": screenshot.get("screenshot_mode"),
+            "capture_method": screenshot.get("capture_method"),
+            "full_page_captured": screenshot.get("full_page"),
+            "full_page_path": screenshot.get("path"),
+            "full_page_media": screenshot.get("media") if include_full_page else None,
+            "full_page_note": screenshot.get("full_page_note"),
+            "suggested_regions": regions.get("regions") or [],
+            "crops": crop_results,
+            "redaction": screenshot.get("redaction"),
+            "checkout_review": screenshot.get("checkout_review"),
+            "material_summary_binding": screenshot.get("material_summary_binding"),
+            "safety_boundary": "Full-page/viewport image artifacts and crops are local PNGs from the shopping browser only. Suggested regions expose sanitized labels, selectors, and bounding boxes, not raw DOM/HTML, cookies, local storage, request headers, CDP endpoints, credentials, or browser internals. Checkout-prep evidence is redacted and downgraded to viewport capture when necessary.",
+        }
+        _audit("visual_evidence", {"url": result["url"], "page_title": result["page_title"], "full_page_path": result["full_page_path"], "crop_count": len(crop_results), "full_page_captured": result["full_page_captured"], "screenshot_mode": result["screenshot_mode"], "checkout_binding": result.get("material_summary_binding")})
+        return result
+
+    return _with_browser(run)
+
+
 def _click(selector: str, reason: str, approved_effect: str) -> dict[str, Any]:
     safe_selector = _selector_arg(selector)
     effect = str(approved_effect or "browse").strip().lower()
@@ -1932,13 +2257,13 @@ def shopping_browser_status_tool(args: dict[str, Any], **_kw: Any) -> str:
         "workload": WORKLOAD,
         "kubectl_available": shutil.which("kubectl") is not None,
         "remote_debug_port": REMOTE_DEBUG_PORT,
-        "browser_operations": ["navigate", "page_snapshot", "query", "click", "type", "screenshot", "current_page_summary"],
+        "browser_operations": ["navigate", "page_snapshot", "query", "click", "type", "screenshot", "visual_evidence", "current_page_summary"],
         "supervised_checkout_prep": {
             "status": "available",
             "approved_click_effects": ["checkout_prep", "select_shipping_option", "apply_checkout_option"],
             "boundary": "Star may navigate/click ordinary checkout-prep controls under Joy's live supervision and may receive sanitized order-review summaries. Star must pause for login, Bitwarden, passkeys, 2FA, CAPTCHA, suspicious security prompts, payment/address/account edits, or sensitive-information prompts.",
             "sanitization": "Checkout-prep snapshots/current-page summaries return isolated structured item/totals/delivery/surprise fields plus destination city-state/abstract label and payment labels. Mixed blobs, sensitive redaction-marker text, and final purchase controls are removed from ordinary summary fields.",
-            "visual_confirmation": "shopping_browser_screenshot blocks Amazon checkout/order-review pages. Use shopping_browser_page_snapshot or shopping_browser_current_page_summary for sanitized checkout-prep fields instead of visual artifacts.",
+            "visual_confirmation": "shopping_browser_visual_evidence returns a bounded visual proof bundle: a local PNG screenshot, sanitized suggested regions, and optional focused crops. Amazon checkout/order-review pages are allowed only as redacted checkout-prep viewport evidence; login/account/payment/address/security pages remain Joy-only.",
         },
         "approval_gated_operations": {
             "add_to_cart": "available only through the broad shopping_browser_click flow with approved_effect='add_to_cart' and a human-readable approval reference",
@@ -1983,6 +2308,16 @@ def shopping_browser_screenshot_tool(args: dict[str, Any], **_kw: Any) -> str:
         return _json(_screenshot(bool(args.get("full_page", False))))
     except Exception as exc:
         return _json({"error": "SCREENSHOT_FAILED", "message": str(exc)[:1000], "operation": "screenshot"})
+
+
+def shopping_browser_visual_evidence_tool(args: dict[str, Any], **_kw: Any) -> str:
+    try:
+        crops = args.get("crops") or []
+        if not isinstance(crops, list):
+            return _json({"error": "INVALID_CROPS", "message": "crops must be a list of crop spec objects", "operation": "visual_evidence"})
+        return _json(_visual_evidence(bool(args.get("full_page", True)), bool(args.get("include_full_page", False)), crops))
+    except Exception as exc:
+        return _json({"error": "VISUAL_EVIDENCE_FAILED", "message": str(exc)[:1000], "operation": "visual_evidence"})
 
 
 def shopping_browser_click_tool(args: dict[str, Any], **_kw: Any) -> str:
@@ -2101,11 +2436,43 @@ QUERY_SCHEMA = {
 
 SCREENSHOT_SCHEMA = {
     "name": "shopping_browser_screenshot",
-    "description": "Capture the current visible persistent shopping browser page as a local PNG media artifact for delivery. Refuses obvious login, checkout, account, payment, address, order, passkey, CAPTCHA, and verification URLs; logs the high-level capture in the audit log. Returns only a local file path/media handle plus sanitized page metadata, not raw CDP data, cookies, storage, headers, or secrets.",
+    "description": "Capture the current visible persistent shopping browser page as a local PNG media artifact for delivery. Refuses obvious login, account, payment, address, order, passkey, CAPTCHA, and verification URLs; Amazon checkout-prep pages are captured only with browser-side redaction and viewport bounds. Logs the high-level capture in the audit log. Returns only a local file path/media handle plus sanitized page metadata, not raw CDP data, cookies, storage, headers, or secrets.",
     "parameters": {
         "type": "object",
         "properties": {
-            "full_page": {"type": "boolean", "description": "Capture beyond the current viewport when Chromium supports it. Prefer false for visible-page proof.", "default": False},
+            "full_page": {"type": "boolean", "description": "Capture beyond the current viewport when Chromium supports it. Redacted checkout-prep evidence is always downgraded to viewport capture.", "default": False},
+        },
+        "required": [],
+    },
+}
+
+VISUAL_EVIDENCE_SCHEMA = {
+    "name": "shopping_browser_visual_evidence",
+    "description": "Capture retailer-agnostic visual evidence from the current shopping browser page: a local PNG screenshot, sanitized suggested regions, and optional focused crops. Crops may reference a suggested region_id/category/text_anchor, a safe CSS selector, or an explicit bounding rect. Amazon checkout-prep pages are captured only with redaction and viewport bounds; login/account/payment/address/security pages remain Joy-only. Returns PNG paths/media handles plus sanitized metadata, never raw DOM, cookies, storage, request headers, credentials, CDP endpoints, payment/address secrets, or browser internals.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "full_page": {"type": "boolean", "description": "Capture beyond the current viewport when safe and supported. Redacted checkout-prep evidence is always downgraded to viewport capture.", "default": True},
+            "include_full_page": {"type": "boolean", "description": "Include a MEDIA handle for the full screenshot in addition to the local path. Crop media handles are always returned.", "default": False},
+            "crops": {
+                "type": "array",
+                "description": "Optional focused crop requests. First call with no crops to inspect suggested_regions, then request crops by region_id/category/text_anchor/selector/rect. Limited to six crops.",
+                "maxItems": MAX_VISUAL_CROPS,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string", "description": "Short artifact label"},
+                        "region_id": {"type": "string", "description": "Suggested region_id returned by this tool"},
+                        "category": {"type": "string", "description": "Suggested region category such as product_title, price, buy_box, cart_item, checkout_total, or order_summary"},
+                        "text_anchor": {"type": "string", "description": "Sanitized text fragment to match within suggested regions"},
+                        "selector": {"type": "string", "description": "Safe CSS selector for a visible page element"},
+                        "rect": {"type": "object", "description": "Explicit CSS-pixel rect with x, y, width, height"},
+                        "padding": {"type": "integer", "description": "Crop padding in CSS pixels, capped internally", "minimum": 0, "maximum": MAX_CROP_PADDING, "default": 24},
+                        "highlight": {"type": "boolean", "description": "Draw a small red border around the requested crop area", "default": True},
+                    },
+                },
+                "default": [],
+            },
         },
         "required": [],
     },
@@ -2255,6 +2622,16 @@ registry.register(
     max_result_size_chars=MAX_RESULT_CHARS,
 )
 registry.register(
+    name=VISUAL_EVIDENCE_SCHEMA["name"],
+    toolset=TOOLSET,
+    schema=VISUAL_EVIDENCE_SCHEMA,
+    handler=shopping_browser_visual_evidence_tool,
+    check_fn=_check_shopping_browser,
+    description=VISUAL_EVIDENCE_SCHEMA["description"],
+    emoji="🖼️",
+    max_result_size_chars=MAX_RESULT_CHARS,
+)
+registry.register(
     name=CLICK_SCHEMA["name"],
     toolset=TOOLSET,
     schema=CLICK_SCHEMA,
@@ -2315,9 +2692,12 @@ if __name__ == "__main__":
     assert _reject_unsafe_operation("local_storage")["allowed"] is False
     assert _reject_unsafe_operation("screenshot")["allowed"] is True
     assert _reject_unsafe_operation("screenshot_sensitive_page")["allowed"] is False
+    amazon_checkout_policy = _screenshot_policy("https://www.amazon.com/gp/buy/spc/handlers/display.html", "Review your order")
+    assert amazon_checkout_policy["mode"] == "checkout_prep_redacted"
+    assert amazon_checkout_policy["redaction_required"] is True
     try:
-        _screenshot_policy("https://www.amazon.com/gp/buy/spc/handlers/display.html", "Review your order")
-        raise AssertionError("checkout/order-review screenshot should be blocked")
+        _screenshot_policy("https://shop.example.test/checkout/payment", "Payment")
+        raise AssertionError("non-Amazon checkout/payment screenshot should be blocked")
     except ValueError:
         pass
     try:
@@ -2395,8 +2775,18 @@ if __name__ == "__main__":
         raise AssertionError("ordinary browse click should block checkout-prep controls")
     except ValueError:
         pass
+    assert _safe_artifact_stem("Total Due / Buy Box!", "fallback") == "total-due-buy-box"
+    crop = _bounded_crop_rect({"x": 10, "y": 10, "width": 40, "height": 20}, 100, 80, 1, 1, 5)
+    assert crop["x"] == 5 and crop["y"] == 5 and crop["width"] == 50 and crop["height"] == 30
+    try:
+        _bounded_crop_rect({"x": -200, "y": -200, "width": 4, "height": 4}, 100, 80, 1, 1, 0)
+        raise AssertionError("off-image crop should be blocked")
+    except ValueError:
+        pass
+    assert json.loads(shopping_browser_visual_evidence_tool({"crops": "not-a-list"}))["error"] == "INVALID_CROPS"
     status = json.loads(shopping_browser_status_tool({}))
     assert "screenshot" in status["browser_operations"]
+    assert "visual_evidence" in status["browser_operations"]
     assert status["supervised_checkout_prep"]["status"] == "available"
     assert "place_order" in status["approval_gated_operations"]
     assert "inspect_product" not in status["browser_operations"]
@@ -2408,7 +2798,7 @@ if __name__ == "__main__":
     assert "text('#ppd')" not in ADD_TO_CART_PRECHECK_JS
     assert "condition_summary" in ADD_TO_CART_PRECHECK_JS
     assert "product_condition" in PRODUCT_EXTRACT_JS
-    active_schema_names = [STATUS_SCHEMA["name"], NAVIGATE_SCHEMA["name"], PAGE_SNAPSHOT_SCHEMA["name"], QUERY_SCHEMA["name"], SCREENSHOT_SCHEMA["name"], CLICK_SCHEMA["name"], TYPE_SCHEMA["name"], CURRENT_PAGE_SUMMARY_SCHEMA["name"], GUARDRAIL_SCHEMA["name"]]
+    active_schema_names = [STATUS_SCHEMA["name"], NAVIGATE_SCHEMA["name"], PAGE_SNAPSHOT_SCHEMA["name"], QUERY_SCHEMA["name"], SCREENSHOT_SCHEMA["name"], VISUAL_EVIDENCE_SCHEMA["name"], CLICK_SCHEMA["name"], TYPE_SCHEMA["name"], CURRENT_PAGE_SUMMARY_SCHEMA["name"], GUARDRAIL_SCHEMA["name"]]
     assert "shopping_browser_inspect_product" not in active_schema_names
     assert "shopping_browser_inspect_reviews" not in active_schema_names
     assert "shopping_browser_inspect_cart" not in active_schema_names
