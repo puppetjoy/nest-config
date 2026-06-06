@@ -1,0 +1,162 @@
+diff --git a/src/agent_request_broker/kanban_backend.py b/src/agent_request_broker/kanban_backend.py
+index 641a81c..06ca7b7 100644
+--- a/src/agent_request_broker/kanban_backend.py
++++ b/src/agent_request_broker/kanban_backend.py
+@@ -1626,6 +1626,38 @@ def _direct_fallback_review_details(task: Any, comment: dict[str, Any] | None, s
+     }
+ 
+ 
++def ensure_review_handoff_for_notification(conn: Any, item: AgentRequestIndex, *, actor: str, summary: str) -> AgentRequestIndex:
++    """Ensure review-requested notifications have a current review artifact.
++
++    Some Kanban review transitions are emitted by the lower-level
++    `review-required` fallback path rather than `agent_request_review_handoff()`.
++    Those events are still actionable reviews, so synthesize the same durable
++    review binding from the latest task comment before building Telegram
++    buttons. Without this, the notification row can be delivered while
++    `actionable_reply_markup()` has no review hash/comment to bind callbacks to.
++    """
++    if latest_review(conn, item.request_id) is not None:
++        return item
++    task = require_kanban().get_task(conn, item.task_id)
++    if task is None:
++        return item
++    comment = _latest_comment_row(conn, item.task_id)
++    details = _direct_fallback_review_details(task, comment, summary)
++    comment_id = int(comment["id"]) if comment else 0
++    record_review_handoff(
++        conn,
++        request_id=item.request_id,
++        comment_id=comment_id,
++        requested_by=actor or item.target or "talon",
++        **details,
++    )
++    if item.status == REVIEW_REQUESTED:
++        return item
++    updated = replace(item, status=REVIEW_REQUESTED, updated_at=now_ts())
++    write_index(conn, updated)
++    return updated
++
++
+ def maybe_register_direct_kanban_fallback_review(conn: Any, task_id: str, *, actor: str, summary: str) -> AgentRequestIndex | None:
+     task = require_kanban().get_task(conn, task_id)
+     if task is None:
+@@ -1649,18 +1681,7 @@ def maybe_register_direct_kanban_fallback_review(conn: Any, task_id: str, *, act
+         subject_display=title,
+     )
+     write_index(conn, item)
+-    if latest_review(conn, request_id) is None:
+-        comment = _latest_comment_row(conn, task_id)
+-        details = _direct_fallback_review_details(task, comment, summary)
+-        comment_id = int(comment["id"]) if comment else 0
+-        record_review_handoff(
+-            conn,
+-            request_id=request_id,
+-            comment_id=comment_id,
+-            requested_by=actor or "talon",
+-            **details,
+-        )
+-    return item
++    return ensure_review_handoff_for_notification(conn, item, actor=actor, summary=summary)
+ 
+ 
+ def write_index(conn: Any, item: AgentRequestIndex) -> None:
+@@ -3875,6 +3896,8 @@ def notify_kanban_event(
+             child_disposition = None
+         if not item:
+             return {"notified": False, "reason": "task is not an agent request, registered agent-request child, or direct Kanban fallback review"}
++        if action in REVIEW_BUTTON_ACTIONS:
++            item = ensure_review_handoff_for_notification(conn, item, actor=actor, summary=summary)
+         child_context = child_notification_context(child_disposition)
+         if child_context and child_context not in summary:
+             summary = (summary + "\n\n" + child_context).strip() if summary else child_context
+diff --git a/tests/test_agent_request_broker.py b/tests/test_agent_request_broker.py
+index 5546b34..07b2635 100755
+--- a/tests/test_agent_request_broker.py
++++ b/tests/test_agent_request_broker.py
+@@ -1852,6 +1852,85 @@ def test_review_handoff_and_trusted_acceptance_resume_followthrough():
+             backend.telegram_send = old_send
+ 
+ 
++def test_review_requested_kanban_event_synthesizes_review_before_buttons():
++    if not require_hermes_src():
++        return
++    with kanban_env() as tmp:
++        from agent_request_broker import kanban_backend as backend
++
++        old_send = backend.telegram_send
++        messages = []
++        markups = []
++
++        def fake_send(message, profile=None, reply_markup=None):
++            del profile
++            messages.append(message)
++            markups.append(reply_markup)
++            return {"sent": True, "test": True}
++
++        backend.telegram_send = fake_send
++        try:
++            talon = load_tool("talon", tmp)
++            submitted = call(talon.agent_request_submit_tool({
++                "title": "Kanban review event smoke",
++                "request": "Produce source work and let the Kanban review event notify Joy.",
++                "target": "talon",
++            }))
++            request = submitted["request"]
++
++            notified = backend.notify_kanban_event(
++                task_id=request["kanban_task_id"],
++                action="review_requested",
++                actor="talon",
++                summary="review-required: source change ready via Kanban review event",
++                event_id=32001,
++            )
++            assert notified["notified"] is True
++            assert any("Agent request review requested" in message for message in messages)
++            review_markup = next(markup for markup in markups if markup and any(
++                button["text"] == "✅ Accept review"
++                for row in markup["inline_keyboard"]
++                for button in row
++            ))
++            review_labels = {
++                button["text"]
++                for row in review_markup["inline_keyboard"]
++                for button in row
++            }
++            assert review_labels == {"✅ Accept review", "🔁 Request changes", "❓ Ask question"}
++
++            conn = backend.connect()
++            try:
++                review = backend.latest_review(conn, request["id"])
++                assert review is not None
++                token = review_markup["inline_keyboard"][0][0]["callback_data"].split(":", 1)[1]
++                callback = backend.validate_callback_token(conn, token)["callback"]
++                assert callback["action"] == "review_accept"
++                assert callback["request_id"] == request["id"]
++                assert callback["review_hash"] == review["review_hash"]
++                notification = conn.execute(
++                    "SELECT action, task_id, delivered, detail FROM agent_request_notifications WHERE request_id = ? AND action = ?",
++                    (request["id"], "review_requested"),
++                ).fetchone()
++                callbacks = conn.execute(
++                    "SELECT action, task_id, review_comment_id, review_hash FROM agent_request_callback_tokens WHERE request_id = ? AND action IN ('review_accept', 'review_changes', 'review_question')",
++                    (request["id"],),
++                ).fetchall()
++                assert notification is not None
++                assert notification["task_id"] == request["kanban_task_id"]
++                assert notification["delivered"] == 1
++                detail = json.loads(notification["detail"] or "{}")
++                assert detail.get("attention_required") is True
++                assert {row["action"] for row in callbacks} == {"review_accept", "review_changes", "review_question"}
++                assert {row["task_id"] for row in callbacks} == {request["kanban_task_id"]}
++                assert {row["review_comment_id"] for row in callbacks} == {review["review_comment_id"]}
++                assert {row["review_hash"] for row in callbacks} == {review["review_hash"]}
++            finally:
++                conn.close()
++        finally:
++            backend.telegram_send = old_send
++
++
+ def test_review_requested_callback_rejects_stale_review_handoff():
+     if not require_hermes_src():
+         return

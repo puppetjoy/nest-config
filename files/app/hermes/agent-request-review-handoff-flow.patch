@@ -1421,7 +1421,7 @@ index 2346dda..86fc2c2 100755
  def test_stale_proposal_callback_rejects_changed_proposal_hash():
      if not require_hermes_src():
          return
-@@ -514,6 +800,189 @@ def test_duplicate_generic_title_approval_notifications_are_self_identifying():
+@@ -514,6 +800,208 @@ def test_duplicate_generic_title_approval_notifications_are_self_identifying():
          finally:
              backend.telegram_send = old_send
  
@@ -1480,6 +1480,25 @@ index 2346dda..86fc2c2 100755
 +                for button in row
 +            }
 +            assert review_labels == {"✅ Accept review", "🔁 Request changes", "❓ Ask question"}
++
++            conn = backend.connect()
++            try:
++                notification_rows = conn.execute(
++                    "SELECT request_id, task_id, action, delivered, detail FROM agent_request_notifications WHERE request_id = ? AND action = 'review_requested'",
++                    (request["id"],),
++                ).fetchall()
++                callback_rows = conn.execute(
++                    "SELECT request_id, task_id, action, review_comment_id, review_hash FROM agent_request_callback_tokens WHERE request_id = ? AND action IN ('review_accept', 'review_changes', 'review_question')",
++                    (request["id"],),
++                ).fetchall()
++            finally:
++                conn.close()
++            assert len(notification_rows) == 1
++            assert notification_rows[0]["task_id"] == request["kanban_task_id"]
++            assert notification_rows[0]["delivered"] == 1
++            assert {row["action"] for row in callback_rows} == {"review_accept", "review_changes", "review_question"}
++            assert {row["review_comment_id"] for row in callback_rows} == {handoff["review"]["review_comment_id"]}
++            assert {row["review_hash"] for row in callback_rows} == {handoff["review"]["review_hash"]}
 +
 +            premature = backend.update({
 +                "request_id": request["id"],
