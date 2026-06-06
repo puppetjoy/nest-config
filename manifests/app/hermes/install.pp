@@ -829,6 +829,7 @@ class nest::app::hermes::install {
     unless  => "/bin/grep -q 'notifiable_index_for_task' ${broker_source_dir}/src/agent_request_broker/kanban_backend.py && /bin/grep -q 'test_notification_adapter_notifies_registered_child_task_events' ${broker_source_dir}/tests/test_agent_request_broker.py",
     require => [
       File["${install_dir}/agent-request-child-task-notifications.patch"],
+      Exec['patch_hermes_agent_request_blocking_child_wakeup'],
       Exec['patch_hermes_agent_request_notification_narrow_redaction'],
     ],
   }
