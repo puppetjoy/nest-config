@@ -414,9 +414,11 @@ index f429326..a30dd88 100644
          "title": title_meta.display,
          "title_raw": title_meta.raw,
          "title_icon": title_meta.icon,
-@@ -1130,6 +1377,10 @@ def event_label(action: str) -> str:
+@@ -1130,7 +1377,11 @@ def event_label(action: str) -> str:
+         "submitted": "request submitted",
          "received": "request received",
-         "commented": "request comment",
+-        "commented": "request comment",
++        "commented": "comment",
          "proposed": "proposal ready",
 +        "review_requested": "review requested",
 +        "review_accepted": "review accepted",

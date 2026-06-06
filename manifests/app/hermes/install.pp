@@ -552,9 +552,26 @@ class nest::app::hermes::install {
     ],
   }
 
+  file { "${install_dir}/agent-request-comment-label.patch":
+    ensure => file,
+    source => 'puppet:///modules/nest/app/hermes/agent-request-comment-label.patch',
+    mode   => '0644',
+    owner  => 'root',
+    group  => 'root',
+  }
+
+  exec { 'patch_hermes_agent_request_comment_label':
+    command => "/bin/rm -f ${broker_source_dir}/src/agent_request_broker/kanban_backend.py.orig ${broker_source_dir}/src/agent_request_broker/kanban_backend.py.rej && /usr/bin/patch -N -p1 -d ${broker_source_dir} < ${install_dir}/agent-request-comment-label.patch",
+    unless  => "/bin/grep -q '\"commented\": \"comment\"' ${broker_source_dir}/src/agent_request_broker/kanban_backend.py",
+    require => [
+      File["${install_dir}/agent-request-comment-label.patch"],
+      Exec['patch_hermes_agent_request_telegram_voice_notifications'],
+    ],
+  }
+
   exec { 'install_hermes_agent_request_broker':
     command     => "${venv_pip} install --upgrade --force-reinstall ${broker_source_dir} && git -C ${broker_source_dir} rev-parse HEAD > ${broker_git_revision_file}",
-    unless      => "test \"$(git -C ${broker_source_dir} rev-parse HEAD)\" = \"$(cat ${broker_git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent-request-broker'); import agent_request_broker.kanban_backend as kb; import agent_request_broker.common as c; assert hasattr(kb, 'trusted_accept_review'); assert hasattr(kb, 'resume_blocked_task_from_reply'); assert hasattr(kb, '_reply_prompt_stale_reason'); assert hasattr(kb, '_active_reply_prompts'); assert hasattr(kb, 'cleanup_terminal_task_resources'); assert hasattr(kb, 'cleanup_terminal_task_sweep'); assert hasattr(kb, 'delete_eyrie_registry_repository'); assert hasattr(c, '_telegram_send_voice_notification'); assert hasattr(c, '_voice_summary_part')\"",
+    unless      => "test \"$(git -C ${broker_source_dir} rev-parse HEAD)\" = \"$(cat ${broker_git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent-request-broker'); import agent_request_broker.kanban_backend as kb; import agent_request_broker.common as c; assert hasattr(kb, 'trusted_accept_review'); assert hasattr(kb, 'resume_blocked_task_from_reply'); assert hasattr(kb, '_reply_prompt_stale_reason'); assert hasattr(kb, '_active_reply_prompts'); assert hasattr(kb, 'cleanup_terminal_task_resources'); assert hasattr(kb, 'cleanup_terminal_task_sweep'); assert hasattr(kb, 'delete_eyrie_registry_repository'); assert kb.event_label('commented') == 'comment'; assert hasattr(c, '_telegram_send_voice_notification'); assert hasattr(c, '_voice_summary_part')\"",
     environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
     path        => ['/bin', '/usr/bin'],
     require     => [
@@ -562,6 +579,7 @@ class nest::app::hermes::install {
       Exec['patch_hermes_agent_request_review_handoff_flow'],
       Exec['patch_hermes_agent_request_worktree_cleanup'],
       Exec['patch_hermes_agent_request_telegram_voice_notifications'],
+      Exec['patch_hermes_agent_request_comment_label'],
     ],
   }
 
