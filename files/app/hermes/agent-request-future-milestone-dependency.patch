@@ -1,0 +1,54 @@
+diff -ruN old/src/agent_request_broker/kanban_backend.py new/src/agent_request_broker/kanban_backend.py
+--- a/src/agent_request_broker/kanban_backend.py	2026-06-06 15:07:04.121044724 -0400
++++ b/src/agent_request_broker/kanban_backend.py	2026-06-06 15:07:04.140264292 -0400
+@@ -3794,6 +3794,7 @@
+             parent_item = index_for_request(conn, parent_request_id) if parent_request_id else index_for_task(conn, parent_task_id)
+             if parent_item is None:
+                 return {"error": "parent agent request not found"}
++        child_parents = (parent_item.task_id,) if parent_item is not None and child_classification == "future_milestone" else ()
+         task_id = kanban.create_task(
+             conn,
+             title=title_meta.display,
+@@ -3806,6 +3807,7 @@
+             workspace_kind=workspace_policy.workspace_kind,
+             workspace_path=workspace_policy.workspace_path,
+             branch_name=workspace_policy.branch_name,
++            parents=child_parents,
+             initial_status="running",
+             board=board_name(),
+         )
+diff -ruN old/tests/test_agent_request_broker.py new/tests/test_agent_request_broker.py
+--- a/tests/test_agent_request_broker.py	2026-06-06 15:07:04.125126766 -0400
++++ b/tests/test_agent_request_broker.py	2026-06-06 15:07:04.140691618 -0400
+@@ -2421,7 +2421,7 @@
+         finally:
+             backend.telegram_send = old_send
+ 
+-def test_subrequest_future_milestone_routes_as_independent_agent_request():
++def test_subrequest_future_milestone_waits_for_parent_dependency():
+     if not require_hermes_src():
+         return
+     with kanban_env():
+@@ -2455,12 +2455,21 @@
+             try:
+                 parent_task = kb.get_task(conn, parent["kanban_task_id"])
+                 child_task = kb.get_task(conn, child["kanban_task_id"])
+-                assert child_task.id not in kb.child_ids(conn, parent_task.id)
++                assert child_task.id in kb.child_ids(conn, parent_task.id)
++                assert child_task.status == "todo"
+                 item = backend.index_for_request(conn, parent["id"])
+                 public_parent = backend.public_request(conn, item)
+             finally:
+                 conn.close()
+             assert public_parent["status"] == "submitted"
++
++            conn = backend.connect()
++            try:
++                assert kb.complete_task(conn, parent["kanban_task_id"], summary="Parent milestone complete")
++                promoted_child = kb.get_task(conn, child["kanban_task_id"])
++            finally:
++                conn.close()
++            assert promoted_child.status == "ready"
+             assert public_parent["child_tasks"][0]["child_task_id"] == child["kanban_task_id"]
+             assert public_parent["child_tasks"][0]["classification"] == "future_milestone"
+             assert any("future_milestone" in message for message in messages)
