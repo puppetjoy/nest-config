@@ -1,17 +1,19 @@
 diff --git a/src/agent_request_broker/kanban_backend.py b/src/agent_request_broker/kanban_backend.py
-index d76a39c..f5cac6d 100644
+index b409a1c..11c44dc 100644
 --- a/src/agent_request_broker/kanban_backend.py
 +++ b/src/agent_request_broker/kanban_backend.py
-@@ -53,6 +53,8 @@ REVIEW_CALLBACK_BINDING_ACTIONS = {"review_accept", "review_changes", "review_qu
+@@ -54,6 +54,10 @@ REVIEW_CALLBACK_BINDING_ACTIONS = {"review_accept", "review_changes", "review_qu
  REVIEW_BUTTON_ACTIONS = {"review", "review_required", "review_handoff", "review_requested", REVIEW_REQUESTED}
  REPLY_PROMPT_ACTIONS = {"steer", "needs_info_answer", "review_changes", "review_question"}
  REPLY_PROMPT_TTL_SECONDS = 60 * 60
 +UNSTUCK_COMMAND_RE = re.compile(r"^\s*(?P<command>/(?:unstuck|agent_requests|prompts)(?:@\w+)?|unstuck|cancel\s+prompts)\b", re.IGNORECASE)
 +REQUEST_ID_RE = re.compile(r"\bar-\d{8}-\d{6}-[0-9a-fA-F]{6}\b", re.IGNORECASE)
++TASK_ID_RE = re.compile(r"\bt_[0-9a-fA-F]{8}\b", re.IGNORECASE)
++UNSTUCK_HELP_TERMS = {"help", "?", "-h", "--help"}
  COMMENT_PREFIX = "<!-- agent-request:event "
  COMMENT_SUFFIX = " -->"
  APPROVAL_PREFIX = "apr-"
-@@ -961,7 +963,8 @@ def init_index(conn: Any) -> None:
+@@ -1059,7 +1063,8 @@ def init_index(conn: Any) -> None:
              prompt_message_id INTEGER,
              created_at INTEGER NOT NULL,
              expires_at INTEGER NOT NULL,
@@ -21,7 +23,7 @@ index d76a39c..f5cac6d 100644
          )
          """
      )
-@@ -974,7 +977,7 @@ def init_index(conn: Any) -> None:
+@@ -1072,7 +1077,7 @@ def init_index(conn: Any) -> None:
          "ON agent_request_reply_prompts(chat_id, prompt_message_id)"
      )
      prompt_columns = {row["name"] for row in conn.execute("PRAGMA table_info(agent_request_reply_prompts)").fetchall()}
@@ -30,7 +32,7 @@ index d76a39c..f5cac6d 100644
          if column not in prompt_columns:
              conn.execute(f"ALTER TABLE agent_request_reply_prompts ADD COLUMN {column} {column_type}")
      conn.execute(
-@@ -2121,7 +2124,7 @@ def record_reply_prompt(
+@@ -2361,7 +2366,7 @@ def record_reply_prompt(
      conn.execute(
          """
          UPDATE agent_request_reply_prompts
@@ -39,7 +41,7 @@ index d76a39c..f5cac6d 100644
           WHERE request_id = ?
             AND action = ?
             AND used_at IS NULL
-@@ -2163,6 +2166,167 @@ def record_reply_prompt(
+@@ -2403,6 +2408,259 @@ def record_reply_prompt(
      }
  
  
@@ -81,21 +83,62 @@ index d76a39c..f5cac6d 100644
 +    return "waiting" if reason is None else f"not waiting: {reason}"
 +
 +
-+def _format_active_prompt_list(conn: Any, prompts: list[dict[str, Any]], *, limit: int = 8) -> str:
++def _prompt_reply_noun(action: str) -> str:
++    return {
++        "steer": "message",
++        "needs_info_answer": "answer",
++        "review_changes": "requested changes",
++        "review_question": "question",
++    }.get(action, "message")
++
++
++def _format_active_prompt_list(conn: Any, prompts: list[dict[str, Any]], *, limit: int = 8, include_details: bool = False) -> str:
 +    lines: list[str] = []
 +    for idx, prompt in enumerate(prompts[:limit], start=1):
 +        item = index_for_request(conn, prompt["request_id"])
 +        title = item.subject_display or item.title_display if item else prompt["request_id"]
-+        title = clean_text(title, max_len=120)
-+        message_id = prompt.get("prompt_message_id") or "unknown"
-+        lines.append(
-+            f"{idx}. {prompt['request_id']} / {prompt['task_id']} — {title} — "
-+            f"{_prompt_action_label(prompt['action'])}; prompt {message_id}; "
-+            f"{_prompt_age_context(prompt)}; {_prompt_waiting_label(conn, prompt)}"
-+        )
++        title = clean_text(title, max_len=90)
++        action = _prompt_action_label(prompt["action"])
++        noun = _prompt_reply_noun(prompt["action"])
++        line = f"{idx}. `{prompt['task_id']}` — {action} — send: `unstuck {idx} <{noun}>`"
++        if title:
++            line += f"\n   {title}"
++        if include_details:
++            message_id = prompt.get("prompt_message_id") or "unknown"
++            line += (
++                f"\n   request: `{prompt['request_id']}`; prompt: {message_id}; "
++                f"{_prompt_age_context(prompt)}; {_prompt_waiting_label(conn, prompt)}"
++            )
++        lines.append(line)
 +    if len(prompts) > limit:
 +        lines.append(f"…and {len(prompts) - limit} more")
 +    return "\n".join(lines)
++
++
++def _format_unstuck_help() -> str:
++    return "\n".join(
++        [
++            "Unstuck helps recover Telegram when an agent-request prompt is trapping replies.",
++            "",
++            "Useful commands:",
++            "- `/unstuck` — show active prompts with simple numbers",
++            "- `unstuck 1 try again` — send text to prompt 1",
++            "- `unstuck t_1234abcd try again` — select by visible task id",
++            "- `unstuck ar-YYYYMMDD-HHMMSS-abcdef try again` — select by request id",
++            "- `cancel prompts` — clear all active prompts in this chat",
++            "",
++            "If a selector matches more than one active prompt, I will show numbered choices instead of guessing.",
++        ]
++    )
++
++
++def _selector_hint(prompts: list[dict[str, Any]]) -> str:
++    selectors: list[str] = [str(idx) for idx in range(1, min(len(prompts), 8) + 1)]
++    for prompt in prompts[:8]:
++        for value in (prompt["task_id"], prompt["request_id"]):
++            if value not in selectors:
++                selectors.append(value)
++    return ", ".join(selectors) if selectors else "no active prompt selectors"
 +
 +
 +def _split_unstuck_command(text: str) -> tuple[bool, str, str]:
@@ -166,48 +209,99 @@ index d76a39c..f5cac6d 100644
 +    """List, retire, or route active Telegram agent-request reply prompts."""
 +    conn = connect()
 +    try:
-+        prompts = _reply_prompt_candidates(conn, chat_id=chat_id, thread_id=thread_id)
-+        request_match = REQUEST_ID_RE.search(text or "")
-+        if request_match:
-+            request_id = request_match.group(0)
-+            matching = [prompt for prompt in prompts if prompt["request_id"].casefold() == request_id.casefold()]
-+            matching, duplicate_tokens = _newest_prompts_by_request_action(matching)
-+            if duplicate_tokens:
-+                _retire_reply_prompts(conn, duplicate_tokens, reason="older duplicate retired by unstuck")
-+            steering = ((text or "")[: request_match.start()] + (text or "")[request_match.end() :]).strip(" :-\n\t")
-+            if len(matching) == 1 and steering:
-+                return _attach_reply_prompt_text(conn, matching[0], response=steering, actor=actor, reason="unstuck reply consumed")
-+            if len(matching) == 1:
-+                return {"handled": True, "ok": True, "message": f"Active prompt for {request_id}:\n{_format_active_prompt_list(conn, matching)}"}
-+            if len(matching) > 1:
-+                return {"handled": True, "ok": False, "message": f"Multiple actions are active for {request_id}. Reply directly to the prompt or include more context.\n{_format_active_prompt_list(conn, matching)}"}
-+            return {"handled": True, "ok": False, "message": f"No active prompt for {request_id}. Current active prompts:\n{_format_active_prompt_list(conn, prompts) or 'none'}"}
++        raw_text = text or ""
++        stripped_text = raw_text.strip()
++        if stripped_text.casefold() in UNSTUCK_HELP_TERMS:
++            return {"handled": True, "ok": True, "message": _format_unstuck_help()}
 +
++        prompts = _reply_prompt_candidates(conn, chat_id=chat_id, thread_id=thread_id)
 +        prompts, duplicate_tokens = _newest_prompts_by_request_action(prompts)
 +        retired_duplicates = _retire_reply_prompts(conn, duplicate_tokens, reason="older duplicate retired by unstuck") if duplicate_tokens else 0
-+        if command == "cancel prompts" or (text or "").strip().casefold() in {"cancel", "cancel all", "retire all", "clear", "clear all"}:
++
++        if command == "cancel prompts" or stripped_text.casefold() in {"cancel", "cancel all", "retire all", "clear", "clear all"}:
 +            retired = _retire_reply_prompts(conn, [prompt["prompt_token"] for prompt in prompts], reason="retired by unstuck command")
 +            return {"handled": True, "ok": True, "retired_prompts": retired + retired_duplicates, "message": f"Retired {retired + retired_duplicates} active agent-request reply prompt(s) in this chat."}
 +
-+        prompts = _reply_prompt_candidates(conn, chat_id=chat_id, thread_id=thread_id)
 +        if not prompts:
 +            msg = "No active agent-request reply prompts are trapping this chat."
 +            if retired_duplicates:
 +                msg += f" Retired {retired_duplicates} older duplicate prompt(s)."
++            msg += " Send `/unstuck help` for examples."
 +            return {"handled": True, "ok": True, "active_prompts": [], "retired_duplicates": retired_duplicates, "message": msg}
++
++        selector_label = ""
++        matching: list[dict[str, Any]] = []
++        steering = ""
++
++        number_match = re.match(r"^\s*(\d+)\b", raw_text)
++        request_match = REQUEST_ID_RE.search(raw_text)
++        task_match = TASK_ID_RE.search(raw_text)
++        if number_match:
++            selector_label = number_match.group(1)
++            selected_index = int(selector_label)
++            steering = raw_text[number_match.end() :].strip(" :-\n\t")
++            if 1 <= selected_index <= len(prompts):
++                matching = [prompts[selected_index - 1]]
++            else:
++                choices = _format_active_prompt_list(conn, prompts)
++                return {
++                    "handled": True,
++                    "ok": False,
++                    "message": f"There is no active prompt numbered {selector_label}. Use one of: {_selector_hint(prompts)}.\n{choices}",
++                }
++        elif request_match:
++            selector_label = request_match.group(0)
++            matching = [prompt for prompt in prompts if prompt["request_id"].casefold() == selector_label.casefold()]
++            steering = (raw_text[: request_match.start()] + raw_text[request_match.end() :]).strip(" :-\n\t")
++        elif task_match:
++            selector_label = task_match.group(0)
++            matching = [prompt for prompt in prompts if prompt["task_id"].casefold() == selector_label.casefold()]
++            steering = (raw_text[: task_match.start()] + raw_text[task_match.end() :]).strip(" :-\n\t")
++
++        if matching:
++            if len(matching) == 1 and steering:
++                return _attach_reply_prompt_text(conn, matching[0], response=steering, actor=actor, reason="unstuck reply consumed")
++            if len(matching) == 1:
++                noun = _prompt_reply_noun(matching[0]["action"])
++                return {
++                    "handled": True,
++                    "ok": True,
++                    "message": f"Selected {selector_label}. Send `unstuck {selector_label} <{noun}>` or reply directly to the prompt.\n{_format_active_prompt_list(conn, matching, include_details=True)}",
++                }
++            return {
++                "handled": True,
++                "ok": False,
++                "message": f"`{selector_label}` matches multiple active prompts, so I will not guess. Use one of these numbers with your message:\n{_format_active_prompt_list(conn, matching, include_details=True)}",
++            }
++
++        if request_match or task_match:
++            selector = (request_match or task_match).group(0)
++            return {
++                "handled": True,
++                "ok": False,
++                "message": f"I found `{selector}`, but it does not match an active prompt in this chat. Use one of: {_selector_hint(prompts)}. Send `/unstuck help` for examples.",
++            }
++
++        if stripped_text:
++            choices = _format_active_prompt_list(conn, prompts)
++            return {
++                "handled": True,
++                "ok": False,
++                "message": f"I did not recognize `{clean_text(stripped_text, max_len=120)}` as an unstuck selector. Use one of: {_selector_hint(prompts)}. Example: `unstuck 1 try again`.\n{choices}",
++            }
++
 +        message = "Active agent-request reply prompts in this chat:\n" + _format_active_prompt_list(conn, prompts)
 +        if retired_duplicates:
 +            message += f"\n\nRetired {retired_duplicates} older duplicate prompt(s)."
-+        message += "\n\nReply directly to a prompt, send `unstuck <request-id> <your steering>`, or send `cancel prompts` to retire all active prompts in this chat."
++        message += "\n\nUse a number, request id, or task id with your reply text. Send `/unstuck help` for examples. Send `cancel prompts` to clear all active prompts in this chat."
 +        return {"handled": True, "ok": True, "active_prompts": prompts, "retired_duplicates": retired_duplicates, "message": message}
 +    finally:
 +        conn.close()
 +
-+
  def _reply_prompt_stale_reason(conn: Any, prompt: dict[str, Any]) -> str | None:
      item = index_for_request(conn, prompt["request_id"])
      task = require_kanban().get_task(conn, prompt["task_id"])
-@@ -2198,17 +2362,18 @@ def _reply_prompt_stale_reason(conn: Any, prompt: dict[str, Any]) -> str | None:
+@@ -2438,17 +2696,18 @@ def _reply_prompt_stale_reason(conn: Any, prompt: dict[str, Any]) -> str | None:
  
  def _active_reply_prompts(rows: list[Any], conn: Any) -> list[dict[str, Any]]:
      active: list[dict[str, Any]] = []
@@ -232,7 +326,7 @@ index d76a39c..f5cac6d 100644
          )
          conn.commit()
      return active
-@@ -2257,7 +2422,7 @@ def _reply_prompt_candidates(
+@@ -2497,7 +2756,7 @@ def _reply_prompt_candidates(
  def _active_prompt_context(conn: Any, prompts: list[dict[str, Any]]) -> str:
      lines = [
          "More than one agent-request reply prompt is active here.",
@@ -241,7 +335,7 @@ index d76a39c..f5cac6d 100644
          "Active prompts:",
      ]
      for prompt in prompts[:8]:
-@@ -2267,7 +2432,7 @@ def _active_prompt_context(conn: Any, prompts: list[dict[str, Any]]) -> str:
+@@ -2507,7 +2766,7 @@ def _active_prompt_context(conn: Any, prompts: list[dict[str, Any]]) -> str:
          expires = datetime.fromtimestamp(int(prompt["expires_at"]), timezone.utc).strftime("%H:%M UTC")
          lines.append(
              f"- {prompt['request_id']} / {prompt['task_id']} / {prompt['action']} — {title} "
@@ -250,7 +344,7 @@ index d76a39c..f5cac6d 100644
          )
      return "\n".join(lines)
  
-@@ -2277,7 +2442,7 @@ def _reply_prompt_request_ids(text: str) -> set[str]:
+@@ -2517,7 +2776,7 @@ def _reply_prompt_request_ids(text: str) -> set[str]:
  
  
  def _mark_reply_prompt_used(conn: Any, prompt_token: str) -> None:
@@ -259,7 +353,7 @@ index d76a39c..f5cac6d 100644
      conn.commit()
  
  
-@@ -2291,6 +2456,9 @@ def handle_telegram_reply(
+@@ -2531,6 +2790,9 @@ def handle_telegram_reply(
  ) -> dict[str, Any]:
      """Route a Telegram free-form reply through its originating action prompt."""
      response = clean_text(text, max_len=4000)
@@ -270,10 +364,10 @@ index d76a39c..f5cac6d 100644
          return {"handled": False, "ok": False, "error": "empty_reply", "message": "Empty agent-request reply."}
      conn = connect()
 diff --git a/tests/test_agent_request_broker.py b/tests/test_agent_request_broker.py
-index bab8056..ba1df5c 100755
+index b429f41..4683eeb 100755
 --- a/tests/test_agent_request_broker.py
 +++ b/tests/test_agent_request_broker.py
-@@ -659,6 +659,166 @@ def test_stale_reply_prompts_are_removed_from_active_consideration():
+@@ -853,6 +853,345 @@ def test_stale_reply_prompts_are_removed_from_active_consideration():
              backend.telegram_send = old_send
  
  
@@ -361,8 +455,10 @@ index bab8056..ba1df5c 100755
 +
 +            assert result["handled"] is True
 +            assert result["retired_duplicates"] == 0
-+            assert first["id"] in result["message"]
-+            assert second["id"] in result["message"]
++            assert f"`{first['kanban_task_id']}`" in result["message"]
++            assert f"`{second['kanban_task_id']}`" in result["message"]
++            assert "unstuck 1" in result["message"]
++            assert "cancel prompts" in result["message"]
 +            assert len(_active_reply_prompt_rows(backend)) == 2
 +        finally:
 +            backend.telegram_send = old_send
@@ -404,6 +500,183 @@ index bab8056..ba1df5c 100755
 +        finally:
 +            backend.telegram_send = old_send
 +
++
++
++def test_unstuck_help_shows_examples_without_dense_prompt_list():
++    if not require_hermes_src():
++        return
++    with kanban_env() as tmp:
++        from agent_request_broker import kanban_backend as backend
++
++        result = backend.handle_telegram_reply(chat_id="chat-1", thread_id="topic-1", text="/unstuck help", actor="joy")
++
++        assert result["handled"] is True
++        assert result["ok"] is True
++        assert "Useful commands" in result["message"]
++        assert "unstuck 1 try again" in result["message"]
++        assert "cancel prompts" in result["message"]
++        assert "Active agent-request reply prompts" not in result["message"]
++
++
++def test_unstuck_with_task_id_attaches_steering_and_retires_prompt():
++    if not require_hermes_src():
++        return
++    with kanban_env() as tmp:
++        from agent_request_broker import kanban_backend as backend
++
++        old_send = backend.telegram_send
++        deliveries = []
++        backend.telegram_send = lambda message, *, profile="", reply_markup=None: deliveries.append(reply_markup) or {"sent": True, "test": True}
++        try:
++            submitted = backend.submit({"title": "Task id steering", "request": "Need proposal steering", "target": "star"}, requester="talon")["request"]
++            backend.propose({"request_id": submitted["id"], "summary": "approval-required", "proposal": "Original plan."}, actor="star")
++            conn = backend.connect()
++            try:
++                markup = [markup for markup in deliveries if markup][-1]
++                token = markup["inline_keyboard"][1][0]["callback_data"].split(":", 1)[1]
++                callback = backend.validate_callback_token(conn, token)["callback"]
++                backend.record_reply_prompt(conn, callback=callback, actor="joy", chat_id="chat-1", thread_id="topic-1", prompt_message_id=17002)
++            finally:
++                conn.close()
++
++            result = backend.handle_telegram_reply(
++                chat_id="chat-1",
++                thread_id="topic-1",
++                text=f"unstuck {submitted['kanban_task_id']} Please use the visible task id",
++                actor="joy",
++            )
++
++            assert result["handled"] is True
++            assert result["request_id"] == submitted["id"]
++            assert result["task_id"] == submitted["kanban_task_id"]
++            assert _active_reply_prompt_rows(backend) == []
++            conn = backend.connect()
++            try:
++                kanban = backend.require_kanban()
++                comments = "\n".join(comment.body for comment in kanban.list_comments(conn, submitted["kanban_task_id"]))
++            finally:
++                conn.close()
++            assert "Please use the visible task id" in comments
++        finally:
++            backend.telegram_send = old_send
++
++
++def test_unstuck_numbered_selection_attaches_to_displayed_prompt():
++    if not require_hermes_src():
++        return
++    with kanban_env() as tmp:
++        from agent_request_broker import kanban_backend as backend
++
++        old_send = backend.telegram_send
++        backend.telegram_send = lambda message, *, profile="", reply_markup=None: {"sent": True, "test": True}
++        try:
++            first = backend.submit({"title": "First numbered", "request": "Need answer one", "target": "star"}, requester="talon")["request"]
++            second = backend.submit({"title": "Second numbered", "request": "Need answer two", "target": "star"}, requester="talon")["request"]
++            conn = backend.connect()
++            try:
++                kanban = backend.require_kanban()
++                for request, message_id in ((first, 16011), (second, 16012)):
++                    kanban.block_task(conn, request["kanban_task_id"], reason="needs-info: test")
++                    backend.update_index_status(conn, request["id"], "needs_info")
++                    item = backend.index_for_request(conn, request["id"])
++                    markup = backend.actionable_reply_markup(conn, item=item, action="needs_info")
++                    token = markup["inline_keyboard"][0][0]["callback_data"].split(":", 1)[1]
++                    callback = backend.validate_callback_token(conn, token)["callback"]
++                    backend.record_reply_prompt(conn, callback=callback, actor="joy", chat_id="chat-1", thread_id="topic-1", prompt_message_id=message_id)
++            finally:
++                conn.close()
++
++            listed = backend.handle_telegram_reply(chat_id="chat-1", thread_id="topic-1", text="unstuck", actor="joy")
++            assert f"`{second['kanban_task_id']}`" in listed["message"]
++
++            result = backend.handle_telegram_reply(chat_id="chat-1", thread_id="topic-1", text="unstuck 1 Answer the newest prompt", actor="joy")
++
++            assert result["handled"] is True
++            assert result["ok"] is True
++            assert result["request_id"] == second["id"]
++            remaining = _active_reply_prompt_rows(backend)
++            assert len(remaining) == 1
++            assert remaining[0]["request_id"] == first["id"]
++        finally:
++            backend.telegram_send = old_send
++
++
++def test_unstuck_ambiguous_task_id_shows_numbered_choices_without_guessing():
++    if not require_hermes_src():
++        return
++    with kanban_env() as tmp:
++        from agent_request_broker import kanban_backend as backend
++
++        old_stale_reason = backend._reply_prompt_stale_reason
++        try:
++            submitted = backend.submit({"title": "Ambiguous task selector", "request": "Two active actions", "target": "star"}, requester="talon")["request"]
++            conn = backend.connect()
++            try:
++                now = backend.now_ts()
++                for token, action, message_id in (("ambig-one", "steer", 19001), ("ambig-two", "review_question", 19002)):
++                    conn.execute(
++                        """
++                        INSERT INTO agent_request_reply_prompts
++                            (prompt_token, request_id, task_id, action, proposal_comment_id,
++                             proposal_hash, review_comment_id, review_hash, actor, chat_id,
++                             thread_id, prompt_message_id, created_at, expires_at, used_at, retired_reason)
++                        VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?, NULL, '')
++                        """,
++                        (token, submitted["id"], submitted["kanban_task_id"], action, "joy", "chat-1", "topic-1", message_id, now, now + 3600),
++                    )
++                conn.commit()
++            finally:
++                conn.close()
++            backend._reply_prompt_stale_reason = lambda conn, prompt: None
++
++            result = backend.handle_telegram_reply(
++                chat_id="chat-1",
++                thread_id="topic-1",
++                text=f"unstuck {submitted['kanban_task_id']} please do this",
++                actor="joy",
++            )
++
++            assert result["handled"] is True
++            assert result["ok"] is False
++            assert "matches multiple active prompts" in result["message"]
++            assert "unstuck 1" in result["message"]
++            assert "unstuck 2" in result["message"]
++            assert len(_active_reply_prompt_rows(backend)) == 2
++        finally:
++            backend._reply_prompt_stale_reason = old_stale_reason
++
++
++def test_unstuck_unrecognized_selector_explains_valid_inputs():
++    if not require_hermes_src():
++        return
++    with kanban_env() as tmp:
++        from agent_request_broker import kanban_backend as backend
++
++        old_send = backend.telegram_send
++        backend.telegram_send = lambda message, *, profile="", reply_markup=None: {"sent": True, "test": True}
++        try:
++            submitted = backend.submit({"title": "Bad selector", "request": "Need proposal steering", "target": "star"}, requester="talon")["request"]
++            backend.propose({"request_id": submitted["id"], "summary": "approval-required", "proposal": "Original plan."}, actor="star")
++            conn = backend.connect()
++            try:
++                item = backend.index_for_request(conn, submitted["id"])
++                markup = backend.actionable_reply_markup(conn, item=item, action="proposed")
++                token = markup["inline_keyboard"][1][0]["callback_data"].split(":", 1)[1]
++                callback = backend.validate_callback_token(conn, token)["callback"]
++                backend.record_reply_prompt(conn, callback=callback, actor="joy", chat_id="chat-1", thread_id="topic-1", prompt_message_id=19011)
++            finally:
++                conn.close()
++
++            result = backend.handle_telegram_reply(chat_id="chat-1", thread_id="topic-1", text="/unstuck banana please", actor="joy")
++
++            assert result["handled"] is True
++            assert result["ok"] is False
++            assert "I did not recognize" in result["message"]
++            assert "Use one of:" in result["message"]
++            assert submitted["kanban_task_id"] in result["message"]
++            assert "unstuck 1 try again" in result["message"]
++        finally:
++            backend.telegram_send = old_send
 +
 +def test_completed_tasks_do_not_leave_active_reply_prompts_intercepting_chat():
 +    if not require_hermes_src():
