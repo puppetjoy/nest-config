@@ -1,0 +1,237 @@
+--- a/tools/kanban_tools.py
++++ b/tools/kanban_tools.py
+@@ -264,6 +264,87 @@
+     return None
+ 
+ 
++def _review_required_reason(reason: Any) -> bool:
++    """Treat legacy review-required block handoffs as review requests.
++
++    Older worker guidance told agents to call ``kanban_block`` with a
++    ``review-required: ...`` reason for code changes needing Joy's eyes. Once
++    the board gained a dedicated review lane, that idiom should no longer leave
++    work in the generic blocked column.
++    """
++    text = str(reason or "").strip().lower()
++    return text.startswith(("review-required", "review_required", "review required"))
++
++
++def _mark_task_review_requested(kb, conn, task_id: str, *, summary: str, expected_run_id: Optional[int]) -> bool:
++    """Transition ``running/ready -> review`` for review-required handoffs."""
++    with kb.write_txn(conn):
++        if expected_run_id is None:
++            cur = conn.execute(
++                """
++                UPDATE tasks
++                   SET status       = 'review',
++                       claim_lock   = NULL,
++                       claim_expires= NULL,
++                       worker_pid   = NULL
++                 WHERE id = ?
++                   AND status IN ('running', 'ready')
++                """,
++                (task_id,),
++            )
++        else:
++            cur = conn.execute(
++                """
++                UPDATE tasks
++                   SET status       = 'review',
++                       claim_lock   = NULL,
++                       claim_expires= NULL,
++                       worker_pid   = NULL
++                 WHERE id = ?
++                   AND status IN ('running', 'ready')
++                   AND current_run_id = ?
++                """,
++                (task_id, int(expected_run_id)),
++            )
++        if cur.rowcount != 1:
++            return False
++        run_id = kb._end_run(
++            conn, task_id,
++            outcome="review", status="review",
++            summary=summary,
++        )
++        if run_id is None and summary:
++            run_id = kb._synthesize_ended_run(
++                conn, task_id,
++                outcome="review",
++                summary=summary,
++            )
++        kb._append_event(
++            conn, task_id, "review_requested",
++            {"summary": summary, "source": "kanban_block_review_required"},
++            run_id=run_id,
++        )
++        return True
++
++
++def _sync_agent_request_review_status(conn, task_id: str) -> None:
++    """Best-effort sync of request index state for review-required fallbacks."""
++    try:
++        from agent_request_broker import kanban_backend as agent_requests
++    except Exception:
++        return
++    try:
++        if conn.execute(
++            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'agent_request_index'"
++        ).fetchone() is None:
++            return
++        item, _child_disposition = agent_requests.notifiable_index_for_task(conn, task_id)
++        if item:
++            agent_requests.update_index_status(conn, item.request_id, agent_requests.REVIEW_REQUESTED)
++    except Exception:
++        logger.exception("agent-request review status sync failed for %s", task_id)
++
++
+ def _notify_agent_request_event(
+     kb,
+     conn,
+@@ -627,17 +708,35 @@
+     try:
+         kb, conn = _connect(board=board)
+         try:
+-            ok = kb.block_task(
+-                conn, tid,
+-                reason=reason,
+-                expected_run_id=_worker_run_id(tid),
+-            )
++            is_review_required = _review_required_reason(reason)
++            expected_run_id = _worker_run_id(tid)
++            if is_review_required:
++                ok = _mark_task_review_requested(
++                    kb, conn, tid,
++                    summary=str(reason),
++                    expected_run_id=expected_run_id,
++                )
++            else:
++                ok = kb.block_task(
++                    conn, tid,
++                    reason=reason,
++                    expected_run_id=expected_run_id,
++                )
+             if not ok:
++                action_label = "move to review" if is_review_required else "block"
+                 return tool_error(
+-                    f"could not block {tid} (unknown id or not in "
++                    f"could not {action_label} {tid} (unknown id or not in "
+                     f"running/ready)"
+                 )
++            if is_review_required:
++                _sync_agent_request_review_status(conn, tid)
+             run = kb.latest_run(conn, tid)
++            if is_review_required:
++                _notify_agent_request_event(
++                    kb, conn, task_id=tid, action="review_requested",
++                    summary=str(reason), event_kind="review_requested",
++                )
++                return _ok(task_id=tid, run_id=run.id if run else None, status="review")
+             _notify_agent_request_event(
+                 kb, conn, task_id=tid, action="blocked",
+                 summary=str(reason), event_kind="blocked",
+--- a/tests/tools/test_kanban_tools.py
++++ b/tests/tools/test_kanban_tools.py
+@@ -10,6 +10,8 @@
+ 
+ import json
+ import os
++import sys
++import types
+ 
+ import pytest
+ 
+@@ -609,6 +611,93 @@
+         conn.close()
+ 
+ 
++def test_block_review_required_enters_review_lane_and_notifies(monkeypatch, worker_env):
++    from hermes_cli import kanban_db as kb
++    from tools import kanban_tools as kt
++
++    notifications = []
++
++    def capture_notification(_kb, _conn, **kwargs):
++        notifications.append(kwargs)
++
++    monkeypatch.setattr(kt, "_notify_agent_request_event", capture_notification)
++
++    reason = "review-required: source change needs Joy acceptance before deploy"
++    out = kt._handle_block({"reason": reason})
++    d = json.loads(out)
++    assert d["ok"] is True
++    assert d["status"] == "review"
++
++    conn = kb.connect()
++    try:
++        task = kb.get_task(conn, worker_env)
++        assert task is not None
++        assert task.status == "review"
++        events = kb.list_events(conn, worker_env)
++        last_event = events[-1]
++        assert last_event.kind == "review_requested"
++        assert isinstance(last_event.payload, dict)
++        assert last_event.payload["source"] == "kanban_block_review_required"
++        run = kb.latest_run(conn, worker_env)
++        assert run is not None
++        assert run.outcome == "review"
++    finally:
++        conn.close()
++
++    assert notifications == [
++        {
++            "task_id": worker_env,
++            "action": "review_requested",
++            "summary": reason,
++            "event_kind": "review_requested",
++        }
++    ]
++
++
++def test_block_review_required_syncs_child_followup_request_status(monkeypatch, worker_env):
++    from hermes_cli import kanban_db as kb
++    from tools import kanban_tools as kt
++
++    seen = {}
++    fake_backend = types.ModuleType("agent_request_broker.kanban_backend")
++    setattr(fake_backend, "REVIEW_REQUESTED", "review_requested")
++
++    class FakeItem:
++        request_id = "req_child"
++
++    def fake_notifiable_index_for_task(_conn, task_id):
++        seen["notifiable_task_id"] = task_id
++        return FakeItem(), {"classification": "blocking", "parent_task_id": "t_parent"}
++
++    def fake_update_index_status(_conn, request_id, status):
++        seen["updated"] = (request_id, status)
++
++    setattr(fake_backend, "notifiable_index_for_task", fake_notifiable_index_for_task)
++    setattr(fake_backend, "update_index_status", fake_update_index_status)
++    fake_pkg = types.ModuleType("agent_request_broker")
++    setattr(fake_pkg, "kanban_backend", fake_backend)
++    monkeypatch.setitem(sys.modules, "agent_request_broker", fake_pkg)
++    monkeypatch.setitem(sys.modules, "agent_request_broker.kanban_backend", fake_backend)
++    monkeypatch.setattr(kt, "_notify_agent_request_event", lambda *_args, **_kwargs: None)
++
++    conn = kb.connect()
++    try:
++        conn.execute("CREATE TABLE agent_request_index (request_id TEXT PRIMARY KEY)")
++        conn.commit()
++    finally:
++        conn.close()
++
++    out = kt._handle_block({"reason": "review-required: child follow-up needs source review"})
++    d = json.loads(out)
++    assert d["ok"] is True
++    assert d["status"] == "review"
++    assert seen == {
++        "notifiable_task_id": worker_env,
++        "updated": ("req_child", "review_requested"),
++    }
++
++
++
+ def test_block_rejects_empty_reason(worker_env):
+     from tools import kanban_tools as kt
+     for bad in ["", "   ", None]:
