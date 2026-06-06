@@ -61,15 +61,16 @@ diff --git a/src/agent_request_broker/kanban_backend.py b/src/agent_request_brok
 index f429326..a30dd88 100644
 --- a/src/agent_request_broker/kanban_backend.py
 +++ b/src/agent_request_broker/kanban_backend.py
-@@ -37,7 +37,7 @@ URGENCY_PRIORITIES = {
+@@ -37,8 +37,8 @@ URGENCY_PRIORITIES = {
  }
  TERMINAL_COMPAT_STATUSES = {"completed", "denied", "cancelled"}
  CHILD_COMPLETION_CLASSES = {"blocking", "nonblocking_followup", "future_milestone"}
--OPEN_CHILD_STATUSES = {"todo", "ready", "running", "blocked", "triage"}
-+OPEN_CHILD_STATUSES = {"todo", "ready", "running", "blocked", "review", "triage"}
+-OPEN_CHILD_STATUSES = {"todo", "scheduled", "ready", "running", "blocked", "triage"}
++OPEN_CHILD_STATUSES = {"todo", "scheduled", "ready", "running", "blocked", "review", "triage"}
+ SCHEDULED = "scheduled"
  COMPLETED_WITH_FOLLOWUP = "completed_with_followup"
+ WAITING_ON_CHILD = "waiting_on_child"
  MAINTENANCE_STATUSES = {"superseded", "cancelled", "denied", "failed_probe", "invalid_proposal"}
- BLOCKING_COMPAT_STATUSES = {"proposed", "needs_info"}
 @@ -46,9 +46,14 @@ REVIEW_ACCEPTED = "review_accepted"
  CHANGE_STATUSES = {"in_progress", "completed"}
  CALLBACK_ACTIONS = {"approve", "deny", "steer", "review_accept", "review_changes", "review_question", "needs_info_answer"}
