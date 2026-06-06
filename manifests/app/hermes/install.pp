@@ -947,20 +947,41 @@ class nest::app::hermes::install {
     ],
   }
 
-  file { "${install_dir}/agent-request-direct-kanban-fallback-review.patch":
+  file { "${install_dir}/agent-request-direct-kanban-fallback-review-code.patch":
     ensure => file,
-    source => 'puppet:///modules/nest/app/hermes/agent-request-direct-kanban-fallback-review.patch',
+    source => 'puppet:///modules/nest/app/hermes/agent-request-direct-kanban-fallback-review-code.patch',
     mode   => '0644',
     owner  => 'root',
     group  => 'root',
   }
 
+  file { "${install_dir}/agent-request-direct-kanban-fallback-review-test.patch":
+    ensure => file,
+    source => 'puppet:///modules/nest/app/hermes/agent-request-direct-kanban-fallback-review-test.patch',
+    mode   => '0644',
+    owner  => 'root',
+    group  => 'root',
+  }
+
+  file { "${install_dir}/agent-request-direct-kanban-fallback-review.patch":
+    ensure => absent,
+  }
+
   exec { 'patch_hermes_agent_request_direct_kanban_fallback_review':
-    command => "/bin/rm -f ${broker_source_dir}/src/agent_request_broker/kanban_backend.py.orig ${broker_source_dir}/src/agent_request_broker/kanban_backend.py.rej ${broker_source_dir}/tests/test_agent_request_broker.py.orig ${broker_source_dir}/tests/test_agent_request_broker.py.rej && /usr/bin/patch -N -p1 -d ${broker_source_dir} < ${install_dir}/agent-request-direct-kanban-fallback-review.patch",
-    unless  => "/bin/grep -q 'maybe_register_direct_kanban_fallback_review' ${broker_source_dir}/src/agent_request_broker/kanban_backend.py && /bin/grep -q 'test_notification_adapter_registers_direct_kanban_fallback_review' ${broker_source_dir}/tests/test_agent_request_broker.py",
+    command => "/bin/rm -f ${broker_source_dir}/src/agent_request_broker/kanban_backend.py.orig ${broker_source_dir}/src/agent_request_broker/kanban_backend.py.rej && /usr/bin/patch -N -p1 -d ${broker_source_dir} < ${install_dir}/agent-request-direct-kanban-fallback-review-code.patch",
+    unless  => "/bin/grep -q 'maybe_register_direct_kanban_fallback_review' ${broker_source_dir}/src/agent_request_broker/kanban_backend.py",
     require => [
-      File["${install_dir}/agent-request-direct-kanban-fallback-review.patch"],
+      File["${install_dir}/agent-request-direct-kanban-fallback-review-code.patch"],
       Exec['patch_hermes_agent_request_future_milestone_dependency'],
+    ],
+  }
+
+  exec { 'patch_hermes_agent_request_direct_kanban_fallback_review_test':
+    command => "/bin/rm -f ${broker_source_dir}/tests/test_agent_request_broker.py.orig ${broker_source_dir}/tests/test_agent_request_broker.py.rej && /usr/bin/patch -N -p1 -d ${broker_source_dir} < ${install_dir}/agent-request-direct-kanban-fallback-review-test.patch",
+    unless  => "/bin/grep -q 'test_notification_adapter_registers_direct_kanban_fallback_review' ${broker_source_dir}/tests/test_agent_request_broker.py",
+    require => [
+      File["${install_dir}/agent-request-direct-kanban-fallback-review-test.patch"],
+      Exec['patch_hermes_agent_request_direct_kanban_fallback_review'],
     ],
   }
 
@@ -986,7 +1007,7 @@ class nest::app::hermes::install {
       Exec['patch_hermes_agent_request_child_task_notifications'],
       Exec['patch_hermes_agent_request_review_requested_attention'],
       Exec['patch_hermes_agent_request_future_milestone_dependency'],
-      Exec['patch_hermes_agent_request_direct_kanban_fallback_review'],
+      Exec['patch_hermes_agent_request_direct_kanban_fallback_review_test'],
       Exec['patch_hermes_agent_request_blocking_child_wakeup'],
       Exec['patch_hermes_agent_request_superseded_review_parent'],
       Exec['patch_hermes_agent_request_stale_blocked_parent_reconcile'],
