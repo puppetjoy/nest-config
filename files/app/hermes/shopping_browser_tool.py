@@ -34,6 +34,8 @@ TOOLSET = "shopping_browser"
 NAMESPACE = os.environ.get("SHOPPING_BROWSER_NAMESPACE", "ai")
 WORKLOAD = os.environ.get("SHOPPING_BROWSER_WORKLOAD", "deployment/shopping")
 REMOTE_DEBUG_PORT = int(os.environ.get("SHOPPING_BROWSER_CDP_PORT", "9222"))
+BROWSER_DISPLAY = os.environ.get("SHOPPING_BROWSER_DISPLAY", ":1")
+XWD_TIMEOUT_SECONDS = float(os.environ.get("SHOPPING_BROWSER_XWD_TIMEOUT_SECONDS", "15"))
 MAX_RESULT_CHARS = 16000
 MAX_TEXT_CHARS = 12000
 MAX_LINKS = 80
@@ -630,6 +632,52 @@ def _assert_screenshot_allowed(url: str, title: str) -> None:
         raise ValueError("current page appears to be login, checkout, account, payment, address, order, CAPTCHA, or passkey scope; Joy must take over before screenshots")
 
 
+def _write_screenshot(output_path: str, data: bytes) -> None:
+    with open(output_path, "wb") as handle:
+        handle.write(data)
+    os.chmod(output_path, 0o600)
+
+
+def _x11_screenshot() -> bytes:
+    if shutil.which("ffmpeg") is None:
+        raise RuntimeError("ffmpeg is required for Kasm display screenshot fallback")
+    capture = subprocess.run(
+        ["kubectl", "-n", NAMESPACE, "exec", WORKLOAD, "--", "xwd", "-root", "-silent", "-display", BROWSER_DISPLAY],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=XWD_TIMEOUT_SECONDS,
+        check=False,
+    )
+    if capture.returncode != 0 or not capture.stdout:
+        stderr = capture.stderr.decode("utf-8", errors="replace") if isinstance(capture.stderr, bytes) else str(capture.stderr)
+        raise RuntimeError(f"Kasm display screenshot capture failed: {stderr[:800]}")
+    convert = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "xwd_pipe", "-i", "pipe:0", "-frames:v", "1", "-f", "image2pipe", "-vcodec", "png", "pipe:1"],
+        input=capture.stdout,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=XWD_TIMEOUT_SECONDS,
+        check=False,
+    )
+    if convert.returncode != 0 or not convert.stdout:
+        stderr = convert.stderr.decode("utf-8", errors="replace") if isinstance(convert.stderr, bytes) else str(convert.stderr)
+        raise RuntimeError(f"Kasm display screenshot conversion failed: {stderr[:800]}")
+    return convert.stdout
+
+
+def _target_page_info(port: int) -> dict[str, str]:
+    with urlopen(f"http://127.0.0.1:{port}/json/list", timeout=3) as response:
+        targets = json.loads(response.read().decode("utf-8"))
+    for target in targets:
+        if target.get("type") == "page":
+            return {
+                "id": str(target.get("id") or ""),
+                "url": str(target.get("url") or ""),
+                "title": str(target.get("title") or ""),
+            }
+    return {"id": "", "url": "about:blank", "title": ""}
+
+
 def _normalize_product_images(result: dict[str, Any]) -> None:
     candidates = result.pop("image_url_candidates", None) or []
     image_urls: list[str] = []
@@ -828,9 +876,10 @@ class PortForward:
 
 
 class CdpSession:
-    def __init__(self, websocket_url: str) -> None:
+    def __init__(self, websocket_url: str, port: int | None = None) -> None:
         self.ws = websockets.sync.client.connect(websocket_url, open_timeout=5, close_timeout=2)
         self.next_id = 1
+        self.port = port
 
     def close(self) -> None:
         self.ws.close()
@@ -964,20 +1013,31 @@ def _query(expression: str) -> dict[str, Any]:
 
 def _screenshot(full_page: bool = False) -> dict[str, Any]:
     def run(browser: CdpSession) -> dict[str, Any]:
-        target_id = _first_page_target(browser)
-        session_id = _attach(browser, target_id)
-        url = str(_evaluate(browser, session_id, "location.href") or "")
-        title = str(_evaluate(browser, session_id, "document.title") or "")
+        page_info = _target_page_info(browser.port) if browser.port is not None else {}
+        url = str(page_info.get("url") or "")
+        title = str(page_info.get("title") or "")
         _assert_screenshot_allowed(url, title)
         params = {"format": "png", "fromSurface": True, "captureBeyondViewport": bool(full_page)}
-        captured = browser.call("Page.captureScreenshot", params, session_id=session_id)
-        encoded = str(captured.get("data") or "")
-        if not encoded:
-            raise RuntimeError("shopping browser did not return screenshot data")
+        capture_method = "cdp"
+        cdp_error = ""
+        try:
+            target_id = page_info.get("id") or _first_page_target(browser)
+            session_id = _attach(browser, str(target_id))
+            captured = browser.call("Page.captureScreenshot", params, session_id=session_id)
+            encoded = str(captured.get("data") or "")
+            if not encoded:
+                raise RuntimeError("shopping browser did not return screenshot data")
+            png_data = base64.b64decode(encoded, validate=True)
+        except Exception as exc:
+            # Amazon can leave the page target unresponsive to Page/Runtime CDP
+            # calls while the Kasm display itself is still live.  Fall back to a
+            # container-scoped X11 root capture after checking the target URL and
+            # title from Chrome's /json/list metadata.
+            capture_method = "kasm_x11"
+            png_data = _x11_screenshot()
+            cdp_error = str(exc)[:500]
         output_path = _safe_screenshot_path()
-        with open(output_path, "wb") as handle:
-            handle.write(base64.b64decode(encoded, validate=True))
-        os.chmod(output_path, 0o600)
+        _write_screenshot(output_path, png_data)
         result = {
             "operation": "screenshot",
             "status": "ok",
@@ -985,13 +1045,22 @@ def _screenshot(full_page: bool = False) -> dict[str, Any]:
             "media": f"MEDIA:{output_path}",
             "url": _sanitize_url(url),
             "page_title": title,
-            "full_page": bool(full_page),
+            "full_page": bool(full_page) and capture_method == "cdp",
+            "capture_method": capture_method,
             "safety_boundary": "Captured only the persistent shopping browser page as a local PNG artifact. No raw CDP endpoint, cookies, local storage, request headers, vault contents, passwords, passkeys, 2FA/CAPTCHA data, or account/payment/address secrets were returned as structured text.",
         }
-        _audit("screenshot", {"url": result["url"], "page_title": title, "path": output_path, "full_page": bool(full_page)})
+        if capture_method == "kasm_x11":
+            result["fallback_reason"] = cdp_error
+            result["full_page_note"] = "Kasm X11 fallback captures the visible browser display only."
+        _audit("screenshot", {"url": result["url"], "page_title": title, "path": output_path, "full_page": result["full_page"], "capture_method": capture_method})
         return result
 
-    return _with_browser(run)
+    with PortForward() as port:
+        browser = CdpSession(_browser_ws_url(port), port=port)
+        try:
+            return run(browser)
+        finally:
+            browser.close()
 
 
 def _click(selector: str, reason: str, approved_effect: str) -> dict[str, Any]:
