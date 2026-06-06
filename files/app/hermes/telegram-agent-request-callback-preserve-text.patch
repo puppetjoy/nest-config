@@ -1,0 +1,156 @@
+diff -uNr a/gateway/platforms/telegram.py b/gateway/platforms/telegram.py
+--- a/gateway/platforms/telegram.py	2026-06-06 16:52:50.966545947 -0400
++++ b/gateway/platforms/telegram.py	2026-06-06 16:52:50.966711199 -0400
+@@ -3163,8 +3163,19 @@
+                     action_label = message_text
+                 else:
+                     action_label = f"⚠️ {message_text}"
++                action_status = f"{action_label}\n\nHandled by {user_display}"
++                original_message = getattr(query, "message", None)
++                original_text = str(
++                    getattr(original_message, "text", None)
++                    or getattr(original_message, "caption", None)
++                    or ""
++                ).rstrip()
++                if original_text:
++                    edit_text = f"{original_text}\n\n---\n{action_status}"
++                else:
++                    edit_text = action_status
+                 await query.edit_message_text(
+-                    text=self.format_message(f"{action_label}\n\nHandled by {user_display}"),
++                    text=self.format_message(edit_text),
+                     parse_mode=ParseMode.MARKDOWN_V2,
+                     reply_markup=None,
+                 )
+diff -uNr a/tests/gateway/test_telegram_agent_request_callbacks.py b/tests/gateway/test_telegram_agent_request_callbacks.py
+--- a/tests/gateway/test_telegram_agent_request_callbacks.py	1970-01-01 00:00:00.000000000 +0000
++++ b/tests/gateway/test_telegram_agent_request_callbacks.py	1970-01-01 00:00:00.000000000 +0000
+@@ -0,0 +1,128 @@
++"""Regression tests for agent-request Telegram callback message edits."""
++
++import sys
++import types
++from types import SimpleNamespace
++
++import pytest
++
++from gateway.config import Platform, PlatformConfig
++
++
++_fake_telegram_error = types.ModuleType("telegram.error")
++
++
++class _TelegramError(Exception):
++    pass
++
++
++_fake_telegram_error.TelegramError = _TelegramError
++_fake_telegram_error.BadRequest = type("BadRequest", (_TelegramError,), {})
++_fake_telegram_error.NetworkError = type("NetworkError", (_TelegramError,), {})
++
++_fake_telegram_constants = types.ModuleType("telegram.constants")
++_fake_telegram_constants.ParseMode = SimpleNamespace(HTML="HTML", MARKDOWN_V2="MarkdownV2")
++_fake_telegram_constants.ChatType = SimpleNamespace(PRIVATE="private", GROUP="group", SUPERGROUP="supergroup")
++
++_fake_telegram_request = types.ModuleType("telegram.request")
++_fake_telegram_request.HTTPXRequest = type("HTTPXRequest", (), {"__init__": lambda *a, **kw: None})
++
++_fake_telegram_ext = types.ModuleType("telegram.ext")
++_fake_telegram_ext.Application = type("Application", (), {})
++_fake_telegram_ext.ApplicationBuilder = type("ApplicationBuilder", (), {
++    "token": lambda self, *a: self,
++    "build": lambda self: None,
++})
++_fake_telegram_ext.CallbackQueryHandler = type("CallbackQueryHandler", (), {"__init__": lambda *a, **kw: None})
++_fake_telegram_ext.CommandHandler = type("CommandHandler", (), {"__init__": lambda *a, **kw: None})
++_fake_telegram_ext.ContextTypes = SimpleNamespace(DEFAULT_TYPE=object)
++_fake_telegram_ext.MessageHandler = type("MessageHandler", (), {"__init__": lambda *a, **kw: None})
++_fake_telegram_ext.filters = SimpleNamespace()
++
++_fake_telegram = types.ModuleType("telegram")
++_fake_telegram.error = _fake_telegram_error
++_fake_telegram.constants = _fake_telegram_constants
++_fake_telegram.ext = _fake_telegram_ext
++_fake_telegram.request = _fake_telegram_request
++_fake_telegram.Bot = type("Bot", (), {})
++_fake_telegram.InlineKeyboardButton = type("InlineKeyboardButton", (), {"__init__": lambda *a, **kw: None})
++_fake_telegram.InlineKeyboardMarkup = type("InlineKeyboardMarkup", (), {"__init__": lambda *a, **kw: None})
++_fake_telegram.Message = type("Message", (), {})
++_fake_telegram.Update = type("Update", (), {})
++
++
++@pytest.fixture(autouse=True)
++def _inject_fake_telegram(monkeypatch):
++    monkeypatch.setitem(sys.modules, "telegram", _fake_telegram)
++    monkeypatch.setitem(sys.modules, "telegram.error", _fake_telegram_error)
++    monkeypatch.setitem(sys.modules, "telegram.constants", _fake_telegram_constants)
++    monkeypatch.setitem(sys.modules, "telegram.ext", _fake_telegram_ext)
++    monkeypatch.setitem(sys.modules, "telegram.request", _fake_telegram_request)
++
++
++def _make_adapter():
++    from gateway.platforms.telegram import TelegramAdapter
++
++    config = PlatformConfig(enabled=True, token="fake-token")
++    adapter = object.__new__(TelegramAdapter)
++    adapter.config = config
++    adapter._config = config
++    adapter._platform = Platform.TELEGRAM
++    adapter._connected = True
++    adapter._message_handler = None
++    return adapter
++
++
++class _FakeCallbackQuery:
++    def __init__(self, original_text):
++        self.data = "ar:test-token"
++        self.from_user = SimpleNamespace(id="12345", first_name="Joy")
++        self.message = SimpleNamespace(
++            chat_id=100,
++            chat=SimpleNamespace(type="private"),
++            message_thread_id=None,
++            message_id=200,
++            text=original_text,
++            caption=None,
++        )
++        self.answered_text = None
++        self.edited_text = None
++        self.edited_reply_markup = "unset"
++
++    async def answer(self, text=None):
++        self.answered_text = text
++
++    async def edit_message_text(self, *, text, parse_mode=None, reply_markup=None):
++        self.edited_text = text
++        self.edited_parse_mode = parse_mode
++        self.edited_reply_markup = reply_markup
++
++
++@pytest.mark.asyncio
++async def test_agent_request_callback_edit_preserves_original_notification(monkeypatch):
++    broker = types.ModuleType("agent_request_broker.kanban_backend")
++
++    def handle_telegram_callback(*args, **kwargs):
++        return {"ok": True, "message": "Review accepted; worker may continue."}
++
++    broker.handle_telegram_callback = handle_telegram_callback
++    package = types.ModuleType("agent_request_broker")
++    package.kanban_backend = broker
++    monkeypatch.setitem(sys.modules, "agent_request_broker", package)
++    monkeypatch.setitem(sys.modules, "agent_request_broker.kanban_backend", broker)
++    monkeypatch.setenv("TELEGRAM_ALLOWED_USERS", "12345")
++
++    adapter = _make_adapter()
++    query = _FakeCallbackQuery(
++        "🔐 Agent request review\n\nReview handoff: preserve notification text\nChanged files: gateway/platforms/telegram.py"
++    )
++    update = SimpleNamespace(callback_query=query)
++
++    await adapter._handle_callback_query(update, SimpleNamespace())
++
++    assert "Agent request review" in query.edited_text
++    assert "Review handoff: preserve notification text" in query.edited_text
++    assert "Changed files: gateway/platforms/telegram\\.py" in query.edited_text
++    assert "Review accepted; worker may continue\\." in query.edited_text
++    assert "Handled by Joy" in query.edited_text
++    assert query.edited_reply_markup is None

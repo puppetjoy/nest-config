@@ -258,6 +258,23 @@ class nest::app::hermes::install {
     ],
   }
 
+  file { "${install_dir}/telegram-agent-request-callback-preserve-text.patch":
+    ensure => file,
+    source => 'puppet:///modules/nest/app/hermes/telegram-agent-request-callback-preserve-text.patch',
+    mode   => '0644',
+    owner  => 'root',
+    group  => 'root',
+  }
+
+  exec { 'patch_hermes_telegram_agent_request_callback_preserve_text':
+    command => "/usr/bin/patch -N -p1 -d ${source_dir} < ${install_dir}/telegram-agent-request-callback-preserve-text.patch",
+    unless  => "/bin/grep -q 'original_text = str(' ${source_dir}/gateway/platforms/telegram.py && /bin/grep -q 'test_agent_request_callback_edit_preserves_original_notification' ${source_dir}/tests/gateway/test_telegram_agent_request_callbacks.py",
+    require => [
+      File["${install_dir}/telegram-agent-request-callback-preserve-text.patch"],
+      Exec['patch_hermes_telegram_agent_request_callbacks'],
+    ],
+  }
+
   file { "${install_dir}/telegram-agent-request-unstuck-command.patch":
     ensure => file,
     source => 'puppet:///modules/nest/app/hermes/telegram-agent-request-unstuck-command.patch',
@@ -271,7 +288,7 @@ class nest::app::hermes::install {
     unless  => "/bin/grep -q 'handle_telegram_unstuck' ${source_dir}/gateway/platforms/telegram.py && /bin/grep -q 'agent-request unstuck command failed' ${source_dir}/gateway/platforms/telegram.py",
     require => [
       File["${install_dir}/telegram-agent-request-unstuck-command.patch"],
-      Exec['patch_hermes_telegram_agent_request_callbacks'],
+      Exec['patch_hermes_telegram_agent_request_callback_preserve_text'],
     ],
   }
 
