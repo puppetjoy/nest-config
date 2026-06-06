@@ -98,8 +98,16 @@ FINAL_PURCHASE_RE = re.compile(r"\b(place\s+(?:your\s+)?order|buy\s+now|submit\s
 HUMAN_TAKEOVER_RE = re.compile(r"\b(sign\s*in|login|bitwarden|passkey|password|two[- ]?factor|2fa|otp|verification\s+code|captcha|security\s+check|suspicious|payment|wallet|card|cvv|cvc|billing|address|phone|email)\b", re.IGNORECASE)
 CART_URL_RE = re.compile(r"/(gp/)?cart(/|$)", re.IGNORECASE)
 CART_REMOVE_TEXT_RE = re.compile(r"\b(delete|remove)\b", re.IGNORECASE)
-APPROVED_CLICK_EFFECTS = ("browse", "select_option", "apply_visible_coupon", "add_to_cart", "remove_from_cart", "checkout_prep", "select_shipping_option", "apply_checkout_option")
+CHECKOUT_APPROVED_EFFECTS = ("checkout_prep", "select_shipping_option", "select_delivery_option", "apply_checkout_option", "fix_purchase_mode", "cart_line_adjustment")
+APPROVED_CLICK_EFFECTS = ("browse", "select_option", "apply_visible_coupon", "add_to_cart", "remove_from_cart") + CHECKOUT_APPROVED_EFFECTS
+APPROVED_TYPE_EFFECTS = ("type", "apply_checkout_option", "cart_line_adjustment")
 SENSITIVE_FIELD_RE = re.compile(r"(password|passkey|otp|verification|card|cvv|cvc|security.?code|address|phone|email)", re.IGNORECASE)
+SENSITIVE_TYPED_TEXT_RE = re.compile(
+    r"([\w.+-]+@[\w.-]+\.[A-Za-z]{2,}|\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b|\b(?:\d[ -]*?){12,19}\b|\b(?:cvv|cvc|security code)\s*[:#-]?\s*\d+\b|\b\d{1,6}\s+[^\n,]{2,60}\b\s+(?:Apt|Apartment|Unit|Ste|Suite|Road|Rd|Street|St|Avenue|Ave|Lane|Ln|Drive|Dr|Court|Ct|Way|Blvd|Boulevard)\b)",
+    re.IGNORECASE,
+)
+CHECKOUTISH_PAGE_RE = re.compile(r"checkout|buy|payselect|ship|spc|review|ordering", re.IGNORECASE)
+SAFE_CHECKOUT_SENSITIVE_LABEL_RE = re.compile(r"shipping\s+(speed|option|method)|delivery\s+(option|date|window)|gift(?!\s*card\s*(number|balance))|coupon|promo|promotion|claim\s+code|quantity|qty|delete|remove|one[-\s]?time|subscribe|subscription|cart", re.IGNORECASE)
 MUTATING_QUERY_RE = re.compile(r"\b(click|submit|fetch|XMLHttpRequest|sendBeacon|localStorage|sessionStorage|indexedDB|cookie|setAttribute|removeAttribute|appendChild|removeChild|innerHTML\s*=|location\s*=|open\s*\()\b", re.IGNORECASE)
 
 PRODUCT_EXTRACT_JS = r"""
@@ -629,6 +637,128 @@ CHECKOUT_PAGE_SAFETY_JS = r"""
 })()
 """
 
+
+CHECKOUT_PREP_CONTROLS_JS = r"""
+(() => {
+  const maxControls = __MAX_CONTROLS__;
+  const clean = (value) => (value || '').replace(/\s+/g, ' ').trim();
+  const redact = (value) => clean(value)
+    .replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g, '[email redacted]')
+    .replace(/\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/g, '[phone redacted]')
+    .replace(/\b(?:\d[ -]*?){12,19}\b/g, '[payment number redacted]')
+    .replace(/\b\d{1,6}\s+[^\n,]{2,60}\b\s+(?:Apt|Apartment|Unit|Ste|Suite|Road|Rd|Street|St|Avenue|Ave|Lane|Ln|Drive|Dr|Court|Ct|Way|Blvd|Boulevard)\b/gi, '[street address redacted]')
+    .replace(/\b[A-Z]{2}\s+\d{5}(?:-\d{4})?\b/g, '[state/zip redacted]')
+    .replace(/\b\d{5}(?:-\d{4})?\b/g, '[zip redacted]');
+  const visible = (el) => {
+    const style = window.getComputedStyle(el);
+    const rect = el.getBoundingClientRect();
+    return Boolean(style && style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0);
+  };
+  const selectorFor = (el) => {
+    if (!el || el.nodeType !== Node.ELEMENT_NODE) return '';
+    const unsafeSelectorText = /(password|passkey|otp|verification|captcha|cvv|cvc|card|payment|wallet|address|phone|email|login|signin)/i;
+    if (el.id && !unsafeSelectorText.test(el.id)) return `#${CSS.escape(el.id)}`;
+    const name = el.getAttribute('name');
+    if (name && !unsafeSelectorText.test(name)) return `${el.tagName.toLowerCase()}[name="${CSS.escape(name)}"]`;
+    const dataTestId = el.getAttribute('data-testid') || el.getAttribute('data-test-id') || '';
+    if (dataTestId && !unsafeSelectorText.test(dataTestId)) return `${el.tagName.toLowerCase()}[data-testid="${CSS.escape(dataTestId)}"]`;
+    const aria = el.getAttribute('aria-label') || '';
+    if (aria && aria.length <= 90 && !unsafeSelectorText.test(aria)) return `${el.tagName.toLowerCase()}[aria-label="${CSS.escape(aria)}"]`;
+    const path = [];
+    let cur = el;
+    while (cur && cur.nodeType === Node.ELEMENT_NODE && path.length < 5) {
+      let part = cur.tagName.toLowerCase();
+      const parent = cur.parentElement;
+      if (parent) {
+        const siblings = Array.from(parent.children).filter((sib) => sib.tagName === cur.tagName);
+        if (siblings.length > 1) part += `:nth-of-type(${siblings.indexOf(cur) + 1})`;
+      }
+      path.unshift(part);
+      cur = parent;
+    }
+    return path.join(' > ');
+  };
+  const labelFor = (el) => {
+    const labelledBy = clean(el.getAttribute('aria-labelledby') || '').split(/\s+/)
+      .map((id) => clean((document.getElementById(id) || {}).textContent || ''))
+      .filter(Boolean)
+      .join(' ');
+    const own = clean(el.innerText || el.value || el.getAttribute('aria-label') || el.getAttribute('title') || el.textContent || '');
+    const context = clean((el.closest('label, li, tr, fieldset, .a-box, .a-row, .a-section, [role="radio"], [role="option"]') || el).innerText || '');
+    return redact([labelledBy, own, context].filter(Boolean).join(' | ')).slice(0, 240);
+  };
+  const regionFor = (label) => {
+    if (/subscribe|subscription|delivery every|one[-\s]?time|purchase option/i.test(label)) return 'purchase_mode';
+    if (/shipping speed|shipping option|shipping method|delivery option|delivery date|delivery day|arrives|ship/i.test(label)) return 'shipping_delivery';
+    if (/gift|this is a gift|gift option/i.test(label)) return 'gift_options';
+    if (/qty|quantity|delete|remove|item|cart/i.test(label)) return 'cart_line_item';
+    if (/coupon|promo|promotion|gift card|claim code|apply/i.test(label)) return 'coupon_gift_card';
+    if (/back|return to cart|cart|change/i.test(label)) return 'navigation_review';
+    return 'checkout_review';
+  };
+  const effectHintsFor = (label, tag, type) => {
+    const hints = [];
+    if (/shipping speed|shipping option|shipping method/i.test(label)) hints.push('select_shipping_option');
+    if (/delivery option|delivery date|delivery day|arrives/i.test(label)) hints.push('select_delivery_option');
+    if (/subscribe|subscription|delivery every|one[-\s]?time|purchase option/i.test(label)) hints.push('fix_purchase_mode');
+    if (/qty|quantity|delete|remove|item|cart/i.test(label) || (tag === 'SELECT' && /quantity/i.test(label))) hints.push('cart_line_adjustment');
+    if (/gift|coupon|promo|promotion|gift card|claim code|apply|change/i.test(label)) hints.push('apply_checkout_option');
+    if (/continue|checkout|review order/i.test(label)) hints.push('checkout_prep');
+    return Array.from(new Set(hints.length ? hints : ['apply_checkout_option']));
+  };
+  const sensitiveControl = /(password|passkey|otp|verification|captcha|cvv|cvc|security code|card number|payment method|wallet|billing|address|phone|email|sign in|login|account settings)/i;
+  const finalControl = /(place\s+(your\s+)?order|buy\s+now|submit\s+order|complete\s+purchase|purchase\s+now|confirm\s+(purchase|order))/i;
+  const candidates = Array.from(document.querySelectorAll('a, button, input, select, textarea, label[for], [role="button"], [role="link"], [role="radio"], [role="checkbox"], [role="option"], [onclick]'));
+  const controls = [];
+  const finalPurchaseControls = [];
+  const skippedSensitiveControls = [];
+  const seen = new Set();
+  for (const el of candidates) {
+    if (!visible(el)) continue;
+    const tag = clean(el.tagName || '').toUpperCase();
+    const type = clean(el.getAttribute('type') || '').toLowerCase();
+    const role = clean(el.getAttribute('role') || '');
+    if (tag === 'INPUT' && ['hidden', 'password'].includes(type)) continue;
+    const label = labelFor(el);
+    const rawBits = clean([label, el.id, el.getAttribute('name'), el.getAttribute('aria-label'), el.getAttribute('placeholder'), el.getAttribute('autocomplete'), type, role].join(' '));
+    if (!label && !rawBits) continue;
+    if (finalControl.test(rawBits)) {
+      finalPurchaseControls.push(redact(label || rawBits).slice(0, 120));
+      continue;
+    }
+    if (sensitiveControl.test(rawBits) && !/(shipping|delivery|gift|coupon|promo|claim code|quantity|qty|delete|remove|one[-\s]?time|subscribe|subscription)/i.test(rawBits)) {
+      skippedSensitiveControls.push(redact(label || rawBits).slice(0, 120));
+      continue;
+    }
+    const selector = selectorFor(el);
+    if (!selector || seen.has(selector)) continue;
+    seen.add(selector);
+    const rect = el.getBoundingClientRect();
+    controls.push({
+      selector,
+      label: label || redact(rawBits).slice(0, 160),
+      role: role || (tag === 'A' ? 'link' : (['BUTTON', 'INPUT', 'SELECT', 'TEXTAREA'].includes(tag) ? tag.toLowerCase() : 'interactive')),
+      tag,
+      input_type: type,
+      region: regionFor(label || rawBits),
+      approved_effect_hints: effectHintsFor(label || rawBits, tag, type),
+      checked: Boolean(el.checked || el.getAttribute('aria-checked') === 'true' || el.getAttribute('aria-selected') === 'true'),
+      disabled: Boolean(el.disabled || el.getAttribute('aria-disabled') === 'true'),
+      viewport_rect: {x: Math.round(rect.left), y: Math.round(rect.top), width: Math.round(rect.width), height: Math.round(rect.height)}
+    });
+    if (controls.length >= maxControls) break;
+  }
+  return {
+    safe_controls: controls,
+    safe_control_count: controls.length,
+    final_purchase_controls_visible: finalPurchaseControls.slice(0, 8),
+    final_purchase_control_count: finalPurchaseControls.length,
+    sensitive_controls_suppressed_count: skippedSensitiveControls.length,
+    policy: 'Checkout-prep control inventory returns sanitized labels/selectors for ordinary review-page controls only. Final order submission and address/payment/account/security controls are withheld or blocked.'
+  };
+})()
+"""
+
 ORDER_REVIEW_EXTRACT_JS = r"""
 (() => {
   const clean = (value) => (value || '').replace(/\s+/g, ' ').trim();
@@ -1128,6 +1258,63 @@ def _sanitize_final_purchase_controls(value: Any) -> list[str]:
     return _dedupe_checkout_values(controls)[:8]
 
 
+def _sanitize_checkout_control_label(value: Any) -> str:
+    text = _sanitize_checkout_text(str(value or ""))
+    if not text:
+        return ""
+    if FINAL_PURCHASE_RE.search(text):
+        return ""
+    if _checkout_text_has_sensitive_marker(text) or _checkout_text_has_mixed_summary(text):
+        return "[checkout control label redacted]"
+    if len(text) > 180:
+        return text[:177].rstrip() + "…"
+    return text
+
+
+def _sanitize_checkout_controls(value: Any) -> list[dict[str, Any]]:
+    controls: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    allowed_regions = {"purchase_mode", "shipping_delivery", "gift_options", "cart_line_item", "coupon_gift_card", "navigation_review", "checkout_review"}
+    allowed_effects = set(CHECKOUT_APPROVED_EFFECTS)
+    for item in value if isinstance(value, list) else []:
+        if not isinstance(item, dict):
+            continue
+        selector = str(item.get("selector") or "").strip()
+        if not selector or len(selector) > 500 or selector in seen:
+            continue
+        label = _sanitize_checkout_control_label(item.get("label"))
+        if not label:
+            continue
+        raw_hints = item.get("approved_effect_hints") if isinstance(item.get("approved_effect_hints"), list) else []
+        hints = [str(hint) for hint in raw_hints if str(hint) in allowed_effects]
+        if not hints:
+            hints = ["apply_checkout_option"]
+        region = str(item.get("region") or "checkout_review")
+        if region not in allowed_regions:
+            region = "checkout_review"
+        rect = item.get("viewport_rect") if isinstance(item.get("viewport_rect"), dict) else {}
+        clean_rect = {
+            key: int(rect.get(key) or 0)
+            for key in ("x", "y", "width", "height")
+        }
+        controls.append({
+            "selector": selector,
+            "label": label,
+            "role": _sanitize_checkout_text(str(item.get("role") or ""))[:40],
+            "tag": _sanitize_checkout_text(str(item.get("tag") or ""))[:20],
+            "input_type": _sanitize_checkout_text(str(item.get("input_type") or ""))[:30],
+            "region": region,
+            "approved_effect_hints": hints,
+            "checked": bool(item.get("checked")),
+            "disabled": bool(item.get("disabled")),
+            "viewport_rect": clean_rect,
+        })
+        seen.add(selector)
+        if len(controls) >= MAX_LINKS:
+            break
+    return controls
+
+
 def _sanitize_checkout_value(value: Any, field_name: str = "") -> Any:
     field = str(field_name or "").lower()
     if isinstance(value, dict):
@@ -1147,8 +1334,10 @@ def _sanitize_checkout_value(value: Any, field_name: str = "") -> Any:
     return value
 
 
-def _sanitize_checkout_summary(summary: dict[str, Any], safety: dict[str, Any]) -> dict[str, Any]:
-    final_purchase_controls = _sanitize_final_purchase_controls(safety.get("final_purchase_controls_visible") or summary.get("final_purchase_controls_visible") or [])
+def _sanitize_checkout_summary(summary: dict[str, Any], safety: dict[str, Any], controls: dict[str, Any] | None = None) -> dict[str, Any]:
+    controls = controls or {}
+    checkout_prep_controls = _sanitize_checkout_controls(controls.get("safe_controls") or [])
+    final_purchase_controls = _sanitize_final_purchase_controls(controls.get("final_purchase_controls_visible") or safety.get("final_purchase_controls_visible") or summary.get("final_purchase_controls_visible") or [])
     shipping_destination = _sanitize_checkout_destination_list(summary.get("shipping_destination_label_or_city_state"))
     if not shipping_destination:
         fallback_destination_candidates = []
@@ -1160,6 +1349,8 @@ def _sanitize_checkout_summary(summary: dict[str, Any], safety: dict[str, Any]) 
         "final_purchase_controls_present": bool(final_purchase_controls),
         "final_purchase_control_count": len(final_purchase_controls),
         "final_purchase_controls_visible": final_purchase_controls,
+        "checkout_prep_safe_control_count": len(checkout_prep_controls),
+        "sensitive_controls_suppressed_count": int(controls.get("sensitive_controls_suppressed_count") or 0),
         "final_purchase_policy": "Final Buy Now, Place Order, or equivalent order-submission controls are blocked and must not be clicked through ordinary shopping_browser tools.",
     }
     if safety.get("blocked_reason"):
@@ -1177,6 +1368,8 @@ def _sanitize_checkout_summary(summary: dict[str, Any], safety: dict[str, Any]) 
         "shipping_destination_city_state_or_label": shipping_destination,
         "payment_method_label_last_four_only": _sanitize_checkout_payment_list(summary.get("payment_method_label_last_four_only")),
         "surprise_flags": _sanitize_checkout_detail_list(summary.get("surprise_flags"), limit=10),
+        "checkout_prep_controls": checkout_prep_controls,
+        "checkout_prep_control_policy": "Star may inspect and use sanitized selectors/labels for ordinary checkout-prep controls only with an explicit approved_effect. Final purchase controls and address/payment/account/security edits remain blocked or Joy-only.",
         "blocked_metadata": blocked_metadata,
         "policy": "Sanitized checkout-prep/order-review summary only: structured fields are isolated; street addresses, full payment/account/card numbers, emails, phone numbers, security-code text, raw DOM, cookies, storage, request headers, and ordinary final-purchase controls are not returned as summary fields.",
     }
@@ -1240,6 +1433,24 @@ def _checkout_metadata_text(metadata: dict[str, Any]) -> str:
     return " ".join(str(metadata.get(key) or "") for key in ("text", "value", "aria_label", "name", "title", "id", "page_title", "url"))
 
 
+def _checkoutish_page_text(metadata: dict[str, Any]) -> str:
+    parsed = urlparse(str(metadata.get("url") or ""))
+    return " ".join([parsed.path, parsed.query, str(metadata.get("page_title") or ""), _checkout_metadata_text(metadata)])
+
+
+def _assert_checkout_page(metadata: dict[str, Any], effect: str) -> None:
+    parsed = urlparse(str(metadata.get("url") or ""))
+    if parsed.scheme != "https" or not AMAZON_HOST_RE.search(parsed.netloc):
+        raise ValueError(f"{effect} actions are currently limited to https://*.amazon.* pages")
+    if not CHECKOUTISH_PAGE_RE.search(_checkoutish_page_text(metadata)):
+        raise ValueError(f"{effect} actions require the current page to be an Amazon checkout-prep/review page")
+
+
+def _assert_checkout_control_not_sensitive(control_text: str) -> None:
+    if HUMAN_TAKEOVER_RE.search(control_text) and not SAFE_CHECKOUT_SENSITIVE_LABEL_RE.search(control_text):
+        raise ValueError("matched checkout control appears to involve sensitive login/payment/address/account/contact scope; Joy must take over")
+
+
 def _assert_checkout_click_allowed(metadata: dict[str, Any], effect: str, reason: str) -> None:
     if not str(reason or "").strip():
         raise ValueError(f"{effect} clicks require a reason/supervision reference")
@@ -1261,17 +1472,43 @@ def _assert_checkout_click_allowed(metadata: dict[str, Any], effect: str, reason
         if not CHECKOUT_PREP_RE.search(control_text):
             raise ValueError("checkout_prep selector must identify a visible checkout/proceed-to-checkout control")
         return
-    checkoutish = " ".join([parsed.path, parsed.query, str(metadata.get("page_title") or ""), control_text])
-    if not re.search(r"checkout|buy|payselect|ship|spc|review|ordering", checkoutish, re.IGNORECASE):
-        raise ValueError(f"{effect} clicks require the current page to be an Amazon checkout-prep/review page")
-    if HUMAN_TAKEOVER_RE.search(control_text) and not re.search(r"shipping\s+(speed|option|method)|delivery\s+(option|date|window)", control_text, re.IGNORECASE):
-        raise ValueError("matched checkout control appears to involve sensitive login/payment/address/account/contact scope; Joy must take over")
+    _assert_checkout_page(metadata, effect)
+    _assert_checkout_control_not_sensitive(control_text)
 
 
-def _checkout_summary_from_browser(browser: CdpSession, session_id: str) -> dict[str, Any]:
+def _assert_checkout_type_allowed(metadata: dict[str, Any], effect: str, reason: str, typed_text: str) -> None:
+    if not str(reason or "").strip():
+        raise ValueError(f"{effect} typing requires a reason/supervision reference")
+    if not metadata.get("exists"):
+        raise ValueError(f"{effect} selector did not match any field")
+    if metadata.get("disabled"):
+        raise ValueError(f"{effect} selector matched a disabled field")
+    if not metadata.get("visible"):
+        raise ValueError(f"{effect} selector must match a visible checkout-prep field")
+    tag = str(metadata.get("tag") or "").upper()
+    role = str(metadata.get("role") or "").lower()
+    input_type = str(metadata.get("type") or "").lower()
+    if tag not in ("INPUT", "TEXTAREA", "SELECT") and role not in ("textbox", "spinbutton", "combobox", "option"):
+        raise ValueError(f"{effect} typing is limited to visible input/select/textarea-style checkout-prep controls")
+    if tag == "INPUT" and input_type in ("hidden", "password"):
+        raise ValueError("matched checkout field is hidden or sensitive; Joy must take over")
+    control_text = _checkout_metadata_text(metadata)
+    if FINAL_PURCHASE_RE.search(control_text):
+        raise ValueError("final purchase controls cannot be modified by shopping_browser_type; use the trusted Telegram approval path")
+    _assert_checkout_page(metadata, effect)
+    _assert_checkout_control_not_sensitive(control_text)
+    if SENSITIVE_FIELD_RE.search(control_text) and not SAFE_CHECKOUT_SENSITIVE_LABEL_RE.search(control_text):
+        raise ValueError("matched field appears sensitive; Joy must take over")
+    if SENSITIVE_TYPED_TEXT_RE.search(str(typed_text or "")):
+        raise ValueError("typed text appears to contain contact, address, payment, or security material; Joy must take over")
+
+
+def _checkout_summary_from_browser(browser: CdpSession, session_id: str, max_controls: int = MAX_LINKS) -> dict[str, Any]:
     safety = _evaluate(browser, session_id, CHECKOUT_PAGE_SAFETY_JS) or {}
     summary = _evaluate(browser, session_id, ORDER_REVIEW_EXTRACT_JS) or {}
-    return _sanitize_checkout_summary(summary, safety)
+    controls_expr = CHECKOUT_PREP_CONTROLS_JS.replace("__MAX_CONTROLS__", str(max(0, min(int(max_controls), MAX_LINKS))))
+    controls = _evaluate(browser, session_id, controls_expr) or {}
+    return _sanitize_checkout_summary(summary, safety, controls)
 
 def _check_shopping_browser() -> bool:
     return shutil.which("kubectl") is not None
@@ -1899,9 +2136,9 @@ def _page_snapshot(max_text_chars: int = MAX_TEXT_CHARS, max_links: int = MAX_LI
         url = str(_evaluate(browser, session_id, "location.href") or "")
         title = str(_evaluate(browser, session_id, "document.title") or "")
         if re.search(r"checkout|buy|payselect|ship|spc|review|ordering", " ".join([url, title]), re.IGNORECASE):
-            result = _checkout_summary_from_browser(browser, session_id)
+            result = _checkout_summary_from_browser(browser, session_id, max_controls=max_links)
             result["operation"] = "checkout_prep_snapshot"
-            result["snapshot_note"] = "Checkout-prep pages return a sanitized order-review summary instead of raw visible text or full interactive listings to avoid address/payment/account disclosure."
+            result["snapshot_note"] = "Checkout-prep pages return a sanitized order-review summary plus non-secret checkout-prep controls instead of raw visible text to avoid address/payment/account disclosure."
             return result
         result = _evaluate(browser, session_id, expression) or {}
         result["operation"] = "page_snapshot"
@@ -2271,7 +2508,7 @@ def _click(selector: str, reason: str, approved_effect: str) -> dict[str, Any]:
         if effect == "remove_from_cart":
             remove_metadata = _evaluate(browser, session_id, CART_REMOVE_CONTROL_JS.replace("__SELECTOR__", _json_literal(safe_selector))) or {}
             _assert_cart_remove_click_allowed(remove_metadata, reason)
-        elif effect in ("checkout_prep", "select_shipping_option", "apply_checkout_option"):
+        elif effect in CHECKOUT_APPROVED_EFFECTS:
             checkout_metadata = _evaluate(browser, session_id, CHECKOUT_CONTROL_JS.replace("__SELECTOR__", _json_literal(safe_selector))) or {}
             _assert_checkout_click_allowed(checkout_metadata, effect, reason)
         elif effect != "add_to_cart":
@@ -2281,7 +2518,7 @@ def _click(selector: str, reason: str, approved_effect: str) -> dict[str, Any]:
         result["operation"] = "click"
         result["approved_effect"] = effect
         result["url"] = _sanitize_url(str(result.get("url") or _evaluate(browser, session_id, "location.href") or ""))
-        if effect in ("checkout_prep", "select_shipping_option", "apply_checkout_option"):
+        if effect in CHECKOUT_APPROVED_EFFECTS:
             result["checkout_review"] = _checkout_summary_from_browser(browser, session_id)
         _audit("click", {"selector": safe_selector, "effect": effect, "reason": str(reason or "")[:300], "element_text": result.get("element_text"), "url": result.get("url"), "checkout_binding": (result.get("checkout_review") or {}).get("material_summary_binding")})
         return result
@@ -2289,9 +2526,12 @@ def _click(selector: str, reason: str, approved_effect: str) -> dict[str, Any]:
     return _with_browser(run)
 
 
-def _type(selector: str, text: str, reason: str) -> dict[str, Any]:
+def _type(selector: str, text: str, reason: str, approved_effect: str = "type") -> dict[str, Any]:
     safe_selector = _selector_arg(selector)
     safe_text = _bounded_text(text)
+    effect = str(approved_effect or "type").strip().lower()
+    if effect not in APPROVED_TYPE_EFFECTS:
+        raise ValueError(f"approved_effect must be {', '.join(APPROVED_TYPE_EFFECTS)}")
     selector_lower = safe_selector.lower()
     if SENSITIVE_FIELD_RE.search(selector_lower):
         raise ValueError("selector appears to target a sensitive credential/contact/payment/address field; Joy must take over")
@@ -2303,13 +2543,20 @@ def _type(selector: str, text: str, reason: str) -> dict[str, Any]:
         session_id = _attach(browser, target_id)
         field_expr = f"(() => {{ const n = document.querySelector({_json_literal(safe_selector)}); return n ? [n.type || '', n.name || '', n.id || '', n.getAttribute('aria-label') || '', n.placeholder || ''].join(' ') : ''; }})()"
         field_text = str(_evaluate(browser, session_id, field_expr) or "")
-        if SENSITIVE_FIELD_RE.search(field_text):
+        if effect == "type" and SENSITIVE_FIELD_RE.search(field_text):
             raise ValueError("matched field appears sensitive; Joy must take over")
+        if effect != "type":
+            checkout_metadata = _evaluate(browser, session_id, CHECKOUT_CONTROL_JS.replace("__SELECTOR__", _json_literal(safe_selector))) or {}
+            _assert_checkout_type_allowed(checkout_metadata, effect, reason, safe_text)
         result = _evaluate(browser, session_id, TYPE_JS.replace("__SELECTOR__", _json_literal(safe_selector)).replace("__VALUE__", _json_literal(safe_text))) or {}
+        time.sleep(1.0)
         result["operation"] = "type"
+        result["approved_effect"] = effect
         result["typed_chars"] = len(safe_text)
         result["url"] = _sanitize_url(str(result.get("url") or _evaluate(browser, session_id, "location.href") or ""))
-        _audit("type", {"selector": safe_selector, "typed_chars": len(safe_text), "reason": str(reason or "")[:300], "url": result.get("url")})
+        if effect != "type":
+            result["checkout_review"] = _checkout_summary_from_browser(browser, session_id)
+        _audit("type", {"selector": safe_selector, "effect": effect, "typed_chars": len(safe_text), "reason": str(reason or "")[:300], "url": result.get("url"), "checkout_binding": (result.get("checkout_review") or {}).get("material_summary_binding")})
         return result
 
     return _with_browser(run)
@@ -2480,8 +2727,9 @@ def shopping_browser_status_tool(args: dict[str, Any], **_kw: Any) -> str:
         "browser_operations": ["navigate", "page_snapshot", "query", "click", "type", "screenshot", "visual_evidence", "current_page_summary", "owner_checkout_review"],
         "supervised_checkout_prep": {
             "status": "available",
-            "approved_click_effects": ["checkout_prep", "select_shipping_option", "apply_checkout_option"],
-            "boundary": "Star may navigate/click ordinary checkout-prep controls under Joy's live supervision and may receive sanitized order-review summaries. Star must pause for login, Bitwarden, passkeys, 2FA, CAPTCHA, suspicious security prompts, payment/address/account edits, or sensitive-information prompts.",
+            "approved_click_effects": list(CHECKOUT_APPROVED_EFFECTS),
+            "approved_type_effects": ["apply_checkout_option", "cart_line_adjustment"],
+            "boundary": "Star may inspect sanitized checkout-prep controls and click/type into ordinary review-page controls under Joy's live supervision with explicit approved_effect values. Star must pause for login, Bitwarden, passkeys, 2FA, CAPTCHA, suspicious security prompts, payment/address/account edits, or sensitive-information prompts.",
             "sanitization": "Checkout-prep snapshots/current-page summaries return isolated structured item/totals/delivery/surprise fields plus destination city-state/abstract label and payment labels. Mixed blobs, sensitive redaction-marker text, and final purchase controls are removed from ordinary summary fields.",
             "visual_confirmation": "shopping_browser_visual_evidence returns a bounded visual proof bundle: a local PNG screenshot, sanitized suggested regions, and optional focused crops. Amazon checkout/order-review pages are allowed only as redacted checkout-prep viewport evidence; login/account/payment/address/security pages remain Joy-only.",
             "owner_only_confirmation": "shopping_browser_owner_checkout_review can send complete unredacted checkout screenshots directly to Joy's configured Telegram destination without returning paths, MEDIA handles, raw DOM, cookies, storage, request headers, CDP endpoints, or address/payment text to Star.",
@@ -2551,7 +2799,7 @@ def shopping_browser_click_tool(args: dict[str, Any], **_kw: Any) -> str:
 
 def shopping_browser_type_tool(args: dict[str, Any], **_kw: Any) -> str:
     try:
-        return _json(_type(str(args.get("selector") or ""), str(args.get("text") or ""), str(args.get("reason") or "")))
+        return _json(_type(str(args.get("selector") or ""), str(args.get("text") or ""), str(args.get("reason") or ""), str(args.get("approved_effect") or "type")))
     except Exception as exc:
         return _json({"error": "TYPE_FAILED", "message": str(exc)[:1000], "operation": "type"})
 
@@ -2709,7 +2957,7 @@ VISUAL_EVIDENCE_SCHEMA = {
 
 CLICK_SCHEMA = {
     "name": "shopping_browser_click",
-    "description": "Click a visible element in the persistent shopping browser by CSS selector. Use for browsing, selecting variants/options, applying visible coupons, explicitly approved add-to-cart/removal, and supervised checkout-prep controls. Checkout prep requires approved_effect='checkout_prep', 'select_shipping_option', or 'apply_checkout_option' and Joy live supervision; it returns a sanitized order-review summary and refuses final purchase controls. Never use for Buy Now, Place Order, account/payment/address edits, login, passkeys, 2FA, or CAPTCHA.",
+    "description": "Click a visible element in the persistent shopping browser by CSS selector. Use for browsing, selecting variants/options, applying visible coupons, explicitly approved add-to-cart/removal, and supervised checkout-prep controls. Checkout prep requires an explicit checkout approved_effect such as checkout_prep, select_shipping_option, select_delivery_option, apply_checkout_option, fix_purchase_mode, or cart_line_adjustment plus Joy live supervision; it returns a refreshed sanitized order-review summary/material_summary_binding and refuses final purchase controls. Never use for Buy Now, Place Order, account/payment/address edits, login, passkeys, 2FA, or CAPTCHA.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -2730,8 +2978,9 @@ TYPE_SCHEMA = {
             "selector": {"type": "string", "description": "CSS selector for the input/select/textarea"},
             "text": {"type": "string", "description": "Non-sensitive text to type"},
             "reason": {"type": "string", "description": "Short human-readable reason for audit"},
+            "approved_effect": {"type": "string", "description": "Expected effect of the typing; checkout-prep effects require Joy live supervision and return a refreshed sanitized checkout summary", "enum": list(APPROVED_TYPE_EFFECTS), "default": "type"},
         },
-        "required": ["selector", "text", "reason"],
+        "required": ["selector", "text", "reason", "approved_effect"],
     },
 }
 
