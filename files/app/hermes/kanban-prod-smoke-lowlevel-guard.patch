@@ -1,0 +1,140 @@
+diff -ruN a/hermes_cli/kanban_db.py b/hermes_cli/kanban_db.py
+--- a/hermes_cli/kanban_db.py	2026-06-06 15:58:53.108412216 -0400
++++ b/hermes_cli/kanban_db.py	2026-06-06 15:58:53.109777169 -0400
+@@ -1739,6 +1739,79 @@
+     return normalize_profile_name(assignee)
+ 
+ 
++def _create_guard_board_slug(conn: sqlite3.Connection, board: Optional[str]) -> Optional[str]:
++    """Best-effort board slug for create-time policy guards."""
++    normed = _normalize_board_slug(board)
++    if normed:
++        return normed
++    env_board = os.environ.get("HERMES_KANBAN_BOARD", "").strip()
++    if env_board:
++        try:
++            return _normalize_board_slug(env_board)
++        except ValueError:
++            return None
++    db_path = os.environ.get("HERMES_KANBAN_DB", "").strip()
++    if not db_path:
++        try:
++            row = conn.execute("PRAGMA database_list").fetchone()
++            if row is not None:
++                db_path = str(row["file"] if "file" in row.keys() else row[2])
++        except Exception:
++            db_path = ""
++    if db_path and os.path.basename(db_path) == "kanban.db":
++        parent = os.path.basename(os.path.dirname(db_path))
++        if parent:
++            try:
++                return _normalize_board_slug(parent)
++            except ValueError:
++                return None
++    try:
++        return get_current_board()
++    except Exception:
++        return None
++
++
++def _is_smoke_task_shape(*, title: str, assignee: Optional[str], created_by: Optional[str]) -> bool:
++    title_text = str(title or "").casefold()
++    assignee_text = str(assignee or "").casefold()
++    created_by_text = str(created_by or "").casefold()
++    smoke_tokens = (
++        "dev smoke",
++        "dev-smoke",
++        "smoke",
++        "synthetic",
++        "review-required-smoke",
++        "live-review-required-smoke",
++    )
++    creator_tokens = ("watchdog-smoke", "smoke", "synthetic", "test")
++    return (
++        assignee_text == "test-worker"
++        or any(token in title_text for token in smoke_tokens)
++        or any(token in created_by_text for token in creator_tokens)
++    )
++
++
++def _reject_prod_agent_requests_smoke_task(
++    conn: sqlite3.Connection,
++    *,
++    board: Optional[str],
++    title: str,
++    assignee: Optional[str],
++    created_by: Optional[str],
++) -> None:
++    if os.environ.get("HERMES_ALLOW_PROD_KANBAN_SMOKE") == "1":
++        return
++    if _create_guard_board_slug(conn, board) != "agent-requests":
++        return
++    if not _is_smoke_task_shape(title=title, assignee=assignee, created_by=created_by):
++        return
++    raise ValueError(
++        "refusing to create live/smoke/test-worker task on production "
++        "agent-requests board; pass board='agent-requests-dev' or use an "
++        "isolated temporary board, and visibly label the task as DEV/test"
++    )
++
++
+ def create_task(
+     conn: sqlite3.Connection,
+     *,
+@@ -1788,6 +1861,13 @@
+     assignee = _canonical_assignee(assignee)
+     if not title or not title.strip():
+         raise ValueError("title is required")
++    _reject_prod_agent_requests_smoke_task(
++        conn,
++        board=board,
++        title=title,
++        assignee=assignee,
++        created_by=created_by,
++    )
+     if initial_status not in VALID_INITIAL_STATUSES:
+         raise ValueError(
+             f"initial_status must be one of {sorted(VALID_INITIAL_STATUSES)}"
+diff -ruN a/tests/hermes_cli/test_kanban_db.py b/tests/hermes_cli/test_kanban_db.py
+--- a/tests/hermes_cli/test_kanban_db.py	2026-06-06 15:58:53.109032375 -0400
++++ b/tests/hermes_cli/test_kanban_db.py	2026-06-06 15:58:53.110002103 -0400
+@@ -42,6 +42,39 @@
+     assert tasks[0].title == "persisted"
+ 
+ 
++
++
++def test_create_task_rejects_prod_board_watchdog_smoke_created_by(kanban_home):
++    kb.create_board("agent-requests")
++
++    with kb.connect(board="agent-requests") as conn:
++        with pytest.raises(ValueError, match="agent-requests-dev"):
++            kb.create_task(
++                conn,
++                title="direct fallback review notification",
++                assignee="talon",
++                created_by="watchdog-smoke",
++                board="agent-requests",
++            )
++
++
++def test_create_task_allows_dev_board_watchdog_smoke_created_by(kanban_home):
++    kb.create_board("agent-requests-dev")
++
++    with kb.connect(board="agent-requests-dev") as conn:
++        tid = kb.create_task(
++            conn,
++            title="DEV SMOKE direct fallback review notification",
++            assignee="talon",
++            created_by="watchdog-smoke",
++            board="agent-requests-dev",
++        )
++        task = kb.get_task(conn, tid)
++
++    assert task is not None
++    assert task.created_by == "watchdog-smoke"
++
++
+ def test_init_creates_expected_tables(kanban_home):
+     with kb.connect() as conn:
+         rows = conn.execute(
