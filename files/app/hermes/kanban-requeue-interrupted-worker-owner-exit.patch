@@ -1,0 +1,142 @@
+--- a/hermes_cli/kanban_db.py
++++ b/hermes_cli/kanban_db.py
+@@ -5119,6 +5119,34 @@
+     return fp.lower().strip()
+ 
+ 
++def _claim_owner_pid(claim_lock: Optional[str]) -> Optional[int]:
++    """Extract the dispatcher PID from a ``host:pid`` claim lock."""
++    if not claim_lock or ":" not in claim_lock:
++        return None
++    _host, raw_pid = claim_lock.rsplit(":", 1)
++    try:
++        return int(raw_pid)
++    except (TypeError, ValueError):
++        return None
++
++
++def _claim_owner_alive(claim_lock: Optional[str]) -> Optional[bool]:
++    """Return liveness for the local dispatcher process named by a claim lock.
++
++    ``None`` means the lock does not name a host-local ``host:pid`` owner we can
++    safely inspect from this process.
++    """
++    if not claim_lock:
++        return None
++    host_prefix = f"{_claimer_id().split(':', 1)[0]}:"
++    if not claim_lock.startswith(host_prefix):
++        return None
++    owner_pid = _claim_owner_pid(claim_lock)
++    if owner_pid is None:
++        return None
++    return _pid_alive(owner_pid)
++
++
+ def detect_crashed_workers(conn: sqlite3.Connection) -> list[str]:
+     """Reclaim ``running`` tasks whose worker PID is no longer alive.
+ 
+@@ -5169,8 +5197,25 @@
+                 continue
+ 
+             pid = int(row["worker_pid"])
++            claim_owner_alive = _claim_owner_alive(row["claim_lock"])
++            interrupted_by_dispatcher_exit = claim_owner_alive is False
+             kind, code = _classify_worker_exit(pid)
+-            if kind == "clean_exit":
++            if interrupted_by_dispatcher_exit:
++                # A worker whose owning dispatcher/gateway process is gone was
++                # interrupted by control-plane lifecycle (for example a planned
++                # service restart after review acceptance), not by task logic.
++                # Requeue without incrementing the task failure counter so the
++                # follow-through worker gets a fresh attempt instead of being
++                # auto-blocked by the restart that applied its own fix.
++                protocol_violation = False
++                error_text = "worker interrupted because claim owner exited"
++                event_kind = "interrupted"
++                event_payload = {
++                    "pid": pid,
++                    "claimer": row["claim_lock"],
++                    "claim_owner_alive": False,
++                }
++            elif kind == "clean_exit":
+                 # Worker subprocess returned 0 but its task is still
+                 # ``running`` in the DB — it exited without calling
+                 # ``kanban_complete`` / ``kanban_block``. Retrying won't
+@@ -5209,7 +5254,8 @@
+             if cur.rowcount == 1:
+                 run_id = _end_run(
+                     conn, row["id"],
+-                    outcome="crashed", status="crashed",
++                    outcome="reclaimed" if interrupted_by_dispatcher_exit else "crashed",
++                    status="reclaimed" if interrupted_by_dispatcher_exit else "crashed",
+                     error=error_text,
+                     metadata=dict(event_payload),
+                 )
+@@ -5218,6 +5264,8 @@
+                     event_payload,
+                     run_id=run_id,
+                 )
++                if interrupted_by_dispatcher_exit:
++                    continue
+                 crashed.append(row["id"])
+                 crash_details.append(
+                     (row["id"], pid, row["claim_lock"],
+--- a/tests/hermes_cli/test_kanban_db.py
++++ b/tests/hermes_cli/test_kanban_db.py
+@@ -746,6 +746,56 @@
+             )
+ 
+ 
++def test_detect_crashed_workers_requeues_worker_when_claim_owner_exited(
++    kanban_home, monkeypatch,
++):
++    """Gateway/dispatcher restarts should not burn a task failure attempt."""
++    import hermes_cli.kanban_db as _kb
++
++    host = _kb._claimer_id().split(":", 1)[0]
++    worker_pid = 91001
++    owner_pid = 91002
++
++    monkeypatch.setattr(_kb, "_pid_alive", lambda _pid: False)
++    monkeypatch.setattr(_kb.time, "time", lambda: 1_000_000.0)
++
++    with kb.connect() as conn:
++        tid = kb.create_task(conn, title="restart interrupted", assignee="a")
++        claimed = kb.claim_task(conn, tid, claimer=f"{host}:{owner_pid}")
++        assert claimed is not None
++        run_id = kb._current_run_id(conn, tid)
++        conn.execute(
++            "UPDATE tasks SET worker_pid=?, started_at=?, consecutive_failures=? WHERE id=?",
++            (worker_pid, 999_000, 0, tid),
++        )
++        conn.execute(
++            "UPDATE task_runs SET worker_pid=? WHERE id=?",
++            (worker_pid, run_id),
++        )
++        conn.commit()
++
++        crashed = kb.detect_crashed_workers(conn)
++        task = kb.get_task(conn, tid)
++        run = conn.execute(
++            "SELECT status, outcome, error, ended_at FROM task_runs WHERE id = ?",
++            (run_id,),
++        ).fetchone()
++        events = kb.list_events(conn, tid)
++
++    assert crashed == []
++    assert task is not None
++    assert task.status == "ready"
++    assert task.consecutive_failures == 0
++    assert task.last_failure_error is None
++    assert task.current_run_id is None
++    assert run["status"] == "reclaimed"
++    assert run["outcome"] == "reclaimed"
++    assert "claim owner exited" in run["error"]
++    assert run["ended_at"] is not None
++    assert any(e.kind == "interrupted" for e in events)
++    assert not any(e.kind == "gave_up" for e in events)
++
++
+ def test_detect_crashed_workers_skips_freshly_claimed_tasks(
+     kanban_home, monkeypatch,
+ ):
