@@ -852,9 +852,41 @@ def _sanitize_checkout_destination_text(value: str) -> str:
     match = _CITY_STATE_RE.search(text)
     if match:
         return f"{match.group(1).strip()}, {match.group(2).upper()}"
-    if any(marker in text.lower() for marker in ("street address redacted", "zip redacted", "phone redacted", "email redacted")):
-        return "[shipping destination redacted]"
-    return text
+    if not text:
+        return ""
+    return "[shipping destination redacted]"
+
+
+def _checkout_text_has_sensitive_marker(value: str) -> bool:
+    lowered = str(value or "").lower()
+    return any(
+        marker in lowered
+        for marker in (
+            "street address redacted",
+            "address unit redacted",
+            "zip redacted",
+            "phone redacted",
+            "email redacted",
+            "payment number redacted",
+            "account number redacted",
+            "payment security code redacted",
+        )
+    )
+
+
+def _checkout_text_has_mixed_summary(value: str) -> bool:
+    text = str(value or "")
+    categories = 0
+    for pattern in (
+        r"\b(ship\s+to|deliver\s+to|delivery\s+address|shipping\s+address)\b",
+        r"\b(payment\s+method|wallet|card|visa|mastercard|amex|american express|discover|gift\s+card)\b",
+        r"\b(subtotal|shipping|estimated\s+tax|order\s+total|total)\b",
+        r"\b(delivery|arrives|shipping\s+speed|delivery\s+(option|date|window))\b",
+        r"\b(qty|quantity|sold\s+by|seller)\b",
+    ):
+        if re.search(pattern, text, re.IGNORECASE):
+            categories += 1
+    return categories > 1
 
 
 def _sanitize_checkout_payment_text(value: str) -> str:
@@ -874,6 +906,71 @@ def _sanitize_checkout_payment_text(value: str) -> str:
     return text
 
 
+def _dedupe_checkout_values(values: list[str]) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        cleaned = re.sub(r"\s+", " ", str(value or "")).strip()
+        if not cleaned:
+            continue
+        key = cleaned.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(cleaned)
+    return result
+
+
+def _as_checkout_list(value: Any) -> list[Any]:
+    if value in (None, ""):
+        return []
+    if isinstance(value, dict):
+        result: list[Any] = []
+        for item in value.values():
+            result.extend(_as_checkout_list(item))
+        return result
+    if isinstance(value, (list, tuple, set)):
+        result = []
+        for item in value:
+            result.extend(_as_checkout_list(item))
+        return result
+    return [value]
+
+
+def _sanitize_checkout_detail_text(value: Any) -> str:
+    text = _sanitize_checkout_text(str(value or ""))
+    if not text:
+        return ""
+    if FINAL_PURCHASE_RE.search(text):
+        return ""
+    if _checkout_text_has_sensitive_marker(text) or _checkout_text_has_mixed_summary(text):
+        return "[checkout detail redacted]"
+    if len(text) > 220:
+        return text[:217].rstrip() + "…"
+    return text
+
+
+def _sanitize_checkout_detail_list(value: Any, limit: int = 12) -> list[str]:
+    return _dedupe_checkout_values([_sanitize_checkout_detail_text(item) for item in _as_checkout_list(value)])[:limit]
+
+
+def _sanitize_checkout_destination_list(value: Any) -> list[str]:
+    return _dedupe_checkout_values([_sanitize_checkout_destination_text(item) for item in _as_checkout_list(value)])[:4]
+
+
+def _sanitize_checkout_payment_list(value: Any) -> list[str]:
+    return _dedupe_checkout_values([_sanitize_checkout_payment_text(item) for item in _as_checkout_list(value)])[:4]
+
+
+def _sanitize_final_purchase_controls(value: Any) -> list[str]:
+    controls: list[str] = []
+    for item in _as_checkout_list(value):
+        text = _sanitize_checkout_text(str(item or ""))
+        if FINAL_PURCHASE_RE.search(text):
+            controls.append(text[:120])
+    return _dedupe_checkout_values(controls)[:8]
+
+
 def _sanitize_checkout_value(value: Any, field_name: str = "") -> Any:
     field = str(field_name or "").lower()
     if isinstance(value, dict):
@@ -891,6 +988,46 @@ def _sanitize_checkout_value(value: Any, field_name: str = "") -> Any:
             return "[sensitive contact/account detail redacted]" if value.strip() else ""
         return _sanitize_checkout_text(value)
     return value
+
+
+def _sanitize_checkout_summary(summary: dict[str, Any], safety: dict[str, Any]) -> dict[str, Any]:
+    final_purchase_controls = _sanitize_final_purchase_controls(safety.get("final_purchase_controls_visible") or summary.get("final_purchase_controls_visible") or [])
+    blocked_metadata: dict[str, Any] = {
+        "final_purchase_controls_present": bool(final_purchase_controls),
+        "final_purchase_control_count": len(final_purchase_controls),
+        "final_purchase_controls_visible": final_purchase_controls,
+        "final_purchase_policy": "Final Buy Now, Place Order, or equivalent order-submission controls are blocked and must not be clicked through ordinary shopping_browser tools.",
+    }
+    if safety.get("blocked_reason"):
+        blocked_metadata["human_takeover_reason"] = _sanitize_checkout_text(str(safety.get("blocked_reason") or ""))
+
+    sanitized: dict[str, Any] = {
+        "operation": "checkout_review_summary",
+        "page_title": _sanitize_checkout_text(str(summary.get("page_title") or safety.get("page_title") or "")),
+        "url": _sanitize_url(str(summary.get("url") or safety.get("url") or "")),
+        "checkout_prep_state": str(safety.get("checkout_prep_state") or "checkout_prep_visible"),
+        "human_takeover_required": bool(safety.get("blocked_reason")),
+        "items": _sanitize_checkout_detail_list(summary.get("items"), limit=10),
+        "totals": _sanitize_checkout_detail_list(summary.get("totals"), limit=8),
+        "delivery": _sanitize_checkout_detail_list(summary.get("delivery"), limit=6),
+        "shipping_destination_city_state_or_label": _sanitize_checkout_destination_list(summary.get("shipping_destination_label_or_city_state")),
+        "payment_method_label_last_four_only": _sanitize_checkout_payment_list(summary.get("payment_method_label_last_four_only")),
+        "surprise_flags": _sanitize_checkout_detail_list(summary.get("surprise_flags"), limit=10),
+        "blocked_metadata": blocked_metadata,
+        "policy": "Sanitized checkout-prep/order-review summary only: structured fields are isolated; street addresses, full payment/account/card numbers, emails, phone numbers, security-code text, raw DOM, cookies, storage, request headers, and ordinary final-purchase controls are not returned as summary fields.",
+    }
+    binding_material = {
+        "items": sanitized["items"],
+        "totals": sanitized["totals"],
+        "delivery": sanitized["delivery"],
+        "shipping_destination_city_state_or_label": sanitized["shipping_destination_city_state_or_label"],
+        "payment_method_label_last_four_only": sanitized["payment_method_label_last_four_only"],
+        "surprise_flags": sanitized["surprise_flags"],
+        "url": sanitized["url"],
+        "final_purchase_controls_present": blocked_metadata["final_purchase_controls_present"],
+    }
+    sanitized["material_summary_binding"] = hashlib.sha256(json.dumps(binding_material, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
+    return sanitized
 
 
 def _check_human_takeover_text(text: str) -> None:
@@ -970,26 +1107,7 @@ def _assert_checkout_click_allowed(metadata: dict[str, Any], effect: str, reason
 def _checkout_summary_from_browser(browser: CdpSession, session_id: str) -> dict[str, Any]:
     safety = _evaluate(browser, session_id, CHECKOUT_PAGE_SAFETY_JS) or {}
     summary = _evaluate(browser, session_id, ORDER_REVIEW_EXTRACT_JS) or {}
-    summary["operation"] = "checkout_review_summary"
-    summary["url"] = _sanitize_url(str(summary.get("url") or safety.get("url") or ""))
-    summary["checkout_prep_state"] = safety.get("checkout_prep_state")
-    summary["human_takeover_required"] = bool(safety.get("blocked_reason"))
-    if safety.get("blocked_reason"):
-        summary["blocked_reason"] = safety.get("blocked_reason")
-    summary["final_purchase_controls_visible"] = safety.get("final_purchase_controls_visible") or []
-    summary = _sanitize_checkout_value(summary)
-    binding_material = {
-        "items": summary.get("items"),
-        "totals": summary.get("totals"),
-        "delivery": summary.get("delivery"),
-        "shipping_destination_label_or_city_state": summary.get("shipping_destination_label_or_city_state"),
-        "payment_method_label_last_four_only": summary.get("payment_method_label_last_four_only"),
-        "surprise_flags": summary.get("surprise_flags"),
-        "url": summary.get("url"),
-    }
-    summary["material_summary_binding"] = hashlib.sha256(json.dumps(binding_material, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
-    summary["final_purchase_policy"] = "Do not click Buy Now, Place Order, or equivalent final submission through ordinary chat/tool use. A trusted Telegram approval token must bind to this material_summary_binding and expire if any material field changes."
-    return summary
+    return _sanitize_checkout_summary(summary, safety)
 
 def _check_shopping_browser() -> bool:
     return shutil.which("kubectl") is not None
@@ -1020,9 +1138,7 @@ def _screenshot_policy(url: str, title: str) -> dict[str, Any]:
     sensitive_url = " ".join([parsed.path, parsed.query, title]).lower()
     checkoutish = re.search(r"checkout|buy|payselect|ship|spc|review|ordering", " ".join([parsed.path, parsed.query, title]), re.IGNORECASE)
     if checkoutish and parsed.scheme == "https" and AMAZON_HOST_RE.search(parsed.netloc):
-        if re.search(r"(signin|login|ap/signin|account|orders|addresses|wallet|payment|passkey|password|captcha|verification)", sensitive_url):
-            raise ValueError("current Amazon page appears to be login, account, payment setup, address edit, order history, CAPTCHA, passkey, or verification scope; Joy must take over before screenshots")
-        return {"mode": "checkout_prep_redacted", "redaction_required": True}
+        raise ValueError("current Amazon page appears to be checkout/order-review scope; screenshots are blocked there. Use shopping_browser_page_snapshot or shopping_browser_current_page_summary for sanitized checkout-prep fields.")
     if re.search(r"(signin|login|ap/signin|checkout|buy|place-order|address|wallet|payment|account|orders|passkey|password|captcha|verification)", sensitive_url):
         raise ValueError("current page appears to be login, checkout, account, payment, address, order, CAPTCHA, or passkey scope; Joy must take over before raw screenshots")
     return {"mode": "standard", "redaction_required": False}
@@ -1747,10 +1863,16 @@ def _current_page_summary() -> dict[str, Any]:
     def run(browser: CdpSession) -> dict[str, Any]:
         target_id = _first_page_target(browser)
         session_id = _attach(browser, target_id)
+        url = str(_evaluate(browser, session_id, "location.href") or "")
+        title = str(_evaluate(browser, session_id, "document.title") or "")
+        if re.search(r"checkout|buy|payselect|ship|spc|review|ordering", " ".join([url, title]), re.IGNORECASE):
+            result = _checkout_summary_from_browser(browser, session_id)
+            result["operation"] = "checkout_prep_current_page_summary"
+            result["summary_note"] = "Checkout-prep pages return isolated sanitized fields instead of generic current-page summary blobs. Final purchase controls are confined to blocked_metadata."
+            return result
         result = _evaluate(browser, session_id, SUMMARY_EXTRACT_JS) or {}
-        location = _evaluate(browser, session_id, "location.href") or ""
-        if location:
-            result["url"] = _sanitize_url(str(location))
+        if url:
+            result["url"] = _sanitize_url(url)
         result["operation"] = "current_page_summary"
         return result
 
@@ -1769,8 +1891,8 @@ def shopping_browser_status_tool(args: dict[str, Any], **_kw: Any) -> str:
             "status": "available",
             "approved_click_effects": ["checkout_prep", "select_shipping_option", "apply_checkout_option"],
             "boundary": "Star may navigate/click ordinary checkout-prep controls under Joy's live supervision and may receive sanitized order-review summaries. Star must pause for login, Bitwarden, passkeys, 2FA, CAPTCHA, suspicious security prompts, payment/address/account edits, or sensitive-information prompts.",
-            "sanitization": "Checkout-prep snapshots and redacted checkout screenshots return item/totals/delivery/surprise-flag lines plus destination/payment labels with street address, full account/card, email, and phone redacted. Redacted checkout screenshots apply opaque browser-side overlays before capture and include the material_summary_binding.",
-            "visual_confirmation": "shopping_browser_screenshot may capture Amazon checkout/order-review pages only in checkout_prep_redacted mode: address/payment/contact/gift/promo/security regions are covered, full-page capture is disabled, and final Place Order remains visible as blocked evidence.",
+            "sanitization": "Checkout-prep snapshots/current-page summaries return isolated structured item/totals/delivery/surprise fields plus destination city-state/abstract label and payment labels. Mixed blobs, sensitive redaction-marker text, and final purchase controls are removed from ordinary summary fields.",
+            "visual_confirmation": "shopping_browser_screenshot blocks Amazon checkout/order-review pages. Use shopping_browser_page_snapshot or shopping_browser_current_page_summary for sanitized checkout-prep fields instead of visual artifacts.",
         },
         "approval_gated_operations": {
             "add_to_cart": "available only through the broad shopping_browser_click flow with approved_effect='add_to_cart' and a human-readable approval reference",
