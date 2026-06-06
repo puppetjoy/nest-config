@@ -694,9 +694,10 @@ CHECKOUT_PREP_CONTROLS_JS = r"""
   const regionFor = (label) => {
     if (/subscribe|subscription|delivery every|one[-\s]?time|purchase option/i.test(label)) return 'purchase_mode';
     if (/shipping speed|shipping option|shipping method|delivery option|delivery date|delivery day|arrives|ship/i.test(label)) return 'shipping_delivery';
-    if (/gift|this is a gift|gift option/i.test(label)) return 'gift_options';
+    if (/payment\s+(summary|method|option)|paying\s+with|gift\s*card|coupon|promo|promotion|claim\s+code|apply|\b(?:visa|mastercard|amex|american express|discover)\b/i.test(label)) return 'payment_gift_card';
+    if (/this is a gift|gift option/i.test(label)) return 'gift_options';
     if (/qty|quantity|delete|remove|item|cart/i.test(label)) return 'cart_line_item';
-    if (/coupon|promo|promotion|gift card|claim code|apply/i.test(label)) return 'coupon_gift_card';
+    if (/coupon|promo|promotion|gift card|claim code|apply/i.test(label)) return 'payment_gift_card';
     if (/back|return to cart|cart|change/i.test(label)) return 'navigation_review';
     return 'checkout_review';
   };
@@ -706,7 +707,7 @@ CHECKOUT_PREP_CONTROLS_JS = r"""
     if (/delivery option|delivery date|delivery day|arrives/i.test(label)) hints.push('select_delivery_option');
     if (/subscribe|subscription|delivery every|one[-\s]?time|purchase option/i.test(label)) hints.push('fix_purchase_mode');
     if (/qty|quantity|delete|remove|item|cart/i.test(label) || (tag === 'SELECT' && /quantity/i.test(label))) hints.push('cart_line_adjustment');
-    if (/gift|coupon|promo|promotion|gift card|claim code|apply|change/i.test(label)) hints.push('apply_checkout_option');
+    if (/payment\s+(summary|method|option)|paying\s+with|gift|coupon|promo|promotion|gift card|claim code|apply|change|\b(?:visa|mastercard|amex|american express|discover)\b/i.test(label)) hints.push('apply_checkout_option');
     if (/continue|checkout|review order/i.test(label)) hints.push('checkout_prep');
     return Array.from(new Set(hints.length ? hints : ['apply_checkout_option']));
   };
@@ -731,7 +732,7 @@ CHECKOUT_PREP_CONTROLS_JS = r"""
       finalPurchaseControls.push(redact(label || rawBits).slice(0, 120));
       continue;
     }
-    if (sensitiveControl.test(rawBits) && !/(shipping|delivery|gift|coupon|promo|claim code|quantity|qty|delete|remove|one[-\s]?time|subscribe|subscription)/i.test(rawBits)) {
+    if (sensitiveControl.test(rawBits) && !/(shipping|delivery|payment\s+(summary|method|option)|paying\s+with|\b(?:visa|mastercard|amex|american express|discover)\b|gift|coupon|promo|claim code|quantity|qty|delete|remove|one[-\s]?time|subscribe|subscription)/i.test(rawBits)) {
       skippedSensitiveControls.push(redact(label || rawBits).slice(0, 120));
       continue;
     }
@@ -1083,14 +1084,69 @@ def _is_checkoutish_page(url: str, title: str = "") -> bool:
     return bool(CHECKOUT_QUERY_PAGE_RE.search(page_material))
 
 
+def _checkout_control_filter_from_expression(expression: str) -> str:
+    text = str(expression or "").lower()
+    if re.search(r"payment|paying|gift\s*card|claim\s*code|promo|coupon|visa|mastercard|amex|american express|discover", text):
+        return "payment_gift_card"
+    if re.search(r"shipping|delivery|arrives|ship", text):
+        return "shipping_delivery"
+    if re.search(r"subscribe|subscription|one[-\s]?time|purchase\s+mode", text):
+        return "purchase_mode"
+    if re.search(r"quantity|qty|delete|remove|cart|line\s*item", text):
+        return "cart_line_item"
+    return ""
+
+
+def _filter_checkout_controls_for_query(checkout_review: dict[str, Any], expression: str) -> str:
+    requested_region = _checkout_control_filter_from_expression(expression)
+    controls = checkout_review.get("checkout_prep_controls")
+    if not requested_region or not isinstance(controls, list):
+        return ""
+    filtered = [control for control in controls if isinstance(control, dict) and str(control.get("region") or "") == requested_region]
+    checkout_review["checkout_prep_controls_filter"] = {
+        "requested_region": requested_region,
+        "full_safe_control_count": len(controls),
+        "filtered_safe_control_count": len(filtered),
+        "note": "The checkout control list was compacted because the read-only query asked for a specific checkout-control category.",
+    }
+    checkout_review["checkout_prep_controls"] = filtered
+    blocked_metadata = checkout_review.get("blocked_metadata")
+    if isinstance(blocked_metadata, dict):
+        blocked_metadata["checkout_prep_safe_control_count_before_filter"] = len(controls)
+        blocked_metadata["checkout_prep_safe_control_filter"] = requested_region
+        blocked_metadata["checkout_prep_safe_control_count"] = len(filtered)
+    return requested_region
+
+
+def _checkout_control_region_counts(controls: Any) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for control in controls if isinstance(controls, list) else []:
+        if not isinstance(control, dict):
+            continue
+        region = str(control.get("region") or "checkout_review")
+        counts[region] = counts.get(region, 0) + 1
+    return counts
+
+
 def _checkout_query_summary_response(checkout_review: dict[str, Any], expression: str, url: str = "", title: str = "") -> dict[str, Any]:
     result = dict(checkout_review)
+    _filter_checkout_controls_for_query(result, expression)
     result["operation"] = "checkout_query_summary"
     result["status"] = "ok"
     result["requested_expression_sha256"] = hashlib.sha256(str(expression or "").encode("utf-8")).hexdigest()
+    result["checkout_prep_control_categories"] = {
+        "regions": _checkout_control_region_counts(checkout_review.get("checkout_prep_controls")),
+        "query_filter_terms": {
+            "payment_gift_card": "payment, paying, gift card, claim code, promo, coupon, or visible card brand such as Visa",
+            "shipping_delivery": "shipping, delivery, arrives, or ship",
+            "purchase_mode": "subscribe, subscription, one-time, or purchase mode",
+            "cart_line_item": "quantity, qty, delete, remove, cart, or line item",
+        },
+    }
     result["query_boundary"] = (
         "Generic shopping_browser_query is restricted on checkout/order-review pages. "
-        "The requested JavaScript was not returned directly; this result contains only the sanitized checkout-prep summary and non-secret controls."
+        "The requested JavaScript was not returned directly; this result contains only the sanitized checkout-prep summary and non-secret controls. "
+        "Ask for a specific checkout-control category such as payment/gift-card controls to receive a compact filtered control list."
     )
     if url and not result.get("url"):
         result["url"] = _sanitize_url(url)
@@ -1309,7 +1365,7 @@ def _sanitize_checkout_control_label(value: Any) -> str:
 def _sanitize_checkout_controls(value: Any) -> list[dict[str, Any]]:
     controls: list[dict[str, Any]] = []
     seen: set[str] = set()
-    allowed_regions = {"purchase_mode", "shipping_delivery", "gift_options", "cart_line_item", "coupon_gift_card", "navigation_review", "checkout_review"}
+    allowed_regions = {"purchase_mode", "shipping_delivery", "gift_options", "cart_line_item", "payment_gift_card", "coupon_gift_card", "navigation_review", "checkout_review"}
     allowed_effects = set(CHECKOUT_APPROVED_EFFECTS)
     for item in value if isinstance(value, list) else []:
         if not isinstance(item, dict):
@@ -3344,6 +3400,18 @@ if __name__ == "__main__":
                     "disabled": False,
                     "viewport_rect": {"x": 10, "y": 20, "width": 15, "height": 15},
                 },
+                {
+                    "selector": "[data-shopping-browser-checkout-control=\"sb-checkout-2\"]",
+                    "label": "Paying with Visa ending in 5252 plus gift card balance Change",
+                    "role": "link",
+                    "tag": "A",
+                    "input_type": "",
+                    "region": "payment_gift_card",
+                    "approved_effect_hints": ["apply_checkout_option"],
+                    "checked": False,
+                    "disabled": False,
+                    "viewport_rect": {"x": 20, "y": 60, "width": 180, "height": 20},
+                },
             ],
         },
     )
@@ -3371,6 +3439,7 @@ if __name__ == "__main__":
         globals()["_evaluate"] = _fake_evaluate
         globals()["_checkout_summary_from_browser"] = lambda _browser, _session_id: generic_checkout_review
         query_result = _query("Array.from(document.querySelectorAll('button,input')).map((node) => node.textContent || node.value || node.getAttribute('aria-label'))")
+        payment_query_result = _query("Find payment and gift card checkout controls")
     finally:
         globals()["_with_browser"] = original_with_browser
         globals()["_target_page_info"] = original_target_page_info
@@ -3385,6 +3454,13 @@ if __name__ == "__main__":
     assert query_result["requested_expression_sha256"]
     assert query_result["checkout_prep_controls"][0]["selector"] == "#sns-item-v2-checkbox-0"
     assert query_result["checkout_prep_controls"][0]["checked"] is False
+    assert query_result["checkout_prep_control_categories"]["regions"]["payment_gift_card"] == 1
+    assert payment_query_result["checkout_prep_controls_filter"]["requested_region"] == "payment_gift_card"
+    assert payment_query_result["checkout_prep_controls_filter"]["full_safe_control_count"] == 2
+    assert payment_query_result["blocked_metadata"]["checkout_prep_safe_control_count_before_filter"] == 2
+    assert len(payment_query_result["checkout_prep_controls"]) == 1
+    assert payment_query_result["checkout_prep_controls"][0]["region"] == "payment_gift_card"
+    assert payment_query_result["checkout_prep_controls"][0]["approved_effect_hints"] == ["apply_checkout_option"]
     assert "Example Street" not in query_json
     assert "12345" not in query_json
     assert "4111" not in query_json
