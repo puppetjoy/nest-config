@@ -90,11 +90,14 @@ define nest::lib::gitlab_runner (
   }
 
   # See: https://docs.gitlab.com/runner/register/index.html#one-line-registration-command
+  # The runner access level is server-side state for glrt-* runner authentication tokens.
+  # Keep the Hiera value as source intent, but do not pass the forbidden flag to register.
+  $_access_level = $access_level
+
   $register_command = [
     'gitlab-runner', 'register',
     '--description', $trusted['certname'],
     '--non-interactive',
-    '--access-level', $access_level,
     $limit_args,
     '--output-limit', '524288',
     '--executor', 'docker',
