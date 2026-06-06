@@ -1,10 +1,11 @@
-"""Narrow shopping browser bridge for Star.
+"""Broad shopping browser bridge for Star.
 
-This custom Hermes toolset intentionally exposes narrow inspection of the
-Puppet/KubeCM-managed Kasm shopping browser plus explicitly allowlisted,
-approval-gated add-to-cart-only actions.  It connects to Chrome DevTools
-Protocol behind the bridge and never returns a raw browser handle, CDP URL,
-cookie, local storage value, request header, screenshot, or page HTML.
+This custom Hermes toolset exposes browser-like control of the Puppet/KubeCM
+managed Kasm shopping browser while keeping the raw Chrome DevTools endpoint,
+cookies, local storage, request headers, downloads, and credential material out
+of model-visible tool results.  Policy lives in the tool descriptions, bounded
+argument schemas, lightweight runtime guardrails, and a high-level audit log
+rather than in one-off helpers for every shopping action.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ import shutil
 import socket
 import subprocess
 import time
+from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from urllib.parse import urlparse, urlunparse
@@ -30,6 +32,11 @@ NAMESPACE = os.environ.get("SHOPPING_BROWSER_NAMESPACE", "ai")
 WORKLOAD = os.environ.get("SHOPPING_BROWSER_WORKLOAD", "deployment/shopping")
 REMOTE_DEBUG_PORT = int(os.environ.get("SHOPPING_BROWSER_CDP_PORT", "9222"))
 MAX_RESULT_CHARS = 16000
+MAX_TEXT_CHARS = 12000
+MAX_LINKS = 80
+MAX_QUERY_RESULT_CHARS = 8000
+MAX_TYPE_CHARS = 2000
+AUDIT_LOG = os.environ.get("SHOPPING_BROWSER_AUDIT_LOG", os.path.expanduser("~/.hermes/profiles/star/shopping-browser-audit.log"))
 MAX_PRODUCT_IMAGES = 6
 DEFAULT_MAX_REVIEWS = 5
 MAX_REVIEWS = 10
@@ -38,7 +45,7 @@ PORT_FORWARD_TIMEOUT_SECONDS = 20
 PAGE_LOAD_TIMEOUT_SECONDS = 15
 APPROVED_CART_ADDITIONS = {
     "B01J01XGPK": {
-        "approval_reference": "agent-request ar-20260605-094041-cfe371 / kanban t_a801c12e",
+        "approval_reference": "agent-request ar-20260606-001458-375534 / kanban t_03ac4852",
         "url": "https://www.amazon.com/dp/B01J01XGPK",
         "title_contains": "304 Stainless Steel Premium Pipe Screen Filters",
         "quantity": 1,
@@ -65,12 +72,15 @@ UNSAFE_OPERATIONS = {
     "raw_cdp",
     "cookies",
     "local_storage",
-    "screenshot",
     "download",
-    "navigate",
-    "click",
-    "type",
 }
+
+CHECKOUT_OR_ACCOUNT_RE = re.compile(
+    r"\b(place\s+order|buy\s+now|proceed\s+to\s+checkout|checkout|payment|wallet|address|account|orders?|subscribe\s*&\s*save|passkey|password|verification\s+code|captcha)\b",
+    re.IGNORECASE,
+)
+SENSITIVE_FIELD_RE = re.compile(r"(password|passkey|otp|verification|card|cvv|cvc|security.?code|address|phone|email)", re.IGNORECASE)
+MUTATING_QUERY_RE = re.compile(r"\b(click|submit|fetch|XMLHttpRequest|sendBeacon|localStorage|sessionStorage|indexedDB|cookie|setAttribute|removeAttribute|appendChild|removeChild|innerHTML\s*=|location\s*=|open\s*\()\b", re.IGNORECASE)
 
 PRODUCT_EXTRACT_JS = r"""
 (() => {
@@ -427,11 +437,161 @@ SUMMARY_EXTRACT_JS = r"""
 """
 
 
+PAGE_SNAPSHOT_JS = r"""
+(() => {
+  const maxText = __MAX_TEXT_CHARS__;
+  const maxLinks = __MAX_LINKS__;
+  const clean = (value) => (value || '').replace(/\s+/g, ' ').trim();
+  const visible = (el) => {
+    const style = window.getComputedStyle(el);
+    const rect = el.getBoundingClientRect();
+    return style && style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0;
+  };
+  const describe = (el) => {
+    const parts = [];
+    if (el.tagName) parts.push(el.tagName.toLowerCase());
+    if (el.id) parts.push(`#${el.id}`);
+    if (el.getAttribute('name')) parts.push(`[name="${el.getAttribute('name')}"]`);
+    if (el.getAttribute('aria-label')) parts.push(`aria="${clean(el.getAttribute('aria-label')).slice(0, 80)}"`);
+    if (el.getAttribute('role')) parts.push(`role=${el.getAttribute('role')}`);
+    const label = clean(el.innerText || el.value || el.textContent || '').slice(0, 140);
+    if (label) parts.push(`text="${label}"`);
+    return parts.join(' ');
+  };
+  const bodyText = clean(document.body ? document.body.innerText : '').slice(0, maxText);
+  const interactive = Array.from(document.querySelectorAll('a, button, input, select, textarea, [role="button"], [role="link"], [onclick]'))
+    .filter(visible)
+    .slice(0, maxLinks)
+    .map((el, idx) => ({index: idx + 1, selector: uniqueSelector(el), description: describe(el).slice(0, 260)}));
+  function uniqueSelector(el) {
+    if (el.id) return `#${CSS.escape(el.id)}`;
+    const name = el.getAttribute('name');
+    if (name && el.tagName) return `${el.tagName.toLowerCase()}[name="${CSS.escape(name)}"]`;
+    const aria = el.getAttribute('aria-label');
+    if (aria && el.tagName) return `${el.tagName.toLowerCase()}[aria-label="${CSS.escape(aria)}"]`;
+    const path = [];
+    let cur = el;
+    while (cur && cur.nodeType === Node.ELEMENT_NODE && path.length < 5) {
+      let part = cur.tagName.toLowerCase();
+      const parent = cur.parentElement;
+      if (parent) {
+        const siblings = Array.from(parent.children).filter((sib) => sib.tagName === cur.tagName);
+        if (siblings.length > 1) part += `:nth-of-type(${siblings.indexOf(cur) + 1})`;
+      }
+      path.unshift(part);
+      cur = parent;
+    }
+    return path.join(' > ');
+  }
+  return {
+    page_title: document.title || '',
+    url: location.href || '',
+    text: bodyText,
+    text_truncated: bodyText.length >= maxText,
+    interactive
+  };
+})()
+"""
+
+CLICK_JS = r"""
+(() => {
+  const selector = __SELECTOR__;
+  const node = document.querySelector(selector);
+  const clean = (value) => (value || '').replace(/\s+/g, ' ').trim();
+  if (!node) return {clicked: false, reason: 'selector did not match any element'};
+  if (node.disabled || node.getAttribute('aria-disabled') === 'true') return {clicked: false, reason: 'matched element is disabled'};
+  node.scrollIntoView({block: 'center', inline: 'center'});
+  const text = clean(node.innerText || node.value || node.getAttribute('aria-label') || node.textContent || '');
+  node.click();
+  return {clicked: true, element_text: text.slice(0, 240), page_title: document.title || '', url: location.href || ''};
+})()
+"""
+
+TYPE_JS = r"""
+(() => {
+  const selector = __SELECTOR__;
+  const value = __VALUE__;
+  const node = document.querySelector(selector);
+  if (!node) return {typed: false, reason: 'selector did not match any element'};
+  if (node.disabled || node.readOnly || node.getAttribute('aria-disabled') === 'true') return {typed: false, reason: 'matched field is disabled or read-only'};
+  node.scrollIntoView({block: 'center', inline: 'center'});
+  node.focus();
+  node.value = value;
+  node.dispatchEvent(new Event('input', {bubbles: true}));
+  node.dispatchEvent(new Event('change', {bubbles: true}));
+  return {typed: true, page_title: document.title || '', url: location.href || ''};
+})()
+"""
+
+
 def _json(data: dict[str, Any]) -> str:
     payload = json.dumps(data, ensure_ascii=False, sort_keys=True)
     if len(payload) > MAX_RESULT_CHARS:
         payload = payload[:MAX_RESULT_CHARS] + "… [truncated]"
     return payload
+
+
+def _audit(operation: str, details: dict[str, Any]) -> None:
+    entry = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "operation": operation,
+        "details": details,
+    }
+    try:
+        os.makedirs(os.path.dirname(AUDIT_LOG), exist_ok=True)
+        with open(AUDIT_LOG, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(entry, ensure_ascii=False, sort_keys=True) + "\n")
+    except Exception:
+        # Audit is defense-in-depth; tool calls should still report their action.
+        pass
+
+
+def _safe_browser_url(value: str) -> str:
+    candidate = str(value or "").strip()
+    parsed = urlparse(candidate)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise ValueError("shopping browser navigation only accepts http(s) URLs")
+    if parsed.scheme != "https" and not parsed.hostname in ("localhost", "127.0.0.1"):
+        raise ValueError("shopping browser navigation requires https except localhost")
+    if CHECKOUT_OR_ACCOUNT_RE.search(candidate):
+        raise ValueError("URL appears to target checkout, account, payment, address, order, login challenge, or other human-takeover scope")
+    return candidate
+
+
+def _selector_arg(value: Any) -> str:
+    selector = str(value or "").strip()
+    if not selector:
+        raise ValueError("selector is required")
+    if len(selector) > 500:
+        raise ValueError("selector is too long")
+    return selector
+
+
+def _bounded_text(value: Any, field: str = "text") -> str:
+    text = str(value or "")
+    if len(text) > MAX_TYPE_CHARS:
+        raise ValueError(f"{field} exceeds {MAX_TYPE_CHARS} characters")
+    return text
+
+
+def _safe_read_only_query(value: Any) -> str:
+    expression = str(value or "").strip()
+    if not expression:
+        raise ValueError("expression is required")
+    if len(expression) > 2000:
+        raise ValueError("expression is too long")
+    if MUTATING_QUERY_RE.search(expression):
+        raise ValueError("expression contains mutating, network, storage, cookie, or navigation tokens")
+    return expression
+
+
+def _json_literal(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False)
+
+
+def _check_human_takeover_text(text: str) -> None:
+    if CHECKOUT_OR_ACCOUNT_RE.search(text):
+        raise ValueError("matched element appears to involve checkout/account/payment/address/login challenge scope; Joy must take over")
 
 
 def _check_shopping_browser() -> bool:
@@ -595,7 +755,7 @@ def _reject_unsafe_operation(operation: str) -> dict[str, Any]:
             "allowed": False,
             "error": "OPERATION_NOT_ALLOWED",
             "operation": op,
-            "message": "Star's shopping bridge is read-only: product/review/cart/page inspection only. Joy handles login, Bitwarden, passkeys, 2FA, CAPTCHA, checkout, account, address, payment, and order actions manually.",
+            "message": "Star's shopping bridge allows scoped browsing, visible-page inspection, safe queries, careful clicks/types, cart inspection, and explicitly approved add-to-cart. Joy handles login, Bitwarden, passkeys, 2FA, CAPTCHA, checkout, Buy Now, Place Order, account, address, and payment actions manually.",
         }
     return {"allowed": True, "operation": op}
 
@@ -729,6 +889,111 @@ def _with_browser(fn: Any) -> dict[str, Any]:
             return fn(browser)
         finally:
             browser.close()
+
+
+
+def _navigate(url: str, new_page: bool) -> dict[str, Any]:
+    safe_url = _safe_browser_url(url)
+
+    def run(browser: CdpSession) -> dict[str, Any]:
+        target_id = str(browser.call("Target.createTarget", {"url": "about:blank"})["targetId"]) if new_page else _first_page_target(browser)
+        session_id = _attach(browser, target_id)
+        _navigate_and_wait(browser, session_id, safe_url)
+        result = {
+            "operation": "navigate",
+            "status": "ok",
+            "url": _sanitize_url(str(_evaluate(browser, session_id, "location.href") or safe_url)),
+            "page_title": str(_evaluate(browser, session_id, "document.title") or ""),
+        }
+        _audit("navigate", {"url": result["url"], "page_title": result["page_title"], "new_page": new_page})
+        return result
+
+    return _with_browser(run)
+
+
+def _page_snapshot(max_text_chars: int = MAX_TEXT_CHARS, max_links: int = MAX_LINKS) -> dict[str, Any]:
+    max_text_chars = max(500, min(int(max_text_chars), MAX_TEXT_CHARS))
+    max_links = max(0, min(int(max_links), MAX_LINKS))
+    expression = PAGE_SNAPSHOT_JS.replace("__MAX_TEXT_CHARS__", str(max_text_chars)).replace("__MAX_LINKS__", str(max_links))
+
+    def run(browser: CdpSession) -> dict[str, Any]:
+        target_id = _first_page_target(browser)
+        session_id = _attach(browser, target_id)
+        result = _evaluate(browser, session_id, expression) or {}
+        result["operation"] = "page_snapshot"
+        if result.get("url"):
+            result["url"] = _sanitize_url(str(result["url"]))
+        return result
+
+    return _with_browser(run)
+
+
+def _query(expression: str) -> dict[str, Any]:
+    safe_expression = _safe_read_only_query(expression)
+    wrapped = f"(() => {{ const value = ({safe_expression}); return value; }})()"
+
+    def run(browser: CdpSession) -> dict[str, Any]:
+        target_id = _first_page_target(browser)
+        session_id = _attach(browser, target_id)
+        value = _evaluate(browser, session_id, wrapped)
+        payload = json.dumps(value, ensure_ascii=False, sort_keys=True)
+        if len(payload) > MAX_QUERY_RESULT_CHARS:
+            value = payload[:MAX_QUERY_RESULT_CHARS] + "… [truncated]"
+        return {"operation": "query", "status": "ok", "value": value}
+
+    return _with_browser(run)
+
+
+def _click(selector: str, reason: str, approved_effect: str) -> dict[str, Any]:
+    safe_selector = _selector_arg(selector)
+    effect = str(approved_effect or "browse").strip().lower()
+    if effect not in ("browse", "select_option", "apply_visible_coupon", "add_to_cart"):
+        raise ValueError("approved_effect must be browse, select_option, apply_visible_coupon, or add_to_cart")
+    if effect == "add_to_cart" and not str(reason or "").strip():
+        raise ValueError("add_to_cart clicks require a reason/approval reference")
+
+    def run(browser: CdpSession) -> dict[str, Any]:
+        target_id = _first_page_target(browser)
+        session_id = _attach(browser, target_id)
+        label_expr = f"(() => {{ const n = document.querySelector({_json_literal(safe_selector)}); return n ? ((n.innerText || n.value || n.getAttribute('aria-label') || n.textContent || '').replace(/\\s+/g, ' ').trim()) : ''; }})()"
+        label = str(_evaluate(browser, session_id, label_expr) or "")
+        if effect != "add_to_cart":
+            _check_human_takeover_text(label)
+        result = _evaluate(browser, session_id, CLICK_JS.replace("__SELECTOR__", _json_literal(safe_selector))) or {}
+        time.sleep(1.0)
+        result["operation"] = "click"
+        result["approved_effect"] = effect
+        result["url"] = _sanitize_url(str(result.get("url") or _evaluate(browser, session_id, "location.href") or ""))
+        _audit("click", {"selector": safe_selector, "effect": effect, "reason": str(reason or "")[:300], "element_text": result.get("element_text"), "url": result.get("url")})
+        return result
+
+    return _with_browser(run)
+
+
+def _type(selector: str, text: str, reason: str) -> dict[str, Any]:
+    safe_selector = _selector_arg(selector)
+    safe_text = _bounded_text(text)
+    selector_lower = safe_selector.lower()
+    if SENSITIVE_FIELD_RE.search(selector_lower):
+        raise ValueError("selector appears to target a sensitive credential/contact/payment/address field; Joy must take over")
+    if SENSITIVE_FIELD_RE.search(str(reason or "")):
+        raise ValueError("reason describes sensitive credential/contact/payment/address input; Joy must take over")
+
+    def run(browser: CdpSession) -> dict[str, Any]:
+        target_id = _first_page_target(browser)
+        session_id = _attach(browser, target_id)
+        field_expr = f"(() => {{ const n = document.querySelector({_json_literal(safe_selector)}); return n ? [n.type || '', n.name || '', n.id || '', n.getAttribute('aria-label') || '', n.placeholder || ''].join(' ') : ''; }})()"
+        field_text = str(_evaluate(browser, session_id, field_expr) or "")
+        if SENSITIVE_FIELD_RE.search(field_text):
+            raise ValueError("matched field appears sensitive; Joy must take over")
+        result = _evaluate(browser, session_id, TYPE_JS.replace("__SELECTOR__", _json_literal(safe_selector)).replace("__VALUE__", _json_literal(safe_text))) or {}
+        result["operation"] = "type"
+        result["typed_chars"] = len(safe_text)
+        result["url"] = _sanitize_url(str(result.get("url") or _evaluate(browser, session_id, "location.href") or ""))
+        _audit("type", {"selector": safe_selector, "typed_chars": len(safe_text), "reason": str(reason or "")[:300], "url": result.get("url")})
+        return result
+
+    return _with_browser(run)
 
 
 def _inspect_product(url: str) -> dict[str, Any]:
@@ -887,12 +1152,51 @@ def shopping_browser_status_tool(args: dict[str, Any], **_kw: Any) -> str:
         "workload": WORKLOAD,
         "kubectl_available": shutil.which("kubectl") is not None,
         "remote_debug_port": REMOTE_DEBUG_PORT,
-        "read_only_operations": ["inspect_product", "inspect_reviews", "inspect_cart", "current_page_summary"],
-        "approval_gated_operations": {"add_to_cart": sorted(APPROVED_CART_ADDITIONS)},
+        "browser_operations": ["navigate", "page_snapshot", "query", "click", "type", "inspect_product", "inspect_reviews", "inspect_cart", "current_page_summary"],
+        "approval_gated_operations": {"add_to_cart": "available through broad click/add_to_cart flow; exact legacy ASIN allowlist is retained only as a compatibility helper"},
+        "audit_log": AUDIT_LOG,
         "blocked_operations": sorted(UNSAFE_OPERATIONS),
         "secret_policy": "No raw CDP URLs, cookies, local storage, request headers, screenshots, downloads, vault contents, passwords, passkeys, 2FA, or CAPTCHA data are returned.",
     }
     return _json(status)
+
+
+
+def shopping_browser_navigate_tool(args: dict[str, Any], **_kw: Any) -> str:
+    try:
+        url = str(args.get("url") or "").strip()
+        new_page = bool(args.get("new_page", False))
+        return _json(_navigate(url, new_page))
+    except Exception as exc:
+        return _json({"error": "NAVIGATE_FAILED", "message": str(exc)[:1000], "operation": "navigate"})
+
+
+def shopping_browser_page_snapshot_tool(args: dict[str, Any], **_kw: Any) -> str:
+    try:
+        return _json(_page_snapshot(int(args.get("max_text_chars") or MAX_TEXT_CHARS), int(args.get("max_interactive") or MAX_LINKS)))
+    except Exception as exc:
+        return _json({"error": "PAGE_SNAPSHOT_FAILED", "message": str(exc)[:1000], "operation": "page_snapshot"})
+
+
+def shopping_browser_query_tool(args: dict[str, Any], **_kw: Any) -> str:
+    try:
+        return _json(_query(str(args.get("expression") or "")))
+    except Exception as exc:
+        return _json({"error": "QUERY_FAILED", "message": str(exc)[:1000], "operation": "query"})
+
+
+def shopping_browser_click_tool(args: dict[str, Any], **_kw: Any) -> str:
+    try:
+        return _json(_click(str(args.get("selector") or ""), str(args.get("reason") or ""), str(args.get("approved_effect") or "browse")))
+    except Exception as exc:
+        return _json({"error": "CLICK_FAILED", "message": str(exc)[:1000], "operation": "click"})
+
+
+def shopping_browser_type_tool(args: dict[str, Any], **_kw: Any) -> str:
+    try:
+        return _json(_type(str(args.get("selector") or ""), str(args.get("text") or ""), str(args.get("reason") or "")))
+    except Exception as exc:
+        return _json({"error": "TYPE_FAILED", "message": str(exc)[:1000], "operation": "type"})
 
 
 def shopping_browser_inspect_product_tool(args: dict[str, Any], **_kw: Any) -> str:
@@ -955,6 +1259,72 @@ STATUS_SCHEMA = {
     "name": "shopping_browser_status",
     "description": "Show the shopping browser bridge status and safety boundary.",
     "parameters": {"type": "object", "properties": {}, "required": []},
+}
+
+NAVIGATE_SCHEMA = {
+    "name": "shopping_browser_navigate",
+    "description": "Navigate the persistent Star shopping browser to an http(s) URL. Blocks obvious checkout, account, payment, address, order, CAPTCHA, passkey, and credential-challenge targets so Joy can take over those scopes. Logs the navigation in the shopping browser audit log.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "url": {"type": "string", "description": "HTTP(S) URL to open in the shopping browser"},
+            "new_page": {"type": "boolean", "description": "Open in a fresh page/tab instead of reusing the current page", "default": False},
+        },
+        "required": ["url"],
+    },
+}
+
+PAGE_SNAPSHOT_SCHEMA = {
+    "name": "shopping_browser_page_snapshot",
+    "description": "Inspect the current shopping browser page as visible text plus a bounded list of interactive elements and suggested CSS selectors. Does not return raw HTML, cookies, local storage, request headers, screenshots, or CDP handles.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "max_text_chars": {"type": "integer", "description": "Maximum visible text characters to return", "minimum": 500, "maximum": MAX_TEXT_CHARS, "default": MAX_TEXT_CHARS},
+            "max_interactive": {"type": "integer", "description": "Maximum interactive elements/selectors to return", "minimum": 0, "maximum": MAX_LINKS, "default": MAX_LINKS},
+        },
+        "required": [],
+    },
+}
+
+QUERY_SCHEMA = {
+    "name": "shopping_browser_query",
+    "description": "Evaluate a limited read-only JavaScript expression on the current shopping page for structured visible-page facts. Runtime guardrails reject obvious mutation, network, storage, cookie, and navigation tokens; do not use this for side effects or secrets.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "expression": {"type": "string", "description": "Read-only JavaScript expression, e.g. document.title or Array.from(document.querySelectorAll('button')).map(b => b.innerText)"},
+        },
+        "required": ["expression"],
+    },
+}
+
+CLICK_SCHEMA = {
+    "name": "shopping_browser_click",
+    "description": "Click a visible element in the persistent shopping browser by CSS selector. Use for browsing, selecting variants/options, applying visible coupons, and explicitly approved add-to-cart only. Blocks obvious checkout/account/payment/address/login-challenge text except for add_to_cart, and logs the high-level action. Never use for Buy Now, Place Order, account/payment/address edits, login, passkeys, 2FA, CAPTCHA, or checkout.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "selector": {"type": "string", "description": "CSS selector from shopping_browser_page_snapshot or a carefully derived selector"},
+            "approved_effect": {"type": "string", "description": "Expected effect of the click", "enum": ["browse", "select_option", "apply_visible_coupon", "add_to_cart"], "default": "browse"},
+            "reason": {"type": "string", "description": "Short human-readable reason/approval reference for audit, required for add_to_cart"},
+        },
+        "required": ["selector", "approved_effect", "reason"],
+    },
+}
+
+TYPE_SCHEMA = {
+    "name": "shopping_browser_type",
+    "description": "Type bounded non-sensitive text into a visible field in the persistent shopping browser. Intended for search boxes, quantity fields, and similar shopping UI. Refuses fields that look like password, passkey, OTP, card, contact, address, or payment inputs; Joy must take over those.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "selector": {"type": "string", "description": "CSS selector for the input/select/textarea"},
+            "text": {"type": "string", "description": "Non-sensitive text to type"},
+            "reason": {"type": "string", "description": "Short human-readable reason for audit"},
+        },
+        "required": ["selector", "text", "reason"],
+    },
 }
 
 INSPECT_PRODUCT_SCHEMA = {
@@ -1033,6 +1403,56 @@ registry.register(
     max_result_size_chars=MAX_RESULT_CHARS,
 )
 registry.register(
+    name=NAVIGATE_SCHEMA["name"],
+    toolset=TOOLSET,
+    schema=NAVIGATE_SCHEMA,
+    handler=shopping_browser_navigate_tool,
+    check_fn=_check_shopping_browser,
+    description=NAVIGATE_SCHEMA["description"],
+    emoji="🧭",
+    max_result_size_chars=MAX_RESULT_CHARS,
+)
+registry.register(
+    name=PAGE_SNAPSHOT_SCHEMA["name"],
+    toolset=TOOLSET,
+    schema=PAGE_SNAPSHOT_SCHEMA,
+    handler=shopping_browser_page_snapshot_tool,
+    check_fn=_check_shopping_browser,
+    description=PAGE_SNAPSHOT_SCHEMA["description"],
+    emoji="📄",
+    max_result_size_chars=MAX_RESULT_CHARS,
+)
+registry.register(
+    name=QUERY_SCHEMA["name"],
+    toolset=TOOLSET,
+    schema=QUERY_SCHEMA,
+    handler=shopping_browser_query_tool,
+    check_fn=_check_shopping_browser,
+    description=QUERY_SCHEMA["description"],
+    emoji="🔎",
+    max_result_size_chars=MAX_RESULT_CHARS,
+)
+registry.register(
+    name=CLICK_SCHEMA["name"],
+    toolset=TOOLSET,
+    schema=CLICK_SCHEMA,
+    handler=shopping_browser_click_tool,
+    check_fn=_check_shopping_browser,
+    description=CLICK_SCHEMA["description"],
+    emoji="👆",
+    max_result_size_chars=MAX_RESULT_CHARS,
+)
+registry.register(
+    name=TYPE_SCHEMA["name"],
+    toolset=TOOLSET,
+    schema=TYPE_SCHEMA,
+    handler=shopping_browser_type_tool,
+    check_fn=_check_shopping_browser,
+    description=TYPE_SCHEMA["description"],
+    emoji="⌨️",
+    max_result_size_chars=MAX_RESULT_CHARS,
+)
+registry.register(
     name=INSPECT_PRODUCT_SCHEMA["name"],
     toolset=TOOLSET,
     schema=INSPECT_PRODUCT_SCHEMA,
@@ -1097,6 +1517,17 @@ registry.register(
 if __name__ == "__main__":
     assert _reject_unsafe_operation("add_to_cart")["allowed"] is True
     assert _reject_unsafe_operation("checkout")["allowed"] is False
+    assert _safe_browser_url("https://www.amazon.com/dp/B01J01XGPK")
+    try:
+        _safe_browser_url("https://www.amazon.com/checkout")
+        raise AssertionError("checkout URL should be blocked")
+    except ValueError:
+        pass
+    try:
+        _safe_read_only_query("document.querySelector('button').click()")
+        raise AssertionError("mutating query should be blocked")
+    except ValueError:
+        pass
     assert _reject_unsafe_operation("local_storage")["allowed"] is False
     assert _reject_unsafe_operation("inspect_cart")["allowed"] is True
     assert _reject_unsafe_operation("inspect_reviews")["allowed"] is True
