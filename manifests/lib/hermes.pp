@@ -350,7 +350,8 @@ ${profile_toolsets_yaml}
       web:
         backend: tavily
         search_backend: tavily
-${image_gen_yaml}      voice:
+${image_gen_yaml}
+      voice:
         auto_tts: ${voice_auto_tts}
       stt:
         enabled: ${stt_enabled}
