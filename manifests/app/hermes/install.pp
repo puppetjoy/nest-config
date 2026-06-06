@@ -85,9 +85,11 @@ class nest::app::hermes::install {
     'patch_hermes_banner_logo_suppression',
     'patch_hermes_cli_custom_toolset_validation',
     'patch_hermes_kanban_agent_request_notification_hook',
+    'patch_hermes_kanban_tools_test_isolate_board_env',
     'patch_hermes_kanban_agent_request_unblocked_summary',
     'patch_hermes_kanban_agent_request_dispatch_notification_hook',
     'patch_hermes_kanban_agent_request_failure_notification_hook',
+    'patch_hermes_kanban_agent_request_failure_notification_posttxn',
     'patch_hermes_kanban_gave_up_running_race_repair',
     'patch_hermes_kanban_dispatcher_profile_scope',
     'patch_hermes_kanban_actionable_attention',
@@ -104,6 +106,28 @@ class nest::app::hermes::install {
     'patch_hermes_dashboard_rich_art_spans',
     'patch_hermes_dashboard_chat_truecolor_env',
     'patch_hermes_dashboard_skin_branding',
+  ]
+  $broker_patch_execs = [
+    'patch_hermes_agent_request_review_handoff_flow',
+    'patch_hermes_agent_request_worktree_cleanup',
+    'patch_hermes_agent_request_telegram_unstuck',
+    'patch_hermes_agent_request_telegram_voice_notifications',
+    'patch_hermes_agent_request_recipient_profile_tts',
+    'patch_hermes_agent_request_comment_label',
+    'patch_hermes_agent_request_review_question_answer',
+    'patch_hermes_agent_request_dev_board_labels',
+    'patch_hermes_agent_request_blocking_child_review_guard',
+    'patch_hermes_agent_request_blocking_child_wakeup',
+    'patch_hermes_agent_request_superseded_review_parent',
+    'patch_hermes_agent_request_stale_blocked_parent_reconcile',
+    'patch_hermes_agent_request_dev_board_override',
+    'patch_hermes_agent_request_dev_board_current_db',
+    'patch_hermes_agent_request_notification_narrow_redaction',
+    'patch_hermes_agent_request_child_task_notifications',
+    'patch_hermes_agent_request_review_requested_attention',
+    'patch_hermes_agent_request_future_milestone_dependency',
+    'patch_hermes_agent_request_direct_kanban_fallback_review',
+    'patch_hermes_agent_request_direct_kanban_fallback_review_test',
   ]
 
   exec { 'reset_hermes_source_for_removed_kanban_diagnostic_patches':
@@ -129,12 +153,28 @@ class nest::app::hermes::install {
     ensure => absent,
   }
 
+  exec { 'cleanup_hermes_patch_artifacts':
+    command => "/bin/rm -rf ${source_dir}/build ${broker_source_dir}/build ${broker_source_dir}/src/hermes_agent_request_broker.egg-info && /usr/bin/find ${source_dir} ${broker_source_dir} -name '*.orig' -delete && /usr/bin/find ${source_dir} ${broker_source_dir} -name '*.rej' -delete && /usr/bin/find ${source_dir} ${broker_source_dir} -name '*.pyc' -delete && /usr/bin/find ${source_dir} ${broker_source_dir} -name '__pycache__' -exec /bin/rm -rf {} +",
+    onlyif  => "/bin/sh -c 'test -e ${source_dir}/build || test -e ${broker_source_dir}/build || test -e ${broker_source_dir}/src/hermes_agent_request_broker.egg-info || /usr/bin/find ${source_dir} ${broker_source_dir} -name \"*.orig\" -print -quit | /bin/grep -q . || /usr/bin/find ${source_dir} ${broker_source_dir} -name \"*.rej\" -print -quit | /bin/grep -q . || /usr/bin/find ${source_dir} ${broker_source_dir} -name \"*.pyc\" -print -quit | /bin/grep -q . || /usr/bin/find ${source_dir} ${broker_source_dir} -name \"__pycache__\" -print -quit | /bin/grep -q .'",
+    require => Exec[$patch_execs + $broker_patch_execs],
+  }
+
+  exec { 'cleanup_hermes_install_artifacts':
+    command => "/bin/rm -rf ${source_dir}/hermes_agent.egg-info ${broker_source_dir}/src/hermes_agent_request_broker.egg-info && /usr/bin/find ${venv_dir}/lib/python*/site-packages -name '*.orig' -delete && /usr/bin/find ${venv_dir}/lib/python*/site-packages -name '*.rej' -delete",
+    onlyif  => "/bin/sh -c 'test -e ${source_dir}/hermes_agent.egg-info || test -e ${broker_source_dir}/src/hermes_agent_request_broker.egg-info || /usr/bin/find ${venv_dir}/lib/python*/site-packages -name \"*.orig\" -print -quit | /bin/grep -q . || /usr/bin/find ${venv_dir}/lib/python*/site-packages -name \"*.rej\" -print -quit | /bin/grep -q .'",
+    require => [
+      Exec['install_hermes_agent'],
+      Exec['install_hermes_agent_request_broker'],
+    ],
+  }
+
   exec { 'install_hermes_agent':
     command     => "${venv_pip} install --upgrade --force-reinstall ${source_dir} && git -C ${source_dir} rev-parse HEAD > ${git_revision_file}",
     unless      => "test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent')\" && /bin/grep -q 'app.state.allow_public = allow_public' ${venv_dir}/lib/python*/site-packages/hermes_cli/web_server.py && /bin/grep -q 'if _pl <= 0:' ${venv_dir}/lib/python*/site-packages/gateway/run.py && /bin/grep -q 'chat_id=str(query_chat_id or' ${venv_dir}/lib/python*/site-packages/gateway/platforms/telegram.py && /bin/grep -q 'handle_telegram_reply' ${venv_dir}/lib/python*/site-packages/gateway/platforms/telegram.py && /bin/grep -q 'handle_telegram_unstuck' ${venv_dir}/lib/python*/site-packages/gateway/platforms/telegram.py && ! /bin/grep -q 'handle_telegram_callback(token, actor=str' ${venv_dir}/lib/python*/site-packages/gateway/platforms/telegram.py && /bin/grep -q '_banner_hero_renderable' ${venv_dir}/lib/python*/site-packages/hermes_cli/banner.py && /bin/grep -q 'banner_subtitle' ${venv_dir}/lib/python*/site-packages/hermes_cli/banner.py && /bin/grep -q 'discover_builtin_tools()' ${venv_dir}/lib/python*/site-packages/cli.py && /bin/grep -q '_notify_agent_request_event' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q 'agent_request_task_completed' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q 'kanban_block_review_required' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q '_prod_agent_requests_smoke_guard' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q '_reject_prod_agent_requests_smoke_task' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_db.py && /bin/grep -q 'Approved/unblocked/resumed; task is eligible to continue' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q '_notify_agent_request_dispatch_event' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_db.py && /bin/grep -q 'Task auto-blocked after' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_db.py && /bin/grep -q 'repair_gave_up_running_divergence' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_db.py && /bin/grep -q 'repair-gave-up-race' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban.py && /bin/grep -q 'dispatcher_profile=dispatcher_profile' ${venv_dir}/lib/python*/site-packages/gateway/run.py && /bin/grep -q '_attention_summary_for_task' ${venv_dir}/lib/python*/site-packages/plugins/kanban/dashboard/plugin_api.py && /bin/grep -q 'taskAttentionSummary' ${venv_dir}/lib/python*/site-packages/plugins/kanban/dashboard/dist/index.js && /bin/grep -q 'BOARD_COLUMN_METADATA' ${venv_dir}/lib/python*/site-packages/plugins/kanban/dashboard/plugin_api.py && /bin/grep -q 'Agent-request review handoffs are different' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_db.py && /bin/grep -q 'cleanup_terminal_task_resources' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q 'json.loads(_ok(task_id=tid, run_id=run.id if run else None))' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q '_summarize_text_for_voice_reply' ${venv_dir}/lib/python*/site-packages/gateway/run.py",
     environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
     path        => ['/bin', '/usr/bin'],
     require     => [
+      Exec['cleanup_hermes_patch_artifacts'],
       Exec['create_hermes_venv'],
       Exec['patch_hermes_dashboard_insecure_websockets'],
       Exec['patch_hermes_telegram_tool_preview_length'],
@@ -1010,6 +1050,7 @@ class nest::app::hermes::install {
     environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
     path        => ['/bin', '/usr/bin'],
     require     => [
+      Exec['cleanup_hermes_patch_artifacts'],
       Exec['create_hermes_venv'],
       Exec['patch_hermes_agent_request_review_handoff_flow'],
       Exec['patch_hermes_agent_request_worktree_cleanup'],
