@@ -1,5 +1,5 @@
---- a/src/agent_request_broker/common.py	2026-06-05 20:28:35.617721650 -0400
-+++ b/src/agent_request_broker/common.py	2026-06-05 20:58:17.364972943 -0400
+--- a/src/agent_request_broker/common.py
++++ b/src/agent_request_broker/common.py
 @@ -6,8 +6,10 @@
  import os
  import re
@@ -11,7 +11,7 @@
  from pathlib import Path
  from typing import Any
 
-@@ -143,6 +145,79 @@
+@@ -143,6 +145,125 @@
                      os.environ[key] = value
 
 
@@ -20,23 +20,51 @@
 +    return value in {"1", "true", "yes", "on"}
 +
 +
-+def _voice_summary_for_notification(message: str, *, max_chars: int = 700) -> str:
-+    text = clean_text(message, max_len=2000)
++def _voice_summary_part(value: str, *, max_chars: int = 120) -> str:
++    text = clean_text(value, max_len=max(max_chars * 4, max_chars + 20))
 +    text = re.sub(r"https?://\S+", "link", text)
 +    text = re.sub(r"[`*_#>\[\]()]", "", text)
-+    text = re.sub(r"\s+", " ", text).strip()
-+    if not text:
++    text = re.sub(r"\s+", " ", text).strip(" -–—:.;")
++    if len(text) > max_chars:
++        text = text[:max_chars].rsplit(" ", 1)[0].strip(" -–—:.;") + "…"
++    return text
++
++
++def _voice_summary_for_notification(message: str, *, max_chars: int = 220) -> str:
++    """Return a one-sentence spoken summary for a verbose text notification."""
++    lines = [line.strip() for line in clean_text(message, max_len=3900).splitlines() if line.strip()]
++    if not lines:
 +        return ""
 +
-+    # Agent-request notifications usually put the actionable headline first.
-+    # Keep that shape, but make it conversational for a voice alert.
-+    text = re.sub(r"^(?:[\W_]*)(?:Agent request|Kanban|Task)[:：]?\s*", "", text, flags=re.I)
-+    if len(text) > max_chars:
-+        text = text[:max_chars].rsplit(" ", 1)[0].strip() + "…"
-+    return f"Joy, Talon needs your attention: {text}"
++    headline = _voice_summary_part(lines[0], max_chars=80)
++    headline = re.sub(r"^(?:[\W_]*)(?:Agent request|Kanban|Task)[:：]?\s*", "", headline, flags=re.I)
++    headline = headline or "agent request update"
++
++    fields: dict[str, str] = {}
++    for line in lines[1:]:
++        if ":" not in line:
++            continue
++        key, value = line.split(":", 1)
++        key = re.sub(r"\s+", " ", key.strip().casefold())
++        if key in {"title", "subject", "next"} and key not in fields:
++            fields[key] = _voice_summary_part(value, max_chars=140)
++
++    subject = fields.get("subject") or fields.get("title")
++    next_step = fields.get("next")
++    parts = [f"Joy, agent request {headline}"]
++    if subject:
++        parts.append(subject)
++    if next_step:
++        parts.append(next_step)
++    summary = ". ".join(part for part in parts if part).strip()
++    if not summary.endswith(('.', '!', '?', '…')):
++        summary += "."
++    if len(summary) > max_chars:
++        summary = summary[:max_chars].rsplit(" ", 1)[0].strip(" -–—:.;") + "…"
++    return summary
 +
 +
-+def _telegram_send_voice_notification(token: str, chat_id: str, message: str) -> dict[str, Any]:
++def _telegram_send_voice_notification(token: str, chat_id: str, message: str, *, reply_to_message_id: int | None = None) -> dict[str, Any]:
 +    summary = _voice_summary_for_notification(message)
 +    if not summary:
 +        return {"sent": False, "reason": "empty voice summary"}
@@ -54,13 +82,29 @@
 +        result = json.loads(result_json)
 +        actual_path = Path(result.get("file_path") or audio_path)
 +        if not result.get("success") or not actual_path.is_file():
-+            return {"sent": False, "reason": result.get("error") or "TTS failed"}
++            return {"sent": False, "reason": result.get("error") or "TTS failed", "summary": summary}
 +
 +        try:
 +            boundary = f"----hermes-agent-request-{uuid.uuid4().hex}"
 +            body = bytearray()
-+            body.extend(f"--{boundary}\r\n".encode())
-+            body.extend(f'Content-Disposition: form-data; name="chat_id"\r\n\r\n{chat_id}\r\n'.encode())
++
++            def add_field(name: str, value: str) -> None:
++                body.extend(f"--{boundary}\r\n".encode())
++                body.extend(f'Content-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode())
++
++            add_field("chat_id", chat_id)
++            if reply_to_message_id is not None:
++                add_field(
++                    "reply_parameters",
++                    json.dumps(
++                        {
++                            "message_id": reply_to_message_id,
++                            "chat_id": chat_id,
++                            "allow_sending_without_reply": True,
++                        },
++                        separators=(",", ":"),
++                    ),
++                )
 +            body.extend(f"--{boundary}\r\n".encode())
 +            body.extend(f'Content-Disposition: form-data; name="voice"; filename="{actual_path.name}"\r\n'.encode())
 +            body.extend(b"Content-Type: audio/ogg\r\n\r\n")
@@ -78,6 +122,8 @@
 +                "sent": bool(payload.get("ok")),
 +                "ok": payload.get("ok"),
 +                "message_id": ((payload.get("result") or {}).get("message_id")),
++                "reply_to_message_id": reply_to_message_id,
++                "summary": summary,
 +            }
 +        finally:
 +            try:
@@ -85,13 +131,13 @@
 +            except OSError:
 +                pass
 +    except Exception as exc:  # noqa: BLE001 - voice notification remains best-effort
-+        return {"sent": False, "reason": str(exc)}
++        return {"sent": False, "reason": str(exc), "summary": summary}
 +
 +
  def telegram_send(
      message: str,
      *,
-@@ -170,11 +245,14 @@
+@@ -170,11 +291,14 @@
      try:
          with urllib.request.urlopen(request, timeout=10) as response:
              payload = json.loads(response.read().decode("utf-8"))
@@ -103,7 +149,122 @@
              "profile": profile or None,
          }
 +        if result["sent"] and _telegram_voice_notifications_enabled():
-+            result["voice"] = _telegram_send_voice_notification(token, chat_id, message)
++            result["voice"] = _telegram_send_voice_notification(token, chat_id, message, reply_to_message_id=result.get("message_id"))
 +        return result
      except Exception as exc:  # noqa: BLE001 - report best-effort notification failure
          return {"sent": False, "reason": str(exc), "profile": profile or None}
+--- a/tests/test_agent_request_broker.py
++++ b/tests/test_agent_request_broker.py
+@@ -307,6 +307,112 @@
+                     os.environ[key] = value
+
+
++
++def test_voice_summary_is_bounded_and_request_aware():
++    from agent_request_broker import common
++
++    message = """🦉 Agent request approved
++Title: CLI approval probe
++Subject: Restart Hermes gateway without waiting through backoff loops
++Next: Approved: remove progressive restart backoff, deploy, apply Puppet, restart Talon, and verify.
++Route: Talon → Talon
++ID: ar-20260606-000000-deadbeef
++Task: t_deadbeef
++
++Proposal:
++This verbose proposal body should not be read aloud in full. """
++
++    summary = common._voice_summary_for_notification(message)
++
++    assert len(summary) <= 220
++    assert summary.startswith("Joy, agent request approved.")
++    assert "Restart Hermes gateway" in summary
++    assert "remove progressive restart backoff" in summary
++    assert "ar-20260606" not in summary
++    assert "t_deadbeef" not in summary
++    assert "verbose proposal body" not in summary
++
++
++def test_telegram_voice_notification_replies_to_text_message_with_summary():
++    from agent_request_broker import common
++
++    keys = ["AGENT_REQUEST_TELEGRAM_VOICE_NOTIFY", "TELEGRAM_BOT_TOKEN", "TELEGRAM_HOME_CHANNEL"]
++    old_env = {key: os.environ.get(key) for key in keys}
++    old_urlopen = common.urllib.request.urlopen
++    old_tts = sys.modules.get("tools.tts_tool")
++    requests = []
++    spoken = []
++
++    class FakeResponse:
++        def __init__(self, payload: bytes):
++            self.payload = payload
++
++        def __enter__(self):
++            return self
++
++        def __exit__(self, *_exc):
++            return False
++
++        def read(self):
++            return self.payload
++
++    def fake_tts(text, output_path=None):
++        spoken.append(text)
++        assert output_path is not None
++        Path(output_path).write_bytes(b"ogg audio")
++        return json.dumps({"success": True, "file_path": output_path})
++
++    def fake_urlopen(request, timeout):
++        requests.append((request, timeout))
++        if request.full_url.endswith("/sendMessage"):
++            return FakeResponse(b'{"ok": true, "result": {"message_id": 77}}')
++        if request.full_url.endswith("/sendVoice"):
++            return FakeResponse(b'{"ok": true, "result": {"message_id": 78}}')
++        raise AssertionError(f"unexpected Telegram URL {request.full_url}")
++
++    try:
++        os.environ["AGENT_REQUEST_TELEGRAM_VOICE_NOTIFY"] = "true"
++        os.environ["TELEGRAM_BOT_TOKEN"] = "dummy-token"
++        os.environ["TELEGRAM_HOME_CHANNEL"] = "123456"
++        tts_mod = types.ModuleType("tools.tts_tool")
++        tts_mod.text_to_speech_tool = fake_tts
++        sys.modules["tools.tts_tool"] = tts_mod
++        common.urllib.request.urlopen = fake_urlopen
++
++        sent = common.telegram_send(
++            "🦉 Agent request review needed\nTitle: Telegram voice UX\nSubject: Attach concise voice summary to the text notification\nNext: Joy can accept review to deploy and restart.\nID: ar-secret-noise",
++            reply_markup={"inline_keyboard": [[{"text": "Accept", "callback_data": "review_accept:1"}]]},
++        )
++
++        assert sent["sent"] is True
++        assert sent["message_id"] == 77
++        assert sent["voice"]["sent"] is True
++        assert sent["voice"]["reply_to_message_id"] == 77
++        assert len(spoken) == 1
++        assert spoken[0] == sent["voice"]["summary"]
++        assert len(spoken[0]) <= 220
++        assert "ar-secret-noise" not in spoken[0]
++        assert len(requests) == 2
++        assert requests[0][0].full_url.endswith("/sendMessage")
++        assert b"reply_markup=" in requests[0][0].data
++        voice_request = requests[1][0]
++        assert voice_request.full_url.endswith("/sendVoice")
++        body = voice_request.data
++        assert b'name="reply_parameters"' in body
++        assert b'"message_id":77' in body
++        assert b'name="voice"' in body
++    finally:
++        common.urllib.request.urlopen = old_urlopen
++        if old_tts is None:
++            sys.modules.pop("tools.tts_tool", None)
++        else:
++            sys.modules["tools.tts_tool"] = old_tts
++        for key, value in old_env.items():
++            if value is None:
++                os.environ.pop(key, None)
++            else:
++                os.environ[key] = value
++
+ def test_submit_status_propose_trusted_approve_and_complete():
+     if not require_hermes_src():
+         return

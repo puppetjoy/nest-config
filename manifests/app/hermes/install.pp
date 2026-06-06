@@ -544,8 +544,8 @@ class nest::app::hermes::install {
   }
 
   exec { 'patch_hermes_agent_request_telegram_voice_notifications':
-    command => "/bin/rm -f ${broker_source_dir}/src/agent_request_broker/common.py.orig ${broker_source_dir}/src/agent_request_broker/common.py.rej && /usr/bin/patch -N -p1 -d ${broker_source_dir} < ${install_dir}/agent-request-telegram-voice-notifications.patch",
-    unless  => "/bin/grep -q '_telegram_send_voice_notification' ${broker_source_dir}/src/agent_request_broker/common.py && /bin/grep -q 'AGENT_REQUEST_TELEGRAM_VOICE_NOTIFY' ${broker_source_dir}/src/agent_request_broker/common.py",
+    command => "/usr/sbin/git -C ${broker_source_dir} reset --hard HEAD && /bin/rm -f ${broker_source_dir}/src/agent_request_broker/common.py.orig ${broker_source_dir}/src/agent_request_broker/common.py.rej ${broker_source_dir}/tests/test_agent_request_broker.py.orig ${broker_source_dir}/tests/test_agent_request_broker.py.rej ${broker_source_dir}/bin/agent-request-accept-review ${broker_source_dir}/bin/agent-request-cleanup-terminal-resources && /usr/bin/patch -N -p1 -d ${broker_source_dir} < ${install_dir}/agent-request-review-handoff-flow.patch && /usr/bin/patch -N -p1 -d ${broker_source_dir} < ${install_dir}/agent-request-worktree-cleanup.patch && /usr/bin/patch -N -p1 -d ${broker_source_dir} < ${install_dir}/agent-request-telegram-voice-notifications.patch",
+    unless  => "/bin/grep -q '_voice_summary_part' ${broker_source_dir}/src/agent_request_broker/common.py && /bin/grep -q 'reply_parameters' ${broker_source_dir}/src/agent_request_broker/common.py && /bin/grep -q 'test_telegram_voice_notification_replies_to_text_message_with_summary' ${broker_source_dir}/tests/test_agent_request_broker.py",
     require => [
       File["${install_dir}/agent-request-telegram-voice-notifications.patch"],
       Exec['patch_hermes_agent_request_worktree_cleanup'],
@@ -554,7 +554,7 @@ class nest::app::hermes::install {
 
   exec { 'install_hermes_agent_request_broker':
     command     => "${venv_pip} install --upgrade --force-reinstall ${broker_source_dir} && git -C ${broker_source_dir} rev-parse HEAD > ${broker_git_revision_file}",
-    unless      => "test \"$(git -C ${broker_source_dir} rev-parse HEAD)\" = \"$(cat ${broker_git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent-request-broker'); import agent_request_broker.kanban_backend as kb; import agent_request_broker.common as c; assert hasattr(kb, 'trusted_accept_review'); assert hasattr(kb, 'resume_blocked_task_from_reply'); assert hasattr(kb, '_reply_prompt_stale_reason'); assert hasattr(kb, '_active_reply_prompts'); assert hasattr(kb, 'cleanup_terminal_task_resources'); assert hasattr(kb, 'cleanup_terminal_task_sweep'); assert hasattr(c, '_telegram_send_voice_notification')\"",
+    unless      => "test \"$(git -C ${broker_source_dir} rev-parse HEAD)\" = \"$(cat ${broker_git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent-request-broker'); import agent_request_broker.kanban_backend as kb; import agent_request_broker.common as c; assert hasattr(kb, 'trusted_accept_review'); assert hasattr(kb, 'resume_blocked_task_from_reply'); assert hasattr(kb, '_reply_prompt_stale_reason'); assert hasattr(kb, '_active_reply_prompts'); assert hasattr(kb, 'cleanup_terminal_task_resources'); assert hasattr(kb, 'cleanup_terminal_task_sweep'); assert hasattr(c, '_telegram_send_voice_notification'); assert hasattr(c, '_voice_summary_part')\"",
     environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
     path        => ['/bin', '/usr/bin'],
     require     => [
