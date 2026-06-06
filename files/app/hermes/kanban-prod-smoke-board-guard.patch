@@ -1,0 +1,110 @@
+diff -ruN a/tests/tools/test_kanban_tools.py b/tests/tools/test_kanban_tools.py
+--- a/tests/tools/test_kanban_tools.py	2026-06-06 13:51:13.179063279 -0400
++++ b/tests/tools/test_kanban_tools.py	2026-06-06 14:10:53.979652169 -0400
+@@ -863,6 +863,44 @@
+         conn.close()
+ 
+ 
++def test_create_rejects_prod_board_smoke_task(monkeypatch, worker_env):
++    monkeypatch.setenv("HERMES_KANBAN_BOARD", "agent-requests")
++    from tools import kanban_tools as kt
++
++    out = kt._handle_create({
++        "title": "live-review-required-smoke",
++        "assignee": "test-worker",
++        "parents": [worker_env],
++    })
++    assert "agent-requests-dev" in json.loads(out).get("error", "")
++
++
++def test_create_allows_dev_board_smoke_task(monkeypatch, worker_env):
++    monkeypatch.setenv("HERMES_KANBAN_BOARD", "agent-requests")
++    from tools import kanban_tools as kt
++
++    out = kt._handle_create({
++        "title": "🧪 DEV live-review-required-smoke",
++        "assignee": "test-worker",
++        "board": "agent-requests-dev",
++    })
++    d = json.loads(out)
++    assert d["ok"] is True
++
++
++def test_create_allows_normal_prod_followup(monkeypatch, worker_env):
++    monkeypatch.setenv("HERMES_KANBAN_BOARD", "agent-requests")
++    from tools import kanban_tools as kt
++
++    out = kt._handle_create({
++        "title": "real follow-up",
++        "assignee": "talon",
++        "parents": [worker_env],
++    })
++    d = json.loads(out)
++    assert d["ok"] is True
++
++
+ def test_create_stamps_session_id_from_env(monkeypatch, worker_env):
+     """When the agent loop runs under ACP, the server propagates the
+     originating chat session id via HERMES_SESSION_ID. ``kanban_create``
+diff -ruN a/tools/kanban_tools.py b/tools/kanban_tools.py
+--- a/tools/kanban_tools.py	2026-06-06 13:51:13.179063279 -0400
++++ b/tools/kanban_tools.py	2026-06-06 14:10:53.978652158 -0400
+@@ -180,6 +180,48 @@
+     return json.dumps({"ok": True, **fields})
+ 
+ 
++def _effective_board_slug(board: Optional[str] = None) -> Optional[str]:
++    """Best-effort board slug for guardrails before opening the DB."""
++    if board:
++        return str(board).strip() or None
++    env_board = os.environ.get("HERMES_KANBAN_BOARD")
++    if env_board:
++        return env_board.strip() or None
++    db_path = os.environ.get("HERMES_KANBAN_DB")
++    if db_path and os.path.basename(db_path) == "kanban.db":
++        parent = os.path.basename(os.path.dirname(db_path))
++        if parent:
++            return parent
++    return None
++
++
++def _prod_agent_requests_smoke_guard(board: Optional[str], title: Any, assignee: Any) -> Optional[str]:
++    """Keep obvious live/dev smoke cards off the production request board.
++
++    Review/actionability smoke tests must target ``agent-requests-dev`` or an
++    isolated board. A worker can still create real production follow-up tasks;
++    this guard only rejects the synthetic ``test-worker``/smoke shapes that are
++    used for lifecycle verification.
++    """
++    if os.environ.get("HERMES_ALLOW_PROD_KANBAN_SMOKE") == "1":
++        return None
++    if _effective_board_slug(board) != "agent-requests":
++        return None
++
++    title_text = str(title or "").strip().lower()
++    assignee_text = str(assignee or "").strip().lower()
++    obvious_smoke_title = any(token in title_text for token in (
++        "smoke", "synthetic", "dev-smoke", "review-required-smoke",
++    ))
++    if assignee_text == "test-worker" or obvious_smoke_title:
++        return tool_error(
++            "refusing to create live/smoke/test-worker task on production "
++            "agent-requests board; pass board='agent-requests-dev' or use an "
++            "isolated temporary board, and visibly label the task as DEV/test"
++        )
++    return None
++
++
+ def _normalize_profile(value: Any) -> Optional[str]:
+     """Normalize CLI-compatible assignee sentinels for the tool surface."""
+     if value is None:
+@@ -889,6 +931,9 @@
+             f"parents must be a list of task ids, got {type(parents).__name__}"
+         )
+     board = args.get("board")
++    smoke_guard = _prod_agent_requests_smoke_guard(board, title, assignee)
++    if smoke_guard:
++        return smoke_guard
+     try:
+         kb, conn = _connect(board=board)
+         try:
