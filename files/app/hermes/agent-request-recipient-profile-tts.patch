@@ -1,0 +1,263 @@
+diff --git a/src/agent_request_broker/common.py b/src/agent_request_broker/common.py
+index cc66818..76d4df9 100644
+--- a/src/agent_request_broker/common.py
++++ b/src/agent_request_broker/common.py
+@@ -195,25 +195,103 @@ def _voice_summary_for_notification(message: str, *, max_chars: int = 220) -> st
+     return summary
+ 
+ 
+-def _telegram_send_voice_notification(token: str, chat_id: str, message: str, *, reply_to_message_id: int | None = None) -> dict[str, Any]:
++def _tts_home_for_profile(profile: str = "") -> Path | None:
++    for home in hermes_home_candidates(profile):
++        if profile or home.exists():
++            return home
++    return None
++
++
++def _tts_profile_audit_detail(profile: str = "") -> dict[str, Any]:
++    """Return non-secret TTS config details for notification audit rows."""
++    home = _tts_home_for_profile(profile)
++    detail: dict[str, Any] = {
++        "tts_profile": profile or None,
++        "tts_home": str(home) if home is not None else None,
++    }
++    config_path = (home / "config.yaml") if home is not None else None
++    if config_path is None or not config_path.is_file():
++        return detail
++    detail["tts_config_source"] = str(config_path)
++    try:
++        import yaml
++
++        config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
++        tts_config = config.get("tts") if isinstance(config, dict) else None
++        if not isinstance(tts_config, dict):
++            return detail
++        provider = str(tts_config.get("provider") or "").strip()
++        if provider:
++            detail["tts_provider"] = provider
++        provider_config = tts_config.get(provider) if provider else None
++        if isinstance(provider_config, dict):
++            model = provider_config.get("model") or provider_config.get("model_id")
++            voice = provider_config.get("voice") or provider_config.get("voice_id")
++            if model:
++                detail["tts_model"] = str(model)
++            if voice:
++                detail["tts_voice"] = str(voice)
++    except Exception as exc:  # noqa: BLE001 - audit detail is best-effort
++        detail["tts_audit_error"] = str(exc)
++    return detail
++
++
++def _text_to_speech_for_profile(summary: str, audio_path: Path, *, profile: str = "") -> str:
++    """Synthesize TTS with Hermes config scoped to the recipient profile."""
++    hermes_src = Path(os.environ.get("HERMES_SRC", "/opt/hermes-agent/src"))
++    if hermes_src.exists() and str(hermes_src) not in sys.path:
++        sys.path.insert(0, str(hermes_src))
++    from tools.tts_tool import text_to_speech_tool
++
++    home = _tts_home_for_profile(profile)
++    saved_home = os.environ.get("HERMES_HOME")
++    saved_profile = os.environ.get("HERMES_PROFILE")
++    token = None
++    try:
++        if home is not None:
++            os.environ["HERMES_HOME"] = str(home)
++        if profile:
++            os.environ["HERMES_PROFILE"] = profile
++        try:
++            from hermes_constants import set_hermes_home_override
++
++            token = set_hermes_home_override(home) if home is not None else None
++        except Exception:
++            token = None
++        return text_to_speech_tool(summary, output_path=str(audio_path))
++    finally:
++        if token is not None:
++            try:
++                from hermes_constants import reset_hermes_home_override
++
++                reset_hermes_home_override(token)
++            except Exception:
++                pass
++        if saved_home is None:
++            os.environ.pop("HERMES_HOME", None)
++        else:
++            os.environ["HERMES_HOME"] = saved_home
++        if saved_profile is None:
++            os.environ.pop("HERMES_PROFILE", None)
++        else:
++            os.environ["HERMES_PROFILE"] = saved_profile
++
++
++def _telegram_send_voice_notification(token: str, chat_id: str, message: str, *, reply_to_message_id: int | None = None, profile: str = "") -> dict[str, Any]:
+     summary = _voice_summary_for_notification(message)
+     if not summary:
+         return {"sent": False, "reason": "empty voice summary"}
+ 
+     try:
+-        hermes_src = Path(os.environ.get("HERMES_SRC", "/opt/hermes-agent/src"))
+-        if hermes_src.exists() and str(hermes_src) not in sys.path:
+-            sys.path.insert(0, str(hermes_src))
+-        from tools.tts_tool import text_to_speech_tool
+-
++        audit_detail = _tts_profile_audit_detail(profile)
+         audio_dir = Path(tempfile.gettempdir()) / "hermes_agent_request_voice"
+         audio_dir.mkdir(parents=True, exist_ok=True)
+         audio_path = audio_dir / f"agent_request_{uuid.uuid4().hex[:12]}.ogg"
+-        result_json = text_to_speech_tool(summary, output_path=str(audio_path))
++        result_json = _text_to_speech_for_profile(summary, audio_path, profile=profile)
+         result = json.loads(result_json)
+         actual_path = Path(result.get("file_path") or audio_path)
+         if not result.get("success") or not actual_path.is_file():
+-            return {"sent": False, "reason": result.get("error") or "TTS failed", "summary": summary}
++            return {"sent": False, "reason": result.get("error") or "TTS failed", "summary": summary, **audit_detail}
+ 
+         try:
+             boundary = f"----hermes-agent-request-{uuid.uuid4().hex}"
+@@ -255,6 +333,7 @@ def _telegram_send_voice_notification(token: str, chat_id: str, message: str, *,
+                 "message_id": ((payload.get("result") or {}).get("message_id")),
+                 "reply_to_message_id": reply_to_message_id,
+                 "summary": summary,
++                **audit_detail,
+             }
+         finally:
+             try:
+@@ -262,7 +341,7 @@ def _telegram_send_voice_notification(token: str, chat_id: str, message: str, *,
+             except OSError:
+                 pass
+     except Exception as exc:  # noqa: BLE001 - voice notification remains best-effort
+-        return {"sent": False, "reason": str(exc), "summary": summary}
++        return {"sent": False, "reason": str(exc), "summary": summary, **_tts_profile_audit_detail(profile)}
+ 
+ 
+ def telegram_send(
+@@ -306,7 +385,7 @@ def telegram_send(
+             "disable_notification": disable_notification,
+         }
+         if sent and _telegram_voice_notifications_enabled():
+-            result["voice"] = _telegram_send_voice_notification(token, chat_id, message, reply_to_message_id=message_id)
++            result["voice"] = _telegram_send_voice_notification(token, chat_id, message, reply_to_message_id=message_id, profile=profile)
+         else:
+             result["voice_suppressed"] = "text_not_sent" if not sent else "disabled"
+         return result
+diff --git a/tests/test_agent_request_broker.py b/tests/test_agent_request_broker.py
+index 8d96644..98e8a0c 100755
+--- a/tests/test_agent_request_broker.py
++++ b/tests/test_agent_request_broker.py
+@@ -259,12 +259,13 @@ def test_telegram_send_attaches_voice_companion_when_enabled():
+         requests.append((request, timeout))
+         return FakeResponse()
+ 
+-    def fake_voice(token, chat_id, message, *, reply_to_message_id=None):
++    def fake_voice(token, chat_id, message, *, reply_to_message_id=None, profile=""):
+         voice_calls.append({
+             "token": token,
+             "chat_id": chat_id,
+             "message": message,
+             "reply_to_message_id": reply_to_message_id,
++            "profile": profile,
+         })
+         return {"sent": True, "message_id": 43, "reply_to_message_id": reply_to_message_id, "summary": "Joy, agent request attention needed."}
+ 
+@@ -289,6 +290,7 @@ def test_telegram_send_attaches_voice_companion_when_enabled():
+             "chat_id": "123456",
+             "message": "Agent request review requested\nSubject: Alert urgency\nNext: approve or steer",
+             "reply_to_message_id": 42,
++            "profile": "",
+         }]
+         assert b"disable_notification=false" in requests[-1][0].data
+     finally:
+@@ -301,6 +303,93 @@ def test_telegram_send_attaches_voice_companion_when_enabled():
+                 os.environ[key] = value
+ 
+ 
++def test_telegram_voice_notification_uses_recipient_profile_tts_context():
++    from agent_request_broker import common
++
++    with tempfile.TemporaryDirectory() as td:
++        tmp = Path(td)
++        talon_home = tmp / ".hermes" / "profiles" / "talon"
++        star_home = tmp / ".hermes" / "profiles" / "star"
++        talon_home.mkdir(parents=True)
++        star_home.mkdir(parents=True)
++        talon_home.joinpath("config.yaml").write_text(
++            "tts:\n  provider: openai\n  openai:\n    model: gpt-4o-mini-tts\n    voice: alloy\n",
++            encoding="utf-8",
++        )
++        star_home.joinpath("config.yaml").write_text(
++            "tts:\n  provider: openai\n  openai:\n    model: gpt-4o-mini-tts\n    voice: nova\n",
++            encoding="utf-8",
++        )
++
++        keys = ["HOME", "HERMES_HOME", "HERMES_PROFILE"]
++        old_env = {key: os.environ.get(key) for key in keys}
++        old_urlopen = common.urllib.request.urlopen
++        old_tts = sys.modules.get("tools.tts_tool")
++        spoken_contexts = []
++
++        class FakeResponse:
++            def __enter__(self):
++                return self
++
++            def __exit__(self, *_exc):
++                return False
++
++            def read(self):
++                return b'{"ok": true, "result": {"message_id": 612}}'
++
++        def fake_tts(text, output_path=None):
++            spoken_contexts.append({
++                "text": text,
++                "home": os.environ.get("HERMES_HOME"),
++                "profile": os.environ.get("HERMES_PROFILE"),
++            })
++            assert output_path is not None
++            Path(output_path).write_bytes(b"ogg audio")
++            return json.dumps({"success": True, "file_path": output_path})
++
++        try:
++            os.environ["HOME"] = str(tmp)
++            os.environ["HERMES_HOME"] = str(talon_home)
++            os.environ["HERMES_PROFILE"] = "talon"
++            tts_mod = types.ModuleType("tools.tts_tool")
++            tts_mod.text_to_speech_tool = fake_tts
++            sys.modules["tools.tts_tool"] = tts_mod
++            common.urllib.request.urlopen = lambda _request, timeout=20: FakeResponse()
++
++            sent = common._telegram_send_voice_notification(
++                "star-token",
++                "654321",
++                "Agent request comment\nSubject: Star voice\nNext: listen for nova",
++                reply_to_message_id=611,
++                profile="star",
++            )
++
++            assert sent["sent"] is True
++            assert sent["tts_profile"] == "star"
++            assert sent["tts_home"] == str(star_home)
++            assert sent["tts_provider"] == "openai"
++            assert sent["tts_model"] == "gpt-4o-mini-tts"
++            assert sent["tts_voice"] == "nova"
++            assert spoken_contexts == [{
++                "text": sent["summary"],
++                "home": str(star_home),
++                "profile": "star",
++            }]
++            assert os.environ["HERMES_HOME"] == str(talon_home)
++            assert os.environ["HERMES_PROFILE"] == "talon"
++        finally:
++            common.urllib.request.urlopen = old_urlopen
++            if old_tts is None:
++                sys.modules.pop("tools.tts_tool", None)
++            else:
++                sys.modules["tools.tts_tool"] = old_tts
++            for key, value in old_env.items():
++                if value is None:
++                    os.environ.pop(key, None)
++                else:
++                    os.environ[key] = value
++
++
+ def test_voice_summary_is_concise_and_does_not_repeat_agent_request():
+     from agent_request_broker import common
+ 
