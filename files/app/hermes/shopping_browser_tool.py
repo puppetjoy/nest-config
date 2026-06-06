@@ -736,6 +736,84 @@ def _json_literal(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False)
 
 
+_STATE_CODES_RE = r"(?:A[LKZR]|C[AOT]|D[CE]|FL|GA|HI|I[ADLN]|K[SY]|LA|M[ADEINOST]|N[CDEHJMVY]|O[HKR]|PA|RI|S[CD]|T[NX]|UT|V[AIT]|W[AIVY])"
+_CITY_STATE_RE = re.compile(rf"\b([A-Z][A-Za-z .'-]{{1,40}}),?\s+({_STATE_CODES_RE})\b")
+_EMAIL_RE = re.compile(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}")
+_PHONE_RE = re.compile(r"\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b")
+_ZIP_RE = re.compile(rf"\b({_STATE_CODES_RE})\s+\d{{5}}(?:-\d{{4}})?\b")
+_STREET_ADDRESS_RE = re.compile(
+    r"\b\d{1,6}\s+(?:[A-Za-z0-9#.'&/-]+\s+){0,8}"
+    r"(?:street|st\.?|avenue|ave\.?|road|rd\.?|drive|dr\.?|lane|ln\.?|court|ct\.?|circle|cir\.?|boulevard|blvd\.?|way|place|pl\.?|terrace|ter\.?|trail|trl\.?|parkway|pkwy\.?|highway|hwy\.?)"
+    r"\b(?:\s+(?:apt|apartment|unit|suite|ste\.?|#)\s*[A-Za-z0-9-]+)?",
+    re.IGNORECASE,
+)
+_UNIT_RE = re.compile(r"\b(?:apt|apartment|unit|suite|ste\.?|#)\s*[A-Za-z0-9-]+\b", re.IGNORECASE)
+_LONG_PAYMENT_NUMBER_RE = re.compile(r"\b(?:\d[ -]?){5,}\d\b")
+_FULL_CARD_RE = re.compile(r"\b(?:\d[ -]?){12,18}\d\b")
+_PAYMENT_BRAND_RE = re.compile(r"\b(visa|mastercard|amex|american express|discover|gift card)\b", re.IGNORECASE)
+_LAST_FOUR_RE = re.compile(r"(?:ending\s+in|last\s+four|\*{2,}|•{2,}|x{2,})\s*(\d{4})\b", re.IGNORECASE)
+
+
+def _sanitize_checkout_text(value: str) -> str:
+    text = re.sub(r"\s+", " ", str(value or "")).strip()
+    text = _EMAIL_RE.sub("[email redacted]", text)
+    text = _PHONE_RE.sub("[phone redacted]", text)
+    text = _FULL_CARD_RE.sub("[payment number redacted]", text)
+    text = re.sub(r"\b(?:cvv|cvc|security code)\s*[:#-]?\s*\d+\b", "[payment security code redacted]", text, flags=re.IGNORECASE)
+    text = re.sub(r"\b(?:account|card|routing)\s*(?:number|no\.?|#)?\s*[:#-]?\s*(?:\d[ -]?){5,}\d\b", "[account number redacted]", text, flags=re.IGNORECASE)
+    text = _STREET_ADDRESS_RE.sub("[street address redacted]", text)
+    text = _UNIT_RE.sub("[address unit redacted]", text)
+    text = _ZIP_RE.sub(r"\1 [zip redacted]", text)
+    text = re.sub(r"\b\d{5}(?:-\d{4})?\b", "[zip redacted]", text)
+    return re.sub(r"\s{2,}", " ", text).strip()
+
+
+def _sanitize_checkout_destination_text(value: str) -> str:
+    text = _sanitize_checkout_text(value)
+    match = _CITY_STATE_RE.search(text)
+    if match:
+        return f"{match.group(1).strip()}, {match.group(2).upper()}"
+    if any(marker in text.lower() for marker in ("street address redacted", "zip redacted", "phone redacted", "email redacted")):
+        return "[shipping destination redacted]"
+    return text
+
+
+def _sanitize_checkout_payment_text(value: str) -> str:
+    raw = re.sub(r"\s+", " ", str(value or "")).strip()
+    explicit_last_four = _LAST_FOUR_RE.search(raw)
+    full_card = _FULL_CARD_RE.search(raw)
+    text = _sanitize_checkout_text(raw)
+    brand = _PAYMENT_BRAND_RE.search(text) or _PAYMENT_BRAND_RE.search(raw)
+    label = brand.group(1).title() if brand else "Payment method"
+    if explicit_last_four:
+        return f"{label} ending in {explicit_last_four.group(1)}"
+    if full_card:
+        digits = re.sub(r"\D", "", full_card.group(0))
+        return f"{label} ending in {digits[-4:]}"
+    if _LONG_PAYMENT_NUMBER_RE.search(text) or any(token in text.lower() for token in ("account", "card", "wallet", "payment")):
+        return f"{label} [details redacted]"
+    return text
+
+
+def _sanitize_checkout_value(value: Any, field_name: str = "") -> Any:
+    field = str(field_name or "").lower()
+    if isinstance(value, dict):
+        return {key: _sanitize_checkout_value(item, str(key)) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_sanitize_checkout_value(item, field_name) for item in value]
+    if isinstance(value, tuple):
+        return [_sanitize_checkout_value(item, field_name) for item in value]
+    if isinstance(value, str):
+        if "shipping_destination" in field or "destination" in field or "address" in field:
+            return _sanitize_checkout_destination_text(value)
+        if "payment" in field or "card" in field or "last_four" in field:
+            return _sanitize_checkout_payment_text(value)
+        if "email" in field or "phone" in field or "account" in field:
+            return "[sensitive contact/account detail redacted]" if value.strip() else ""
+        return _sanitize_checkout_text(value)
+    return value
+
+
 def _check_human_takeover_text(text: str) -> None:
     if CHECKOUT_OR_ACCOUNT_RE.search(text) or CHECKOUT_PREP_RE.search(text) or FINAL_PURCHASE_RE.search(text):
         raise ValueError("matched element appears to involve checkout/account/payment/address/login challenge scope; Joy must take over or use an explicit supervised checkout-prep effect")
@@ -820,6 +898,7 @@ def _checkout_summary_from_browser(browser: CdpSession, session_id: str) -> dict
     if safety.get("blocked_reason"):
         summary["blocked_reason"] = safety.get("blocked_reason")
     summary["final_purchase_controls_visible"] = safety.get("final_purchase_controls_visible") or []
+    summary = _sanitize_checkout_value(summary)
     binding_material = {
         "items": summary.get("items"),
         "totals": summary.get("totals"),
@@ -1950,6 +2029,22 @@ if __name__ == "__main__":
     assert _reject_unsafe_operation("screenshot")["allowed"] is True
     assert _reject_unsafe_operation("screenshot_sensitive_page")["allowed"] is False
     assert "checkout_prep" in APPROVED_CLICK_EFFECTS
+    synthetic_checkout = {
+        "items": ["Widget Qty: 1 Sold by Example Seller Ship to 123 Example Street Apt 4, Sampletown, NY 12345"],
+        "delivery": ["Delivery Monday to 123 Example Street, Sampletown, NY 12345 phone 212-555-0100"],
+        "shipping_destination_label_or_city_state": ["Ship to Example Recipient, 123 Example Street Apt 4, Sampletown, NY 12345"],
+        "payment_method_label_last_four_only": ["Visa 4111 1111 1111 1234 ending in 1234 billing to 123 Example Street"],
+        "nested": {"contact_blob": "email shopper@example.invalid phone 212-555-0100"},
+    }
+    sanitized_checkout = _sanitize_checkout_value(synthetic_checkout)
+    flattened_checkout = json.dumps(sanitized_checkout, ensure_ascii=False)
+    assert "Example Street" not in flattened_checkout
+    assert "12345" not in flattened_checkout
+    assert "212-555-0100" not in flattened_checkout
+    assert "shopper@example.invalid" not in flattened_checkout
+    assert "4111" not in flattened_checkout
+    assert sanitized_checkout["shipping_destination_label_or_city_state"] == ["Sampletown, NY"]
+    assert sanitized_checkout["payment_method_label_last_four_only"] == ["Visa ending in 1234"]
     try:
         _check_human_takeover_text("Proceed to checkout")
         raise AssertionError("ordinary browse click should block checkout-prep controls")
