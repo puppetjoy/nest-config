@@ -1,0 +1,315 @@
+diff --git a/hermes_cli/kanban.py b/hermes_cli/kanban.py
+index f683f69ed..d3a938989 100644
+--- a/hermes_cli/kanban.py
++++ b/hermes_cli/kanban.py
+@@ -550,6 +550,14 @@ def build_parser(parent_subparsers: argparse._SubParsersAction) -> argparse.Argu
+     p_unblock = sub.add_parser("unblock", help="Return one or more blocked/scheduled tasks to ready")
+     p_unblock.add_argument("task_ids", nargs="+")
+ 
++    p_repair = sub.add_parser(
++        "repair-gave-up-race",
++        help="Trusted repair for tasks with stale open current runs",
++    )
++    p_repair.add_argument("task_id", nargs="?", default=None)
++    p_repair.add_argument("--dry-run", action="store_true")
++    p_repair.add_argument("--json", action="store_true")
++
+     p_promote = sub.add_parser(
+         "promote",
+         help="Manually move one or more todo/blocked tasks to ready (recovery path)",
+@@ -932,6 +940,7 @@ def kanban_command(args: argparse.Namespace) -> int:
+         "block":    _cmd_block,
+         "schedule": _cmd_schedule,
+         "unblock":  _cmd_unblock,
++        "repair-gave-up-race": _cmd_repair_gave_up_race,
+         "promote":  _cmd_promote,
+         "archive":  _cmd_archive,
+         "tail":     _cmd_tail,
+@@ -1635,6 +1644,29 @@ def _cmd_reclaim(args: argparse.Namespace) -> int:
+     return 0
+ 
+ 
++def _cmd_repair_gave_up_race(args: argparse.Namespace) -> int:
++    with kb.connect_closing() as conn:
++        repairs = kb.repair_gave_up_running_divergence(
++            conn,
++            task_id=getattr(args, "task_id", None),
++            dry_run=bool(getattr(args, "dry_run", False)),
++        )
++    if getattr(args, "json", False):
++        print(json.dumps({"repaired": repairs, "dry_run": bool(getattr(args, "dry_run", False))}, indent=2))
++        return 0
++    if not repairs:
++        print("No gave_up/running divergence found.")
++        return 0
++    verb = "Would repair" if getattr(args, "dry_run", False) else "Repaired"
++    for item in repairs:
++        print(
++            f"{verb} {item['task_id']}: "
++            f"{item['previous_status']} -> {item['repaired_status']} "
++            f"(run {item['run_id']})"
++        )
++    return 0
++
++
+ def _cmd_reassign(args: argparse.Namespace) -> int:
+     profile = None if args.profile.lower() in {"none", "-", "null"} else args.profile
+     with kb.connect_closing() as conn:
+diff --git a/hermes_cli/kanban_db.py b/hermes_cli/kanban_db.py
+index 0ff160089..ca82ffb2d 100644
+--- a/hermes_cli/kanban_db.py
++++ b/hermes_cli/kanban_db.py
+@@ -5104,25 +5104,39 @@ def _record_task_failure(
+ 
+         if failures >= effective_limit:
+             # Trip the breaker.
++            state_changed = True
+             if release_claim:
+                 # Spawn path: still running, also clear claim state.
+-                conn.execute(
++                cur = conn.execute(
+                     "UPDATE tasks SET status = 'blocked', claim_lock = NULL, "
+                     "claim_expires = NULL, worker_pid = NULL, "
+                     "consecutive_failures = ?, last_failure_error = ? "
+                     "WHERE id = ? AND status IN ('running', 'ready')",
+                     (failures, error[:500], task_id),
+                 )
++                state_changed = cur.rowcount == 1
+             else:
+-                # Timeout/crash path: task is already at ``ready``
+-                # with claim cleared; just flip to blocked + update
+-                # counter fields.
+-                conn.execute(
++                # Timeout/crash path: the caller closed the failed run and
++                # briefly returned the task to ``ready`` before invoking this
++                # helper. A racing dispatcher may already have claimed the
++                # retry and installed a new ``current_run_id``. In that case
++                # record the counter/error only; do not flip the active retry
++                # to ``blocked`` or emit ``gave_up`` for a different run.
++                cur = conn.execute(
+                     "UPDATE tasks SET status = 'blocked', "
+                     "consecutive_failures = ?, last_failure_error = ? "
+-                    "WHERE id = ? AND status IN ('ready', 'running')",
++                    "WHERE id = ? AND status = 'ready' AND current_run_id IS NULL",
+                     (failures, error[:500], task_id),
+                 )
++                state_changed = cur.rowcount == 1
++                if not state_changed:
++                    conn.execute(
++                        "UPDATE tasks SET consecutive_failures = ?, "
++                        "last_failure_error = ? WHERE id = ?",
++                        (failures, error[:500], task_id),
++                    )
++            if not state_changed:
++                return False
+             run_id = None
+             if end_run:
+                 # Only the spawn path has an open run to close.
+@@ -5213,6 +5227,95 @@ def _record_spawn_failure(
+     )
+ 
+ 
++def repair_gave_up_running_divergence(
++    conn: sqlite3.Connection,
++    *,
++    task_id: Optional[str] = None,
++    dry_run: bool = False,
++) -> list[dict]:
++    """Repair tasks with a stale open ``current_run_id`` after gave_up races.
++
++    Historical cleanup races could leave a task row in an actionable-looking
++    state (``ready`` or ``blocked``) while ``current_run_id`` still pointed at
++    an open run. If that run's worker is alive, the durable invariant is that
++    the task is really ``running``. If the worker is gone, the safe repair is to
++    close the stale run, clear the current-run pointer, and leave the task
++    actionable at ``ready``. Each mutation appends an audit event.
++    """
++    params: list[object] = []
++    where = (
++        "t.status IN ('ready', 'blocked') AND t.current_run_id IS NOT NULL "
++        "AND r.id = t.current_run_id AND r.ended_at IS NULL"
++    )
++    if task_id:
++        where += " AND t.id = ?"
++        params.append(task_id)
++    rows = conn.execute(
++        "SELECT t.id, t.status, t.current_run_id, t.claim_lock, "
++        "t.claim_expires, t.worker_pid, r.claim_lock AS run_claim_lock, "
++        "r.claim_expires AS run_claim_expires, r.worker_pid AS run_worker_pid "
++        "FROM tasks t JOIN task_runs r ON r.id = t.current_run_id "
++        f"WHERE {where} ORDER BY t.id",
++        tuple(params),
++    ).fetchall()
++    repairs: list[dict] = []
++    if not rows:
++        return repairs
++    with write_txn(conn):
++        for row in rows:
++            run_id = int(row["current_run_id"])
++            pid = row["run_worker_pid"] or row["worker_pid"]
++            pid_alive = bool(pid and _pid_alive(int(pid)))
++            if pid_alive:
++                repaired_status = "running"
++                reason = "gave_up race left live current run outside running state"
++            else:
++                repaired_status = "ready"
++                reason = "gave_up race left dead current run attached to task"
++            payload = {
++                "previous_status": row["status"],
++                "repaired_status": repaired_status,
++                "run_id": run_id,
++                "worker_pid": int(pid) if pid else None,
++                "pid_alive": pid_alive,
++                "reason": reason,
++            }
++            repairs.append({"task_id": row["id"], **payload})
++            if dry_run:
++                continue
++            if pid_alive:
++                conn.execute(
++                    "UPDATE tasks SET status = 'running', "
++                    "claim_lock = COALESCE(claim_lock, ?), "
++                    "claim_expires = COALESCE(claim_expires, ?), "
++                    "worker_pid = COALESCE(worker_pid, ?) "
++                    "WHERE id = ? AND status IN ('ready', 'blocked') "
++                    "AND current_run_id = ?",
++                    (
++                        row["run_claim_lock"],
++                        row["run_claim_expires"],
++                        row["run_worker_pid"],
++                        row["id"],
++                        run_id,
++                    ),
++                )
++            else:
++                _end_run(
++                    conn, row["id"],
++                    outcome="crashed", status="crashed",
++                    error="repair closed stale current run with no live worker",
++                    metadata={"repair": payload},
++                )
++                conn.execute(
++                    "UPDATE tasks SET status = 'ready', claim_lock = NULL, "
++                    "claim_expires = NULL, worker_pid = NULL "
++                    "WHERE id = ? AND current_run_id IS NULL",
++                    (row["id"],),
++                )
++            _append_event(conn, row["id"], "repaired", payload, run_id=run_id)
++    return repairs
++
++
+ def _set_worker_pid(conn: sqlite3.Connection, task_id: str, pid: int) -> None:
+     """Record the spawned child's pid + emit a ``spawned`` event.
+ 
+diff --git a/tests/hermes_cli/test_kanban_db.py b/tests/hermes_cli/test_kanban_db.py
+index 69049b209..8181653e8 100644
+--- a/tests/hermes_cli/test_kanban_db.py
++++ b/tests/hermes_cli/test_kanban_db.py
+@@ -542,6 +542,107 @@ def test_stale_claim_reclaim_event_records_diagnostic_payload(
+         assert payload["host_local"] is True
+ 
+ 
++def test_failure_counter_does_not_block_racing_active_retry(kanban_home):
++    with kb.connect() as conn:
++        t = kb.create_task(conn, title="race", assignee="talon")
++        kb.claim_task(conn, t, claimer="host:first")
++        first_run = kb._current_run_id(conn, t)
++
++        # Simulate the timeout/crash caller's first transaction: the failed
++        # attempt is closed and the task briefly returns to ready.
++        with kb.write_txn(conn):
++            conn.execute(
++                "UPDATE tasks SET status = 'ready', claim_lock = NULL, "
++                "claim_expires = NULL, worker_pid = NULL WHERE id = ?",
++                (t,),
++            )
++            kb._end_run(conn, t, outcome="crashed", status="crashed")
++
++        # A dispatcher claims the retry before the old attempt's failure
++        # accounting trips the circuit breaker.
++        retry = kb.claim_task(conn, t, claimer="host:retry")
++        assert retry is not None
++        retry_run = kb._current_run_id(conn, t)
++        assert retry_run is not None and retry_run != first_run
++
++        tripped = kb._record_task_failure(
++            conn, t, "pid 123 not alive",
++            outcome="crashed",
++            failure_limit=1,
++            release_claim=False,
++            end_run=False,
++        )
++
++        assert tripped is False
++        task = kb.get_task(conn, t)
++        assert task.status == "running"
++        assert task.current_run_id == retry_run
++        events = kb.list_events(conn, t)
++        assert not any(e.kind == "gave_up" for e in events)
++
++
++def test_repair_gave_up_running_divergence_restores_running(kanban_home, monkeypatch):
++    monkeypatch.setattr(kb, "_pid_alive", lambda pid: pid == 12345)
++    with kb.connect() as conn:
++        t = kb.create_task(conn, title="diverged", assignee="talon")
++        kb.claim_task(conn, t, claimer="host:worker")
++        run_id = kb._current_run_id(conn, t)
++        assert run_id is not None
++        conn.execute(
++            "UPDATE tasks SET status = 'blocked', worker_pid = ? WHERE id = ?",
++            (12345, t),
++        )
++        conn.execute(
++            "UPDATE task_runs SET worker_pid = ? WHERE id = ?",
++            (12345, run_id),
++        )
++        conn.commit()
++
++        repairs = kb.repair_gave_up_running_divergence(conn)
++
++        assert len(repairs) == 1
++        assert repairs[0]["task_id"] == t
++        assert repairs[0]["pid_alive"] is True
++        task = kb.get_task(conn, t)
++        assert task.status == "running"
++        assert task.current_run_id == run_id
++        events = kb.list_events(conn, t)
++        assert any(e.kind == "repaired" and e.run_id == run_id for e in events)
++
++
++def test_repair_gave_up_running_divergence_closes_dead_ready_run(kanban_home, monkeypatch):
++    monkeypatch.setattr(kb, "_pid_alive", lambda pid: False)
++    with kb.connect() as conn:
++        t = kb.create_task(conn, title="dead diverged", assignee="talon")
++        kb.claim_task(conn, t, claimer="host:worker")
++        run_id = kb._current_run_id(conn, t)
++        assert run_id is not None
++        conn.execute(
++            "UPDATE tasks SET status = 'ready', worker_pid = ? WHERE id = ?",
++            (12345, t),
++        )
++        conn.execute(
++            "UPDATE task_runs SET worker_pid = ? WHERE id = ?",
++            (12345, run_id),
++        )
++        conn.commit()
++
++        repairs = kb.repair_gave_up_running_divergence(conn)
++
++        assert len(repairs) == 1
++        assert repairs[0]["task_id"] == t
++        assert repairs[0]["pid_alive"] is False
++        task = kb.get_task(conn, t)
++        assert task.status == "ready"
++        assert task.current_run_id is None
++        run = conn.execute("SELECT status, outcome, ended_at FROM task_runs WHERE id = ?", (run_id,)).fetchone()
++        assert run["status"] == "crashed"
++        assert run["outcome"] == "crashed"
++        assert run["ended_at"] is not None
++        events = kb.list_events(conn, t)
++        assert any(e.kind == "repaired" and e.run_id == run_id for e in events)
++
++
+ def test_detect_crashed_workers_systemic_failure_fast_block(
+     kanban_home, monkeypatch,
+ ):

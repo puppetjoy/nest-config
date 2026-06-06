@@ -88,6 +88,7 @@ class nest::app::hermes::install {
     'patch_hermes_kanban_agent_request_unblocked_summary',
     'patch_hermes_kanban_agent_request_dispatch_notification_hook',
     'patch_hermes_kanban_agent_request_failure_notification_hook',
+    'patch_hermes_kanban_gave_up_running_race_repair',
     'patch_hermes_kanban_dispatcher_profile_scope',
     'patch_hermes_kanban_actionable_attention',
     'patch_hermes_kanban_frontend_actionable_attention',
@@ -126,7 +127,7 @@ class nest::app::hermes::install {
 
   exec { 'install_hermes_agent':
     command     => "${venv_pip} install --upgrade --force-reinstall ${source_dir} && git -C ${source_dir} rev-parse HEAD > ${git_revision_file}",
-    unless      => "test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent')\" && /bin/grep -q 'app.state.allow_public = allow_public' ${venv_dir}/lib/python*/site-packages/hermes_cli/web_server.py && /bin/grep -q 'if _pl <= 0:' ${venv_dir}/lib/python*/site-packages/gateway/run.py && /bin/grep -q 'chat_id=str(query_chat_id or' ${venv_dir}/lib/python*/site-packages/gateway/platforms/telegram.py && /bin/grep -q 'handle_telegram_reply' ${venv_dir}/lib/python*/site-packages/gateway/platforms/telegram.py && /bin/grep -q 'handle_telegram_unstuck' ${venv_dir}/lib/python*/site-packages/gateway/platforms/telegram.py && ! /bin/grep -q 'handle_telegram_callback(token, actor=str' ${venv_dir}/lib/python*/site-packages/gateway/platforms/telegram.py && /bin/grep -q '_banner_hero_renderable' ${venv_dir}/lib/python*/site-packages/hermes_cli/banner.py && /bin/grep -q 'banner_subtitle' ${venv_dir}/lib/python*/site-packages/hermes_cli/banner.py && /bin/grep -q 'discover_builtin_tools()' ${venv_dir}/lib/python*/site-packages/cli.py && /bin/grep -q '_notify_agent_request_event' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q 'Approved/unblocked/resumed; task is eligible to continue' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q '_notify_agent_request_dispatch_event' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_db.py && /bin/grep -q 'Task auto-blocked after' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_db.py && /bin/grep -q 'dispatcher_profile=dispatcher_profile' ${venv_dir}/lib/python*/site-packages/gateway/run.py && /bin/grep -q '_attention_summary_for_task' ${venv_dir}/lib/python*/site-packages/plugins/kanban/dashboard/plugin_api.py && /bin/grep -q 'taskAttentionSummary' ${venv_dir}/lib/python*/site-packages/plugins/kanban/dashboard/dist/index.js && /bin/grep -q 'BOARD_COLUMN_METADATA' ${venv_dir}/lib/python*/site-packages/plugins/kanban/dashboard/plugin_api.py && /bin/grep -q 'Agent-request review handoffs are different' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_db.py && /bin/grep -q 'cleanup_terminal_task_resources' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q 'json.loads(_ok(task_id=tid, run_id=run.id if run else None))' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q '_summarize_text_for_voice_reply' ${venv_dir}/lib/python*/site-packages/gateway/run.py",
+    unless      => "test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent')\" && /bin/grep -q 'app.state.allow_public = allow_public' ${venv_dir}/lib/python*/site-packages/hermes_cli/web_server.py && /bin/grep -q 'if _pl <= 0:' ${venv_dir}/lib/python*/site-packages/gateway/run.py && /bin/grep -q 'chat_id=str(query_chat_id or' ${venv_dir}/lib/python*/site-packages/gateway/platforms/telegram.py && /bin/grep -q 'handle_telegram_reply' ${venv_dir}/lib/python*/site-packages/gateway/platforms/telegram.py && /bin/grep -q 'handle_telegram_unstuck' ${venv_dir}/lib/python*/site-packages/gateway/platforms/telegram.py && ! /bin/grep -q 'handle_telegram_callback(token, actor=str' ${venv_dir}/lib/python*/site-packages/gateway/platforms/telegram.py && /bin/grep -q '_banner_hero_renderable' ${venv_dir}/lib/python*/site-packages/hermes_cli/banner.py && /bin/grep -q 'banner_subtitle' ${venv_dir}/lib/python*/site-packages/hermes_cli/banner.py && /bin/grep -q 'discover_builtin_tools()' ${venv_dir}/lib/python*/site-packages/cli.py && /bin/grep -q '_notify_agent_request_event' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q 'Approved/unblocked/resumed; task is eligible to continue' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q '_notify_agent_request_dispatch_event' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_db.py && /bin/grep -q 'Task auto-blocked after' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_db.py && /bin/grep -q 'repair_gave_up_running_divergence' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_db.py && /bin/grep -q 'repair-gave-up-race' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban.py && /bin/grep -q 'dispatcher_profile=dispatcher_profile' ${venv_dir}/lib/python*/site-packages/gateway/run.py && /bin/grep -q '_attention_summary_for_task' ${venv_dir}/lib/python*/site-packages/plugins/kanban/dashboard/plugin_api.py && /bin/grep -q 'taskAttentionSummary' ${venv_dir}/lib/python*/site-packages/plugins/kanban/dashboard/dist/index.js && /bin/grep -q 'BOARD_COLUMN_METADATA' ${venv_dir}/lib/python*/site-packages/plugins/kanban/dashboard/plugin_api.py && /bin/grep -q 'Agent-request review handoffs are different' ${venv_dir}/lib/python*/site-packages/hermes_cli/kanban_db.py && /bin/grep -q 'cleanup_terminal_task_resources' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q 'json.loads(_ok(task_id=tid, run_id=run.id if run else None))' ${venv_dir}/lib/python*/site-packages/tools/kanban_tools.py && /bin/grep -q '_summarize_text_for_voice_reply' ${venv_dir}/lib/python*/site-packages/gateway/run.py",
     environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
     path        => ['/bin', '/usr/bin'],
     require     => [
@@ -142,6 +143,7 @@ class nest::app::hermes::install {
       Exec['patch_hermes_kanban_agent_request_unblocked_summary'],
       Exec['patch_hermes_kanban_agent_request_dispatch_notification_hook'],
       Exec['patch_hermes_kanban_agent_request_failure_notification_hook'],
+      Exec['patch_hermes_kanban_gave_up_running_race_repair'],
       Exec['patch_hermes_kanban_agent_request_failure_notification_posttxn'],
       Exec['patch_hermes_kanban_dispatcher_profile_scope'],
       Exec['patch_hermes_kanban_actionable_attention'],
@@ -361,6 +363,23 @@ class nest::app::hermes::install {
     ],
   }
 
+  file { "${install_dir}/kanban-gave-up-running-race-repair.patch":
+    ensure => file,
+    source => 'puppet:///modules/nest/app/hermes/kanban-gave-up-running-race-repair.patch',
+    mode   => '0644',
+    owner  => 'root',
+    group  => 'root',
+  }
+
+  exec { 'patch_hermes_kanban_gave_up_running_race_repair':
+    command => "/usr/bin/patch -N -p1 -d ${source_dir} < ${install_dir}/kanban-gave-up-running-race-repair.patch",
+    unless  => "/bin/grep -q 'repair_gave_up_running_divergence' ${source_dir}/hermes_cli/kanban_db.py && /bin/grep -q 'test_failure_counter_does_not_block_racing_active_retry' ${source_dir}/tests/hermes_cli/test_kanban_db.py",
+    require => [
+      File["${install_dir}/kanban-gave-up-running-race-repair.patch"],
+      Exec['patch_hermes_kanban_agent_request_failure_notification_posttxn'],
+    ],
+  }
+
   file { "${install_dir}/kanban-dispatcher-profile-scope.patch":
     ensure => file,
     source => 'puppet:///modules/nest/app/hermes/kanban-dispatcher-profile-scope.patch',
@@ -374,7 +393,7 @@ class nest::app::hermes::install {
     unless  => "/bin/grep -q 'dispatcher_profile=dispatcher_profile' ${source_dir}/gateway/run.py && /bin/grep -q 'test_dispatcher_profile_scopes_ready_claims' ${source_dir}/tests/hermes_cli/test_kanban_db.py",
     require => [
       File["${install_dir}/kanban-dispatcher-profile-scope.patch"],
-      Exec['patch_hermes_kanban_agent_request_failure_notification_posttxn'],
+      Exec['patch_hermes_kanban_gave_up_running_race_repair'],
     ],
   }
 
