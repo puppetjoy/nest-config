@@ -654,6 +654,85 @@ ORDER_REVIEW_EXTRACT_JS = r"""
 })()
 """
 
+CHECKOUT_SCREENSHOT_REDACTION_JS = r"""
+(() => {
+  const clean = (value) => (value || '').replace(/\s+/g, ' ').trim();
+  const sensitiveLabel = /(ship\s+to|deliver\s+to|delivery\s+address|shipping\s+address|billing\s+address|payment\s+method|wallet|card|visa|mastercard|amex|american express|discover|gift\s+card|claim\s+code|promo(?:tion)?\s+code|email|phone|security\s+code|captcha|verification|passcode|password|passkey|cvv|cvc)/i;
+  const sensitiveValue = /([\w.+-]+@[\w.-]+\.[A-Za-z]{2,}|\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b|\b\d{1,6}\s+[^\n,]{2,60}\b\s+(?:Apt|Apartment|Unit|Ste|Suite|Road|Rd|Street|St|Avenue|Ave|Lane|Ln|Drive|Dr|Court|Ct|Way|Blvd|Boulevard)\b|\b[A-Z]{2}\s+\d{5}(?:-\d{4})?\b|\b(?:\d[ -]*?){12,19}\b)/i;
+  const keepFinalPurchase = /(place\s+(your\s+)?order|submit\s+order|complete\s+purchase|buy\s+now)/i;
+  document.querySelectorAll('[data-shopping-browser-redaction="checkout-prep"]').forEach((node) => node.remove());
+  const candidates = new Set();
+  const addCandidate = (node) => {
+    if (!node || node.nodeType !== Node.ELEMENT_NODE) return;
+    if (node.closest('[data-shopping-browser-redaction="checkout-prep"]')) return;
+    const text = clean(node.innerText || node.textContent || node.getAttribute('aria-label') || node.value || '');
+    if (keepFinalPurchase.test(text)) return;
+    candidates.add(node);
+  };
+  document.querySelectorAll('input, textarea, select, [autocomplete], [name], [id], [aria-label]').forEach((node) => {
+    const attrs = clean([node.name, node.id, node.getAttribute('aria-label'), node.getAttribute('autocomplete'), node.placeholder, node.type].join(' '));
+    if (sensitiveLabel.test(attrs)) addCandidate(node.closest('form, fieldset, .a-box, .a-section, li, tr, div') || node);
+  });
+  document.querySelectorAll('address, [data-testid*="address" i], [id*="address" i], [class*="address" i], [id*="payment" i], [class*="payment" i], [id*="wallet" i], [class*="wallet" i]').forEach((node) => addCandidate(node));
+  const walker = document.createTreeWalker(document.body || document.documentElement, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      const value = clean(node.nodeValue || '');
+      if (!value || value.length < 4) return NodeFilter.FILTER_REJECT;
+      if (sensitiveLabel.test(value) || sensitiveValue.test(value)) return NodeFilter.FILTER_ACCEPT;
+      return NodeFilter.FILTER_REJECT;
+    }
+  });
+  let textNode;
+  while ((textNode = walker.nextNode())) {
+    const parent = textNode.parentElement;
+    if (!parent) continue;
+    addCandidate(parent.closest('address, form, fieldset, .a-box, .a-section, li, tr, div') || parent);
+  }
+  const overlays = [];
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+  candidates.forEach((node) => {
+    const rect = node.getBoundingClientRect();
+    if (!rect || rect.width < 4 || rect.height < 4) return;
+    if (rect.bottom <= 0 || rect.right <= 0 || rect.top >= viewportHeight || rect.left >= viewportWidth) return;
+    const overlay = document.createElement('div');
+    overlay.setAttribute('data-shopping-browser-redaction', 'checkout-prep');
+    overlay.textContent = 'redacted';
+    Object.assign(overlay.style, {
+      position: 'fixed',
+      left: `${Math.max(0, rect.left)}px`,
+      top: `${Math.max(0, rect.top)}px`,
+      width: `${Math.min(rect.width, viewportWidth - Math.max(0, rect.left))}px`,
+      height: `${Math.min(rect.height, viewportHeight - Math.max(0, rect.top))}px`,
+      zIndex: '2147483647',
+      background: 'rgba(0, 0, 0, 0.88)',
+      color: '#fff',
+      font: 'bold 13px sans-serif',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      textTransform: 'uppercase',
+      letterSpacing: '0.04em',
+      pointerEvents: 'none',
+      borderRadius: '3px',
+      boxSizing: 'border-box',
+      padding: '2px'
+    });
+    document.documentElement.appendChild(overlay);
+    overlays.push({left: Math.round(rect.left), top: Math.round(rect.top), width: Math.round(rect.width), height: Math.round(rect.height)});
+  });
+  return {redaction_overlay_count: overlays.length, redaction_rects_sha256_material: JSON.stringify(overlays)};
+})()
+"""
+
+CHECKOUT_SCREENSHOT_REDACTION_CLEANUP_JS = r"""
+(() => {
+  const nodes = Array.from(document.querySelectorAll('[data-shopping-browser-redaction="checkout-prep"]'));
+  nodes.forEach((node) => node.remove());
+  return {removed: nodes.length};
+})()
+"""
+
 TYPE_JS = r"""
 (() => {
   const selector = __SELECTOR__;
@@ -936,11 +1015,22 @@ def _safe_screenshot_path() -> str:
     return os.path.join(SCREENSHOT_DIR, f"shopping-browser-{stamp}-{os.getpid()}.png")
 
 
-def _assert_screenshot_allowed(url: str, title: str) -> None:
+def _screenshot_policy(url: str, title: str) -> dict[str, Any]:
     parsed = urlparse(url)
     sensitive_url = " ".join([parsed.path, parsed.query, title]).lower()
+    checkoutish = re.search(r"checkout|buy|payselect|ship|spc|review|ordering", " ".join([parsed.path, parsed.query, title]), re.IGNORECASE)
+    if checkoutish and parsed.scheme == "https" and AMAZON_HOST_RE.search(parsed.netloc):
+        if re.search(r"(signin|login|ap/signin|account|orders|addresses|wallet|payment|passkey|password|captcha|verification)", sensitive_url):
+            raise ValueError("current Amazon page appears to be login, account, payment setup, address edit, order history, CAPTCHA, passkey, or verification scope; Joy must take over before screenshots")
+        return {"mode": "checkout_prep_redacted", "redaction_required": True}
     if re.search(r"(signin|login|ap/signin|checkout|buy|place-order|address|wallet|payment|account|orders|passkey|password|captcha|verification)", sensitive_url):
-        raise ValueError("current page appears to be login, checkout, account, payment, address, order, CAPTCHA, or passkey scope; Joy must take over before screenshots")
+        raise ValueError("current page appears to be login, checkout, account, payment, address, order, CAPTCHA, or passkey scope; Joy must take over before raw screenshots")
+    return {"mode": "standard", "redaction_required": False}
+
+
+def _redaction_hash(redaction: dict[str, Any]) -> str:
+    material = str(redaction.get("redaction_rects_sha256_material") or "[]")
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
 def _write_screenshot(output_path: str, data: bytes) -> None:
@@ -1383,13 +1473,22 @@ def _screenshot(full_page: bool = False) -> dict[str, Any]:
         page_info = _target_page_info(browser.port) if browser.port is not None else {}
         url = str(page_info.get("url") or "")
         title = str(page_info.get("title") or "")
-        _assert_screenshot_allowed(url, title)
-        params = {"format": "png", "fromSurface": True, "captureBeyondViewport": bool(full_page)}
+        policy = _screenshot_policy(url, title)
+        target_id = page_info.get("id") or _first_page_target(browser)
+        session_id = _attach(browser, str(target_id))
+        checkout_review: dict[str, Any] | None = None
+        redaction: dict[str, Any] = {}
+        if policy["redaction_required"]:
+            checkout_review = _checkout_summary_from_browser(browser, session_id)
+            if checkout_review.get("human_takeover_required"):
+                raise ValueError(str(checkout_review.get("blocked_reason") or "sensitive checkout/security prompt is visible; Joy must take over before screenshots"))
+            redaction = _evaluate(browser, session_id, CHECKOUT_SCREENSHOT_REDACTION_JS) or {}
+            if int(redaction.get("redaction_overlay_count") or 0) < 1:
+                raise ValueError("checkout-prep screenshot redaction found no address/payment/contact regions to cover; refusing visual capture")
+        params = {"format": "png", "fromSurface": True, "captureBeyondViewport": bool(full_page) and not policy["redaction_required"]}
         capture_method = "cdp"
         cdp_error = ""
         try:
-            target_id = page_info.get("id") or _first_page_target(browser)
-            session_id = _attach(browser, str(target_id))
             captured = browser.call("Page.captureScreenshot", params, session_id=session_id)
             encoded = str(captured.get("data") or "")
             if not encoded:
@@ -1398,11 +1497,17 @@ def _screenshot(full_page: bool = False) -> dict[str, Any]:
         except Exception as exc:
             # Amazon can leave the page target unresponsive to Page/Runtime CDP
             # calls while the Kasm display itself is still live.  Fall back to a
-            # container-scoped X11 root capture after checking the target URL and
-            # title from Chrome's /json/list metadata.
+            # container-scoped X11 root capture.  On checkout-prep pages this is
+            # only allowed after a CDP-installed redaction overlay is active.
             capture_method = "kasm_x11"
+            if policy["redaction_required"] and not redaction:
+                raise RuntimeError("checkout-prep screenshot requires an active redaction overlay before X11 fallback") from exc
             png_data = _x11_screenshot()
             cdp_error = str(exc)[:500]
+        finally:
+            if policy["redaction_required"]:
+                with contextlib.suppress(Exception):
+                    _evaluate(browser, session_id, CHECKOUT_SCREENSHOT_REDACTION_CLEANUP_JS)
         output_path = _safe_screenshot_path()
         _write_screenshot(output_path, png_data)
         result = {
@@ -1412,14 +1517,27 @@ def _screenshot(full_page: bool = False) -> dict[str, Any]:
             "media": f"MEDIA:{output_path}",
             "url": _sanitize_url(url),
             "page_title": title,
-            "full_page": bool(full_page) and capture_method == "cdp",
+            "full_page": bool(full_page) and capture_method == "cdp" and not policy["redaction_required"],
             "capture_method": capture_method,
+            "screenshot_mode": policy["mode"],
             "safety_boundary": "Captured only the persistent shopping browser page as a local PNG artifact. No raw CDP endpoint, cookies, local storage, request headers, vault contents, passwords, passkeys, 2FA/CAPTCHA data, or account/payment/address secrets were returned as structured text.",
         }
+        if policy["redaction_required"]:
+            result["redaction"] = {
+                "status": "applied",
+                "overlay_count": int(redaction.get("redaction_overlay_count") or 0),
+                "redaction_rects_hash": _redaction_hash(redaction),
+                "policy": "Checkout-prep screenshot uses browser-side opaque overlays for address, payment, account/contact, gift/promo-code, and security-prompt regions before capture. Full-page capture is disabled for redacted checkout evidence so off-viewport secrets are not captured without overlays.",
+            }
+            if checkout_review is not None:
+                result["checkout_review"] = checkout_review
+                result["material_summary_binding"] = checkout_review.get("material_summary_binding")
         if capture_method == "kasm_x11":
             result["fallback_reason"] = cdp_error
             result["full_page_note"] = "Kasm X11 fallback captures the visible browser display only."
-        _audit("screenshot", {"url": result["url"], "page_title": title, "path": output_path, "full_page": result["full_page"], "capture_method": capture_method})
+        if policy["redaction_required"] and full_page:
+            result["full_page_note"] = "Full-page capture was downgraded to the visible viewport because checkout-prep redaction is viewport-bound."
+        _audit("screenshot", {"url": result["url"], "page_title": title, "path": output_path, "full_page": result["full_page"], "capture_method": capture_method, "screenshot_mode": result["screenshot_mode"], "checkout_binding": result.get("material_summary_binding"), "redaction_rects_hash": (result.get("redaction") or {}).get("redaction_rects_hash")})
         return result
 
     with PortForward() as port:
@@ -1651,7 +1769,8 @@ def shopping_browser_status_tool(args: dict[str, Any], **_kw: Any) -> str:
             "status": "available",
             "approved_click_effects": ["checkout_prep", "select_shipping_option", "apply_checkout_option"],
             "boundary": "Star may navigate/click ordinary checkout-prep controls under Joy's live supervision and may receive sanitized order-review summaries. Star must pause for login, Bitwarden, passkeys, 2FA, CAPTCHA, suspicious security prompts, payment/address/account edits, or sensitive-information prompts.",
-            "sanitization": "Checkout-prep snapshots return item/totals/delivery/surprise-flag lines plus destination/payment labels with street address, full account/card, email, and phone redacted.",
+            "sanitization": "Checkout-prep snapshots and redacted checkout screenshots return item/totals/delivery/surprise-flag lines plus destination/payment labels with street address, full account/card, email, and phone redacted. Redacted checkout screenshots apply opaque browser-side overlays before capture and include the material_summary_binding.",
+            "visual_confirmation": "shopping_browser_screenshot may capture Amazon checkout/order-review pages only in checkout_prep_redacted mode: address/payment/contact/gift/promo/security regions are covered, full-page capture is disabled, and final Place Order remains visible as blocked evidence.",
         },
         "approval_gated_operations": {
             "add_to_cart": "available only through the broad shopping_browser_click flow with approved_effect='add_to_cart' and a human-readable approval reference",
@@ -2028,6 +2147,30 @@ if __name__ == "__main__":
     assert _reject_unsafe_operation("local_storage")["allowed"] is False
     assert _reject_unsafe_operation("screenshot")["allowed"] is True
     assert _reject_unsafe_operation("screenshot_sensitive_page")["allowed"] is False
+    assert _screenshot_policy("https://www.amazon.com/gp/buy/spc/handlers/display.html", "Review your order")["mode"] == "checkout_prep_redacted"
+    try:
+        _screenshot_policy("https://www.amazon.com/ap/signin", "Amazon Sign In")
+        raise AssertionError("login screenshot should be blocked")
+    except ValueError:
+        pass
+    assert _redaction_hash({"redaction_rects_sha256_material": "[]"}) == hashlib.sha256(b"[]").hexdigest()
+    sensitive_checkout_blob = {
+        "delivery": ["Arrives Monday at 123 Example Street Apt 4, Springfield, IL 62704, call 312-555-1212"],
+        "items": [{"title": "Widget", "seller": "Example Seller", "shipper": "Amazon", "notes": "Ship to 123 Example Street"}],
+        "payment_method_label_last_four_only": "Visa 4111 1111 1111 1234 CVV 987 account number 1234567890",
+        "shipping_destination_label_or_city_state": "Joy, 123 Example Street Apt 4, Springfield, IL 62704",
+        "nested": [["contact joy@example.test"], {"phone": "312-555-1212"}],
+    }
+    sanitized_checkout_blob = _sanitize_checkout_value(sensitive_checkout_blob)
+    sanitized_json = json.dumps(sanitized_checkout_blob).lower()
+    assert "example street" not in sanitized_json
+    assert "62704" not in sanitized_json
+    assert "312-555-1212" not in sanitized_json
+    assert "joy@example.test" not in sanitized_json
+    assert "1111 1111" not in sanitized_json
+    assert "cvv 987" not in sanitized_json
+    assert sanitized_checkout_blob["payment_method_label_last_four_only"] == "Visa ending in 1234"
+    assert sanitized_checkout_blob["shipping_destination_label_or_city_state"] == "Springfield, IL"
     assert "checkout_prep" in APPROVED_CLICK_EFFECTS
     synthetic_checkout = {
         "items": ["Widget Qty: 1 Sold by Example Seller Ship to 123 Example Street Apt 4, Sampletown, NY 12345"],
