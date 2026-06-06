@@ -1072,11 +1072,33 @@ TYPE_JS = r"""
 """
 
 
+def _compact_large_result(data: dict[str, Any]) -> dict[str, Any]:
+    compact = dict(data)
+    controls = compact.get("checkout_prep_controls")
+    if isinstance(controls, list) and len(controls) > 12:
+        metadata = dict(compact.get("blocked_metadata") or {})
+        metadata["checkout_prep_controls_returned"] = 12
+        metadata["checkout_prep_controls_truncated_from"] = len(controls)
+        compact["blocked_metadata"] = metadata
+        compact["checkout_prep_controls"] = controls[:12]
+    return compact
+
+
 def _json(data: dict[str, Any]) -> str:
     payload = json.dumps(data, ensure_ascii=False, sort_keys=True)
-    if len(payload) > MAX_RESULT_CHARS:
-        payload = payload[:MAX_RESULT_CHARS] + "… [truncated]"
-    return payload
+    if len(payload) <= MAX_RESULT_CHARS:
+        return payload
+    compact = _compact_large_result(data)
+    compact["result_truncated"] = True
+    payload = json.dumps(compact, ensure_ascii=False, sort_keys=True)
+    if len(payload) <= MAX_RESULT_CHARS:
+        return payload
+    return json.dumps({
+        "error": "RESULT_TOO_LARGE",
+        "message": "Sanitized result exceeded the shopping browser tool result budget after compaction.",
+        "operation": data.get("operation"),
+        "result_truncated": True,
+    }, ensure_ascii=False, sort_keys=True)
 
 
 def _audit(operation: str, details: dict[str, Any]) -> None:
