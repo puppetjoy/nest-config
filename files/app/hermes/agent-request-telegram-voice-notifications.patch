@@ -38,7 +38,8 @@
 +
 +    headline = _voice_summary_part(lines[0], max_chars=80)
 +    headline = re.sub(r"^(?:[\W_]*)(?:Agent request|Kanban|Task)[:：]?\s*", "", headline, flags=re.I)
-+    headline = headline or "agent request update"
++    headline = re.sub(r"^request\b[:：]?\s*", "", headline, flags=re.I)
++    headline = headline or "update"
 +
 +    fields: dict[str, str] = {}
 +    for line in lines[1:]:
