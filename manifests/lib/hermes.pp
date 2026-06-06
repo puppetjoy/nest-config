@@ -102,11 +102,12 @@ define nest::lib::hermes (
   $toolsets_yaml                     = $effective_toolsets.map |String[1] $toolset| {
     "          - ${toolset}"
   }.join("\n")
-  $profile_toolsets_yaml             = $profile_toolsets.map |String[1] $toolset| {
+  $profile_toolsets_yaml             = $effective_toolsets.map |String[1] $toolset| {
     "        - ${toolset}"
   }.join("\n")
   $platform_toolsets_yaml            = [
     'cli',
+    'cron',
     'telegram',
     'discord',
     'whatsapp',
