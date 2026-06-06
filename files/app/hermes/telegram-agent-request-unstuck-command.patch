@@ -1,0 +1,39 @@
+--- a/gateway/platforms/telegram.py
++++ b/gateway/platforms/telegram.py
+@@ -5050,6 +5050,36 @@
+             return
+         await self._ensure_forum_commands(msg)
+ 
++        command_text = msg.text or ""
++        command_head, _, command_tail = command_text.partition(" ")
++        command_name = command_head.lstrip("/").split("@", 1)[0].casefold()
++        if command_name in {"unstuck", "agent_requests", "prompts"}:
++            try:
++                from agent_request_broker.kanban_backend import handle_telegram_unstuck
++
++                user_display = getattr(getattr(msg, "from_user", None), "first_name", "Joy")
++                result = handle_telegram_unstuck(
++                    chat_id=str(getattr(msg, "chat_id", "") or ""),
++                    thread_id=str(getattr(msg, "message_thread_id", "") or ""),
++                    text=command_tail.strip(),
++                    command=command_name,
++                    actor=str(user_display or "joy"),
++                )
++            except Exception as exc:
++                logger.error("[%s] agent-request unstuck command failed: %s", self.name, exc, exc_info=True)
++                result = {"handled": True, "message": "Agent-request unstuck command failed. Check gateway logs."}
++            if result.get("handled"):
++                ack = str(result.get("message") or "Agent request prompts checked.")
++                try:
++                    await msg.reply_text(
++                        self.format_message(ack),
++                        parse_mode=ParseMode.MARKDOWN_V2,
++                        disable_web_page_preview=True,
++                    )
++                except Exception:
++                    logger.debug("[%s] failed to acknowledge agent-request unstuck command", self.name, exc_info=True)
++                return
++
+         event = self._build_message_event(msg, MessageType.COMMAND, update_id=update.update_id)
+         event.text = self._clean_bot_trigger_text(event.text)
+         event = self._apply_telegram_group_observe_attribution(event)

@@ -1,0 +1,442 @@
+diff --git a/src/agent_request_broker/kanban_backend.py b/src/agent_request_broker/kanban_backend.py
+index d76a39c..f5cac6d 100644
+--- a/src/agent_request_broker/kanban_backend.py
++++ b/src/agent_request_broker/kanban_backend.py
+@@ -53,6 +53,8 @@ REVIEW_CALLBACK_BINDING_ACTIONS = {"review_accept", "review_changes", "review_qu
+ REVIEW_BUTTON_ACTIONS = {"review", "review_required", "review_handoff", "review_requested", REVIEW_REQUESTED}
+ REPLY_PROMPT_ACTIONS = {"steer", "needs_info_answer", "review_changes", "review_question"}
+ REPLY_PROMPT_TTL_SECONDS = 60 * 60
++UNSTUCK_COMMAND_RE = re.compile(r"^\s*(?P<command>/(?:unstuck|agent_requests|prompts)(?:@\w+)?|unstuck|cancel\s+prompts)\b", re.IGNORECASE)
++REQUEST_ID_RE = re.compile(r"\bar-\d{8}-\d{6}-[0-9a-fA-F]{6}\b", re.IGNORECASE)
+ COMMENT_PREFIX = "<!-- agent-request:event "
+ COMMENT_SUFFIX = " -->"
+ APPROVAL_PREFIX = "apr-"
+@@ -961,7 +963,8 @@ def init_index(conn: Any) -> None:
+             prompt_message_id INTEGER,
+             created_at INTEGER NOT NULL,
+             expires_at INTEGER NOT NULL,
+-            used_at INTEGER
++            used_at INTEGER,
++            retired_reason TEXT NOT NULL DEFAULT ''
+         )
+         """
+     )
+@@ -974,7 +977,7 @@ def init_index(conn: Any) -> None:
+         "ON agent_request_reply_prompts(chat_id, prompt_message_id)"
+     )
+     prompt_columns = {row["name"] for row in conn.execute("PRAGMA table_info(agent_request_reply_prompts)").fetchall()}
+-    for column, column_type in (("review_comment_id", "INTEGER"), ("review_hash", "TEXT")):
++    for column, column_type in (("review_comment_id", "INTEGER"), ("review_hash", "TEXT"), ("retired_reason", "TEXT NOT NULL DEFAULT ''")):
+         if column not in prompt_columns:
+             conn.execute(f"ALTER TABLE agent_request_reply_prompts ADD COLUMN {column} {column_type}")
+     conn.execute(
+@@ -2121,7 +2124,7 @@ def record_reply_prompt(
+     conn.execute(
+         """
+         UPDATE agent_request_reply_prompts
+-           SET used_at = ?
++           SET used_at = ?, retired_reason = 'superseded by newer prompt'
+          WHERE request_id = ?
+            AND action = ?
+            AND used_at IS NULL
+@@ -2163,6 +2166,167 @@ def record_reply_prompt(
+     }
+ 
+ 
++def _retire_reply_prompts(conn: Any, prompt_tokens: list[str], *, reason: str) -> int:
++    if not prompt_tokens:
++        return 0
++    rows = [(now_ts(), reason, token) for token in prompt_tokens]
++    conn.executemany(
++        """
++        UPDATE agent_request_reply_prompts
++           SET used_at = ?, retired_reason = ?
++         WHERE prompt_token = ?
++           AND used_at IS NULL
++        """,
++        rows,
++    )
++    conn.commit()
++    return len(prompt_tokens)
++
++
++def _prompt_action_label(action: str) -> str:
++    return {
++        "steer": "proposal steering",
++        "needs_info_answer": "needs-info answer",
++        "review_changes": "review changes",
++        "review_question": "review question",
++    }.get(action, action.replace("_", " "))
++
++
++def _prompt_age_context(prompt: dict[str, Any]) -> str:
++    current = now_ts()
++    age = max(0, current - int(prompt.get("created_at") or current)) // 60
++    ttl = max(0, int(prompt.get("expires_at") or current) - current) // 60
++    return f"age {age}m, expires in {ttl}m"
++
++
++def _prompt_waiting_label(conn: Any, prompt: dict[str, Any]) -> str:
++    reason = _reply_prompt_stale_reason(conn, prompt)
++    return "waiting" if reason is None else f"not waiting: {reason}"
++
++
++def _format_active_prompt_list(conn: Any, prompts: list[dict[str, Any]], *, limit: int = 8) -> str:
++    lines: list[str] = []
++    for idx, prompt in enumerate(prompts[:limit], start=1):
++        item = index_for_request(conn, prompt["request_id"])
++        title = item.subject_display or item.title_display if item else prompt["request_id"]
++        title = clean_text(title, max_len=120)
++        message_id = prompt.get("prompt_message_id") or "unknown"
++        lines.append(
++            f"{idx}. {prompt['request_id']} / {prompt['task_id']} — {title} — "
++            f"{_prompt_action_label(prompt['action'])}; prompt {message_id}; "
++            f"{_prompt_age_context(prompt)}; {_prompt_waiting_label(conn, prompt)}"
++        )
++    if len(prompts) > limit:
++        lines.append(f"…and {len(prompts) - limit} more")
++    return "\n".join(lines)
++
++
++def _split_unstuck_command(text: str) -> tuple[bool, str, str]:
++    match = UNSTUCK_COMMAND_RE.match(text or "")
++    if not match:
++        return False, "", text or ""
++    command = match.group("command").casefold()
++    if command.startswith("/"):
++        command = command[1:].split("@", 1)[0]
++    return True, command, (text or "")[match.end():].strip()
++
++
++def _newest_prompts_by_request_action(prompts: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[str]]:
++    newest: dict[tuple[str, str], dict[str, Any]] = {}
++    stale_tokens: list[str] = []
++    for prompt in sorted(
++        prompts,
++        key=lambda row: (
++            int(row.get("created_at") or 0),
++            int(row.get("prompt_message_id") or 0),
++            row.get("prompt_token") or "",
++        ),
++        reverse=True,
++    ):
++        key = (prompt["request_id"], prompt["action"])
++        if key in newest:
++            stale_tokens.append(prompt["prompt_token"])
++        else:
++            newest[key] = prompt
++    return list(newest.values()), stale_tokens
++
++
++def _attach_reply_prompt_text(conn: Any, prompt: dict[str, Any], *, response: str, actor: str, reason: str = "reply consumed") -> dict[str, Any]:
++    response = sanitize_notification_text(response, max_len=1800)
++    response_labels = {
++        "steer": "Joy provided proposal steering from Telegram.",
++        "needs_info_answer": "Joy answered a blocked/needs-info prompt from Telegram.",
++        "review_changes": "Joy provided requested review changes from Telegram.",
++        "review_question": "Joy provided a review question from Telegram.",
++    }
++    comment_body = event_comment(
++        request_id=prompt["request_id"],
++        actor=actor,
++        action=f"{prompt['action']}_response",
++        summary=response_labels.get(prompt["action"], "Joy replied to an agent-request Telegram prompt."),
++        joy_steering=response,
++    )
++    require_kanban().add_comment(conn, prompt["task_id"], actor, comment_body)
++    _retire_reply_prompts(conn, [prompt["prompt_token"]], reason=reason)
++    return {
++        "handled": True,
++        "ok": True,
++        "request_id": prompt["request_id"],
++        "task_id": prompt["task_id"],
++        "action": prompt["action"],
++        "message": f"Recorded reply for {prompt['request_id']} / {prompt['task_id']} and retired that prompt.",
++    }
++
++
++def handle_telegram_unstuck(
++    *,
++    chat_id: str,
++    actor: str = "joy",
++    thread_id: str = "",
++    text: str = "",
++    command: str = "unstuck",
++) -> dict[str, Any]:
++    """List, retire, or route active Telegram agent-request reply prompts."""
++    conn = connect()
++    try:
++        prompts = _reply_prompt_candidates(conn, chat_id=chat_id, thread_id=thread_id)
++        request_match = REQUEST_ID_RE.search(text or "")
++        if request_match:
++            request_id = request_match.group(0)
++            matching = [prompt for prompt in prompts if prompt["request_id"].casefold() == request_id.casefold()]
++            matching, duplicate_tokens = _newest_prompts_by_request_action(matching)
++            if duplicate_tokens:
++                _retire_reply_prompts(conn, duplicate_tokens, reason="older duplicate retired by unstuck")
++            steering = ((text or "")[: request_match.start()] + (text or "")[request_match.end() :]).strip(" :-\n\t")
++            if len(matching) == 1 and steering:
++                return _attach_reply_prompt_text(conn, matching[0], response=steering, actor=actor, reason="unstuck reply consumed")
++            if len(matching) == 1:
++                return {"handled": True, "ok": True, "message": f"Active prompt for {request_id}:\n{_format_active_prompt_list(conn, matching)}"}
++            if len(matching) > 1:
++                return {"handled": True, "ok": False, "message": f"Multiple actions are active for {request_id}. Reply directly to the prompt or include more context.\n{_format_active_prompt_list(conn, matching)}"}
++            return {"handled": True, "ok": False, "message": f"No active prompt for {request_id}. Current active prompts:\n{_format_active_prompt_list(conn, prompts) or 'none'}"}
++
++        prompts, duplicate_tokens = _newest_prompts_by_request_action(prompts)
++        retired_duplicates = _retire_reply_prompts(conn, duplicate_tokens, reason="older duplicate retired by unstuck") if duplicate_tokens else 0
++        if command == "cancel prompts" or (text or "").strip().casefold() in {"cancel", "cancel all", "retire all", "clear", "clear all"}:
++            retired = _retire_reply_prompts(conn, [prompt["prompt_token"] for prompt in prompts], reason="retired by unstuck command")
++            return {"handled": True, "ok": True, "retired_prompts": retired + retired_duplicates, "message": f"Retired {retired + retired_duplicates} active agent-request reply prompt(s) in this chat."}
++
++        prompts = _reply_prompt_candidates(conn, chat_id=chat_id, thread_id=thread_id)
++        if not prompts:
++            msg = "No active agent-request reply prompts are trapping this chat."
++            if retired_duplicates:
++                msg += f" Retired {retired_duplicates} older duplicate prompt(s)."
++            return {"handled": True, "ok": True, "active_prompts": [], "retired_duplicates": retired_duplicates, "message": msg}
++        message = "Active agent-request reply prompts in this chat:\n" + _format_active_prompt_list(conn, prompts)
++        if retired_duplicates:
++            message += f"\n\nRetired {retired_duplicates} older duplicate prompt(s)."
++        message += "\n\nReply directly to a prompt, send `unstuck <request-id> <your steering>`, or send `cancel prompts` to retire all active prompts in this chat."
++        return {"handled": True, "ok": True, "active_prompts": prompts, "retired_duplicates": retired_duplicates, "message": message}
++    finally:
++        conn.close()
++
++
+ def _reply_prompt_stale_reason(conn: Any, prompt: dict[str, Any]) -> str | None:
+     item = index_for_request(conn, prompt["request_id"])
+     task = require_kanban().get_task(conn, prompt["task_id"])
+@@ -2198,17 +2362,18 @@ def _reply_prompt_stale_reason(conn: Any, prompt: dict[str, Any]) -> str | None:
+ 
+ def _active_reply_prompts(rows: list[Any], conn: Any) -> list[dict[str, Any]]:
+     active: list[dict[str, Any]] = []
+-    stale_tokens: list[str] = []
++    stale_reasons: list[tuple[str, str]] = []
+     for row in rows:
+         prompt = dict(row)
+-        if _reply_prompt_stale_reason(conn, prompt):
+-            stale_tokens.append(prompt["prompt_token"])
++        stale_reason = _reply_prompt_stale_reason(conn, prompt)
++        if stale_reason:
++            stale_reasons.append((prompt["prompt_token"], stale_reason))
+         else:
+             active.append(prompt)
+-    if stale_tokens:
++    if stale_reasons:
+         conn.executemany(
+-            "UPDATE agent_request_reply_prompts SET used_at = ? WHERE prompt_token = ? AND used_at IS NULL",
+-            [(now_ts(), token) for token in stale_tokens],
++            "UPDATE agent_request_reply_prompts SET used_at = ?, retired_reason = ? WHERE prompt_token = ? AND used_at IS NULL",
++            [(now_ts(), reason, token) for token, reason in stale_reasons],
+         )
+         conn.commit()
+     return active
+@@ -2257,7 +2422,7 @@ def _reply_prompt_candidates(
+ def _active_prompt_context(conn: Any, prompts: list[dict[str, Any]]) -> str:
+     lines = [
+         "More than one agent-request reply prompt is active here.",
+-        "Reply directly to the intended prompt message, or include exactly one request id in your reply.",
++        "Send /unstuck to manage them, reply directly to the intended prompt message, or include exactly one request id in your reply.",
+         "Active prompts:",
+     ]
+     for prompt in prompts[:8]:
+@@ -2267,7 +2432,7 @@ def _active_prompt_context(conn: Any, prompts: list[dict[str, Any]]) -> str:
+         expires = datetime.fromtimestamp(int(prompt["expires_at"]), timezone.utc).strftime("%H:%M UTC")
+         lines.append(
+             f"- {prompt['request_id']} / {prompt['task_id']} / {prompt['action']} — {title} "
+-            f"(prompt message {message_id}, expires {expires})"
++            f"(prompt message {message_id}, expires {expires}; {_prompt_waiting_label(conn, prompt)})"
+         )
+     return "\n".join(lines)
+ 
+@@ -2277,7 +2442,7 @@ def _reply_prompt_request_ids(text: str) -> set[str]:
+ 
+ 
+ def _mark_reply_prompt_used(conn: Any, prompt_token: str) -> None:
+-    conn.execute("UPDATE agent_request_reply_prompts SET used_at = ? WHERE prompt_token = ?", (now_ts(), prompt_token))
++    conn.execute("UPDATE agent_request_reply_prompts SET used_at = ?, retired_reason = 'reply consumed' WHERE prompt_token = ?", (now_ts(), prompt_token))
+     conn.commit()
+ 
+ 
+@@ -2291,6 +2456,9 @@ def handle_telegram_reply(
+ ) -> dict[str, Any]:
+     """Route a Telegram free-form reply through its originating action prompt."""
+     response = clean_text(text, max_len=4000)
++    is_unstuck, command, command_tail = _split_unstuck_command(response)
++    if is_unstuck:
++        return handle_telegram_unstuck(chat_id=chat_id, actor=actor, thread_id=thread_id, text=command_tail, command=command)
+     if not response:
+         return {"handled": False, "ok": False, "error": "empty_reply", "message": "Empty agent-request reply."}
+     conn = connect()
+diff --git a/tests/test_agent_request_broker.py b/tests/test_agent_request_broker.py
+index bab8056..ba1df5c 100755
+--- a/tests/test_agent_request_broker.py
++++ b/tests/test_agent_request_broker.py
+@@ -659,6 +659,166 @@ def test_stale_reply_prompts_are_removed_from_active_consideration():
+             backend.telegram_send = old_send
+ 
+ 
++
++def _active_reply_prompt_rows(backend, chat_id: str = "chat-1"):
++    conn = backend.connect()
++    try:
++        return [
++            dict(row)
++            for row in conn.execute(
++                "SELECT * FROM agent_request_reply_prompts WHERE chat_id = ? AND used_at IS NULL ORDER BY created_at, prompt_token",
++                (chat_id,),
++            ).fetchall()
++        ]
++    finally:
++        conn.close()
++
++
++def test_unstuck_retires_duplicate_same_request_prompts():
++    if not require_hermes_src():
++        return
++    with kanban_env() as tmp:
++        from agent_request_broker import kanban_backend as backend
++
++        old_send = backend.telegram_send
++        deliveries = []
++        backend.telegram_send = lambda message, *, profile="", reply_markup=None: deliveries.append(reply_markup) or {"sent": True, "test": True}
++        try:
++            submitted = backend.submit({"title": "Duplicate prompt", "request": "Need proposal steering", "target": "star"}, requester="talon")
++            request_id = submitted["request"]["id"]
++            task_id = submitted["request"]["kanban_task_id"]
++            backend.propose({"request_id": request_id, "summary": "approval-required", "proposal": "Do the thing."}, actor="star")
++            conn = backend.connect()
++            try:
++                markup = [markup for markup in deliveries if markup][-1]
++                token = markup["inline_keyboard"][1][0]["callback_data"].split(":", 1)[1]
++                validation = backend.validate_callback_token(conn, token)
++                callback = validation["callback"]
++                backend.record_reply_prompt(conn, callback=callback, actor="joy", chat_id="chat-1", thread_id="topic-1", prompt_message_id=15915)
++                backend.record_reply_prompt(conn, callback=callback, actor="joy", chat_id="chat-1", thread_id="topic-1", prompt_message_id=15948)
++                conn.execute("UPDATE agent_request_reply_prompts SET used_at = NULL, retired_reason = '' WHERE prompt_message_id = 15915")
++                conn.commit()
++            finally:
++                conn.close()
++
++            result = backend.handle_telegram_reply(chat_id="chat-1", thread_id="topic-1", text="/unstuck", actor="joy")
++
++            assert result["handled"] is True
++            assert result["retired_duplicates"] == 1
++            active = _active_reply_prompt_rows(backend)
++            assert len(active) == 1
++            assert active[0]["request_id"] == request_id
++            assert active[0]["task_id"] == task_id
++            assert active[0]["prompt_message_id"] == 15948
++        finally:
++            backend.telegram_send = old_send
++
++
++def test_unstuck_lists_multiple_requests_without_guessing():
++    if not require_hermes_src():
++        return
++    with kanban_env() as tmp:
++        from agent_request_broker import kanban_backend as backend
++
++        old_send = backend.telegram_send
++        deliveries = []
++        backend.telegram_send = lambda message, *, profile="", reply_markup=None: deliveries.append(reply_markup) or {"sent": True, "test": True}
++        try:
++            first = backend.submit({"title": "First prompt", "request": "Need answer one", "target": "star"}, requester="talon")["request"]
++            second = backend.submit({"title": "Second prompt", "request": "Need answer two", "target": "star"}, requester="talon")["request"]
++            conn = backend.connect()
++            try:
++                kanban = backend.require_kanban()
++                for request, message_id in ((first, 16001), (second, 16002)):
++                    kanban.block_task(conn, request["kanban_task_id"], reason="needs-info: test")
++                    item = backend.index_for_request(conn, request["id"])
++                    markup = backend.actionable_reply_markup(conn, item=item, action="needs_info")
++                    token = markup["inline_keyboard"][0][0]["callback_data"].split(":", 1)[1]
++                    callback = backend.validate_callback_token(conn, token)["callback"]
++                    backend.record_reply_prompt(conn, callback=callback, actor="joy", chat_id="chat-1", thread_id="topic-1", prompt_message_id=message_id)
++            finally:
++                conn.close()
++
++            result = backend.handle_telegram_reply(chat_id="chat-1", thread_id="topic-1", text="unstuck", actor="joy")
++
++            assert result["handled"] is True
++            assert result["retired_duplicates"] == 0
++            assert first["id"] in result["message"]
++            assert second["id"] in result["message"]
++            assert len(_active_reply_prompt_rows(backend)) == 2
++        finally:
++            backend.telegram_send = old_send
++
++
++def test_unstuck_with_request_id_attaches_steering_and_retires_prompt():
++    if not require_hermes_src():
++        return
++    with kanban_env() as tmp:
++        from agent_request_broker import kanban_backend as backend
++
++        old_send = backend.telegram_send
++        deliveries = []
++        backend.telegram_send = lambda message, *, profile="", reply_markup=None: deliveries.append(reply_markup) or {"sent": True, "test": True}
++        try:
++            submitted = backend.submit({"title": "Attach steering", "request": "Need proposal steering", "target": "star"}, requester="talon")["request"]
++            backend.propose({"request_id": submitted["id"], "summary": "approval-required", "proposal": "Original plan."}, actor="star")
++            conn = backend.connect()
++            try:
++                markup = [markup for markup in deliveries if markup][-1]
++                token = markup["inline_keyboard"][1][0]["callback_data"].split(":", 1)[1]
++                callback = backend.validate_callback_token(conn, token)["callback"]
++                backend.record_reply_prompt(conn, callback=callback, actor="joy", chat_id="chat-1", thread_id="topic-1", prompt_message_id=17001)
++            finally:
++                conn.close()
++
++            result = backend.handle_telegram_reply(chat_id="chat-1", thread_id="topic-1", text=f"unstuck {submitted['id']} Please keep the safer path", actor="joy")
++
++            assert result["handled"] is True
++            assert result["request_id"] == submitted["id"]
++            assert _active_reply_prompt_rows(backend) == []
++            conn = backend.connect()
++            try:
++                kanban = backend.require_kanban()
++                comments = "\n".join(comment.body for comment in kanban.list_comments(conn, submitted["kanban_task_id"]))
++            finally:
++                conn.close()
++            assert "Please keep the safer path" in comments
++        finally:
++            backend.telegram_send = old_send
++
++
++def test_completed_tasks_do_not_leave_active_reply_prompts_intercepting_chat():
++    if not require_hermes_src():
++        return
++    with kanban_env() as tmp:
++        from agent_request_broker import kanban_backend as backend
++
++        old_send = backend.telegram_send
++        deliveries = []
++        backend.telegram_send = lambda message, *, profile="", reply_markup=None: deliveries.append(reply_markup) or {"sent": True, "test": True}
++        try:
++            submitted = backend.submit({"title": "Completed prompt", "request": "Will complete", "target": "star"}, requester="talon")["request"]
++            conn = backend.connect()
++            try:
++                kanban = backend.require_kanban()
++                kanban.block_task(conn, submitted["kanban_task_id"], reason="needs-info: test")
++                item = backend.index_for_request(conn, submitted["id"])
++                markup = backend.actionable_reply_markup(conn, item=item, action="needs_info")
++                token = markup["inline_keyboard"][0][0]["callback_data"].split(":", 1)[1]
++                callback = backend.validate_callback_token(conn, token)["callback"]
++                backend.record_reply_prompt(conn, callback=callback, actor="joy", chat_id="chat-1", thread_id="topic-1", prompt_message_id=18001)
++                assert kanban.complete_task(conn, submitted["kanban_task_id"], summary="done")
++                backend.update_index_status(conn, submitted["id"], "completed")
++            finally:
++                conn.close()
++
++            result = backend.handle_telegram_reply(chat_id="chat-1", thread_id="topic-1", text="ordinary chat after completion", actor="joy")
++
++            assert result["handled"] is False
++            assert _active_reply_prompt_rows(backend) == []
++        finally:
++            backend.telegram_send = old_send
++
+ def test_needs_info_reply_records_payload_and_resumes_blocked_task():
+     if not require_hermes_src():
+         return
