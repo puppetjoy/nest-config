@@ -1,0 +1,65 @@
+--- a/src/agent_request_broker/kanban_backend.py
++++ b/src/agent_request_broker/kanban_backend.py
+@@ -3079,8 +3079,18 @@ def remind_actionable_request(args: dict[str, Any], *, actor: str) -> dict[str,
+ 
+     conn = connect()
+     try:
++        fallback_task_id = task_id
++        if not fallback_task_id and request_id.startswith(DIRECT_FALLBACK_REQUEST_PREFIX):
++            fallback_task_id = request_id[len(DIRECT_FALLBACK_REQUEST_PREFIX):]
+         item = index_for_request(conn, request_id) if request_id else index_for_task(conn, task_id)
++        if not item and fallback_task_id:
++            item = maybe_register_direct_kanban_fallback_review(
++                conn,
++                fallback_task_id,
++                actor=actor,
++                summary="Watchdog reminder: direct Kanban fallback review is still waiting for Joy action.",
++            )
+         if not item:
+-            return {"error": "agent request not found"}
++            return {"error": "agent request not found"}
+         task = require_kanban().get_task(conn, item.task_id)
+         if task is None:
+             return {"error": f"Kanban task not found for request {item.request_id}: {item.task_id}"}
+--- a/tests/test_agent_request_broker.py
++++ b/tests/test_agent_request_broker.py
+@@ -3264,6 +3264,8 @@ def test_notification_adapter_registers_direct_kanban_fallback_review():
+                     {"summary": "review-required: direct fallback needs review", "source": "kanban_block_review_required"},
+                     run_id=None,
+                 )
++                conn.execute("UPDATE tasks SET status = ? WHERE id = ?", ("review", task_id))
++                conn.commit()
+             finally:
+                 conn.close()
+ 
+@@ -3305,6 +3305,29 @@ def test_notification_adapter_registers_direct_kanban_fallback_review():
+             assert rows[0]["action"] == "review_requested"
+             assert rows[0]["delivered"] == 1
+             assert {row["action"] for row in callback_rows} == {"review_accept", "review_changes", "review_question"}
+             assert {row["review_comment_id"] for row in callback_rows} == {comment_id}
++
++            messages.clear()
++            sends.clear()
++            reminded = backend.remind_actionable_request(
++                {"task_id": task_id, "min_interval_seconds": 60},
++                actor="talon",
++            )
++            assert reminded["request_id"] == fallback_request_id
++            assert reminded["task_id"] == task_id
++            assert reminded["action"] == "reviewing"
++            assert reminded["reminded"] is False
++            assert reminded["reason"] == "recent Joy-visible actionable notification already delivered"
++
++            conn = backend.connect()
++            try:
++                conn.execute("DELETE FROM agent_request_notifications WHERE task_id = ?", (task_id,))
++                conn.commit()
++            finally:
++                conn.close()
++            reminded = backend.remind_actionable_request({"task_id": task_id}, actor="talon")
++            assert reminded["reminded"] is True
++            assert reminded["notification"]["notified"] is True
++            assert len(messages) == 1
+         finally:
+             backend.telegram_send = old_send
+ 

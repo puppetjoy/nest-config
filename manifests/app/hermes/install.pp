@@ -116,6 +116,7 @@ class nest::app::hermes::install {
     'patch_hermes_agent_request_future_milestone_dependency',
     'patch_hermes_agent_request_direct_kanban_fallback_review',
     'patch_hermes_agent_request_direct_kanban_fallback_review_test',
+    'patch_hermes_agent_request_direct_kanban_reminder_fallback',
     'patch_hermes_agent_request_watchdog_actionable_reminder',
     'patch_hermes_agent_request_completed_archive_policy',
     'patch_hermes_agent_request_telegram_delivery_profile_routing',
@@ -489,6 +490,14 @@ class nest::app::hermes::install {
     group  => 'root',
   }
 
+  file { "${install_dir}/agent-request-direct-kanban-reminder-fallback.patch":
+    ensure => file,
+    source => 'puppet:///modules/nest/app/hermes/agent-request-direct-kanban-reminder-fallback.patch',
+    mode   => '0644',
+    owner  => 'root',
+    group  => 'root',
+  }
+
   file { "${install_dir}/agent-request-review-notification-binding.patch":
     ensure => file,
     source => 'puppet:///modules/nest/app/hermes/agent-request-review-notification-binding.patch',
@@ -533,6 +542,15 @@ class nest::app::hermes::install {
     require => [
       File["${install_dir}/agent-request-direct-kanban-review-phrase-coverage.patch"],
       Exec['patch_hermes_agent_request_direct_kanban_fallback_review_test'],
+    ],
+  }
+
+  exec { 'patch_hermes_agent_request_direct_kanban_reminder_fallback':
+    command => "/bin/rm -f ${broker_source_dir}/src/agent_request_broker/kanban_backend.py.orig ${broker_source_dir}/src/agent_request_broker/kanban_backend.py.rej ${broker_source_dir}/tests/test_agent_request_broker.py.orig ${broker_source_dir}/tests/test_agent_request_broker.py.rej && /usr/bin/patch -N -p1 -d ${broker_source_dir} < ${install_dir}/agent-request-direct-kanban-reminder-fallback.patch",
+    unless  => "/bin/grep -q 'fallback_task_id = task_id' ${broker_source_dir}/src/agent_request_broker/kanban_backend.py && /bin/grep -q 'recent Joy-visible actionable notification already delivered' ${broker_source_dir}/tests/test_agent_request_broker.py",
+    require => [
+      File["${install_dir}/agent-request-direct-kanban-reminder-fallback.patch"],
+      Exec['patch_hermes_agent_request_direct_kanban_review_phrase_coverage'],
     ],
   }
 
@@ -612,6 +630,7 @@ class nest::app::hermes::install {
       Exec['patch_hermes_agent_request_review_requested_attention'],
       Exec['patch_hermes_agent_request_future_milestone_dependency'],
       Exec['patch_hermes_agent_request_direct_kanban_review_phrase_coverage'],
+      Exec['patch_hermes_agent_request_direct_kanban_reminder_fallback'],
       Exec['patch_hermes_agent_request_watchdog_actionable_reminder'],
       Exec['patch_hermes_agent_request_review_notification_binding'],
       Exec['patch_hermes_agent_request_completed_archive_policy'],
