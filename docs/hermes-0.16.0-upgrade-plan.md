@@ -137,6 +137,14 @@ not yet advertise that tag in the checked probe, so the safe path is:
    tag/commit, followed by Puppet deploy, owl apply twice, service restart, and
    live verification.
 
+## Approved 0.16.0 fork branch
+
+The reviewed 0.16.0 patch-stack branch is `joy/nest-0.15.2-patch-stack` in
+`https://gitlab.joyfullee.me/nest/forks/hermes-agent.git`. It is based on
+upstream `v2026.6.5` / Hermes Agent `0.16.0`, with the Nest Hermes core patch
+inventory rebased as first-class commits. The approved rollout pin is commit
+`a6d1e64a1795f2fbe8d4718e0b34e37d022806c6`.
+
 ## Rollback
 
 The Phase 0/1 source cutover is reversible by setting `git_url` back to upstream
