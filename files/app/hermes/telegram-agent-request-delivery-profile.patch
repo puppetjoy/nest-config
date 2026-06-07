@@ -1,0 +1,108 @@
+diff --git a/gateway/platforms/telegram.py b/gateway/platforms/telegram.py
+index 90d2ce610..574f80d36 100644
+--- a/gateway/platforms/telegram.py
++++ b/gateway/platforms/telegram.py
+@@ -401,6 +401,66 @@ class TelegramAdapter(BasePlatformAdapter):
+         """Telegram measures message length in UTF-16 code units."""
+         return utf16_len
+ 
++    def _agent_request_delivery_profile(self) -> str:
++        """Return the Hermes recipient profile for agent-request routing.
++
++        ``self.name`` is the adapter/platform name (``Telegram``), not the
++        Hermes profile that owns this gateway process. Agent-request callback
++        tokens are profile-scoped, so passing the platform label makes valid
++        Talon/Star buttons look like they belong to a different recipient.
++        """
++        for key in ("HERMES_PROFILE", "HERMES_PROFILE_NAME"):
++            value = (os.environ.get(key) or "").strip()
++            if value:
++                return value
++
++        # Profile-aware CLI entrypoints set a context-local Hermes home override
++        # rather than mutating process-wide environment variables.  In managed
++        # gateway services this is the normal path: the systemd environment may
++        # still show HERMES_HOME=~/.hermes while ``hermes --profile talon`` has
++        # selected ~/.hermes/profiles/talon inside the process.
++        try:
++            from hermes_cli.profiles import get_active_profile_name
++
++            active_profile = (get_active_profile_name() or "").strip()
++            if active_profile and active_profile not in {"default", "custom"}:
++                return active_profile
++        except Exception:
++            logger.debug("[%s] failed to derive agent-request profile from active Hermes profile", self.name, exc_info=True)
++
++        # Fall back to parsing the current CLI invocation.  This covers early
++        # gateway-start paths before the profile override is visible to this
++        # adapter, and keeps callback routing correct for managed units whose
++        # command line is ``hermes --profile <name> gateway run``.
++        try:
++            argv = list(sys.argv[1:])
++            for index, arg in enumerate(argv):
++                if arg in {"--profile", "-p"} and index + 1 < len(argv):
++                    value = argv[index + 1].strip()
++                    if value:
++                        return value
++                if arg.startswith("--profile="):
++                    value = arg.split("=", 1)[1].strip()
++                    if value:
++                        return value
++        except Exception:
++            logger.debug("[%s] failed to derive agent-request profile from argv", self.name, exc_info=True)
++
++        home = (os.environ.get("HERMES_HOME") or "").strip()
++        if home:
++            try:
++                path = _Path(home).expanduser()
++                if path.parent.name == "profiles" and path.name:
++                    return path.name
++            except Exception:
++                logger.debug("[%s] failed to derive agent-request profile from HERMES_HOME", self.name, exc_info=True)
++        logger.warning(
++            "[%s] agent-request callback/reply has no Hermes profile in environment; "
++            "routing will rely on token/chat validation only",
++            self.name,
++        )
++        return ""
++
+     def __init__(self, config: PlatformConfig):
+         super().__init__(config, Platform.TELEGRAM)
+         self._app: Optional[Application] = None
+@@ -3287,7 +3347,7 @@ class TelegramAdapter(BasePlatformAdapter):
+                     chat_id=str(query_chat_id or ""),
+                     thread_id=str(query_thread_id or ""),
+                     prompt_message_id=getattr(getattr(query, "message", None), "message_id", None),
+-                    delivery_profile=str(self.name or ""),
++                    delivery_profile=self._agent_request_delivery_profile(),
+                 )
+             except Exception as exc:
+                 logger.error("[%s] agent-request callback failed: %s", self.name, exc, exc_info=True)
+@@ -3295,6 +3355,18 @@ class TelegramAdapter(BasePlatformAdapter):
+                 return
+ 
+             message_text = str(result.get("message") or "Agent request action recorded.")
++            if not result.get("ok"):
++                logger.warning(
++                    "[%s] agent-request callback rejected: error=%s message=%s "
++                    "delivery_profile=%s chat_id=%s thread_id=%s prompt_message_id=%s",
++                    self.name,
++                    result.get("error") or result.get("reason") or "unknown",
++                    message_text,
++                    self._agent_request_delivery_profile(),
++                    query_chat_id,
++                    query_thread_id,
++                    getattr(getattr(query, "message", None), "message_id", None),
++                )
+             await query.answer(text=message_text[:200])
+             try:
+                 if result.get("ok"):
+@@ -5265,7 +5337,7 @@ class TelegramAdapter(BasePlatformAdapter):
+                 reply_to_message_id=reply_to,
+                 text=msg.text,
+                 actor=str(user_display or "joy"),
+-                delivery_profile=str(self.name or ""),
++                delivery_profile=self._agent_request_delivery_profile(),
+             )
+         except Exception as exc:
+             logger.error("[%s] agent-request reply routing failed: %s", self.name, exc, exc_info=True)
