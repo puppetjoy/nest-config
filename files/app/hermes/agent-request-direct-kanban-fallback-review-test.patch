@@ -1,6 +1,6 @@
 --- a/tests/test_agent_request_broker.py
 +++ b/tests/test_agent_request_broker.py
-@@ -2488,6 +2488,114 @@
+@@ -2488,6 +2488,115 @@
              assert {row["action"] for row in callback_rows} == {"needs_info_answer"}
          finally:
              backend.telegram_send = old_send
@@ -29,9 +29,10 @@
 +                    conn,
 +                    title="Watchdog fallback review task",
 +                    body=(
-+                        "Watchdog follow-up for a suspicious lifecycle shape.\n\n"
-+                        "Filed by the stuck-task watchdog as a direct Kanban fallback because "
-+                        "agent_request_submit is not available in this cron profile's tool surface."
++                        "Direct corrective child for parent `t_parent` / request `ar-parent` after "
++                        "agent-request workspace policy misrouted the original child task.\n\n"
++                        "Validate that direct corrective Kanban reviews are still indexed and notified "
++                        "even when the body does not contain the older direct Kanban fallback wording."
 +                    ),
 +                    assignee="talon",
 +                    created_by="worker",

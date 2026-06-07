@@ -1,12 +1,15 @@
 --- a/src/agent_request_broker/kanban_backend.py	2026-06-06 13:51:13.844070633 -0400
 +++ b/src/agent_request_broker/kanban_backend.py	2026-06-06 15:16:10.531508385 -0400
-@@ -1540,6 +1540,88 @@
+@@ -1540,6 +1540,91 @@
      return "; ".join(parts)
 
 
-+DIRECT_KANBAN_FALLBACK_PHRASE = "direct Kanban fallback"
++DIRECT_KANBAN_FALLBACK_PHRASES = (
++    "direct Kanban fallback",
++    "direct corrective child",
++    "direct corrective Kanban",
++)
 +DIRECT_FALLBACK_REQUEST_PREFIX = "ar-kanban-"
-+
 +
 +def _latest_comment_row(conn: Any, task_id: str) -> dict[str, Any] | None:
 +    row = conn.execute(
@@ -54,7 +57,7 @@
 +    if task is None:
 +        return None
 +    body = clean_text(getattr(task, "body", ""), max_len=12000)
-+    if DIRECT_KANBAN_FALLBACK_PHRASE.casefold() not in body.casefold():
++    if not any(phrase.casefold() in body.casefold() for phrase in DIRECT_KANBAN_FALLBACK_PHRASES):
 +        return None
 +    request_id = f"{DIRECT_FALLBACK_REQUEST_PREFIX}{task_id}"
 +    title = clean_text(getattr(task, "title", "") or task_id, max_len=200)
