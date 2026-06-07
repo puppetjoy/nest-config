@@ -268,6 +268,15 @@ define nest::lib::hermes (
         | YAML
     },
   }
+  $plugins_yaml = $image_gen_provider ? {
+    undef   => '',
+    default => @("YAML"),
+      plugins:
+        disabled: []
+        enabled:
+          - "image_gen/${image_gen_provider}"
+      | YAML
+  }
   $display_skin_yaml = $skin_name ? {
     undef   => '',
     default => "  skin: \"${skin_name}\"\n",
@@ -355,6 +364,7 @@ ${profile_toolsets_yaml}
         backend: tavily
         search_backend: tavily
 ${image_gen_yaml}
+${plugins_yaml}
       voice:
         auto_tts: ${voice_auto_tts}
       stt:

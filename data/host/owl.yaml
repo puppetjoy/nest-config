@@ -230,9 +230,13 @@ nest::app::hermes::instances:
         web: '🔎'
         session_search: '📝'
         messaging: '💬'
+        vision: '👁️'
+        image_gen: '🎨'
         agent_requests: '🦋'
         shopping_browser: '🛒'
         kanban: '📋'
+    image_gen_provider: 'openai-codex'
+    image_gen_model: 'gpt-image-2-medium'
     gitlab_enabled: false
     honcho_workspace: 'hermes'
     honcho_user_peer: 'joy'
@@ -258,6 +262,8 @@ nest::app::hermes::instances:
       - cronjob
       - todo
       - web
+      - vision
+      - image_gen
     google_workspace_enabled: true
     voice_auto_tts: true
     stt_enabled: true
