@@ -104,6 +104,15 @@ class nest::app::hermes::service {
     ],
   }
 
+  file { "${install_dir}/bin/hermes-systemd-user-refresh":
+    ensure  => file,
+    mode    => '0755',
+    owner   => 'root',
+    group   => 'root',
+    source  => 'puppet:///modules/nest/app/hermes/hermes-systemd-user-refresh',
+    require => File["${install_dir}/bin"],
+  }
+
   $agent_request_review_commands = [
     'agent-request-approve',
     'agent-request-propose',

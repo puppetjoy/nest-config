@@ -1,0 +1,42 @@
+#!/bin/sh
+# Refresh a Hermes user service from Puppet with locking and debounce
+
+set -eu
+
+if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
+  echo "usage: hermes-systemd-user-refresh SERVICE [DEBOUNCE_SECONDS]" >&2
+  exit 2
+fi
+
+service=$1
+debounce_seconds=${2:-300}
+runtime_dir=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
+state_dir=${runtime_dir}/hermes-maintenance
+lock_file=${state_dir}/service-refresh.lock
+stamp_file=${state_dir}/$(printf '%s' "$service" | tr -c 'A-Za-z0-9_.@-' '_').stamp
+
+mkdir -p "$state_dir"
+exec 9>"$lock_file"
+if command -v flock >/dev/null 2>&1; then
+  flock 9
+fi
+
+now=$(date +%s)
+last=0
+if [ -r "$stamp_file" ]; then
+  last=$(cat "$stamp_file" 2>/dev/null || printf '0')
+fi
+case "$last" in
+  ''|*[!0-9]*) last=0 ;;
+esac
+
+age=$((now - last))
+if [ "$age" -ge 0 ] && [ "$age" -lt "$debounce_seconds" ]; then
+  if XDG_RUNTIME_DIR="$runtime_dir" systemctl --user is-active --quiet "$service"; then
+    echo "Skipping $service refresh: refreshed ${age}s ago within ${debounce_seconds}s debounce window" >&2
+    exit 0
+  fi
+fi
+
+XDG_RUNTIME_DIR="$runtime_dir" systemctl --user try-reload-or-restart "$service"
+printf '%s\n' "$now" > "$stamp_file"

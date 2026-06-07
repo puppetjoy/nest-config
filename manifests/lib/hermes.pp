@@ -498,7 +498,7 @@ ${dashboard_theme_yaml}
     }
 
     exec { "restart_hermes_gateway_${profile}":
-      command     => "/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user try-reload-or-restart hermes-gateway@${profile}.service'",
+      command     => "/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) ${install_dir}/bin/hermes-systemd-user-refresh hermes-gateway@${profile}.service 300'",
       refreshonly => true,
       user        => $user,
       subscribe   => [
@@ -510,7 +510,10 @@ ${dashboard_theme_yaml}
         File[$hermes_honcho_config_path],
         Exec["configure_hermes_managed_config_${profile}"],
       ],
-      require     => Exec["enable_hermes_gateway_${profile}"],
+      require     => [
+        Exec["enable_hermes_gateway_${profile}"],
+        File["${install_dir}/bin/hermes-systemd-user-refresh"],
+      ],
     }
   } else {
     exec { "disable_hermes_gateway_${profile}":
