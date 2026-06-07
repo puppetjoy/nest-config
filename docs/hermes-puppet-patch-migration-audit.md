@@ -9,7 +9,11 @@ This audit covers the Hermes-related `patch` resources in
 was inspected in the task worktree
 `/home/joy/projects/.worktrees/hermes-agent/t_722214b6`, detached at
 `7050182dd5c549f88bd9f9c5b8ba244ee9019db7` (`origin/hermes/0.16.0-nest`, tag
-`nest/v0.16.0`).
+`nest/v0.16.0`) before follow-through. The accepted follow-through migrated the
+remaining source dependency patch to fork commit
+`4a8829c9fd05d5f02ec21a76868f93812d65eab2` and fast-forwarded
+`origin/hermes/0.16.0-nest` plus `origin/joy/nest-0.16.0-patch-stack` to that
+commit.
 
 ## Summary
 
@@ -18,12 +22,13 @@ was inspected in the task worktree
 - It also defines 24 agent-request-broker patch execs that apply to
   `${broker_source_dir}`. Those are broker maintenance, not candidates for the
   Hermes Agent fork.
-- 34 of the 35 Hermes Agent source patch execs are already covered by the
-  Hermes Agent fork ref that Puppet pins on owl.
+- 34 of the 35 Hermes Agent source patch execs were already covered by the
+  Hermes Agent fork ref that Puppet pinned on owl at audit time.
 - The one remaining durable Hermes Agent source change still only represented
-  as a Puppet patch is `dashboard-python-multipart-dependency.patch`.
-- No Puppet patches were removed, no Puppet pins were changed, and no deploy or
-  Puppet apply was performed during this audit.
+  as a Puppet patch at audit time was
+  `dashboard-python-multipart-dependency.patch`; it is now covered by fork
+  commit `4a8829c9f`.
+- No deploy or Puppet apply was performed during this audit or follow-through.
 
 ## Evidence used
 
@@ -31,11 +36,12 @@ was inspected in the task worktree
   - `manifests/app/hermes/install.pp`
   - `files/app/hermes/*.patch`
   - `data/host/owl.yaml`, which pins `nest::app::hermes::git_ref` to
-    `hermes/0.16.0-nest` and `nest::app::hermes::git_commit` to
-    `7050182dd5c549f88bd9f9c5b8ba244ee9019db7`
+    `hermes/0.16.0-nest` and now pins `nest::app::hermes::git_commit` to
+    `4a8829c9fd05d5f02ec21a76868f93812d65eab2`
 - Hermes Agent fork:
   - `origin/hermes/0.16.0-nest` and `origin/joy/nest-0.16.0-patch-stack` both
-    resolve to `7050182dd` in the task worktree
+    resolved to `7050182dd` in the task worktree at audit time and now resolve
+    to `4a8829c9f`
   - `git log --oneline --reverse upstream/v0.16.0..HEAD` shows the `nest: apply
     ...` patch migration commits listed below
   - targeted `git grep` checks confirmed current-file coverage for patches that
@@ -56,7 +62,7 @@ Classification legend:
 | Patch file | Puppet exec | Classification | Fork evidence |
 | --- | --- | --- | --- |
 | `dashboard-insecure-websockets.patch` | `patch_hermes_dashboard_insecure_websockets` | covered in fork | `c00322fd5 nest: apply dashboard-insecure-websockets`; current `hermes_cli/web_server.py` contains `app.state.allow_public = allow_public` |
-| `dashboard-python-multipart-dependency.patch` | `patch_hermes_dashboard_python_multipart_dependency` | migrate to fork | Current fork `pyproject.toml` has FastAPI/Uvicorn but no `python-multipart`; `git apply --check` of the Puppet patch succeeds against `7050182dd` |
+| `dashboard-python-multipart-dependency.patch` | `patch_hermes_dashboard_python_multipart_dependency` | migrated to fork; Puppet patch cleanup prepared | Fork commit `4a8829c9f deps: ship python-multipart with dashboard` adds `python-multipart==0.0.32` to `pyproject.toml` and updates `uv.lock`; the Nest config cleanup removes this Puppet patch wiring while keeping the install smoke for `m.version('python-multipart')` |
 | `telegram-tool-preview-length.patch` | `patch_hermes_telegram_tool_preview_length` | covered in fork | `326ff441d nest: apply telegram-tool-preview-length` |
 | `telegram-agent-request-callbacks.patch` | `patch_hermes_telegram_agent_request_callbacks` | covered in fork | `95d1780af nest: apply telegram-agent-request-callbacks`; callback tests exist in `tests/gateway/test_telegram_agent_request_callbacks.py` |
 | `telegram-agent-request-callback-preserve-text.patch` | `patch_hermes_telegram_agent_request_callback_preserve_text` | covered in fork | `6da2e2ed4 nest: apply telegram-agent-request-callback-preserve-text`; current Telegram adapter preserves `original_text` |
@@ -135,9 +141,9 @@ known-good and any ordering/array cleanups in `install.pp` are reviewed.
 3. After Joy approves that fork commit and the fork ref/pin moves to a commit that
    includes it, update Puppet source in a separate review-gated Nest config change:
    - remove `dashboard-python-multipart-dependency.patch` and its `file`/`exec`
-     wiring from `install.pp`
-   - remove the `python-multipart` patch-specific grep from `install_hermes_agent`
-     only if the package metadata check still proves the dependency is installed
+     wiring from `install.pp` (prepared in this follow-through)
+   - keep the `python-multipart` install smoke in `install_hermes_agent` so the
+     managed venv still proves the dependency is installed
    - consider removing or retaining the other 34 source patches according to Joy's
      rollout preference; they are redundant with the current fork ref, but keeping
      them temporarily is a conservative no-op-style guard while the fork/ref

@@ -98,7 +98,6 @@ class nest::app::hermes::install {
 
   $patch_execs = [
     'patch_hermes_dashboard_insecure_websockets',
-    'patch_hermes_dashboard_python_multipart_dependency',
     'patch_hermes_telegram_agent_request_callbacks',
     'patch_hermes_telegram_agent_request_callback_preserve_text',
     'patch_hermes_telegram_agent_request_delivery_profile',
@@ -213,7 +212,6 @@ class nest::app::hermes::install {
       Exec['cleanup_hermes_patch_artifacts'],
       Exec['create_hermes_venv'],
       Exec['patch_hermes_dashboard_insecure_websockets'],
-      Exec['patch_hermes_dashboard_python_multipart_dependency'],
       Exec['patch_hermes_telegram_tool_preview_length'],
       Exec['patch_hermes_telegram_agent_request_callbacks'],
       Exec['patch_hermes_telegram_agent_request_callback_preserve_text'],
@@ -263,23 +261,6 @@ class nest::app::hermes::install {
     require => [
       File["${install_dir}/dashboard-insecure-websockets.patch"],
       Vcsrepo[$source_dir],
-    ],
-  }
-
-  file { "${install_dir}/dashboard-python-multipart-dependency.patch":
-    ensure => file,
-    source => 'puppet:///modules/nest/app/hermes/dashboard-python-multipart-dependency.patch',
-    mode   => '0644',
-    owner  => 'root',
-    group  => 'root',
-  }
-
-  exec { 'patch_hermes_dashboard_python_multipart_dependency':
-    command => "/usr/bin/patch -N -p1 -d ${source_dir} < ${install_dir}/dashboard-python-multipart-dependency.patch",
-    unless  => "/bin/grep -q 'python-multipart==0.0.32' ${source_dir}/pyproject.toml",
-    require => [
-      File["${install_dir}/dashboard-python-multipart-dependency.patch"],
-      Exec['patch_hermes_dashboard_insecure_websockets'],
     ],
   }
 
