@@ -69,7 +69,7 @@ class nest::app::hermes::install {
   if $git_commit {
     exec { 'verify_hermes_source_ref_pin':
       command => "/bin/sh -c 'echo Hermes source ref ${git_ref} no longer resolves to pinned commit ${git_commit} >&2; exit 1'",
-      unless  => "/bin/sh -c 'test \"$(/usr/sbin/git -C ${source_dir} rev-parse ${git_ref}^{commit} 2>/dev/null || /usr/sbin/git -C ${source_dir} rev-parse origin/${git_ref}^{commit})\" = ${git_commit}'",
+      unless  => "/bin/sh -c 'resolved=$(/usr/sbin/git -C ${source_dir} rev-parse --verify --quiet ${git_ref}^{commit} || /usr/sbin/git -C ${source_dir} rev-parse --verify --quiet origin/${git_ref}^{commit}); test \"\$resolved\" = ${git_commit}'",
       require => Vcsrepo[$source_dir],
     }
   }
