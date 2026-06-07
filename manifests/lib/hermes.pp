@@ -79,6 +79,7 @@ define nest::lib::hermes (
     default => $soul_content,
   }
   $default_toolsets                  = [
+    'agent_directory',
     'agent_requests',
     'browser',
     'clarify',

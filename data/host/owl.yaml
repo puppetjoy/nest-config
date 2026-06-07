@@ -112,6 +112,7 @@ nest::app::hermes::instances:
         web: '🔎'
         browser: '🌐'
         skills: '📚'
+        agent_directory: '🗂️'
         agent_requests: '🪶'
         kanban: '📋'
         todo: '☑️'
@@ -233,6 +234,7 @@ nest::app::hermes::instances:
         messaging: '💬'
         vision: '👁️'
         image_gen: '🎨'
+        agent_directory: '🗂️'
         agent_requests: '🦋'
         shopping_browser: '🛒'
         kanban: '📋'
@@ -251,6 +253,7 @@ nest::app::hermes::instances:
     dashboard_public_url: 'https://star.eyrie'
     dashboard_theme: 'rose'
     toolsets:
+      - agent_directory
       - agent_requests
       - browser
       - clarify
