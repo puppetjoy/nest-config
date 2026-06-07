@@ -1,0 +1,15 @@
+diff --git a/pyproject.toml b/pyproject.toml
+index 7c9c0c7..5c393f7 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -106,6 +106,10 @@ dependencies = [
+   "pathspec==1.1.1",
+   "fastapi>=0.104.0,<1",
+   "uvicorn[standard]>=0.24.0,<1",
++  # Dashboard plugins that register FastAPI routes with Form/File/UploadFile
++  # need python-multipart at route registration time; without it the plugin
++  # API router is skipped and the dashboard returns 404 for plugin endpoints.
++  "python-multipart==0.0.32",
+   "ptyprocess>=0.7.0,<1; sys_platform != 'win32'",
+   "pywinpty>=2.0.0,<3; sys_platform == 'win32'",
+ ]
