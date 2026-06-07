@@ -1,0 +1,86 @@
+diff --git a/tests/tools/test_agent_directory_tools.py b/tests/tools/test_agent_directory_tools.py
+index deb3f1b16..fb44d0b81 100644
+--- a/tests/tools/test_agent_directory_tools.py
++++ b/tests/tools/test_agent_directory_tools.py
+@@ -98,6 +98,50 @@ def test_register_update_reuses_entry_task(directory_env):
+     assert discovered["agents"][0]["mission"] == "Nest operations and Hermes routing"
+ 
+ 
++def test_register_honors_profile_name_environment(directory_env, monkeypatch):
++    from tools import agent_directory_tools as directory
++
++    monkeypatch.delenv("HERMES_PROFILE", raising=False)
++    monkeypatch.setenv("HERMES_PROFILE_NAME", "star")
++
++    result = _loads(directory._handle_register({"profile": "star", "mission": "shopping help"}))
++
++    assert result["ok"] is True
++    assert result["profile"] == "star"
++    assert result["action"] == "registered"
++
++    omitted = _loads(directory._handle_register({"mission": "shopping and browsing"}))
++    assert omitted["ok"] is True
++    assert omitted["profile"] == "star"
++    discovered = _loads(directory._handle_discover({"profile": "star"}))
++    assert discovered["agents"][0]["mission"] == "shopping and browsing"
++
++
++def test_register_infers_current_profile_from_named_hermes_home(directory_env, monkeypatch):
++    from tools import agent_directory_tools as directory
++
++    profile_home = directory_env / "profiles" / "star"
++    profile_home.mkdir(parents=True)
++    monkeypatch.setenv("HERMES_HOME", str(profile_home))
++    monkeypatch.setenv("HERMES_KANBAN_HOME", str(directory_env))
++    monkeypatch.delenv("HERMES_AGENT_DIRECTORY_PROFILE", raising=False)
++    monkeypatch.delenv("HERMES_PROFILE", raising=False)
++    monkeypatch.delenv("HERMES_PROFILE_NAME", raising=False)
++    monkeypatch.delenv("HERMES_KANBAN_ASSIGNEE", raising=False)
++
++    explicit = _loads(directory._handle_register({"profile": "star", "mission": "shopping help"}))
++    omitted = _loads(directory._handle_register({"mission": "shopping and browsing"}))
++
++    assert explicit["ok"] is True
++    assert explicit["profile"] == "star"
++    assert omitted["ok"] is True
++    assert omitted["profile"] == "star"
++
++    rejected = _loads(directory._handle_register({"profile": "talon", "mission": "ops"}))
++    assert "error" in rejected
++    assert "current profile ('star')" in rejected["error"]
++
++
+ def test_register_rejects_cross_profile_mutation(directory_env):
+     from tools import agent_directory_tools as directory
+ 
+diff --git a/tools/agent_directory_tools.py b/tools/agent_directory_tools.py
+index 55812cbf5..9c2dd16ee 100644
+--- a/tools/agent_directory_tools.py
++++ b/tools/agent_directory_tools.py
+@@ -42,10 +42,23 @@ def _board(arg: Optional[str] = None) -> str:
+ 
+ 
+ def _current_profile() -> str:
+-    for key in ("HERMES_AGENT_DIRECTORY_PROFILE", "HERMES_PROFILE", "HERMES_KANBAN_ASSIGNEE"):
+-        value = os.environ.get(key)
++    for key in (
++        "HERMES_AGENT_DIRECTORY_PROFILE",
++        "HERMES_PROFILE",
++        "HERMES_PROFILE_NAME",
++        "HERMES_KANBAN_ASSIGNEE",
++    ):
++        value = (os.environ.get(key) or "").strip()
+         if value:
+-            return value.strip()
++            return value
++    try:
++        from hermes_cli.profiles import get_active_profile_name
++
++        name = (get_active_profile_name() or "").strip()
++        if name:
++            return name
++    except Exception:
++        pass
+     return "default"
+ 
+ 
