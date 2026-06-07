@@ -17,9 +17,13 @@ commit.
 
 ## Summary
 
-- `install.pp` currently defines 35 Hermes Agent source patch execs that apply
-  to `${source_dir}`.
-- It also defines 24 agent-request-broker patch execs that apply to
+- At audit time, `install.pp` defined 35 Hermes Agent source patch execs that
+  applied to `${source_dir}`.
+- A later cleanup task retired the remaining redundant Hermes Agent source patch
+  resources after the fork ref `nest/v0.16.0` contained the behavior; the patch
+  payload files for those `${source_dir}` patches were removed from
+  `files/app/hermes/`.
+- `install.pp` still defines agent-request-broker patch execs that apply to
   `${broker_source_dir}`. Those are broker maintenance, not candidates for the
   Hermes Agent fork.
 - 34 of the 35 Hermes Agent source patch execs were already covered by the
@@ -139,15 +143,11 @@ known-good and any ordering/array cleanups in `install.pp` are reviewed.
    - a local unauthenticated dashboard plugin API probe should continue to return
      `401`, not the old missing-route `404`, after deploy approval
 3. After Joy approves that fork commit and the fork ref/pin moves to a commit that
-   includes it, update Puppet source in a separate review-gated Nest config change:
-   - remove `dashboard-python-multipart-dependency.patch` and its `file`/`exec`
-     wiring from `install.pp` (prepared in this follow-through)
-   - keep the `python-multipart` install smoke in `install_hermes_agent` so the
-     managed venv still proves the dependency is installed
-   - consider removing or retaining the other 34 source patches according to Joy's
-     rollout preference; they are redundant with the current fork ref, but keeping
-     them temporarily is a conservative no-op-style guard while the fork/ref
-     normalization settles
+   includes it, update Puppet source in a separate review-gated Nest config change
+   to remove redundant `${source_dir}` Hermes Agent patch payloads and their
+   `file`/`exec` wiring from `install.pp`, while keeping the `python-multipart`
+   install smoke in `install_hermes_agent` so the managed venv still proves the
+   dependency is installed.
 4. Treat the broker patch cleanup as a separate task. The broker patches target a
    different repository and should be retired by comparing Puppet patches against
    `/home/joy/projects/nest/hermes-agent-request-broker` and its deployed ref, not
