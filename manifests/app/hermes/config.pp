@@ -131,6 +131,7 @@ class nest::app::hermes::config {
     }
     $instance_compress_timeout  = pick($config['compression_timeout'], $compression_timeout)
     $instance_extract_timeout   = pick($config['web_extract_timeout'], $web_extract_timeout)
+    $instance_approval_mode     = pick($config['approval_mode'], 'manual')
     $instance_dashboard_enabled = pick($config['dashboard_enabled'], false)
     $instance_dashboard_bind    = pick($config['dashboard_bind_host'], $dashboard_bind_host)
     $instance_dashboard_port    = pick($config['dashboard_port'], 9119)
@@ -193,6 +194,7 @@ class nest::app::hermes::config {
       image_gen_model            => $instance_image_model,
       compression_timeout        => $instance_compress_timeout,
       web_extract_timeout        => $instance_extract_timeout,
+      approval_mode              => $instance_approval_mode,
       dashboard_enabled          => $instance_dashboard_enabled,
       dashboard_bind_host        => $instance_dashboard_bind,
       dashboard_port             => $instance_dashboard_port,

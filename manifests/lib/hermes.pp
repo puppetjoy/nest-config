@@ -21,6 +21,7 @@ define nest::lib::hermes (
   Optional[String[1]]  $image_gen_model          = undef,
   Integer[1]           $compression_timeout      = 120,
   Integer[1]           $web_extract_timeout      = 360,
+  String[1]            $approval_mode            = 'manual',
   Boolean              $dashboard_enabled        = false,
   String[1]            $dashboard_bind_host      = '0.0.0.0',
   Stdlib::Port         $dashboard_port           = 9119,
@@ -367,6 +368,8 @@ ${image_gen_yaml}
 ${plugins_yaml}
       voice:
         auto_tts: ${voice_auto_tts}
+      approvals:
+        mode: "${approval_mode}"
       stt:
         enabled: ${stt_enabled}
         provider: "${stt_provider}"
