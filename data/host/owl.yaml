@@ -12,7 +12,8 @@ nest::distcc_server: true
 nest::dvorak: true
 nest::text_scaling_factor: 1.5
 
-nest::app::hermes::git_ref: '233b619d3c5d0dc74963e8d3a881cd54a31810c4'
+nest::app::hermes::git_ref: 'hermes/0.16.0-nest'
+nest::app::hermes::git_commit: '6cb4c45c1a7712c8d54269aa1fde5b2f5acd056f'
 nest::app::hermes::agent_request_kanban_board: 'agent-requests'
 
 nest::kernel_cmdline:

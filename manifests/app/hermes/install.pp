@@ -2,6 +2,8 @@ class nest::app::hermes::install {
   $install_dir       = $nest::app::hermes::install_dir
   $git_url           = $nest::app::hermes::git_url
   $git_ref           = $nest::app::hermes::git_ref
+  $git_commit        = $nest::app::hermes::git_commit
+  $git_revision      = pick($git_commit, $git_ref)
   $venv_dir          = "${install_dir}/venv"
   $venv_python       = "${venv_dir}/bin/python"
   $venv_pip          = "${venv_dir}/bin/pip"
@@ -56,12 +58,20 @@ class nest::app::hermes::install {
     ensure   => latest,
     provider => git,
     source   => $git_url,
-    revision => $git_ref,
+    revision => $git_revision,
     require  => [
       File[$install_dir],
       Class['nest::base::git'],
       Exec['set_hermes_source_remote'],
     ],
+  }
+
+  if $git_commit {
+    exec { 'verify_hermes_source_ref_pin':
+      command => "/bin/sh -c 'echo Hermes source ref ${git_ref} no longer resolves to pinned commit ${git_commit} >&2; exit 1'",
+      unless  => "/bin/sh -c 'test \"$(/usr/sbin/git -C ${source_dir} rev-parse ${git_ref}^{commit} 2>/dev/null || /usr/sbin/git -C ${source_dir} rev-parse origin/${git_ref}^{commit})\" = ${git_commit}'",
+      require => Vcsrepo[$source_dir],
+    }
   }
 
   exec { 'set_hermes_agent_request_broker_remote':
