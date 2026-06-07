@@ -1,0 +1,280 @@
+diff --git a/README.md b/README.md
+index 98fd24f..0c5a507 100644
+--- a/README.md
++++ b/README.md
+@@ -74,6 +74,7 @@ agent-request-maintain <request-id> --diagnose
+ agent-request-supersede <request-id> --by <replacement-request-id> --reason '...'
+ agent-request-cancel <request-id> --reason '...'
+ agent-request-deny <request-id> --reason '...'
++agent-request-archive-completed --board agent-requests --retention-days 14
+ ```
+ 
+ `agent-request-approve` binds approval to the latest structured proposal comment id and proposal
+@@ -150,6 +151,22 @@ print('syntax_ok')
+ PY
+ ```
+ 
++## Completed-task archival policy
++
++Normal completed real work should be archived, not deleted, after the retention window so
++ordinary board views stay focused while `kanban_show` and explicit archived lists continue to
++work. The operator archival command is dry-run by default and only targets request-indexed
++Kanban tasks whose status is `done` and whose `completed_at` (falling back to `created_at`) is
++older than the retention window. The default retention is 14 days.
++
++```sh
++agent-request-archive-completed --board agent-requests --retention-days 14
++agent-request-archive-completed --board agent-requests --retention-days 14 --apply
++```
++
++Deletion remains a separate incident-cleanup path for obvious smoke/test artifacts or
++sensitive accidents and should use a DB backup plus integrity checks before reporting success.
++
+ ## Backup and board state
+ 
+ Nest's full Hermes backup includes shared Kanban board data. Verify archives contain at least:
+diff --git a/src/agent_request_broker/kanban_backend.py b/src/agent_request_broker/kanban_backend.py
+index 641a81c..0a635af 100644
+--- a/src/agent_request_broker/kanban_backend.py
++++ b/src/agent_request_broker/kanban_backend.py
+@@ -537,6 +537,7 @@ def update_task_workspace(conn: Any, *, task_id: str, policy: WorkspacePolicy) -
+ 
+ 
+ TERMINAL_TASK_STATUSES = {"done", "archived"}
++DEFAULT_COMPLETED_ARCHIVE_RETENTION_DAYS = 14
+ SAFE_TASK_BRANCH_RE = re.compile(r"^(?:talon|star|rollout)/t_[0-9a-f]{8}(?:[-/].*)?$")
+ REGISTRY_IMAGE_ARCH_TAGS = ("haswell", "cortex-a53", "sifive-u74")
+ REMOTE_BRANCH_DELETE_ENV = "AGENT_REQUEST_CLEANUP_DELETE_REMOTE_BRANCHES"
+@@ -969,6 +970,86 @@ def cleanup_terminal_task_sweep(*, actor: str = "talon", include_archived: bool
+     finally:
+         conn.close()
+ 
++
++def _completed_archive_cutoff(*, retention_days: int, now: int | None = None) -> int:
++    days = max(int(retention_days), 1)
++    return int(now if now is not None else now_ts()) - days * 24 * 60 * 60
++
++
++def completed_archive_candidates(conn: Any, *, retention_days: int = DEFAULT_COMPLETED_ARCHIVE_RETENTION_DAYS, limit: int | None = None, now: int | None = None) -> list[dict[str, Any]]:
++    cutoff = _completed_archive_cutoff(retention_days=retention_days, now=now)
++    sql = """
++        SELECT
++            t.id AS task_id,
++            t.title AS title,
++            t.status AS kanban_status,
++            t.created_at AS created_at,
++            t.completed_at AS completed_at,
++            i.request_id AS request_id,
++            i.status AS request_status,
++            i.requester AS requester,
++            i.target AS target
++        FROM tasks t
++        JOIN agent_request_index i ON i.task_id = t.id
++        WHERE t.status = 'done'
++          AND COALESCE(t.completed_at, t.created_at) <= ?
++        ORDER BY COALESCE(t.completed_at, t.created_at) ASC, t.created_at ASC, t.id ASC
++    """
++    params: list[Any] = [cutoff]
++    if limit is not None:
++        sql += " LIMIT ?"
++        params.append(max(int(limit), 1))
++    return [dict(row) for row in conn.execute(sql, params).fetchall()]
++
++
++def archive_completed_requests(args: dict[str, Any], *, actor: str = "talon") -> dict[str, Any]:
++    """Dry-run-first archival for old completed Agent Requests tasks."""
++    if actor != "talon":
++        return {"error": "Only Talon/operator may archive completed agent-request tasks"}
++    retention_days = int(args.get("retention_days") or DEFAULT_COMPLETED_ARCHIVE_RETENTION_DAYS)
++    if retention_days < 1:
++        return {"error": "retention_days must be >= 1"}
++    limit_arg = args.get("limit")
++    limit = int(limit_arg) if limit_arg is not None else None
++    if limit is not None and limit < 1:
++        return {"error": "limit must be >= 1"}
++    apply = bool(args.get("apply", False))
++    cleanup_resources = bool(args.get("cleanup_resources", False))
++    conn = connect()
++    try:
++        kanban = require_kanban()
++        candidates = completed_archive_candidates(conn, retention_days=retention_days, limit=limit)
++        archived: list[dict[str, Any]] = []
++        cleanups: list[dict[str, Any]] = []
++        if apply:
++            for candidate in candidates:
++                did_archive = kanban.archive_task(conn, candidate["task_id"])
++                archived_item = {**candidate, "archived": did_archive}
++                archived.append(archived_item)
++                if did_archive and cleanup_resources:
++                    cleanups.append(cleanup_terminal_task_resources(conn, task_id=candidate["task_id"], actor=actor))
++        cutoff = _completed_archive_cutoff(retention_days=retention_days)
++        return {
++            "board": board_name(),
++            "dry_run": not apply,
++            "retention_days": retention_days,
++            "cutoff": cutoff,
++            "candidate_count": len(candidates),
++            "archived_count": sum(1 for item in archived if item.get("archived")),
++            "candidates": candidates,
++            "archived": archived,
++            "cleanup_resources": cleanup_resources,
++            "cleanups": cleanups,
++            "policy": {
++                "default_retention_days": DEFAULT_COMPLETED_ARCHIVE_RETENTION_DAYS,
++                "archive_scope": "agent_request_index tasks with Kanban status done older than the retention window",
++                "delete_scope": "none; deletion remains reserved for explicit smoke/test artifact or sensitive-accident cleanup with backup",
++                "dry_run_first": True,
++            },
++        }
++    finally:
++        conn.close()
++
+ def urgency_to_priority(urgency: str) -> int:
+     return URGENCY_PRIORITIES[urgency]
+ 
+diff --git a/tests/test_agent_request_broker.py b/tests/test_agent_request_broker.py
+index 5546b34..906a543 100755
+--- a/tests/test_agent_request_broker.py
++++ b/tests/test_agent_request_broker.py
+@@ -3816,3 +3816,69 @@ if __name__ == "__main__":
+         cleanup_path.mkdir()
+         test_cleanup_eyrie_registry_deletion_is_env_gated_and_uses_docker_registry_v2(cleanup_path, MonkeyPatch())
+     print("ok")
++
++
++def test_archive_completed_requests_dry_run_then_apply():
++    if not require_hermes_src():
++        return
++    with kanban_env("archive-completed-test"):
++        from agent_request_broker import kanban_backend as backend
++
++        old_send = backend.telegram_send
++        backend.telegram_send = lambda message: {"sent": True, "test": True, "message": message}
++        try:
++            old = backend.submit({
++                "title": "Old completed real task",
++                "request": "This completed task is beyond the retention window",
++                "target": "talon",
++            }, requester="talon")["request"]
++            recent = backend.submit({
++                "title": "Recent completed real task",
++                "request": "This completed task is still inside retention",
++                "target": "talon",
++            }, requester="talon")["request"]
++        finally:
++            backend.telegram_send = old_send
++
++        kb = backend.require_kanban()
++        conn = backend.connect()
++        try:
++            assert kb.complete_task(conn, old["kanban_task_id"], summary="done")
++            assert kb.complete_task(conn, recent["kanban_task_id"], summary="done")
++            now = backend.now_ts()
++            old_completed_at = now - 20 * 24 * 60 * 60
++            conn.execute("UPDATE tasks SET completed_at = ? WHERE id = ?", (old_completed_at, old["kanban_task_id"]))
++            conn.execute("UPDATE tasks SET completed_at = ? WHERE id = ?", (now, recent["kanban_task_id"]))
++            conn.commit()
++        finally:
++            conn.close()
++
++        dry_run = backend.archive_completed_requests({"retention_days": 14}, actor="talon")
++        assert dry_run["dry_run"] is True
++        assert dry_run["candidate_count"] == 1
++        assert dry_run["candidates"][0]["request_id"] == old["id"]
++        assert dry_run["archived_count"] == 0
++
++        conn = backend.connect()
++        try:
++            assert kb.get_task(conn, old["kanban_task_id"]).status == "done"
++        finally:
++            conn.close()
++
++        applied = backend.archive_completed_requests({"retention_days": 14, "apply": True}, actor="talon")
++        assert applied["dry_run"] is False
++        assert applied["archived_count"] == 1
++
++        conn = backend.connect()
++        try:
++            assert kb.get_task(conn, old["kanban_task_id"]).status == "archived"
++            assert kb.get_task(conn, recent["kanban_task_id"]).status == "done"
++            visible_done = kb.list_tasks(conn, status="done", include_archived=False)
++            assert {task.id for task in visible_done} == {recent["kanban_task_id"]}
++            archived = kb.list_tasks(conn, status="archived", include_archived=True)
++            assert {task.id for task in archived} == {old["kanban_task_id"]}
++            shown = backend.public_request(conn, backend.index_for_request(conn, old["id"]))
++            assert shown["status"] == "completed"
++            assert shown["kanban_status"] == "archived"
++        finally:
++            conn.close()
+diff --git a/bin/agent-request-archive-completed b/bin/agent-request-archive-completed
+new file mode 100755
+index 0000000..c5a1c09
+--- /dev/null
++++ b/bin/agent-request-archive-completed
+@@ -0,0 +1,66 @@
++#!/usr/bin/env python3
++"""Dry-run-first archival for old completed Agent Requests tasks."""
++from __future__ import annotations
++
++import argparse
++import json
++import os
++import sys
++from pathlib import Path
++
++ROOT = Path(__file__).resolve().parents[1]
++HERMES_SRC = Path(os.environ.get("HERMES_SRC", "/opt/hermes-agent/src"))
++if HERMES_SRC.exists() and HERMES_SRC != ROOT / "src":
++    sys.path.insert(0, str(HERMES_SRC))
++sys.path.insert(0, str(ROOT / "src"))
++
++from agent_request_broker import kanban_backend  # noqa: E402
++
++
++def parser() -> argparse.ArgumentParser:
++    p = argparse.ArgumentParser(
++        description="Archive old completed Agent Requests Kanban tasks; dry-run by default.",
++    )
++    p.add_argument("--board", default="agent-requests", help="Kanban board slug, default: agent-requests")
++    p.add_argument("--retention-days", type=int, default=kanban_backend.DEFAULT_COMPLETED_ARCHIVE_RETENTION_DAYS, help="Archive completed tasks older than this many days; default: %(default)s")
++    p.add_argument("--limit", type=int, help="Maximum candidates to inspect/apply")
++    p.add_argument("--apply", action="store_true", help="Actually archive candidates. Omit for dry-run.")
++    p.add_argument("--cleanup-resources", action="store_true", help="After archiving, run terminal worktree/branch cleanup for archived tasks")
++    p.add_argument("--actor", default="talon", help="Operator identity to record, default: talon")
++    p.add_argument("--json", action="store_true", help="Print full JSON result")
++    return p
++
++
++def main(argv: list[str] | None = None) -> int:
++    args = parser().parse_args(argv)
++    if args.board:
++        os.environ["AGENT_REQUEST_KANBAN_BOARD"] = args.board
++    result = kanban_backend.archive_completed_requests(
++        {
++            "retention_days": args.retention_days,
++            "limit": args.limit,
++            "apply": args.apply,
++            "cleanup_resources": args.cleanup_resources,
++        },
++        actor=args.actor,
++    )
++    if args.json:
++        print(json.dumps(result, ensure_ascii=False, indent=2))
++    elif "error" in result:
++        print(f"error: {result['error']}", file=sys.stderr)
++    else:
++        mode = "dry-run" if result.get("dry_run") else "applied"
++        print(
++            f"{mode} archive-completed on {result['board']}: "
++            f"candidates={result['candidate_count']} archived={result['archived_count']} "
++            f"retention_days={result['retention_days']}"
++        )
++        for item in (result.get("candidates") or [])[:10]:
++            print(f"candidate {item['request_id']} task={item['task_id']} completed_at={item['completed_at']} title={item['title']}")
++        if result.get("candidate_count", 0) > 10:
++            print(f"... {result['candidate_count'] - 10} more candidates")
++    return 1 if "error" in result else 0
++
++
++if __name__ == "__main__":
++    raise SystemExit(main())
