@@ -236,7 +236,7 @@ class nest::app::hermes::install {
 
   exec { 'patch_hermes_dashboard_insecure_websockets':
     command => "/usr/bin/patch -N -p1 -d ${source_dir} < ${install_dir}/dashboard-insecure-websockets.patch",
-    unless  => "/bin/grep -q 'app.state.allow_public = allow_public' ${source_dir}/hermes_cli/web_server.py && /bin/grep -q 'getattr(app.state, \"allow_public\", False)' ${source_dir}/hermes_cli/web_server.py",
+    unless  => "/bin/sh -c '/bin/grep -q \"app.state.allow_public = allow_public\" ${source_dir}/hermes_cli/web_server.py && (/bin/grep -q \"getattr(app.state, \\\"allow_public\\\", False)\" ${source_dir}/hermes_cli/web_server.py || /bin/grep -q \"bound_host and bound_host not in _LOOPBACK_HOSTS\" ${source_dir}/hermes_cli/web_server.py)'",
     require => [
       File["${install_dir}/dashboard-insecure-websockets.patch"],
       Vcsrepo[$source_dir],
