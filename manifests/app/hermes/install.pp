@@ -43,6 +43,15 @@ class nest::app::hermes::install {
 
   include 'nest::base::git'
 
+  exec { 'set_hermes_source_remote':
+    command => "/usr/sbin/git -C ${source_dir} remote set-url origin ${git_url}",
+    onlyif  => "/bin/sh -c 'test -d ${source_dir}/.git && test \$(/usr/sbin/git -C ${source_dir} remote get-url origin) != ${git_url}'",
+    require => [
+      File[$install_dir],
+      Class['nest::base::git'],
+    ],
+  }
+
   vcsrepo { $source_dir:
     ensure   => latest,
     provider => git,
@@ -51,6 +60,7 @@ class nest::app::hermes::install {
     require  => [
       File[$install_dir],
       Class['nest::base::git'],
+      Exec['set_hermes_source_remote'],
     ],
   }
 
