@@ -251,6 +251,7 @@ nest::app::hermes::instances:
     dashboard_theme: 'rose'
     toolsets:
       - agent_requests
+      - browser
       - clarify
       - memory
       - messaging
@@ -261,6 +262,7 @@ nest::app::hermes::instances:
       - kanban
       - cronjob
       - todo
+      - tts
       - web
       - vision
       - image_gen
