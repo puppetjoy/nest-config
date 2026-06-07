@@ -44,6 +44,9 @@ define nest::lib::hermes (
   Array[String[1]]     $profile_toolsets         = ['hermes-cli', 'kanban'],
   Any                  $toolsets                 = undef,
   Any                  $telegram_toolsets        = undef,
+  Boolean              $agent_directory_enabled  = true,
+  String[1]            $agent_directory_board    = 'agent-directory',
+  Integer[0]           $agent_directory_touch    = 3600,
   Boolean              $google_workspace_enabled = false,
   Boolean              $voice_auto_tts           = false,
   Boolean              $stt_enabled              = false,
@@ -78,6 +81,7 @@ define nest::lib::hermes (
     undef   => "# ${display_name}\n\nYou are ${display_name}, one of Joy's Hermes Agent profiles.\n",
     default => $soul_content,
   }
+  $agent_directory_freshness_notes  = "Puppet-managed ${display_name} lifecycle refresh"
   $default_toolsets                  = [
     'agent_directory',
     'agent_requests',
@@ -402,6 +406,14 @@ ${display_skin_yaml}  platforms:
             tool_preview_length: 500
       memory:
         provider: honcho
+      agent_directory:
+        enabled: ${agent_directory_enabled}
+        board: "${agent_directory_board}"
+        touch_interval_seconds: ${agent_directory_touch}
+        profile_name: "${profile}"
+        profile:
+          display_name: "${display_name}"
+          freshness_notes: "${agent_directory_freshness_notes}"
       kanban:
         dispatch_in_gateway: ${kanban_dispatch_in_gateway}
       dashboard:

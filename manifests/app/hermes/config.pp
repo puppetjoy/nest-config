@@ -161,6 +161,9 @@ class nest::app::hermes::config {
       default => $config['toolsets'],
     }
     $instance_profile_toolsets  = pick($config['profile_toolsets'], ['hermes-cli', 'kanban'])
+    $instance_directory_enabled = pick($config['agent_directory_enabled'], true)
+    $instance_directory_board   = pick($config['agent_directory_board'], 'agent-directory')
+    $instance_directory_touch   = pick($config['agent_directory_touch'], 3600)
     $instance_google_workspace  = pick($config['google_workspace_enabled'], false)
     $instance_voice_auto_tts    = pick($config['voice_auto_tts'], false)
     $instance_stt_enabled       = pick($config['stt_enabled'], $instance_voice_auto_tts)
@@ -216,6 +219,9 @@ class nest::app::hermes::config {
       skin_banner_hero_source    => $instance_skin_hero_source,
       profile_toolsets           => $instance_profile_toolsets,
       toolsets                   => $instance_toolsets,
+      agent_directory_enabled    => $instance_directory_enabled,
+      agent_directory_board      => $instance_directory_board,
+      agent_directory_touch      => $instance_directory_touch,
       google_workspace_enabled   => $instance_google_workspace,
       voice_auto_tts             => $instance_voice_auto_tts,
       stt_enabled                => $instance_stt_enabled,
