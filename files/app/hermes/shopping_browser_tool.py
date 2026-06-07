@@ -1074,6 +1074,8 @@ TYPE_JS = r"""
 
 def _compact_large_result(data: dict[str, Any]) -> dict[str, Any]:
     compact = dict(data)
+    if compact.get("operation") == "owner_checkout_review":
+        compact = _compact_owner_checkout_review_result(compact)
     controls = compact.get("checkout_prep_controls")
     if isinstance(controls, list) and len(controls) > 12:
         metadata = dict(compact.get("blocked_metadata") or {})
@@ -1082,6 +1084,81 @@ def _compact_large_result(data: dict[str, Any]) -> dict[str, Any]:
         compact["blocked_metadata"] = metadata
         compact["checkout_prep_controls"] = controls[:12]
     return compact
+
+
+def _bounded_checkout_scalar(value: Any, max_chars: int = 160, default: str = "") -> str:
+    text = str(value if value is not None else default).strip()
+    if len(text) > max_chars:
+        return text[:max_chars]
+    return text
+
+
+def _bounded_checkout_list(value: Any, limit: int, item_chars: int = 160) -> list[str]:
+    items: list[str] = []
+    if isinstance(value, list):
+        source = value
+    elif value:
+        source = [value]
+    else:
+        source = []
+    for item in source:
+        text = _bounded_checkout_scalar(item, item_chars)
+        if text:
+            items.append(text)
+        if len(items) >= limit:
+            break
+    return items
+
+
+def _minimal_owner_checkout_facts(checkout_review: dict[str, Any]) -> dict[str, Any]:
+    """Return only compact Star-visible order facts for owner-only review acks.
+
+    The full checkout evidence is delivered directly to Joy as screenshots.  The
+    model-visible acknowledgement must not carry verbose safe-control inventories,
+    final-purchase button labels, raw paths, DOM, or owner-only visual content.
+    """
+    return {
+        "items": _bounded_checkout_list(checkout_review.get("items"), 3),
+        "totals": _bounded_checkout_list(checkout_review.get("totals"), 3),
+        "delivery": _bounded_checkout_list(checkout_review.get("delivery"), 3),
+        "shipping_destination_city_state_or_label": _bounded_checkout_list(checkout_review.get("shipping_destination_city_state_or_label"), 2),
+        "payment_method_label_last_four_only": _bounded_checkout_list(checkout_review.get("payment_method_label_last_four_only"), 2),
+        "purchase_mode": _bounded_checkout_scalar(checkout_review.get("purchase_mode"), 80, "not_detected") or "not_detected",
+        "subscription_offer_visible": bool(checkout_review.get("subscription_offer_visible")),
+        "subscription_selected": bool(checkout_review.get("subscription_selected")),
+        "subscription_control_visible": bool(checkout_review.get("subscription_control_visible")),
+        "one_time_selected": bool(checkout_review.get("one_time_selected")),
+        "informational_flags": _bounded_checkout_list(checkout_review.get("informational_flags"), 3),
+        "surprise_flags": _bounded_checkout_list(checkout_review.get("surprise_flags"), 3),
+        "final_purchase_state": "blocked_pending_trusted_approval",
+    }
+
+
+def _compact_owner_checkout_review_result(data: dict[str, Any]) -> dict[str, Any]:
+    checkout_review = data.get("checkout_review")
+    if not isinstance(checkout_review, dict):
+        checkout_review = {}
+    deliveries = data.get("telegram_message_ids")
+    delivery_count = len(deliveries) if isinstance(deliveries, list) else 0
+    return {
+        "operation": "owner_checkout_review",
+        "status": _bounded_checkout_scalar(data.get("status"), 80, "sent_owner_only") or "sent_owner_only",
+        "review_id": _bounded_checkout_scalar(data.get("review_id"), 80),
+        "url": _bounded_checkout_scalar(data.get("url"), 500),
+        "page_title": _bounded_checkout_scalar(data.get("page_title"), 200),
+        "delivery": {
+            "telegram": bool(delivery_count),
+            "telegram_message_count": delivery_count,
+            "status": "sent" if delivery_count else "not_delivered",
+        },
+        "material_summary_binding": _bounded_checkout_scalar(data.get("material_summary_binding") or checkout_review.get("material_summary_binding"), 128),
+        "owner_visual_evidence_binding": _bounded_checkout_scalar(data.get("owner_visual_evidence_binding"), 128),
+        "capture_mode": _bounded_checkout_scalar(data.get("capture_mode"), 80),
+        "artifact_count": data.get("artifact_count"),
+        "minimal_order_facts": _minimal_owner_checkout_facts(checkout_review),
+        "retention": _bounded_checkout_scalar(data.get("retention"), 200),
+        "safety_boundary": "Complete checkout screenshots were sent only to Joy via the trusted Telegram path. This acknowledgement omits raw screenshots, file paths, DOM, cookies, storage, request headers, full address/payment/account text, and final purchase controls; final purchase remains blocked pending trusted approval.",
+    }
 
 
 def _json(data: dict[str, Any]) -> str:
@@ -2548,7 +2625,7 @@ def _owner_checkout_review(send_to_telegram: bool = True, retain_local: bool = F
             "safety_boundary": "Complete checkout screenshots were sent directly to Joy's configured Telegram destination and are not returned as MEDIA handles, file paths, raw DOM, cookies, storage, request headers, CDP endpoints, credentials, passkeys, 2FA/CAPTCHA, or structured address/payment text to Star. Final Place Order remains blocked from ordinary shopping tools.",
         }
         _audit("owner_checkout_review", {"review_id": review_id, "url": result["url"], "page_title": title, "material_summary_binding": binding, "owner_visual_evidence_binding": evidence_binding, "capture_mode": capture_mode, "artifact_count": len(artifacts), "retained_local": retain_local})
-        return result
+        return _compact_owner_checkout_review_result(result)
 
     return _with_browser(run)
 
@@ -3578,6 +3655,52 @@ if __name__ == "__main__":
     disabled_owner_review = json.loads(shopping_browser_owner_checkout_review_tool({"send_to_telegram": False}))
     assert disabled_owner_review["error"] == "OWNER_CHECKOUT_REVIEW_FAILED"
     assert disabled_owner_review["operation"] == "owner_checkout_review"
+    huge_owner_review = {
+        "operation": "owner_checkout_review",
+        "status": "sent_owner_only",
+        "review_id": "review-test",
+        "url": "https://www.amazon.com/gp/buy/spc/handlers/display.html",
+        "page_title": "Review your order",
+        "material_summary_binding": "binding-test",
+        "owner_visual_evidence_binding": "evidence-test",
+        "capture_mode": "full-page",
+        "artifact_count": 1,
+        "telegram_message_ids": [12345],
+        "checkout_review": {
+            "items": ["Widget Qty: 1 Sold by Example Seller"] * 50,
+            "totals": ["Order total $5.29"] * 50,
+            "delivery": ["Delivery Monday"] * 50,
+            "shipping_destination_city_state_or_label": ["Sampletown, NY"] * 10,
+            "payment_method_label_last_four_only": ["Visa ending in 5252"] * 10,
+            "purchase_mode": "subscription_offer_visible_only",
+            "subscription_offer_visible": True,
+            "subscription_selected": False,
+            "subscription_control_visible": False,
+            "one_time_selected": False,
+            "informational_flags": ["Subscribe & Save Delivery every 2 months"] * 20,
+            "surprise_flags": [],
+            "checkout_prep_controls": [{"selector": "#control", "label": "Change payment"}] * 200,
+            "blocked_metadata": {"final_purchase_controls_visible": ["Place Order"]},
+        },
+        "retention": "sensitive PNG artifacts were deleted locally after Telegram delivery",
+    }
+    compact_owner_review = json.loads(_json(huge_owner_review))
+    compact_owner_json = json.dumps(compact_owner_review, ensure_ascii=False)
+    assert compact_owner_review["status"] == "sent_owner_only"
+    assert compact_owner_review["delivery"] == {"telegram": True, "telegram_message_count": 1, "status": "sent"}
+    assert compact_owner_review["material_summary_binding"] == "binding-test"
+    assert compact_owner_review["owner_visual_evidence_binding"] == "evidence-test"
+    assert compact_owner_review["capture_mode"] == "full-page"
+    assert compact_owner_review["artifact_count"] == 1
+    assert compact_owner_review["minimal_order_facts"]["purchase_mode"] == "subscription_offer_visible_only"
+    assert compact_owner_review["minimal_order_facts"]["subscription_offer_visible"] is True
+    assert compact_owner_review["minimal_order_facts"]["subscription_selected"] is False
+    assert compact_owner_review["minimal_order_facts"]["subscription_control_visible"] is False
+    assert "checkout_review" not in compact_owner_review
+    assert "checkout_prep_controls" not in compact_owner_json
+    assert "selector" not in compact_owner_json
+    assert "Place Order" not in compact_owner_json
+    assert len(compact_owner_json) <= MAX_RESULT_CHARS
     body, content_type = _multipart_request({"chat_id": "123"}, {"document": ("review.png", b"png", "image/png")})
     assert b"review.png" in body and content_type.startswith("multipart/form-data")
     status = json.loads(shopping_browser_status_tool({}))
