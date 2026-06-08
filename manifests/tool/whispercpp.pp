@@ -39,7 +39,6 @@ class nest::tool::whispercpp (
       ].join(' '),
       'cmake --build build',
     ],
-    require => Class['nest::base::gpu'],
   }
 
   exec { 'whisper.cpp-install':

@@ -10,8 +10,9 @@ class nest::tool::ttscpp (
   }
 
   nest::lib::src_repo { '/usr/src/TTS.cpp':
-    url => 'https://github.com/mmwillet/TTS.cpp.git',
-    ref => $revision,
+    url        => 'https://github.com/mmwillet/TTS.cpp.git',
+    ref        => $revision,
+    submodules => true,
   }
   ~>
   nest::lib::build { 'tts.cpp':

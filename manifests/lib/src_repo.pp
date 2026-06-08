@@ -1,6 +1,7 @@
 define nest::lib::src_repo (
-  String $url,
-  String $ref = 'main',
+  String  $url,
+  String  $ref        = 'main',
+  Boolean $submodules = false,
 ) {
   if $facts['build'] {
     vcsrepo { $name:
@@ -8,7 +9,7 @@ define nest::lib::src_repo (
       provider   => git,
       source     => $url,
       revision   => $ref,
-      submodules => false,
+      submodules => $submodules,
       before     => File[$name],
     }
   }
