@@ -1,6 +1,7 @@
 define nest::lib::hermes (
   String[1]            $profile                  = $title,
   String[1]            $display_name             = $title,
+  Optional[String[1]]  $profile_icon             = undef,
   Stdlib::Absolutepath $install_dir              = '/opt/hermes-agent',
   String[1]            $user                     = 'joy',
   String[1]            $gitlab_url               = 'https://gitlab.joyfullee.me',
@@ -295,6 +296,10 @@ define nest::lib::hermes (
     undef   => '',
     default => "  theme: \"${dashboard_theme}\"\n",
   }
+  $agent_directory_profile_icon_yaml = $profile_icon ? {
+    undef   => '',
+    default => "          profile_icon: \"${profile_icon}\"\n",
+  }
   $effective_skin_content = $skin_content ? {
     undef   => undef,
     default => "${skin_content}${skin_banner_hero_yaml}",
@@ -413,6 +418,7 @@ ${display_skin_yaml}  platforms:
         profile_name: "${profile}"
         profile:
           display_name: "${display_name}"
+${agent_directory_profile_icon_yaml}
           freshness_notes: "${agent_directory_freshness_notes}"
       kanban:
         dispatch_in_gateway: ${kanban_dispatch_in_gateway}

@@ -163,6 +163,7 @@ nest::app::hermes::instances:
   star:
     profile: 'star'
     display_name: 'Star'
+    profile_icon: '🦋'
     skin_name: 'star-dawn-butterfly'
     skin_banner_hero_source: 'nest/app/hermes/skins/star-dawn-butterfly-banner-hero.ansi'
     skin_content: |

@@ -93,6 +93,7 @@ class nest::app::hermes::config {
 
     $profile                 = pick($config['profile'], $instance_name)
     $display_name            = pick($config['display_name'], $instance_name)
+    $instance_profile_icon   = $config['profile_icon']
     $instance_gitlab_enabled = pick($config['gitlab_enabled'], false)
     $instance_gitlab_token   = $instance_gitlab_enabled ? {
       true    => $config['gitlab_token'] ? {
@@ -177,6 +178,7 @@ class nest::app::hermes::config {
     nest::lib::hermes { $instance_name:
       profile                    => $profile,
       display_name               => $display_name,
+      profile_icon               => $instance_profile_icon,
       install_dir                => $nest::app::hermes::install_dir,
       user                       => $nest::user,
       gitlab_url                 => $gitlab_url,
