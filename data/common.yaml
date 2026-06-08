@@ -16,6 +16,8 @@ lookup_options:
     convert_to: 'Sensitive'
   nest::app::hermes::telegram_bot_token:
     convert_to: 'Sensitive'
+  nest::app::hermes::codex_oauth_slots:
+    merge: 'deep'
   nest::app::hermes::instances:
     merge: 'deep'
   nest::app::hermes::instance_secrets:

@@ -11,6 +11,8 @@ class nest::app::hermes (
   Optional[Sensitive[String[1]]] $openai_api_key              = undef,
   Optional[Sensitive[String[1]]] $tavily_api_key              = undef,
   Optional[Sensitive[String[1]]] $telegram_bot_token          = undef,
+  Hash[String[1], Any]           $codex_oauth_slots           = {},
+  String[1]                      $codex_oauth_default_label   = 'primary',
   String[1]                      $telegram_allowed            = '8756212310',
   String[1]                      $telegram_home               = '8756212310',
   String[1]                      $model_provider              = 'openai-codex',

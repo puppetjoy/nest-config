@@ -1,4 +1,4 @@
-# Hermes OpenAI Codex auth across profiles
+# Hermes OpenAI Codex auth slots across profiles
 
 Hermes source still treats named profiles as independent homes. A profile such
 as `talon` or `star` resolves `HERMES_HOME` to
@@ -20,68 +20,146 @@ Source evidence:
 
 ## Nest policy
 
-Joy's Hermes agent team shares one OpenAI Codex auth state. Nest enforces that
-policy by using Hermes' existing root-auth fallback deliberately:
+Joy's Hermes agent team has two owner-operated OpenAI Codex OAuth
+subscriptions, labelled `primary` and `secondary`. Nest keeps both token sets
+as private/encrypted Puppet data, then activates exactly one slot into Hermes'
+root auth fallback store:
 
-1. Keep the shared Codex provider and credential-pool entries in
-   `~/.hermes/auth.json`.
-2. Remove only the `openai-codex` provider and credential-pool entries from
-   each managed profile's `auth.json`.
-3. Leave profile-local non-Codex auth, API keys, config, memories, skills,
-   sessions, and other runtime state alone.
+1. Joy completes each OAuth/device-code flow locally. Do not paste token JSON,
+   callback URLs containing codes, browser cookies, or any other token material
+   into chat, Kanban comments, tickets, commits, logs, or memory.
+2. Joy captures the resulting `openai-codex` provider and credential-pool
+   payload as a labelled slot and stores each slot as an encrypted value in
+   `nest/private` Hiera under `nest::app::hermes::codex_oauth_slots`.
+3. Puppet renders the decrypted private values to
+   `~/.hermes/codex-auth/slots.json` with mode `0600` and `show_diff => false`.
+4. `/opt/hermes-agent/bin/hermes-codex-auth` activates the selected slot by
+   writing only that slot's `openai-codex` provider and pool entries to the
+   shared root `~/.hermes/auth.json`.
+5. The same helper removes only profile-local `openai-codex` entries from
+   managed profiles so Talon, Star, and future managed profiles use the shared
+   root fallback instead of stale profile-local quota caches.
 
-With the profile-local Codex entries removed, Talon, Star, and future managed
-profiles all read the same root Codex auth state. This avoids copying tokens in
-chat and avoids silently diverging quota/exhaustion caches between profiles.
+The runtime selected label is `~/.hermes/codex-auth/active-label`. Puppet
+creates it only if missing, seeded from
+`nest::app::hermes::codex_oauth_default_label` (default `primary`), and does
+not replace it. Manual or chat-approved switches therefore survive later Puppet
+runs while still using the Puppet-private slot store.
 
-Puppet installs `/opt/hermes-agent/bin/hermes-share-codex-auth` and runs it from
-`nest::app::hermes::config` as Joy. The script does not print token values. On
-apply it chooses the freshest non-exhausted available `openai-codex` entry from
-the root or managed profiles, writes that entry to the root auth store, and
-removes profile-local `openai-codex` entries that would shadow the shared root
-state. If a future interactive reauth is accidentally run with `-p talon` or
-`-p star`, the next Puppet run migrates that fresh profile credential back to
-the shared root store.
+If no private slot store exists yet, the helper preserves the legacy migration
+behavior: it chooses the freshest non-exhausted local/root `openai-codex` state,
+writes it to the root auth store, and removes profile-local shadows.
 
-## Operator workflow
+## Owner-operated capture workflow
 
-Preferred reauth target:
+Run the OAuth flow from Joy's trusted shell. Prefer root/default Hermes auth so
+capture source is unambiguous:
 
 ```sh
 hermes auth add openai-codex
 ```
 
-That command should be run from Joy's trusted shell without `-p`, so it writes
-the root auth store directly. Do not paste tokens, `auth.json` contents,
-callback URLs containing codes, or browser secrets into chat or tickets.
-
-If a profile-specific reauth has already happened, do not manually copy tokens.
-Run Puppet so the managed sharing policy migrates the fresh profile-local Codex
-entry into the shared root store and removes local shadow entries:
+Capture the result as encrypted EYAML output. The helper pipes plaintext JSON
+directly to the local `eyaml encrypt --stdin` process and prints only the
+encrypted block:
 
 ```sh
-sudo puppet agent --test
-sudo puppet agent --test
+/opt/hermes-agent/bin/hermes-codex-auth capture primary \
+  --eyaml-label 'nest::app::hermes::codex_oauth_slots.primary'
 ```
 
-After a reauth or Puppet migration, restart long-running profile services so
-running gateways/dashboard sessions reload the shared auth state:
+Repeat the OAuth flow and capture for `secondary`:
 
 ```sh
-systemctl --user restart hermes-gateway@talon.service hermes-dashboard@talon.service
-systemctl --user restart hermes-gateway@star.service hermes-dashboard@star.service
+hermes auth add openai-codex
+/opt/hermes-agent/bin/hermes-codex-auth capture secondary \
+  --eyaml-label 'nest::app::hermes::codex_oauth_slots.secondary'
 ```
 
-The Puppet-managed restart hooks also refresh those services when the Codex
-sharing exec changes auth state during a managed apply.
+Place each encrypted block in the private Hiera value as a per-slot encrypted
+string:
 
-## Status checks
+```yaml
+nest::app::hermes::codex_oauth_slots:
+  primary: >
+    ENC[PKCS7,...]
+  secondary: >
+    ENC[PKCS7,...]
+```
 
-`hermes -p <profile> auth status openai-codex` proves only that Hermes can see a
-credential. It can still print `logged in` when the cached pool entry is
-rate-limited or exhausted.
+Each decrypted value is the JSON object emitted by the matching `capture`
+command. Edit the private Hiera file using the existing Nest private/eyaml
+workflow so the committed private repo contains only `ENC[PKCS7,...]` blocks,
+not plaintext JSON. If a temporary plaintext file is ever used with
+`capture --out`, keep it on a trusted local filesystem, remove it immediately
+after encrypting, and never commit it.
 
-Use both presence and quota/exhaustion checks for every affected profile:
+After updating private Hiera, deploy/apply Puppet through the normal reviewed
+Nest workflow. The public repo only defines the parameter, file paths, modes,
+and helper behavior; the token material belongs in `nest/private`.
+
+## Chat-driven switch path
+
+When Joy asks Talon/Star to switch subscriptions, the agent should use the
+normal approval/review path before touching live credentials or restarting
+services. The side effect to approve is:
+
+```sh
+/opt/hermes-agent/bin/hermes-codex-auth switch secondary \
+  --home /home/joy \
+  --slots-file /home/joy/.hermes/codex-auth/slots.json \
+  --active-file /home/joy/.hermes/codex-auth/active-label \
+  --restart talon star
+```
+
+Use `primary` instead of `secondary` to switch back. The command prints only the
+activated label, cleaned profile names, and service-unit names; it does not
+print token values. `--restart` reloads the long-running gateway/dashboard units
+so new agent sessions use the selected credential reliably.
+
+## CLI/manual switch path
+
+If the active subscription is exhausted and Joy needs to switch without relying
+on a running agent session, run the same command from a trusted shell:
+
+```sh
+/opt/hermes-agent/bin/hermes-codex-auth switch secondary \
+  --home /home/joy \
+  --slots-file /home/joy/.hermes/codex-auth/slots.json \
+  --active-file /home/joy/.hermes/codex-auth/active-label \
+  --restart talon star
+```
+
+If systemd restart fails because the user manager is unavailable, switch first
+without `--restart`, then restart the units when the user manager is reachable:
+
+```sh
+systemctl --user try-reload-or-restart \
+  hermes-gateway@talon.service hermes-dashboard@talon.service \
+  hermes-gateway@star.service hermes-dashboard@star.service
+```
+
+Puppet also subscribes the Talon/Star service restart hooks to the Codex auth
+sharing exec, so a managed apply refreshes services when the helper changes the
+active root auth state.
+
+## Status and verification
+
+Safe redacted status from the managed slot store:
+
+```sh
+/opt/hermes-agent/bin/hermes-codex-auth status \
+  --home /home/joy \
+  --slots-file /home/joy/.hermes/codex-auth/slots.json \
+  --active-file /home/joy/.hermes/codex-auth/active-label \
+  talon star
+```
+
+The JSON status includes labels, active label, provider/pool presence, pool
+entry counts, exhausted-entry counts, non-secret fingerprints, and any
+profile-local Codex shadows. It never includes token values.
+
+Hermes' own status commands are still useful, but interpret them carefully:
 
 ```sh
 hermes -p talon auth list openai-codex
@@ -90,13 +168,12 @@ hermes -p star auth list openai-codex
 hermes -p star auth status openai-codex
 ```
 
-`auth list` is the quota/exhaustion-oriented check. It surfaces cached
-`rate-limited`, `usage_limit`, `quota`, `exhausted`, error code, and wait-window
-metadata on each pool entry. `auth status` remains useful as a credential
-presence check but is not enough by itself.
+`auth status` proves only that Hermes can see a credential. It can still print
+`logged in` when the cached pool entry is rate-limited or exhausted. `auth list`
+is the quota/exhaustion-oriented check and surfaces cached `rate-limited`,
+`usage_limit`, `quota`, `exhausted`, error-code, and wait-window metadata.
 
-For source-level verification of the sharing policy, check only non-secret
-structure:
+Source-level structure check without token output:
 
 ```sh
 python3 - <<'PY'
@@ -106,18 +183,44 @@ for label, path in {
     'root': Path.home() / '.hermes/auth.json',
     'talon': Path.home() / '.hermes/profiles/talon/auth.json',
     'star': Path.home() / '.hermes/profiles/star/auth.json',
+    'slots': Path.home() / '.hermes/codex-auth/slots.json',
+    'active': Path.home() / '.hermes/codex-auth/active-label',
 }.items():
+    if label == 'active':
+        print(label, path.read_text().strip() if path.exists() else None)
+        continue
     data = json.loads(path.read_text()) if path.exists() else {}
     print(label, {
         'provider_entry': 'openai-codex' in data.get('providers', {}),
         'pool_entry': 'openai-codex' in data.get('credential_pool', {}),
+        'slot_labels': sorted(data.get('slots', {}).keys()) if label == 'slots' else None,
     })
 PY
 ```
 
-Expected managed state: root has both entries; managed profiles do not. The
-profile CLI commands above should still show Codex auth because Hermes falls
-back to the shared root store.
+Expected managed state: `slots` has `primary` and `secondary`, root has the
+selected slot's Codex entries, managed profiles do not have local Codex entries,
+and the profile CLI commands still show Codex auth because Hermes falls back to
+the shared root store.
+
+## Recovery and rollback
+
+- Switch rollback: run `hermes-codex-auth switch primary ... --restart talon
+  star` (or `secondary`) to reactivate the prior subscription.
+- Bad active marker: replace `~/.hermes/codex-auth/active-label` with a known
+  slot label, mode `0600`, then run `hermes-codex-auth apply ... talon star` or
+  Puppet.
+- Bad private slot JSON: revert the private Hiera commit and rerun the normal
+  Puppet deploy/apply. The helper refuses unknown labels and invalid slot JSON
+  before rewriting root auth.
+- Accidental profile-local reauth: do not manually copy token JSON. Run
+  `hermes-codex-auth apply ... talon star` or Puppet; legacy mode migrates the
+  freshest profile-local Codex state to root, and slot mode removes local
+  shadows so they cannot mask the active slot.
+- Lost root auth file: rerun `hermes-codex-auth apply ... talon star`; it
+  reconstructs the selected `openai-codex` entries from the private slot store.
+- Lost private slot store: recapture both subscriptions from fresh OAuth flows
+  and commit only encrypted EYAML blocks to `nest/private`.
 
 ## Current incident notes
 
@@ -125,5 +228,6 @@ During the June 2026 Talon/Star divergence, Talon had a refreshed local Codex
 credential while Star still had a local pool entry carrying `last_status =
 exhausted`, `last_error_code = 429`, and `last_error_reason =
 usage_limit_reached`. Star recovered only after Joy reauthed Star directly. The
-managed policy above prevents that class of divergence by making profile-local
-Codex entries temporary migration sources rather than steady-state auth stores.
+managed slot policy above prevents that class of divergence by making
+profile-local Codex entries temporary migration sources and keeping steady-state
+selection in a shared root fallback plus private labelled slot store.

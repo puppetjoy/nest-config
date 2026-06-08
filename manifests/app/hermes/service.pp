@@ -64,6 +64,12 @@ class nest::app::hermes::service {
     require => File["${install_dir}/bin"],
   }
 
+  file { "${install_dir}/bin/hermes-codex-auth":
+    ensure  => link,
+    target  => "${install_dir}/bin/hermes-share-codex-auth",
+    require => File["${install_dir}/bin/hermes-share-codex-auth"],
+  }
+
   $agent_request_review_commands = [
     'agent-request-approve',
     'agent-request-propose',
