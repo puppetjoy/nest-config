@@ -3,13 +3,16 @@ class nest::gui::screenshots {
     'gui-apps/grim',
     'gui-apps/slurp',
     'gui-apps/swappy',
-    'x11-misc/shutter',
+    'media-gfx/imagemagick',
     'x11-misc/xclip',
   ]:
     ensure => installed,
   }
 
-  nest::lib::package { 'kde-plasma/spectacle':
+  nest::lib::package { [
+    'kde-plasma/spectacle',
+    'x11-misc/shutter',
+  ]:
     ensure => absent,
   }
 }
