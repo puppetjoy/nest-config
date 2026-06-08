@@ -1,0 +1,21 @@
+<%- |
+  String[1] $venv_dir,
+  String[1] $source_dir,
+  String[1] $broker_source_dir,
+  String[1] $profile,
+  String[1] $user,
+  Boolean   $dev_board = false,
+| -%>
+#!<%= $venv_dir %>/bin/python
+import os
+import sys
+
+<% if $dev_board { -%>
+os.environ['AGENT_REQUEST_KANBAN_BOARD'] = 'agent-requests-dev'
+os.environ['AGENT_REQUEST_KANBAN_BOARD_OVERRIDE'] = 'agent-requests-dev'
+os.environ['HERMES_KANBAN_BOARD'] = 'agent-requests-dev'
+os.environ['HERMES_KANBAN_DB'] = '/home/<%= $user %>/.hermes/kanban/boards/agent-requests-dev/kanban.db'
+<% } -%>
+os.environ['SHLVL'] = '1'
+os.environ['PYTHONPATH'] = '<%= $source_dir %>:<%= $broker_source_dir %>/src'
+os.execv('<%= $venv_dir %>/bin/hermes', ['<%= $venv_dir %>/bin/hermes', '--profile', '<%= $profile %>', *sys.argv[1:]])

@@ -18,6 +18,12 @@ class nest::app::hermes::install {
   $tui_revision_file        = "${install_dir}/.installed-tui-revision"
   $web_revision_file        = "${install_dir}/.installed-web-revision"
 
+  class { 'python':
+    manage_python_package => false,
+    manage_pip_package    => false,
+    manage_venv_package   => false,
+  }
+
   nest::lib::package { 'dev-python/virtualenv':
     ensure => present,
   }
@@ -33,10 +39,14 @@ class nest::app::hermes::install {
     group  => 'root',
   }
 
-  exec { 'create_hermes_venv':
-    command => "/usr/bin/python3 -m virtualenv ${venv_dir}",
-    creates => $venv_python,
-    require => [
+  python::pyvenv { $venv_dir:
+    ensure      => present,
+    version     => 'system',
+    python_path => '/usr/bin/python3',
+    owner       => 'root',
+    group       => 'root',
+    require     => [
+      Class['python'],
       File[$install_dir],
       Nest::Lib::Package['dev-python/virtualenv'],
     ],
@@ -95,41 +105,13 @@ class nest::app::hermes::install {
     ],
   }
 
-  file { [
-    "${install_dir}/kanban-cross-board-phantom-references.patch",
-    "${install_dir}/kanban-legacy-prose-diagnostic-reclassification.patch",
-    "${install_dir}/kanban-cross-board-info-severity.patch",
-    "${install_dir}/kanban-same-board-legacy-prose-diagnostic-cleanup.patch",
-  ]:
-    ensure => absent,
-  }
-
-  exec { 'cleanup_hermes_patch_artifacts':
-    command => "/bin/rm -rf ${source_dir}/build ${broker_source_dir}/build ${broker_source_dir}/src/hermes_agent_request_broker.egg-info && /usr/bin/find ${source_dir} ${broker_source_dir} -name '*.orig' -delete && /usr/bin/find ${source_dir} ${broker_source_dir} -name '*.rej' -delete && /usr/bin/find ${source_dir} ${broker_source_dir} -name '*.pyc' -delete && /usr/bin/find ${source_dir} ${broker_source_dir} -name '__pycache__' -exec /bin/rm -rf {} +",
-    onlyif  => "/bin/sh -c 'test -e ${source_dir}/build || test -e ${broker_source_dir}/build || test -e ${broker_source_dir}/src/hermes_agent_request_broker.egg-info || /usr/bin/find ${source_dir} ${broker_source_dir} -name \"*.orig\" -print -quit | /bin/grep -q . || /usr/bin/find ${source_dir} ${broker_source_dir} -name \"*.rej\" -print -quit | /bin/grep -q . || /usr/bin/find ${source_dir} ${broker_source_dir} -name \"*.pyc\" -print -quit | /bin/grep -q . || /usr/bin/find ${source_dir} ${broker_source_dir} -name \"__pycache__\" -print -quit | /bin/grep -q .'",
-    require => [
-      Vcsrepo[$source_dir],
-      Vcsrepo[$broker_source_dir],
-    ],
-  }
-
-  exec { 'cleanup_hermes_install_artifacts':
-    command => "/bin/rm -rf ${source_dir}/hermes_agent.egg-info ${broker_source_dir}/src/hermes_agent_request_broker.egg-info && /usr/bin/find ${venv_dir}/lib/python*/site-packages -name '*.orig' -delete && /usr/bin/find ${venv_dir}/lib/python*/site-packages -name '*.rej' -delete",
-    onlyif  => "/bin/sh -c 'test -e ${source_dir}/hermes_agent.egg-info || test -e ${broker_source_dir}/src/hermes_agent_request_broker.egg-info || /usr/bin/find ${venv_dir}/lib/python*/site-packages -name \"*.orig\" -print -quit | /bin/grep -q . || /usr/bin/find ${venv_dir}/lib/python*/site-packages -name \"*.rej\" -print -quit | /bin/grep -q .'",
-    require => [
-      Exec['install_hermes_agent'],
-      Exec['install_hermes_agent_request_broker'],
-    ],
-  }
-
   exec { 'install_hermes_agent':
     command     => "${venv_pip} install --upgrade --force-reinstall ${source_dir} && git -C ${source_dir} rev-parse HEAD > ${git_revision_file}",
     unless      => "test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent')\" && ${venv_python} -c \"import importlib.metadata as m; m.version('python-multipart')\" && ${venv_python} -m pip check",
     environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
     path        => ['/bin', '/usr/bin'],
     require     => [
-      Exec['cleanup_hermes_patch_artifacts'],
-      Exec['create_hermes_venv'],
+      Python::Pyvenv[$venv_dir],
       File["${source_dir}/tools/agent_request_tool.py"],
       File["${source_dir}/tools/google_workspace_tool.py"],
       File["${source_dir}/tools/shopping_browser_tool.py"],
@@ -151,8 +133,7 @@ class nest::app::hermes::install {
     environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
     path        => ['/bin', '/usr/bin'],
     require     => [
-      Exec['cleanup_hermes_patch_artifacts'],
-      Exec['create_hermes_venv'],
+      Python::Pyvenv[$venv_dir],
       Vcsrepo[$broker_source_dir],
     ],
   }
@@ -208,15 +189,13 @@ class nest::app::hermes::install {
       mode    => '0755',
       owner   => 'root',
       group   => 'root',
-      content => @("PY"),
-        #!${venv_dir}/bin/python
-        import os
-        import sys
-
-        os.environ['SHLVL'] = '1'
-        os.environ['PYTHONPATH'] = '${source_dir}:${broker_source_dir}/src'
-        os.execv('${venv_dir}/bin/hermes', ['${venv_dir}/bin/hermes', '--profile', '${wrapper_profile}', *sys.argv[1:]])
-        | PY
+      content => epp('nest/app/hermes/profile-wrapper.py.epp', {
+        'venv_dir'          => $venv_dir,
+        'source_dir'        => $source_dir,
+        'broker_source_dir' => $broker_source_dir,
+        'profile'           => $wrapper_profile,
+        'user'              => $nest::user,
+      }),
       require => Exec['install_hermes_agent'],
     }
 
@@ -225,33 +204,31 @@ class nest::app::hermes::install {
       mode    => '0755',
       owner   => 'root',
       group   => 'root',
-      content => @("PY"),
-        #!${venv_dir}/bin/python
-        import os
-        import sys
-
-        os.environ['AGENT_REQUEST_KANBAN_BOARD'] = 'agent-requests-dev'
-        os.environ['AGENT_REQUEST_KANBAN_BOARD_OVERRIDE'] = 'agent-requests-dev'
-        os.environ['HERMES_KANBAN_BOARD'] = 'agent-requests-dev'
-        os.environ['HERMES_KANBAN_DB'] = '/home/${nest::user}/.hermes/kanban/boards/agent-requests-dev/kanban.db'
-        os.environ['SHLVL'] = '1'
-        os.environ['PYTHONPATH'] = '${source_dir}:${broker_source_dir}/src'
-        os.execv('${venv_dir}/bin/hermes', ['${venv_dir}/bin/hermes', '--profile', '${wrapper_profile}', *sys.argv[1:]])
-        | PY
+      content => epp('nest/app/hermes/profile-wrapper.py.epp', {
+        'venv_dir'          => $venv_dir,
+        'source_dir'        => $source_dir,
+        'broker_source_dir' => $broker_source_dir,
+        'profile'           => $wrapper_profile,
+        'user'              => $nest::user,
+        'dev_board'         => true,
+      }),
       require => Exec['install_hermes_agent_request_broker'],
     }
   }
 
-  exec { 'install_hermes_telegram_deps':
-    command     => "${venv_pip} install 'python-telegram-bot[webhooks]==22.6'",
-    unless      => "${venv_python} -c \"import importlib.metadata as m; raise SystemExit(0 if m.version('python-telegram-bot') == '22.6' else 1)\"",
+  python::pip { 'hermes-agent-telegram-deps':
+    ensure      => '22.6',
+    pkgname     => 'python-telegram-bot',
+    extras      => ['webhooks'],
+    virtualenv  => $venv_dir,
     environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
     require     => Exec['install_hermes_agent'],
   }
 
-  exec { 'install_hermes_honcho_deps':
-    command     => "${venv_pip} install 'honcho-ai>=2.0.1'",
-    unless      => "${venv_python} -c \"import honcho\"",
+  python::pip { 'hermes-agent-honcho-deps':
+    ensure      => present,
+    pkgname     => 'honcho-ai',
+    virtualenv  => $venv_dir,
     environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
     require     => Exec['install_hermes_agent'],
   }

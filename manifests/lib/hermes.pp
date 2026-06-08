@@ -108,13 +108,7 @@ define nest::lib::hermes (
     'web',
   ]
   $effective_toolsets                = pick($toolsets, $telegram_toolsets, $default_toolsets)
-  $toolsets_yaml                     = $effective_toolsets.map |String[1] $toolset| {
-    "          - ${toolset}"
-  }.join("\n")
-  $profile_toolsets_yaml             = $effective_toolsets.map |String[1] $toolset| {
-    "        - ${toolset}"
-  }.join("\n")
-  $platform_toolsets_yaml            = [
+  $platform_toolsets                 = [
     'cli',
     'cron',
     'telegram',
@@ -127,9 +121,9 @@ define nest::lib::hermes (
     'yuanbao',
     'teams',
     'google_chat',
-  ].map |String[1] $platform| {
-    "        ${platform}:\n${toolsets_yaml}"
-  }.join("\n")
+  ].reduce({}) |Hash $memo, String[1] $platform| {
+    $memo + { $platform => $effective_toolsets }
+  }
 
   ensure_resource('nest::lib::package', $extra_packages, {
     'ensure' => 'present',
@@ -263,50 +257,126 @@ define nest::lib::hermes (
     '',
   ].flatten
 
-  $image_gen_yaml = $image_gen_provider ? {
-    undef   => '',
-    default => $image_gen_model ? {
-      undef   => @("YAML"),
-        image_gen:
-          provider: "${image_gen_provider}"
-        | YAML
-      default => @("YAML"),
-        image_gen:
-          provider: "${image_gen_provider}"
-          model: "${image_gen_model}"
-        | YAML
+  $image_gen_config = $image_gen_provider ? {
+    undef   => {},
+    default => {
+      'image_gen' => {
+        'provider' => $image_gen_provider,
+      } + ($image_gen_model ? {
+        undef   => {},
+        default => { 'model' => $image_gen_model },
+      }),
     },
   }
-  $plugins_yaml = $image_gen_provider ? {
-    undef   => '',
-    default => @("YAML"),
-      plugins:
-        disabled: []
-        enabled:
-          - "image_gen/${image_gen_provider}"
-      | YAML
+  $plugins_config = $image_gen_provider ? {
+    undef   => {},
+    default => {
+      'plugins' => {
+        'disabled' => [],
+        'enabled'  => ["image_gen/${image_gen_provider}"],
+      },
+    },
   }
-  $display_skin_yaml = $skin_name ? {
-    undef   => '',
-    default => "  skin: \"${skin_name}\"\n",
+  $display_skin_config = $skin_name ? {
+    undef   => {},
+    default => { 'skin' => $skin_name },
   }
   $skin_banner_hero_yaml = $skin_banner_hero_source ? {
     undef   => '',
     default => "banner_hero: |2\n${nest::ansi_to_rich($skin_banner_hero_source).split("\n").map |String $line| { "  ${line}" }.join("\n")}\n",
   }
-  $dashboard_theme_yaml = $dashboard_theme ? {
-    undef   => '',
-    default => "  theme: \"${dashboard_theme}\"\n",
+  $dashboard_theme_config = $dashboard_theme ? {
+    undef   => {},
+    default => { 'theme' => $dashboard_theme },
   }
-  $agent_directory_profile_icon_yaml = $profile_icon ? {
-    undef   => '',
-    default => "    profile_icon: \"${profile_icon}\"\n",
+  $agent_directory_profile_icon_config = $profile_icon ? {
+    undef   => {},
+    default => { 'profile_icon' => $profile_icon },
   }
   $effective_skin_content = $skin_content ? {
     undef   => undef,
     default => "${skin_content}${skin_banner_hero_yaml}",
   }
   $has_custom_skin = $skin_name != undef and $effective_skin_content != undef
+
+  $managed_config = {
+    'toolsets'         => $effective_toolsets,
+    'model'            => {
+      'provider' => $model_provider,
+      'default'  => $model_name,
+      'base_url' => $model_base_url,
+    },
+    'web'              => {
+      'backend'        => 'tavily',
+      'search_backend' => 'tavily',
+    },
+    'voice'            => {
+      'auto_tts' => $voice_auto_tts,
+    },
+    'approvals'        => {
+      'mode' => $approval_mode,
+    },
+    'stt'              => {
+      'enabled'  => $stt_enabled,
+      'provider' => $stt_provider,
+      'openai'   => {
+        'model' => $stt_model,
+      },
+    },
+    'tts'              => {
+      'provider' => $tts_provider,
+      'openai'   => {
+        'model' => $tts_openai_model,
+        'voice' => $tts_openai_voice,
+      },
+    },
+    'auxiliary'        => {
+      'compression' => {
+        'provider' => $auxiliary_provider,
+        'model'    => $auxiliary_mini_model,
+        'timeout'  => $compression_timeout,
+      },
+      'web_extract' => {
+        'provider' => $auxiliary_provider,
+        'model'    => $auxiliary_mini_model,
+        'timeout'  => $web_extract_timeout,
+      },
+    },
+    'platform_toolsets' => $platform_toolsets,
+    'display'          => {
+      'tool_progress'         => 'all',
+      'tool_progress_command' => true,
+      'platforms'             => {
+        'telegram' => {
+          'tool_progress'       => 'all',
+          'tool_preview_length' => 500,
+        },
+      },
+    } + $display_skin_config,
+    'memory'           => {
+      'provider' => 'honcho',
+    },
+    'agent_directory'  => {
+      'enabled'                => $agent_directory_enabled,
+      'board'                  => $agent_directory_board,
+      'touch_interval_seconds' => $agent_directory_touch,
+      'profile_name'           => $profile,
+      'profile'                => {
+        'display_name'    => $display_name,
+        'freshness_notes' => $agent_directory_freshness_notes,
+      } + $agent_directory_profile_icon_config,
+    },
+    'kanban'           => {
+      'dispatch_in_gateway' => $kanban_dispatch_in_gateway,
+    },
+    'dashboard'        => {
+      'public_url' => $dashboard_public_url,
+      'oauth'      => {
+        'client_id'  => $dashboard_oauth_client_id_value,
+        'portal_url' => $dashboard_oauth_portal_url_value,
+      },
+    } + $dashboard_theme_config,
+  } + $image_gen_config + $plugins_config
 
   $env_content = [$gitlab_env_lines, $openai_env_lines, $tavily_env_lines, $telegram_env_lines, $agent_request_env_lines].flatten.join("\n")
 
@@ -365,72 +435,7 @@ define nest::lib::hermes (
     mode    => '0600',
     owner   => $user,
     group   => $user,
-    content => @("YAML"),
-      ---
-      toolsets:
-${profile_toolsets_yaml}
-      model:
-        provider: "${model_provider}"
-        default: "${model_name}"
-        base_url: "${model_base_url}"
-      web:
-        backend: tavily
-        search_backend: tavily
-${image_gen_yaml}
-${plugins_yaml}
-      voice:
-        auto_tts: ${voice_auto_tts}
-      approvals:
-        mode: "${approval_mode}"
-      stt:
-        enabled: ${stt_enabled}
-        provider: "${stt_provider}"
-        openai:
-          model: "${stt_model}"
-      tts:
-        provider: "${tts_provider}"
-        openai:
-          model: "${tts_openai_model}"
-          voice: "${tts_openai_voice}"
-
-      auxiliary:
-        compression:
-          provider: "${auxiliary_provider}"
-          model: "${auxiliary_mini_model}"
-          timeout: ${compression_timeout}
-        web_extract:
-          provider: "${auxiliary_provider}"
-          model: "${auxiliary_mini_model}"
-          timeout: ${web_extract_timeout}
-      platform_toolsets:
-${platform_toolsets_yaml}
-      display:
-        tool_progress: all
-        tool_progress_command: true
-${display_skin_yaml}  platforms:
-          telegram:
-            tool_progress: all
-            tool_preview_length: 500
-      memory:
-        provider: honcho
-      agent_directory:
-        enabled: ${agent_directory_enabled}
-        board: "${agent_directory_board}"
-        touch_interval_seconds: ${agent_directory_touch}
-        profile_name: "${profile}"
-        profile:
-          display_name: "${display_name}"
-${agent_directory_profile_icon_yaml}
-          freshness_notes: "${agent_directory_freshness_notes}"
-      kanban:
-        dispatch_in_gateway: ${kanban_dispatch_in_gateway}
-      dashboard:
-        public_url: "${dashboard_public_url}"
-${dashboard_theme_yaml}
-        oauth:
-          client_id: "${dashboard_oauth_client_id_value}"
-          portal_url: "${dashboard_oauth_portal_url_value}"
-      | YAML
+    content => $managed_config.stdlib::to_yaml,
     require => File[$profile_dir],
   }
 
@@ -467,7 +472,7 @@ ${dashboard_theme_yaml}
   $configure_require = $has_custom_skin ? {
     true    => [
       Exec['install_hermes_agent'],
-      Exec['install_hermes_honcho_deps'],
+      Python::Pip['hermes-agent-honcho-deps'],
       File[$hermes_config_path],
       File[$hermes_config_manager_path],
       File[$hermes_managed_config_path],
@@ -476,7 +481,7 @@ ${dashboard_theme_yaml}
     ],
     default => [
       Exec['install_hermes_agent'],
-      Exec['install_hermes_honcho_deps'],
+      Python::Pip['hermes-agent-honcho-deps'],
       File[$hermes_config_path],
       File[$hermes_config_manager_path],
       File[$hermes_managed_config_path],
@@ -493,13 +498,14 @@ ${dashboard_theme_yaml}
   }
 
   if $gateway_enabled {
-    exec { "enable_hermes_gateway_${profile}":
-      command => "/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user enable --now hermes-gateway@${profile}.service'",
-      unless  => "/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-enabled --quiet hermes-gateway@${profile}.service && XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-active --quiet hermes-gateway@${profile}.service'",
+    systemd::user_service { "hermes-gateway-${profile}":
+      ensure  => running,
+      enable  => true,
+      unit    => "hermes-gateway@${profile}.service",
       user    => $user,
       require => [
-        Exec['enable_hermes_gateway_linger'],
-        File["${systemd_user_dir}/hermes-gateway@.service"],
+        Loginctl_user[$user],
+        Systemd::Manage_unit['hermes-gateway@.service'],
         File["${profile_dir}/systemd.env"],
         Exec["configure_hermes_managed_config_${profile}"],
       ],
@@ -520,27 +526,29 @@ ${dashboard_theme_yaml}
         Exec["configure_hermes_managed_config_${profile}"],
       ],
       require     => [
-        Exec["enable_hermes_gateway_${profile}"],
+        Systemd::User_service["hermes-gateway-${profile}"],
         File["${install_dir}/bin/hermes-systemd-user-refresh"],
       ],
     }
   } else {
-    exec { "disable_hermes_gateway_${profile}":
-      command => "/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user disable --now hermes-gateway@${profile}.service || true'",
-      unless  => "/bin/sh -c '! XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-enabled --quiet hermes-gateway@${profile}.service && ! XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-active --quiet hermes-gateway@${profile}.service'",
+    systemd::user_service { "hermes-gateway-${profile}":
+      ensure  => stopped,
+      enable  => false,
+      unit    => "hermes-gateway@${profile}.service",
       user    => $user,
-      require => File["${systemd_user_dir}/hermes-gateway@.service"],
+      require => Systemd::Manage_unit['hermes-gateway@.service'],
     }
   }
 
   if $dashboard_enabled {
-    exec { "enable_hermes_dashboard_${profile}":
-      command => "/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user enable --now hermes-dashboard@${profile}.service'",
-      unless  => "/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-enabled --quiet hermes-dashboard@${profile}.service && XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-active --quiet hermes-dashboard@${profile}.service'",
+    systemd::user_service { "hermes-dashboard-${profile}":
+      ensure  => running,
+      enable  => true,
+      unit    => "hermes-dashboard@${profile}.service",
       user    => $user,
       require => [
-        Exec['enable_hermes_gateway_linger'],
-        File["${systemd_user_dir}/hermes-dashboard@.service"],
+        Loginctl_user[$user],
+        Systemd::Manage_unit['hermes-dashboard@.service'],
         File["${profile_dir}/systemd.env"],
         Exec["configure_hermes_managed_config_${profile}"],
       ],
@@ -557,14 +565,15 @@ ${dashboard_theme_yaml}
         File[$hermes_managed_config_path],
         Exec["configure_hermes_managed_config_${profile}"],
       ],
-      require     => Exec["enable_hermes_dashboard_${profile}"],
+      require     => Systemd::User_service["hermes-dashboard-${profile}"],
     }
   } else {
-    exec { "disable_hermes_dashboard_${profile}":
-      command => "/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user disable --now hermes-dashboard@${profile}.service || true'",
-      unless  => "/bin/sh -c '! XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-enabled --quiet hermes-dashboard@${profile}.service && ! XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-active --quiet hermes-dashboard@${profile}.service'",
+    systemd::user_service { "hermes-dashboard-${profile}":
+      ensure  => stopped,
+      enable  => false,
+      unit    => "hermes-dashboard@${profile}.service",
       user    => $user,
-      require => File["${systemd_user_dir}/hermes-dashboard@.service"],
+      require => Systemd::Manage_unit['hermes-dashboard@.service'],
     }
   }
 }

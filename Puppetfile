@@ -35,6 +35,7 @@ mod 'puppetlabs-powershell', '6.0.0'
 mod 'puppetlabs-vcsrepo', :git => 'git@gitlab.joyfullee.me:nest/forks/puppet-vcsrepo.git', :branch => 'main'
 mod 'puppet-firewalld', :git => 'git@gitlab.joyfullee.me:nest/forks/puppet-firewalld.git', :branch => 'fix-new-zone-creation'
 mod 'puppet-nodejs', '10.0.0'
+mod 'puppet-python', '9.0.0'
 mod 'puppet-systemd', '7.1.0'
 mod 'puppetlabs-windows_env', '5.0.0'
 mod 'puppet-windows_firewall', '4.1.0'
@@ -45,6 +46,9 @@ mod 'puppetlabs-registry', '5.0.1'
 
 # Required by puppetlabs-powershell
 mod 'puppetlabs-pwshlib', '1.2.2'
+
+# Required by puppet-python
+mod 'puppet-epel', '6.1.1'
 
 # Required by theforeman-puppet
 mod 'puppet-extlib', '7.0.0'

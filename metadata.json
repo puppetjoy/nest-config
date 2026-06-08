@@ -61,6 +61,10 @@
       "version_requirement": ">= 9.0.0 < 10.0.0"
     },
     {
+      "name": "puppet-python",
+      "version_requirement": ">= 9.0.0 < 10.0.0"
+    },
+    {
       "name": "puppet-systemd",
       "version_requirement": ">= 7.0.0 < 8.0.0"
     },
@@ -75,6 +79,10 @@
     {
       "name": "joy-homebrew",
       "version_requirement": ">= 0.1.0 < 1.0.0"
+    },
+    {
+      "name": "puppet-epel",
+      "version_requirement": ">= 6.0.0 < 7.0.0"
     }
   ],
   "operatingsystem_support": [

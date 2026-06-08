@@ -1,0 +1,17 @@
+<%- |
+  String[1] $venv_dir,
+  String[1] $venv_python,
+  String[1] $source_dir,
+  String[1] $broker_source_dir,
+  String[1] $hermes_home_dir,
+  String[1] $pythonpath,
+  String[1] $command,
+| -%>
+#!/bin/sh
+set -eu
+export PATH=<%= $venv_dir %>/bin:/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export VIRTUAL_ENV=<%= $venv_dir %>
+export HERMES_SRC=<%= $source_dir %>
+export HERMES_HOME=<%= $hermes_home_dir %>
+export PYTHONPATH=<%= $pythonpath %>
+exec <%= $venv_python %> <%= $broker_source_dir %>/bin/<%= $command %> "$@"

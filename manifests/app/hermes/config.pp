@@ -26,7 +26,6 @@ class nest::app::hermes::config {
   $hermes_config_dir       = "/home/${nest::user}/.config/hermes"
   $hermes_home_dir         = "/home/${nest::user}/.hermes"
   $profiles_dir            = "${hermes_home_dir}/profiles"
-  $requests_dir            = "${hermes_home_dir}/agent-requests"
   $codex_auth_manager_path = "${nest::app::hermes::install_dir}/bin/hermes-share-codex-auth"
 
   file { $hermes_config_dir:
@@ -49,40 +48,6 @@ class nest::app::hermes::config {
     owner   => $nest::user,
     group   => $nest::user,
     require => File[$hermes_home_dir],
-  }
-
-  file { "${profiles_dir}/tars":
-    ensure  => absent,
-    force   => true,
-    recurse => true,
-    require => File[$profiles_dir],
-  }
-
-  file { $requests_dir:
-    ensure  => absent,
-    force   => true,
-    recurse => true,
-    require => File[$hermes_home_dir],
-  }
-
-  [
-    'sessions',
-    'memories',
-    'cron',
-    'logs',
-    'cache',
-    'state-snapshots',
-    'config.yaml',
-    'managed-config.yaml',
-    'honcho.json',
-    'SOUL.md',
-    '.env',
-  ].each |String[1] $default_profile_path| {
-    file { "${hermes_home_dir}/${default_profile_path}":
-      ensure  => absent,
-      force   => true,
-      recurse => true,
-    }
   }
 
   $codex_auth_profiles = $instances.map |String[1] $instance_name, Hash $instance_config| {
