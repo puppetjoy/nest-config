@@ -759,6 +759,7 @@ class nest::app::hermes::install {
 
   nest::lib::package { 'media-video/ffmpeg':
     ensure => present,
+    use    => ['opus'],
   }
 
   if $facts['profile']['architecture'] == 'amd64' {
