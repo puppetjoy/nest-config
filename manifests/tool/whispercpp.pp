@@ -8,6 +8,7 @@ class nest::tool::whispercpp (
 
   nest::lib::package { [
     'dev-util/vulkan-headers',
+    'media-libs/vulkan-loader',
     'media-libs/shaderc',
     'media-video/ffmpeg',
   ]:

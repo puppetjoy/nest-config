@@ -30,7 +30,12 @@ class nest::tool::ttscpp (
   }
 
   exec { 'tts.cpp-install':
-    command     => '/usr/bin/cmake --install build',
+    command     => join([
+      'install -D -m 0755 build/bin/tts-server /usr/local/bin/tts-server',
+      'install -D -m 0755 build/bin/tts-cli /usr/local/bin/tts-cli',
+      'install -D -m 0755 build/bin/phonemize /usr/local/bin/tts-phonemize',
+      'install -D -m 0755 build/bin/quantize /usr/local/bin/tts-quantize',
+    ], ' && '),
     cwd         => '/usr/src/TTS.cpp',
     path        => '/usr/bin:/bin',
     refreshonly => true,
