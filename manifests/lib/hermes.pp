@@ -79,7 +79,7 @@ define nest::lib::hermes (
     default => $dashboard_oauth_portal_url,
   }
   $soul_seed                        = $soul_content ? {
-    undef   => "# ${display_name}\n\nYou are ${display_name}, one of Joy's Hermes Agent profiles.\n",
+    undef   => fail("Hermes profile ${profile} must set soul_content from private Hiera"),
     default => $soul_content,
   }
   $agent_directory_freshness_notes  = "Puppet-managed ${display_name} lifecycle refresh"
