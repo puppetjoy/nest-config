@@ -44,6 +44,7 @@ nest::app::hermes::instances:
   talon:
     profile: 'talon'
     display_name: 'Talon'
+    profile_icon: '🦉'
     skin_name: 'talon-ops-dawn'
     skin_banner_hero_source: 'nest/app/hermes/skins/talon-ops-dawn-banner-hero.ansi'
     skin_content: |

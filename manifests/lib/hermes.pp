@@ -298,7 +298,7 @@ define nest::lib::hermes (
   }
   $agent_directory_profile_icon_yaml = $profile_icon ? {
     undef   => '',
-    default => "          profile_icon: \"${profile_icon}\"\n",
+    default => "    profile_icon: \"${profile_icon}\"\n",
   }
   $effective_skin_content = $skin_content ? {
     undef   => undef,
