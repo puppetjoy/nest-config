@@ -97,14 +97,20 @@ define nest::lib::reverse_proxy (
   ]
 
   if empty($blocked_user_agents) {
-    $blocked_user_agent_rewrites = []
+    $blocked_user_agent_fragment = ''
   } else {
     $blocked_user_agent_pattern = $blocked_user_agents.map |$agent| { "(${agent})" }.join('|')
-    $blocked_user_agent_rewrites = [{
-      'comment'      => ' Block unwanted crawlers before proxying',
-      'rewrite_cond' => ["%{HTTP_USER_AGENT} ${blocked_user_agent_pattern} [NC]"],
-      'rewrite_rule' => ['^ - [F,L]'],
-    }]
+    $blocked_user_agent_fragment = @("UA_BLOCK")
+      # Block unwanted crawlers before proxying
+      SetEnvIfNoCase User-Agent "${blocked_user_agent_pattern}" blocked_bad_user_agent
+      <Location "/">
+        <RequireAll>
+          Require all granted
+          Require not env blocked_bad_user_agent
+        </RequireAll>
+      </Location>
+
+      | UA_BLOCK
   }
 
   if $websockets {
@@ -123,7 +129,7 @@ define nest::lib::reverse_proxy (
     $websocket_rewrites = []
   }
 
-  $vhost_rewrites = $blocked_user_agent_rewrites + $websocket_rewrites
+  $vhost_rewrites = $websocket_rewrites
 
   $certbot_exception = @(EOT)
     <Location "/.well-known">
@@ -149,7 +155,7 @@ define nest::lib::reverse_proxy (
       'proxy_preserve_host'   => $preserve_host,
       'rewrites'              => $vhost_rewrites,
       'ssl_proxyengine'       => $proxy_ssl,
-      'custom_fragment'       => "${balancer}${certbot_exception}",
+      'custom_fragment'       => "${blocked_user_agent_fragment}${balancer}${certbot_exception}",
     } + $extra_params,
   }
 }
