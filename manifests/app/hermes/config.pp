@@ -18,6 +18,7 @@ class nest::app::hermes::config {
   $dashboard_bind_host              = $nest::app::hermes::dashboard_bind_host
   $dashboard_oauth_client_id        = $nest::app::hermes::dashboard_oauth_client_id
   $dashboard_oauth_portal_url       = $nest::app::hermes::dashboard_oauth_portal_url
+  $toolsets                         = $nest::app::hermes::toolsets
   $agent_request_kanban_board       = $nest::app::hermes::agent_request_kanban_board
   $instances                        = $nest::app::hermes::instances
   $instance_secrets                 = $nest::app::hermes::instance_secrets
@@ -158,7 +159,10 @@ class nest::app::hermes::config {
     $instance_skin_content      = $config['skin_content']
     $instance_skin_hero_source  = $config['skin_banner_hero_source']
     $instance_toolsets          = $config['toolsets'] ? {
-      undef   => $config['telegram_toolsets'],
+      undef   => $config['telegram_toolsets'] ? {
+        undef   => $toolsets,
+        default => $config['telegram_toolsets'],
+      },
       default => $config['toolsets'],
     }
     $instance_profile_toolsets  = pick($config['profile_toolsets'], ['hermes-cli', 'kanban'])

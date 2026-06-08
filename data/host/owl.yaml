@@ -247,31 +247,11 @@ nest::app::hermes::instances:
     honcho_user_peer: 'joy'
     honcho_ai_peer: 'star'
     gateway_enabled: true
-    profile_toolsets:
-      - hermes-cli
     kanban_dispatch_in_gateway: true
     dashboard_enabled: true
     dashboard_port: 9121
     dashboard_public_url: 'https://star.eyrie'
     dashboard_theme: 'rose'
-    toolsets:
-      - agent_directory
-      - agent_requests
-      - browser
-      - clarify
-      - memory
-      - messaging
-      - session_search
-      - skills
-      - google_workspace
-      - shopping_browser
-      - kanban
-      - cronjob
-      - todo
-      - tts
-      - web
-      - vision
-      - image_gen
     google_workspace_enabled: true
     voice_auto_tts: true
     stt_enabled: true
