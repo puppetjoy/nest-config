@@ -4,11 +4,7 @@ class nest::gui::plasma {
     use    => ['-display-manager', '-firewall', '-networkmanager'],
   }
 
-  # Don't build support for online services
-  nest::lib::package { 'kde-plasma/spectacle':
-    ensure => installed,
-    use    => '-kipi',
-  }
+  # Screenshot tooling is provided by nest::gui::screenshots
 
   nest::lib::package { [
     'kde-apps/ark',

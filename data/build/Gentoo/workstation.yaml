@@ -11,6 +11,7 @@ nest::classes:
   - 'nest::gui::media'
   - 'nest::gui::packages'
   - 'nest::gui::plasma'
+  - 'nest::gui::screenshots'
   - 'nest::gui::sway'
   - 'nest::gui::terminals'
   - 'nest::gui::xmonad'
