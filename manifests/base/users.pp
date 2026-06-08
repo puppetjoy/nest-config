@@ -116,10 +116,15 @@ class nest::base::users {
     }
   }
 
-  $dotfiles_git_source   = 'gitlab.joyfullee.me:joy/dotfiles.git'
-  $dotfiles_git_identity = $facts['os']['family'] ? {
-    'Darwin' => "/Users/${nest::user}/.ssh/id_ed25519",
-    default  => "/home/${nest::user}/.ssh/id_ed25519",
+  if $facts['build'] {
+    $dotfiles_git_source   = 'https://gitlab.joyfullee.me/joy/dotfiles.git'
+    $dotfiles_git_identity = undef
+  } else {
+    $dotfiles_git_source   = 'gitlab.joyfullee.me:joy/dotfiles.git'
+    $dotfiles_git_identity = $facts['os']['family'] ? {
+      'Darwin' => "/Users/${nest::user}/.ssh/id_ed25519",
+      default  => "/home/${nest::user}/.ssh/id_ed25519",
+    }
   }
 
   $homes.each |$user, $dir| {
