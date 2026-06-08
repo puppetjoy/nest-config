@@ -54,6 +54,8 @@ lookup_options:
     convert_to: 'Sensitive'
   nest::service::kubernetes::bolt_private_key:
     convert_to: 'Sensitive'
+  nest::service::kasm_oauth_browser::vnc_password:
+    convert_to: 'Sensitive'
   nest::service::kasm_shopping_browser::vnc_password:
     convert_to: 'Sensitive'
   nest::service::llama_server::hf_token:
@@ -123,6 +125,7 @@ nest::cnames:
   talon.eyrie: 'ingress-compute.eyrie'
   star.eyrie: 'ingress-compute.eyrie'
   shopping.eyrie: 'ingress-compute.eyrie'
+  oauth-browser.eyrie: 'ingress-compute.eyrie'
   llama-util.nest: 'kestrel.nest'
 
   # Local services

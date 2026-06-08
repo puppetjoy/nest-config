@@ -50,6 +50,35 @@ If no private slot store exists yet, the helper preserves the legacy migration
 behavior: it chooses the freshest non-exhausted local/root `openai-codex` state,
 writes it to the root auth store, and removes profile-local shadows.
 
+## Shared OAuth browser workflow
+
+Joy can complete login and consent in a persistent Kasm browser that Talon can
+also navigate and inspect at a redacted metadata level. The browser is deployed
+as the `ai/oauth-browser` KubeCM service at `https://oauth-browser.eyrie/`, with
+a PVC-backed Chrome profile and Bitwarden extension policy like the shopping
+browser, but with a narrower Hermes `oauth_browser` toolset.
+
+Talon may use `oauth_browser_login_prompt` or `oauth_browser_navigate` to open a
+provider/device-code URL in that browser and produce an owner-facing prompt.
+Joy then uses the Kasm UI to unlock Bitwarden, sign in, satisfy passkeys, 2FA,
+CAPTCHA, and approve consent. Talon must not request or receive passwords,
+passkeys, 2FA codes, callback URLs containing `code=`, browser cookies, local
+storage, raw screenshots of secret pages, or token JSON in chat/tool output.
+
+Safe status commands for the shared browser:
+
+```sh
+hermes -p talon chat -q 'Check oauth_browser_status with include_page=true and report only redacted origin/title/readiness.'
+kubectl -n ai get deploy/oauth-browser,svc/oauth-browser,ingress/oauth-browser,pvc/oauth-browser-profile
+```
+
+The OAuth browser bridge reports the public Kasm URL, Kubernetes readiness,
+redacted origin/path/title/query-key names, and whether a URL fragment is
+present. It does not return visible page text, raw DOM, cookies, storage,
+headers, CDP endpoints, or callback codes. Use the normal Hermes auth/capture
+commands below only after Joy reports that the owner-operated browser flow has
+completed.
+
 ## Owner-operated capture workflow
 
 Run the OAuth flow from Joy's trusted shell. Prefer root/default Hermes auth so

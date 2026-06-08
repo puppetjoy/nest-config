@@ -1,0 +1,280 @@
+---
+include:
+  - 'nest::service::kasm_oauth_browser'
+
+plan_base: 'nest::eyrie::ai::oauth_browser'
+service_name: oauth-browser
+
+cert_issuer: eyrie-ca
+cert_issuer_kind: ClusterIssuer
+ingress_class: contour-compute
+node_role: compute
+image: docker.io/kasmweb/chrome:1.18.0
+launch_url: https://chatgpt.com/
+app_args: >-
+  --start-maximized
+  --disable-gpu
+  --disable-features=UseChromeOSDirectVideoDecoder
+  --user-data-dir=/home/kasm-user/.config/talon-oauth-chrome
+  --remote-debugging-address=0.0.0.0
+  --remote-debugging-port=9222
+storage_class: owl-crypt
+profile_storage_size: 8Gi
+bitwarden_extension_id: nngceckbapebfimnlniiiahkandclblb
+bitwarden_update_url: https://clients2.google.com/service/update2/crx
+
+.policy_json: &policy_json |-
+  {
+    "ExtensionInstallForcelist": [
+      "%{lookup('bitwarden_extension_id')};%{lookup('bitwarden_update_url')}"
+    ],
+    "ExtensionSettings": {
+      "%{lookup('bitwarden_extension_id')}": {
+        "installation_mode": "force_installed",
+        "toolbar_pin": "force_pinned",
+        "update_url": "%{lookup('bitwarden_update_url')}"
+      }
+    }
+  }
+
+.external_extension_json: &external_extension_json |-
+  {
+    "external_update_url": "%{lookup('bitwarden_update_url')}"
+  }
+
+resources:
+  backup: {}
+  restore: {}
+  registry_auths: {}
+
+  certs:
+    apiVersion: cert-manager.io/v1
+    kind: Certificate
+    metadata:
+      name: "%{nest::kubernetes::service}-certs"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      secretName: "%{nest::kubernetes::service}-certs"
+      issuerRef:
+        name: "%{lookup('cert_issuer')}"
+        kind: "%{lookup('cert_issuer_kind')}"
+      dnsNames:
+        - "%{nest::kubernetes::fqdn}"
+
+  secrets:
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: "%{nest::kubernetes::service}-secrets"
+      namespace: "%{nest::kubernetes::namespace}"
+    type: Opaque
+    data:
+      VNC_PW: "%{nest::service::kasm_oauth_browser::vnc_password_base64}"
+
+  browser-policy:
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: "%{nest::kubernetes::service}-browser-policy"
+      namespace: "%{nest::kubernetes::namespace}"
+    data:
+      bitwarden-extension.json: *policy_json
+      "%{lookup('bitwarden_extension_id')}.json": *external_extension_json
+
+  reset-procedure:
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: "%{nest::kubernetes::service}-reset-procedure"
+      namespace: "%{nest::kubernetes::namespace}"
+    data:
+      README.txt: |-
+        Reset/revoke procedure for the OAuth Browser profile:
+        1. Stop the live session: kubectl -n %{nest::kubernetes::namespace} scale deployment/%{nest::kubernetes::service} --replicas=0
+        2. Wipe profile state: kubectl -n %{nest::kubernetes::namespace} delete pvc %{nest::kubernetes::service}-profile
+        3. Recreate the managed resources: bolt plan run nest::eyrie::ai::deploy_oauth_browser
+        4. Rotate the KasmVNC UI password by updating the private eyaml key nest::service::kasm_oauth_browser::vnc_password and redeploying.
+        This browser exists for owner-operated OAuth/device-code login flows such as OpenAI Codex. Talon may navigate the persistent browser and report redacted status only. Joy handles Bitwarden unlock, account login, passkeys, 2FA, CAPTCHA, and consent prompts through the authenticated Kasm UI. Do not expose CDP, raw VNC, cookies, local storage, request headers, screenshots of secret pages, callback URLs containing codes, vault contents, or credential material directly to any agent.
+
+
+  profile-storage:
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: "%{nest::kubernetes::service}-profile"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: "%{lookup('profile_storage_size')}"
+      storageClassName: "%{lookup('storage_class')}"
+
+  deployment:
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: "%{nest::kubernetes::service}"
+      namespace: "%{nest::kubernetes::namespace}"
+      labels:
+        app: "%{nest::kubernetes::service}"
+    spec:
+      replicas: 1
+      strategy:
+        type: Recreate
+      selector:
+        matchLabels:
+          app: "%{nest::kubernetes::service}"
+      template:
+        metadata:
+          labels:
+            app: "%{nest::kubernetes::service}"
+        spec:
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                    - key: "node-role.kubernetes.io/%{lookup('node_role')}"
+                      operator: Exists
+          tolerations:
+            - key: "node-role.kubernetes.io/%{lookup('node_role')}"
+              operator: Exists
+              effect: NoSchedule
+          securityContext:
+            fsGroup: 1000
+          initContainers:
+            - name: seed-debug-profile
+              image: "%{lookup('image')}"
+              command:
+                - /bin/sh
+                - -ec
+                - >-
+                  if [ ! -e /home/kasm-user/.config/talon-oauth-chrome ] && [ -d /home/kasm-user/.config/google-chrome ]; then
+                    mkdir -p /home/kasm-user/.config;
+                    cp -a /home/kasm-user/.config/google-chrome /home/kasm-user/.config/talon-oauth-chrome;
+                  else
+                    mkdir -p /home/kasm-user/.config/talon-oauth-chrome;
+                  fi;
+                  rm -f \
+                    /home/kasm-user/.config/talon-oauth-chrome/SingletonCookie \
+                    /home/kasm-user/.config/talon-oauth-chrome/SingletonLock \
+                    /home/kasm-user/.config/talon-oauth-chrome/SingletonSocket
+              volumeMounts:
+                - name: profile
+                  mountPath: /home/kasm-user
+          containers:
+            - name: kasm-chrome
+              image: "%{lookup('image')}"
+              env:
+                - name: VNC_PW
+                  valueFrom:
+                    secretKeyRef:
+                      name: "%{nest::kubernetes::service}-secrets"
+                      key: VNC_PW
+                - name: LAUNCH_URL
+                  value: "%{lookup('launch_url')}"
+                - name: KASM_RESTRICTED_FILE_CHOOSER
+                  value: '1'
+                - name: APP_ARGS
+                  value: "%{lookup('app_args')}"
+              ports:
+                - name: https
+                  containerPort: 6901
+                - name: cdp
+                  containerPort: 9222
+              readinessProbe:
+                exec:
+                  command:
+                    - /bin/sh
+                    - -ec
+                    - >-
+                      fmt='%'; fmt="${fmt}{http_code}";
+                      code=$(curl -ks -o /dev/null -w "${fmt}" https://127.0.0.1:6901/ || true);
+                      test "${code}" = 401
+                periodSeconds: 5
+                timeoutSeconds: 2
+              livenessProbe:
+                tcpSocket:
+                  port: 6901
+                periodSeconds: 10
+                timeoutSeconds: 2
+              volumeMounts:
+                - name: profile
+                  mountPath: /home/kasm-user
+                - name: browser-policy
+                  mountPath: /etc/opt/chrome/policies/managed/bitwarden-extension.json
+                  subPath: bitwarden-extension.json
+                  readOnly: true
+                - name: browser-policy
+                  mountPath: /etc/chromium/policies/managed/bitwarden-extension.json
+                  subPath: bitwarden-extension.json
+                  readOnly: true
+                - name: browser-policy
+                  mountPath: "/usr/share/google-chrome/extensions/%{lookup('bitwarden_extension_id')}.json"
+                  subPath: "%{lookup('bitwarden_extension_id')}.json"
+                  readOnly: true
+                - name: browser-policy
+                  mountPath: "/usr/share/chromium/extensions/%{lookup('bitwarden_extension_id')}.json"
+                  subPath: "%{lookup('bitwarden_extension_id')}.json"
+                  readOnly: true
+                - name: dshm
+                  mountPath: /dev/shm
+          volumes:
+            - name: profile
+              persistentVolumeClaim:
+                claimName: "%{nest::kubernetes::service}-profile"
+            - name: browser-policy
+              configMap:
+                name: "%{nest::kubernetes::service}-browser-policy"
+            - name: dshm
+              emptyDir:
+                medium: Memory
+                sizeLimit: 1Gi
+
+  service:
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: "%{nest::kubernetes::service}"
+      namespace: "%{nest::kubernetes::namespace}"
+      annotations:
+        projectcontour.io/upstream-protocol.tls: '6901'
+    spec:
+      type: ClusterIP
+      selector:
+        app: "%{nest::kubernetes::service}"
+      ports:
+        - name: https
+          port: 6901
+          targetPort: 6901
+
+  ingress:
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: "%{nest::kubernetes::service}"
+      namespace: "%{nest::kubernetes::namespace}"
+      annotations:
+        projectcontour.io/response-timeout: infinity
+        projectcontour.io/websocket-routes: /
+    spec:
+      ingressClassName: "%{lookup('ingress_class')}"
+      rules:
+        - host: "%{nest::kubernetes::fqdn}"
+          http:
+            paths:
+              - path: /
+                pathType: Prefix
+                backend:
+                  service:
+                    name: "%{nest::kubernetes::service}"
+                    port:
+                      number: 6901
+      tls:
+        - secretName: "%{nest::kubernetes::service}-certs"
+          hosts:
+            - "%{nest::kubernetes::fqdn}"
+
+values: {}

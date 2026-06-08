@@ -42,6 +42,11 @@ parameters:
     type: Boolean
     default: true
 
+  oauth_browser:
+    description: 'Deploy Kasm OAuth Browser'
+    type: Boolean
+    default: true
+
   init:
     description: 'Deploy initial revision'
     type: Boolean
@@ -84,3 +89,8 @@ steps:
     plan: nest::eyrie::ai::deploy_shopping_browser
     parameters:
       deploy: $deploy and $shopping_browser
+
+  - description: 'Deploy Kasm OAuth Browser'
+    plan: nest::eyrie::ai::deploy_oauth_browser
+    parameters:
+      deploy: $deploy and $oauth_browser

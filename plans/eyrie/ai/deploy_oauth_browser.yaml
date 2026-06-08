@@ -1,0 +1,24 @@
+---
+description: 'Deploy Kasm OAuth Browser'
+
+parameters:
+  deploy:
+    description: 'Run or skip the deployment'
+    type: Boolean
+    default: true
+
+  render_to:
+    description: 'Just render the template'
+    type: String
+    default: ''
+
+steps:
+  - description: 'Deploy Kasm OAuth Browser'
+    plan: 'nest::kubernetes::deploy'
+    parameters:
+      service: 'oauth-browser'
+      app: 'kasm-oauth-browser'
+      namespace: 'ai'
+      init: false
+      deploy: $deploy
+      render_to: $render_to
