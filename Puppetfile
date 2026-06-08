@@ -48,7 +48,7 @@ mod 'puppetlabs-registry', '5.0.1'
 mod 'puppetlabs-pwshlib', '1.2.2'
 
 # Required by puppet-python
-mod 'puppet-epel', '6.1.1'
+mod 'puppet-epel', '6.0.0'
 
 # Required by theforeman-puppet
 mod 'puppet-extlib', '7.0.0'
