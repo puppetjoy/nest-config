@@ -38,11 +38,43 @@ class nest::tool::whispercpp (
         '-DGGML_VULKAN=ON',
       ].join(' '),
       'cmake --build build',
-      'cmake --install build',
-      'install -d /usr/local/share/whisper.cpp/models',
-      "test -s /usr/local/share/whisper.cpp/models/ggml-large-v3-turbo-q5_0.bin || curl -L ${model_url.shellquote} -o /usr/local/share/whisper.cpp/models/ggml-large-v3-turbo-q5_0.bin",
-      'whisper-server --help >/dev/null',
     ],
     require => Class['nest::base::gpu'],
+  }
+
+  exec { 'whisper.cpp-install':
+    command     => '/usr/bin/cmake --install build',
+    cwd         => '/usr/src/whisper.cpp',
+    path        => '/usr/bin:/bin',
+    refreshonly => true,
+    subscribe   => Exec['whisper.cpp-build'],
+  }
+
+  file { '/usr/local/share/whisper.cpp':
+    ensure => directory,
+    mode   => '0755',
+    owner  => 'root',
+    group  => 'root',
+  }
+  ->
+  file { '/usr/local/share/whisper.cpp/models':
+    ensure => directory,
+    mode   => '0755',
+    owner  => 'root',
+    group  => 'root',
+  }
+  ->
+  exec { 'whisper.cpp-download-large-v3-turbo':
+    command => "/usr/bin/curl -L ${model_url.shellquote} -o /usr/local/share/whisper.cpp/models/ggml-large-v3-turbo-q5_0.bin",
+    creates => '/usr/local/share/whisper.cpp/models/ggml-large-v3-turbo-q5_0.bin',
+    path    => '/usr/bin:/bin',
+    require => Exec['whisper.cpp-install'],
+  }
+
+  exec { 'whisper.cpp-verify-server':
+    command     => '/usr/local/bin/whisper-server --help >/dev/null',
+    path        => '/usr/local/bin:/usr/bin:/bin',
+    refreshonly => true,
+    subscribe   => Exec['whisper.cpp-install'],
   }
 }

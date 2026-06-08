@@ -25,10 +25,42 @@ class nest::tool::ttscpp (
         '-DCMAKE_BUILD_WITH_INSTALL_RPATH=ON',
       ].join(' '),
       'cmake --build build',
-      'cmake --install build',
-      'install -d /usr/local/share/TTS.cpp/models',
-      "test -s /usr/local/share/TTS.cpp/models/Kokoro_espeak_Q5.gguf || curl -L ${model_url.shellquote} -o /usr/local/share/TTS.cpp/models/Kokoro_espeak_Q5.gguf",
-      'tts-server --help >/dev/null',
     ],
+  }
+
+  exec { 'tts.cpp-install':
+    command     => '/usr/bin/cmake --install build',
+    cwd         => '/usr/src/TTS.cpp',
+    path        => '/usr/bin:/bin',
+    refreshonly => true,
+    subscribe   => Exec['tts.cpp-build'],
+  }
+
+  file { '/usr/local/share/TTS.cpp':
+    ensure => directory,
+    mode   => '0755',
+    owner  => 'root',
+    group  => 'root',
+  }
+  ->
+  file { '/usr/local/share/TTS.cpp/models':
+    ensure => directory,
+    mode   => '0755',
+    owner  => 'root',
+    group  => 'root',
+  }
+  ->
+  exec { 'tts.cpp-download-kokoro':
+    command => "/usr/bin/curl -L ${model_url.shellquote} -o /usr/local/share/TTS.cpp/models/Kokoro_espeak_Q5.gguf",
+    creates => '/usr/local/share/TTS.cpp/models/Kokoro_espeak_Q5.gguf',
+    path    => '/usr/bin:/bin',
+    require => Exec['tts.cpp-install'],
+  }
+
+  exec { 'tts.cpp-verify-server':
+    command     => '/usr/local/bin/tts-server --help >/dev/null',
+    path        => '/usr/local/bin:/usr/bin:/bin',
+    refreshonly => true,
+    subscribe   => Exec['tts.cpp-install'],
   }
 }
