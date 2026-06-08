@@ -153,7 +153,7 @@ class nest::app::hermes::service {
       ].join("\n"),
       require => [
         File["${install_dir}/bin"],
-        Exec['patch_hermes_agent_request_review_handoff_flow'],
+        Exec['install_hermes_agent_request_broker'],
       ],
     }
   }
@@ -177,7 +177,7 @@ class nest::app::hermes::service {
       ].join("\n"),
       require => [
         File["${install_dir}/bin"],
-        Exec['patch_hermes_agent_request_worktree_cleanup'],
+        Exec['install_hermes_agent_request_broker'],
       ],
     }
   }
@@ -201,7 +201,7 @@ class nest::app::hermes::service {
       ].join("\n"),
       require => [
         File["${install_dir}/bin"],
-        Exec['patch_hermes_agent_request_completed_archive_policy'],
+        Exec['install_hermes_agent_request_broker'],
       ],
     }
   }
