@@ -21,7 +21,8 @@ describe 'nest::lib::package_use' do
           PP
         end
 
-        it { is_expected.to contain_exec('emerge-newuse-foo/bar').that_requires('Class[nest::base::portage]') }
+        it { is_expected.to contain_exec('emerge-newuse-foo/bar').that_subscribes_to('Package_use[foo/bar]') }
+        it { is_expected.to contain_package('foo/bar').that_subscribes_to('Exec[emerge-newuse-foo/bar]') }
       end
     end
   end
