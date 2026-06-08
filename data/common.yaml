@@ -119,9 +119,7 @@ nest::cnames:
   thestaticvoid-test.eyrie: 'ingress-test.eyrie'
 
   # AI services
-  chat.eyrie: 'ingress-compute.eyrie'
   honcho.eyrie: 'ingress-compute.eyrie'
-  llm.eyrie: 'ingress-compute.eyrie'
   talon.eyrie: 'ingress-compute.eyrie'
   star.eyrie: 'ingress-compute.eyrie'
   shopping.eyrie: 'ingress-compute.eyrie'
