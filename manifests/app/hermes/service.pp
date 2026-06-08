@@ -113,6 +113,15 @@ class nest::app::hermes::service {
     require => File["${install_dir}/bin"],
   }
 
+  file { "${install_dir}/bin/hermes-share-codex-auth":
+    ensure  => file,
+    mode    => '0755',
+    owner   => 'root',
+    group   => 'root',
+    source  => 'puppet:///modules/nest/app/hermes/share-codex-auth.py',
+    require => File["${install_dir}/bin"],
+  }
+
   $agent_request_review_commands = [
     'agent-request-approve',
     'agent-request-propose',

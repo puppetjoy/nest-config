@@ -196,6 +196,10 @@ class nest::app::hermes::install {
     require => Exec['install_hermes_agent'],
   }
 
+  file { '/usr/local/bin/hermes-codex-auth-status':
+    ensure => absent,
+  }
+
   $nest::app::hermes::instances.each |String[1] $instance_name, Hash $instance_config| {
     $wrapper_profile = pick($instance_config['profile'], $instance_name)
 

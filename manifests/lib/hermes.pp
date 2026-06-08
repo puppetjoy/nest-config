@@ -512,6 +512,7 @@ ${dashboard_theme_yaml}
       subscribe   => [
         Exec['install_hermes_agent'],
         Exec['install_hermes_agent_request_broker'],
+        Exec['share_hermes_codex_auth'],
         File[$hermes_env_path],
         File["${profile_dir}/systemd.env"],
         File[$hermes_managed_config_path],
@@ -551,6 +552,7 @@ ${dashboard_theme_yaml}
       user        => $user,
       subscribe   => [
         Exec['install_hermes_agent'],
+        Exec['share_hermes_codex_auth'],
         File["${profile_dir}/systemd.env"],
         File[$hermes_managed_config_path],
         Exec["configure_hermes_managed_config_${profile}"],

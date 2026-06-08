@@ -23,10 +23,11 @@ class nest::app::hermes::config {
   $instances                        = $nest::app::hermes::instances
   $instance_secrets                 = $nest::app::hermes::instance_secrets
 
-  $hermes_config_dir = "/home/${nest::user}/.config/hermes"
-  $hermes_home_dir   = "/home/${nest::user}/.hermes"
-  $profiles_dir      = "${hermes_home_dir}/profiles"
-  $requests_dir      = "${hermes_home_dir}/agent-requests"
+  $hermes_config_dir       = "/home/${nest::user}/.config/hermes"
+  $hermes_home_dir         = "/home/${nest::user}/.hermes"
+  $profiles_dir            = "${hermes_home_dir}/profiles"
+  $requests_dir            = "${hermes_home_dir}/agent-requests"
+  $codex_auth_manager_path = "${nest::app::hermes::install_dir}/bin/hermes-share-codex-auth"
 
   file { $hermes_config_dir:
     ensure => directory,
@@ -81,6 +82,26 @@ class nest::app::hermes::config {
       ensure  => absent,
       force   => true,
       recurse => true,
+    }
+  }
+
+  $codex_auth_profiles = $instances.map |String[1] $instance_name, Hash $instance_config| {
+    pick($instance_config['profile'], $instance_name)
+  }
+
+  if $codex_auth_profiles.length > 0 {
+    $codex_auth_profile_args = $codex_auth_profiles.join(' ')
+
+    exec { 'share_hermes_codex_auth':
+      command     => "${codex_auth_manager_path} apply --home /home/${nest::user} ${codex_auth_profile_args}",
+      unless      => "${codex_auth_manager_path} check --home /home/${nest::user} ${codex_auth_profile_args}",
+      user        => $nest::user,
+      environment => ["HOME=/home/${nest::user}"],
+      require     => [
+        File[$hermes_home_dir],
+        File[$profiles_dir],
+        File[$codex_auth_manager_path],
+      ],
     }
   }
 
