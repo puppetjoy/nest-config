@@ -90,11 +90,13 @@ resources:
     data:
       README.txt: |-
         Reset/revoke procedure for the OAuth Browser profile:
-        1. Stop the live session: kubectl -n %{nest::kubernetes::namespace} scale deployment/%{nest::kubernetes::service} --replicas=0
-        2. Wipe profile state: kubectl -n %{nest::kubernetes::namespace} delete pvc %{nest::kubernetes::service}-profile
-        3. Recreate the managed resources: bolt plan run nest::eyrie::ai::deploy_oauth_browser
-        4. Rotate the KasmVNC UI password by updating the private eyaml key nest::service::kasm_oauth_browser::vnc_password and redeploying.
-        This browser exists for owner-operated OAuth/device-code login flows such as OpenAI Codex. Talon may navigate the persistent browser and report redacted status only. Joy handles Bitwarden unlock, account login, passkeys, 2FA, CAPTCHA, and consent prompts through the authenticated Kasm UI. Do not expose CDP, raw VNC, cookies, local storage, request headers, screenshots of secret pages, callback URLs containing codes, vault contents, or credential material directly to any agent.
+        1. If the Kasm UI is stuck at Connecting during a live device-code flow, do not kill the OAuth poller first. Restart only this pod to clear the VNC relay: kubectl -n %{nest::kubernetes::namespace} delete pod -l app=%{nest::kubernetes::service} --wait=true
+        2. Wait for rollout: kubectl -n %{nest::kubernetes::namespace} rollout status deployment/%{nest::kubernetes::service} --timeout=120s
+        3. Navigate the browser back to the provider device page and reuse the same device code if the provider still accepts it.
+        4. Full profile reset: stop the live session with kubectl -n %{nest::kubernetes::namespace} scale deployment/%{nest::kubernetes::service} --replicas=0, then wipe profile state with kubectl -n %{nest::kubernetes::namespace} delete pvc %{nest::kubernetes::service}-profile
+        5. Recreate the managed resources: bolt plan run nest::eyrie::ai::deploy_oauth_browser
+        6. Rotate the KasmVNC UI password by updating the private eyaml key nest::service::kasm_oauth_browser::vnc_password and redeploying.
+        This browser exists for owner-operated OAuth/device-code login flows such as OpenAI Codex. Talon may navigate the persistent browser and report redacted status only. Joy handles Bitwarden unlock, account login, passkeys, 2FA, CAPTCHA, and consent prompts through the authenticated Kasm UI. Persistent browser account state is not proof of the intended provider account; compare redacted Codex fingerprints before overwriting private Hiera, and prefer Joy's local private/incognito browser when switching accounts is ambiguous. Do not expose CDP, raw VNC, cookies, local storage, request headers, screenshots of secret pages, callback URLs containing codes, vault contents, or credential material directly to any agent.
 
 
   profile-storage:

@@ -65,6 +65,14 @@ CAPTCHA, and approve consent. Talon must not request or receive passwords,
 passkeys, 2FA codes, callback URLs containing `code=`, browser cookies, local
 storage, raw screenshots of secret pages, or token JSON in chat/tool output.
 
+Treat account identity as part of the OAuth safety boundary. A persistent shared
+browser can silently reuse the wrong provider account even when the CLI/device
+code flow reports success. Before using the shared OAuth browser for a second
+OpenAI account, Joy should explicitly sign out or confirm the intended account
+in the browser UI. If the provider does not make the active account unmistakable,
+prefer Joy's local private/incognito browser for that account and use Talon only
+for the redacted capture/status/fingerprint steps.
+
 Safe status commands for the shared browser:
 
 ```sh
@@ -88,6 +96,16 @@ capture source is unambiguous:
 hermes auth add openai-codex
 ```
 
+Before overwriting private Hiera, compare the fresh local capture source against
+any already-rendered managed slots. This command prints only labels, counts, and
+a redacted fingerprint; if `matches_existing_slots` names the wrong label, stop
+and redo the owner-operated login in a browser/account context that clearly uses
+the intended account:
+
+```sh
+/opt/hermes-agent/bin/hermes-codex-auth fingerprint --home /home/joy
+```
+
 Capture the result as encrypted EYAML output. The helper pipes plaintext JSON
 directly to the local `eyaml encrypt --stdin` process and prints only the
 encrypted block:
@@ -101,6 +119,7 @@ Repeat the OAuth flow and capture for `secondary`:
 
 ```sh
 hermes auth add openai-codex
+/opt/hermes-agent/bin/hermes-codex-auth fingerprint --home /home/joy
 /opt/hermes-agent/bin/hermes-codex-auth capture secondary \
   --eyaml-label 'nest::app::hermes::codex_oauth_slots.secondary'
 ```
@@ -173,6 +192,17 @@ sharing exec, so a managed apply refreshes services when the helper changes the
 active root auth state.
 
 ## Status and verification
+
+Redacted fingerprint check for the current local capture source:
+
+```sh
+/opt/hermes-agent/bin/hermes-codex-auth fingerprint --home /home/joy
+/opt/hermes-agent/bin/hermes-codex-auth fingerprint --home /home/joy --from-profile talon
+```
+
+The fingerprint mode reads the same root/profile auth source that `capture` would
+use and reports whether that fresh source matches any existing managed slot. It
+is the pre-overwrite gate for account-switch-sensitive captures.
 
 Safe redacted status from the managed slot store:
 

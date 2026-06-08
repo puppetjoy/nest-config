@@ -55,7 +55,7 @@ SECRETISH_KEYS = {
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Manage labelled openai-codex auth slots")
-    parser.add_argument("mode", choices=("check", "apply", "switch", "status", "capture"))
+    parser.add_argument("mode", choices=("check", "apply", "switch", "status", "capture", "fingerprint"))
     parser.add_argument("args", nargs="*", help="switch/capture: LABEL [PROFILES...]; other modes: [PROFILES...]")
     parser.add_argument("--home", default=str(Path.home()), help="user home directory, default: current user's home")
     parser.add_argument("--slots-file", help="managed JSON file containing labelled Codex slots")
@@ -398,6 +398,43 @@ def capture(args: argparse.Namespace, home: Path) -> int:
     raise SystemExit("capture requires --eyaml-label or --out so plaintext is not printed")
 
 
+def fingerprint_capture_source(args: argparse.Namespace, home: Path) -> int:
+    profile = args.from_profile
+    path = home / ".hermes" / "auth.json" if profile is None else home / ".hermes" / "profiles" / profile / "auth.json"
+    label = profile or "root"
+    with locked(path):
+        source_store = load_store(path)
+    state, entries = openai_codex_payload(source_store)
+    if state is None and not entries:
+        raise SystemExit(f"no {PROVIDER} auth found in {label} capture source")
+
+    hermes_home = home / ".hermes"
+    slots_path = Path(args.slots_file).expanduser() if args.slots_file else hermes_home / "codex-auth" / "slots.json"
+    source_fingerprint = redacted_fingerprint(openai_codex_payload(source_store))
+    matches: list[str] = []
+    if slots_path.exists():
+        with locked(slots_path):
+            slots = load_slots(slots_path)
+        matches = sorted(
+            slot_label
+            for slot_label, slot_store in slots.items()
+            if redacted_fingerprint(openai_codex_payload(slot_store)) == source_fingerprint
+        )
+
+    print(json.dumps({
+        "provider": PROVIDER,
+        "capture_source": label,
+        "slots_file_exists": slots_path.exists(),
+        "fingerprint": source_fingerprint,
+        "provider_entry": state is not None,
+        "pool_entries": len(entries),
+        "exhausted_pool_entries": sum(1 for entry in entries if entry_is_exhausted(entry)),
+        "matches_existing_slots": matches,
+        "safe_to_capture_as_distinct_slot": not matches,
+    }, indent=2))
+    return 0
+
+
 def legacy_share(args: argparse.Namespace, home: Path) -> int:
     root_path, profile_paths = auth_paths(home, args.profiles)
     all_paths = [root_path] + [path for _, path in profile_paths]
@@ -432,6 +469,8 @@ def legacy_share(args: argparse.Namespace, home: Path) -> int:
 def main() -> int:
     args = parse_args()
     home = Path(args.home).expanduser()
+    if args.mode == "fingerprint":
+        return fingerprint_capture_source(args, home)
     if args.mode == "capture":
         return capture(args, home)
 
