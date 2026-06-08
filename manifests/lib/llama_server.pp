@@ -1,9 +1,10 @@
 define nest::lib::llama_server (
-  String            $repo,
-  Optional[Integer] $instance  = undef,
-  Optional[Integer] $kv_size   = undef,
-  Stdlib::Port      $port      = 8080,
-  Stdlib::Port      $port_base = $port,
+  String              $repo,
+  Nest::ServiceEnsure $ensure    = running,
+  Optional[Integer]   $instance  = undef,
+  Optional[Integer]   $kv_size   = undef,
+  Stdlib::Port        $port      = 8080,
+  Stdlib::Port        $port_base = $port,
 ) {
   if $instance {
     $port_real = $port_base + $instance
@@ -24,6 +25,7 @@ define nest::lib::llama_server (
   ].flatten
 
   nest::lib::container { "llama-${name}":
+    ensure  => $ensure,
     image   => 'nest/tools/llama.cpp',
     command => $command,
     devices => ['/dev/dri/renderD128'],

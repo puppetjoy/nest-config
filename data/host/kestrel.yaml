@@ -3,6 +3,7 @@ nest::classes:
   - 'nest::host::kestrel'
   - 'nest::service::gitlab_runner'
   - 'nest::service::llama_server'
+  - 'nest::service::speech_io'
   - 'nest::service::usb_resetter'
   - 'nest::tool::bolt'
 
@@ -43,9 +44,22 @@ nest::service::gitlab_runner::instances:
 
 nest::service::llama_server::instances:
   util:
+    ensure: stopped
     # https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512-GGUF
     repo: mistralai/Ministral-3-3B-Instruct-2512-GGUF:Q8_0
     kv_size: 16384
+
+nest::service::speech_io::stt_instances:
+  whisper:
+    port: 2022
+    processors: 1
+    threads: 8
+
+nest::service::speech_io::tts_instances:
+  kokoro:
+    port: 2023
+    threads: 8
+    voice: af_heart
 
 # Workaround usbnet hang at boot
 # See: https://gitlab.joyfullee.me/nest/config/-/issues/64

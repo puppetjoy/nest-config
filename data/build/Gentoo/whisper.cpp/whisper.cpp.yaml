@@ -1,0 +1,6 @@
+---
+nest::classes:
+  - 'nest::tool::whispercpp'
+
+nest::tool::whispercpp::revision: 'v1.8.6'
+nest::use: ['vulkan']

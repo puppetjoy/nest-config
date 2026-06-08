@@ -40,7 +40,7 @@ case $build in
     bolt|pdk)
         extra_args=("cpu=${name}")
         ;;
-    llama.cpp|r10k)
+    llama.cpp|r10k|tts.cpp|whisper.cpp)
         extra_args=("cpu=${name}" "tool=${build}")
         build=tool
         ;;
