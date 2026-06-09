@@ -11,7 +11,6 @@ class nest::app::hermes::install {
   $broker_git_url    = $nest::app::hermes::broker_git_url
   $broker_git_ref    = $nest::app::hermes::broker_git_ref
   $broker_source_dir = "${install_dir}/agent-request-broker"
-  $broker_git_identity = "/home/${nest::user}/.ssh/id_ed25519"
   $gws_dir           = '/opt/google-workspace-cli'
   $git_revision_file        = "${install_dir}/.installed-git-revision"
   $broker_git_revision_file = "${install_dir}/.installed-agent-request-broker-revision"
@@ -85,7 +84,7 @@ class nest::app::hermes::install {
 
   exec { 'set_hermes_agent_request_broker_remote':
     command => "/usr/sbin/git -C ${broker_source_dir} remote set-url origin ${broker_git_url}",
-    onlyif  => "/bin/sh -c 'test -d ${broker_source_dir}/.git && test \$(/usr/sbin/git -C ${broker_source_dir} remote get-url origin) != ${broker_git_url}'",
+    onlyif  => "/bin/sh -c 'test -d ${broker_source_dir}/.git && test \"$(/usr/sbin/git -C ${broker_source_dir} remote get-url origin)\" != \"${broker_git_url}\"'",
     require => [
       File[$install_dir],
       Class['nest::base::git'],
@@ -97,7 +96,6 @@ class nest::app::hermes::install {
     provider => git,
     source   => $broker_git_url,
     revision => $broker_git_ref,
-    identity => $broker_git_identity,
     require  => [
       File[$install_dir],
       Class['nest::base::git'],

@@ -121,24 +121,30 @@ class nest::base::users {
   $homes.each |$user, $dir| {
     case $facts['os']['family'] {
       'windows': {
-        $exec_user   = undef
-        $home_dir    = "C:/tools/cygwin${dir}"
-        $refresh_cmd = "C:/tools/cygwin/bin/bash.exe -c 'source /etc/profile && ${home_dir}/.refresh'"
-        $test_cmd    = "C:/tools/cygwin/bin/test.exe -x ${home_dir}/.refresh"
+        $exec_user          = undef
+        $home_dir           = "C:/tools/cygwin${dir}"
+        $refresh_cmd        = "C:/tools/cygwin/bin/bash.exe -c 'source /etc/profile && ${home_dir}/.refresh'"
+        $test_cmd           = "C:/tools/cygwin/bin/test.exe -x ${home_dir}/.refresh"
+        $remote_set_command = shellquote('C:/tools/cygwin/bin/bash.exe', '-c', "source /etc/profile && /usr/bin/git -C ${home_dir} remote set-url origin ${dotfiles_git_source}")
+        $remote_onlyif      = shellquote('C:/tools/cygwin/bin/bash.exe', '-c', "/usr/bin/test -d ${home_dir}/.git")
+        $remote_unless      = shellquote('C:/tools/cygwin/bin/bash.exe', '-c', "/usr/bin/test \"$(/usr/bin/git -C ${home_dir} remote get-url origin)\" = '${dotfiles_git_source}'")
       }
 
       default: {
-        $exec_user   = $user
-        $home_dir    = $dir
-        $refresh_cmd = "${home_dir}/.refresh"
-        $test_cmd    = "/bin/test -x ${home_dir}/.refresh"
+        $exec_user          = $user
+        $home_dir           = $dir
+        $refresh_cmd        = "${home_dir}/.refresh"
+        $test_cmd           = "/bin/test -x ${home_dir}/.refresh"
+        $remote_set_command = "/usr/bin/git -C ${home_dir} remote set-url origin ${dotfiles_git_source}"
+        $remote_onlyif      = "/bin/test -d ${home_dir}/.git"
+        $remote_unless      = "/bin/test \"$(/usr/bin/git -C ${home_dir} remote get-url origin)\" = '${dotfiles_git_source}'"
       }
     }
 
     exec { "set-dotfiles-remote-${home_dir}":
-      command => "/usr/bin/git -C ${home_dir} remote set-url origin ${dotfiles_git_source}",
-      onlyif  => "/bin/test -d ${home_dir}/.git",
-      unless  => "/usr/bin/test \"$(/usr/bin/git -C ${home_dir} remote get-url origin)\" = '${dotfiles_git_source}'",
+      command => $remote_set_command,
+      onlyif  => $remote_onlyif,
+      unless  => $remote_unless,
       user    => $exec_user,
       before  => Vcsrepo[$home_dir],
     }
