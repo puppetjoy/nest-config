@@ -1,11 +1,16 @@
 # Deploy the Puppet control repo during the OpenVox migration
 plan nest::puppet::deploy ( # lint:ignore:deploy_plan_boundary -- code rollout plan, not Kubernetes stack initialization
-  Enum['legacy', 'test', 'prod', 'kubernetes', 'both', 'all'] $backend     = 'all',
-  Optional[String[1]]                                         $environment = undef,
+  Enum['legacy', 'test', 'prod', 'kubernetes', 'both', 'all'] $backend          = 'both',
+  Optional[String[1]]                                         $environment      = 'main',
+  Boolean                                                     $all_environments = false,
 ) {
-  $environment_args = $environment ? {
-    undef   => [],
+  $environment_args = $all_environments ? {
+    true    => [],
     default => [$environment],
+  }
+
+  if (!$all_environments) and ($environment !~ String[1]) {
+    fail('environment must be set unless all_environments=true')
   }
 
   if $backend in ['legacy', 'both', 'all'] {
@@ -29,7 +34,7 @@ plan nest::puppet::deploy ( # lint:ignore:deploy_plan_boundary -- code rollout p
     'test'       => ['test'],
     'prod'       => ['prod'],
     'kubernetes' => ['test', 'prod'],
-    'both'       => ['test', 'prod'],
+    'both'       => ['test'],
     'all'        => ['test', 'prod'],
     default      => [],
   }
@@ -40,6 +45,13 @@ plan nest::puppet::deploy ( # lint:ignore:deploy_plan_boundary -- code rollout p
     $description = $openvox['description']
     $deployment  = 'deploy/puppet-puppetserver'
 
+    $wait_cmd = [
+      'kubectl', 'wait', '-n', $namespace,
+      '--for=jsonpath={.status.containerStatuses[?(@.name=="r10k-code")].ready}=true',
+      'pod', '-l', 'app.kubernetes.io/component=puppetserver',
+      '--timeout=180s',
+    ].shellquote
+
     $deploy_cmd = ([
       'kubectl', 'exec', '-n', $namespace, $deployment,
       '-c', 'r10k-code', '--',
@@ -49,6 +61,7 @@ plan nest::puppet::deploy ( # lint:ignore:deploy_plan_boundary -- code rollout p
       '--puppetfile',
     ]).shellquote
 
+    run_command($wait_cmd, 'localhost', "Wait for ${description} r10k sidecar")
     run_command($deploy_cmd, 'localhost', "Deploy Puppet code to ${description}")
 
     if $environment =~ String[1] {
