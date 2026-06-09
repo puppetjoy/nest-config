@@ -7,9 +7,15 @@
 # The cache path is the deterministic llama.cpp HF cache filename produced by the
 # initial `--hf-repo ...:Q4_K_M` deployment. Using --model avoids a b9222
 # --hf-repo startup hang observed after the shards were already downloaded.
+# Cap dynamic-resolution image inputs at 4096 tokens: high enough for screenshots
+# and OCR probes in a 128K slot, while bounding accidental huge image prompts.
 server_args:
   - --model
   - /root/.cache/llama.cpp/bartowski_Qwen_Qwen3.5-122B-A10B-GGUF_Qwen_Qwen3.5-122B-A10B-Q4_K_M_Qwen_Qwen3.5-122B-A10B-Q4_K_M-00001-of-00002.gguf
+  - --mmproj
+  - /root/.cache/llama.cpp/bartowski_Qwen_Qwen3.5-122B-A10B-GGUF_mmproj-Qwen_Qwen3.5-122B-A10B-f16.gguf
+  - --image-max-tokens
+  - '4096'
   - --ctx-size
   - '393216'
   - --parallel
