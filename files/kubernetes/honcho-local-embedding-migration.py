@@ -31,6 +31,8 @@ from src.embedding_client import embedding_client  # noqa: E402
 TARGET_DIM = int(os.environ.get("EMBEDDING_VECTOR_DIMENSIONS", "1024"))
 DOC_BATCH_SIZE = int(os.environ.get("HONCHO_MIGRATION_DOC_BATCH_SIZE", "64"))
 MESSAGE_BATCH_SIZE = int(os.environ.get("HONCHO_MIGRATION_MESSAGE_BATCH_SIZE", "64"))
+DOC_MAX_CHARS = int(os.environ.get("HONCHO_MIGRATION_DOC_MAX_CHARS", "24000"))
+DOC_MIN_CHARS = int(os.environ.get("HONCHO_MIGRATION_DOC_MIN_CHARS", "2048"))
 
 
 def log(message: str) -> None:
@@ -126,13 +128,33 @@ async def fetch_document_batch(db: AsyncSession) -> Sequence[models.Document]:
 async def embed_documents() -> int:
     log(f"documents: embedding with batch_size={DOC_BATCH_SIZE}")
     total = 0
+    truncated = 0
     started = time.monotonic()
     async with tracked_db("local_embedding_migration_documents") as db:
         while True:
             docs = await fetch_document_batch(db)
             if not docs:
                 break
-            embeddings = await embedding_client.simple_batch_embed([d.content for d in docs])
+            try:
+                embeddings = await embedding_client.simple_batch_embed([d.content for d in docs])
+            except ValueError as e:
+                if "maximum token limit" not in str(e):
+                    raise
+                log("documents: batch exceeded embedding token limit; retrying documents individually with truncation")
+                embeddings = []
+                for doc in docs:
+                    content = doc.content
+                    limit = min(len(content), DOC_MAX_CHARS)
+                    while True:
+                        try:
+                            embeddings.append(await embedding_client.embed(content[:limit]))
+                            if limit < len(content):
+                                truncated += 1
+                            break
+                        except ValueError as doc_error:
+                            if "maximum token limit" not in str(doc_error) or limit <= DOC_MIN_CHARS:
+                                raise
+                            limit = max(DOC_MIN_CHARS, limit // 2)
             if len(embeddings) != len(docs):
                 raise RuntimeError(f"document batch returned {len(embeddings)} embeddings for {len(docs)} docs")
             for doc, embedding in zip(docs, embeddings, strict=True):
@@ -150,7 +172,10 @@ async def embed_documents() -> int:
             total += len(docs)
             if total == len(docs) or total % (DOC_BATCH_SIZE * 10) == 0:
                 log(f"documents: embedded={total} elapsed={time.monotonic() - started:.1f}s")
-    log(f"documents: complete embedded={total} elapsed={time.monotonic() - started:.1f}s")
+    log(
+        f"documents: complete embedded={total} truncated_overlong={truncated} "
+        f"elapsed={time.monotonic() - started:.1f}s"
+    )
     return total
 
 
