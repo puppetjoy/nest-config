@@ -21,8 +21,7 @@ are used.
 - STT health: `http://kestrel:2022/health`
 - STT OpenAI-style transcription endpoint:
   `http://kestrel:2022/v1/audio/transcriptions`
-- TTS health: `http://kestrel:2023/health` or
-  `http://kestrel:2023/v1/health`
+- TTS health: `http://kestrel:2023/health`
 - TTS OpenAI-style speech endpoint:
   `http://kestrel:2023/v1/audio/speech`
 - TTS voices endpoint: `http://kestrel:2023/v1/audio/voices`
@@ -55,7 +54,7 @@ tts:
   providers:
     kestrel-kokoro:
       type: command
-      command: "jq -Rs --arg voice '{voice}' --arg format wav '{input: ., voice: $voice, response_format: $format}' {input_path} | curl -fsS -H 'Content-Type: application/json' -d @- http://kestrel:2023/v1/audio/speech > {output_path}"
+      command: "jq -Rs --arg format wav '{input: ., response_format: $format}' {input_path} | curl -fsS -H 'Content-Type: application/json' -d @- http://kestrel:2023/v1/audio/speech > {output_path}"
       output_format: wav
       voice: af_heart
       voice_compatible: true
