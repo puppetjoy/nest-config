@@ -40,16 +40,19 @@ host:
 - `manifests/service/rocm.pp` installs those ROCm/HIP userland packages and
   selects `amdgpu radeonsi` video cards for the opted-in host.
 
-The next Eyrie speech service should be added only after the host gate passes:
-`/dev/kfd` exists, `rocminfo` enumerates the Radeon 8060S, and a Kubernetes test
-pod can see both `/dev/kfd` and `/dev/dri/renderD128` while requesting the
-existing `squat.ai/gpu` resource.
+The host gate now passes after the approved owl reboot: `/dev/kfd` exists,
+`rocminfo` enumerates the Radeon 8060S as `gfx1151`, and Kubernetes GPU pods can
+see both `/dev/kfd` and `/dev/dri/renderD128` while requesting the existing
+`squat.ai/gpu` resource. The remaining runtime gate is a speech image built
+against ROCm/PyTorch versions that actually support `gfx1151`.
 
 ## Candidate runtime shape after ROCm is live
 
-- TTS: start with a ROCm Kokoro-FastAPI image or build one under the normal Nest
-  tool-image workflow. Kokoro-FastAPI exposes the OpenAI-compatible
-  `POST /v1/audio/speech` route needed by Hermes command providers.
+- TTS: start with Kokoro-FastAPI, but build a Nest ROCm 7.2 / PyTorch 2.10+
+  image for `gfx1151` under the normal Nest tool-image workflow rather than using
+  the current public ROCm 6.4 image. Kokoro-FastAPI exposes the
+  OpenAI-compatible `POST /v1/audio/speech` route needed by Hermes command
+  providers.
 - STT: start with a PyTorch ROCm Whisper service using OpenAI Whisper or
   WhisperX-style code, then wrap it with `POST /v1/audio/transcriptions` if the
   selected runtime does not already expose that route.
