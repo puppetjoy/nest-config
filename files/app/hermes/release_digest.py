@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Daily consolidated release/update digest for Joy's Nest/Hermes stacks.
+"""Daily consolidated Nest release/update digest for Joy.
 
 The digest is intentionally a no-agent Hermes cron script: it does its own
 source/live-pin discovery, upstream polling, classification, state dedupe, and
@@ -520,7 +520,7 @@ def digest_signature(items: list[Component], errors: list[str]) -> str:
 def render_digest(items: list[Component], errors: list[str], *, force: bool, checked_at: dt.datetime) -> str:
     if not items and not errors and not force:
         return ""
-    lines = ["Joy, here is the daily Nest/Hermes release digest.", ""]
+    lines = ["Joy, here is the daily Nest release digest.", ""]
     if items:
         groups = ["action needed", "watch only", "no action"]
         for classification in groups:

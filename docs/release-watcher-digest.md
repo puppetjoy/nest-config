@@ -56,14 +56,14 @@ script-only cron job:
 
 | Name | Schedule | Script | Mode | Delivery |
 |---|---:|---|---|---|
-| Nest/Hermes release digest | `0 9 * * *` | `release_digest.py` | `no_agent` | `origin` |
+| Daily Nest release digest | `0 9 * * *` | `release_digest.py` | `no_agent` | `origin` |
 
 Suggested operator commands after Puppet has installed the script:
 
 ```bash
 # Create the new daily digest job.
 hermes -p talon cron create '0 9 * * *' \
-  --name 'Nest/Hermes release digest' \
+  --name 'Daily Nest release digest' \
   --script release_digest.py \
   --no-agent \
   --toolsets terminal
@@ -87,7 +87,7 @@ branch.
 `python3 files/app/hermes/release_digest.py --offline-sample`:
 
 ```text
-Joy, here is the daily Nest/Hermes release digest.
+Joy, here is the daily Nest release digest.
 
 ACTION NEEDED
 - Kubernetes platform: Rook/Ceph chart 1.18.2 -> 1.19.0
