@@ -91,7 +91,8 @@ patches:
           path: '/spec/template/spec/containers/-'
           value:
             name: nest
-            image: "%{lookup('registry')}/nest/stage1/server"
+            image: "%{lookup('registry')}/nest/stage1/server:latest"
+            imagePullPolicy: IfNotPresent
             command: ['/usr/bin/sshd', '-D', '-e']
             securityContext:
               capabilities:
