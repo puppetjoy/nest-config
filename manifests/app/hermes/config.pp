@@ -8,6 +8,8 @@ class nest::app::hermes::config {
   $codex_oauth_default_label        = $nest::app::hermes::codex_oauth_default_label
   $telegram_allowed                 = $nest::app::hermes::telegram_allowed
   $telegram_home                    = $nest::app::hermes::telegram_home
+  $telegram_bot_username            = $nest::app::hermes::telegram_bot_username
+  $telegram_bot_id                  = $nest::app::hermes::telegram_bot_id
   $model_provider                   = $nest::app::hermes::model_provider
   $model_name                       = $nest::app::hermes::model_name
   $model_base_url                   = $nest::app::hermes::model_base_url
@@ -154,6 +156,14 @@ class nest::app::hermes::config {
     $instance_telegram_enabled  = pick($config['telegram_enabled'], true)
     $instance_telegram_allowed  = pick($config['telegram_allowed'], $telegram_allowed)
     $instance_telegram_home     = pick($config['telegram_home'], $telegram_home)
+    $instance_telegram_bot_username = $config['telegram_bot_username'] ? {
+      undef   => $telegram_bot_username,
+      default => $config['telegram_bot_username'],
+    }
+    $instance_telegram_bot_id = $config['telegram_bot_id'] ? {
+      undef   => $telegram_bot_id,
+      default => $config['telegram_bot_id'],
+    }
     $instance_model_provider    = pick($config['model_provider'], $model_provider)
     $instance_model_name        = pick($config['model_name'], $model_name)
     $instance_model_base_url    = pick($config['model_base_url'], $model_base_url)
@@ -233,6 +243,8 @@ class nest::app::hermes::config {
       telegram_enabled           => $instance_telegram_enabled,
       telegram_allowed           => $instance_telegram_allowed,
       telegram_home              => $instance_telegram_home,
+      telegram_bot_username      => $instance_telegram_bot_username,
+      telegram_bot_id            => $instance_telegram_bot_id,
       model_provider             => $instance_model_provider,
       model_name                 => $instance_model_name,
       model_base_url             => $instance_model_base_url,

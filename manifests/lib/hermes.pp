@@ -13,6 +13,8 @@ define nest::lib::hermes (
   Boolean              $telegram_enabled         = true,
   String[1]            $telegram_allowed         = '8756212310',
   String[1]            $telegram_home            = '8756212310',
+  Optional[String[1]]  $telegram_bot_username    = undef,
+  Optional[String[1]]  $telegram_bot_id          = undef,
   String[1]            $model_provider           = 'openai-codex',
   String[1]            $model_name               = 'gpt-5.5',
   String[1]            $model_base_url           = 'https://chatgpt.com/backend-api/codex',
@@ -332,6 +334,15 @@ define nest::lib::hermes (
     undef   => {},
     default => { 'profile_icon' => $profile_icon },
   }
+  $telegram_bot_username_config = $telegram_bot_username ? {
+    undef   => {},
+    default => { 'expected_bot_username' => $telegram_bot_username },
+  }
+  $telegram_bot_id_config = $telegram_bot_id ? {
+    undef   => {},
+    default => { 'expected_bot_id' => $telegram_bot_id },
+  }
+  $telegram_config = $telegram_bot_username_config + $telegram_bot_id_config
   $effective_skin_content = $skin_content ? {
     undef   => undef,
     default => "${skin_content}${skin_banner_hero_yaml}",
@@ -382,7 +393,8 @@ define nest::lib::hermes (
       },
     },
     'platform_toolsets' => $platform_toolsets,
-    'display'          => {
+    'telegram'          => $telegram_config,
+    'display'           => {
       'tool_progress'         => 'all',
       'tool_progress_command' => true,
       'platforms'             => {

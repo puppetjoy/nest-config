@@ -171,6 +171,8 @@ nest::app::hermes::instances:
     tts_provider: 'openai'
     tts_openai_model: 'gpt-4o-mini-tts'
     tts_openai_voice: 'alloy'
+    telegram_bot_username: 'talonopsbot'
+    telegram_bot_id: '8625589001'
   star:
     profile: 'star'
     display_name: 'Star'
@@ -271,3 +273,5 @@ nest::app::hermes::instances:
     tts_provider: 'openai'
     tts_openai_model: 'gpt-4o-mini-tts'
     tts_openai_voice: 'nova'
+    telegram_bot_username: 'joyfulstarbot'
+    telegram_bot_id: '8571651712'
