@@ -329,6 +329,7 @@ define nest::lib::hermes (
       default => ["SSH_AUTH_SOCK=${ssh_auth_sock}"],
     },
     $openai_env_lines,
+    $telegram_env_lines,
     $agent_request_env_lines,
     $ssh_env_lines,
     $kubeconfig_env_lines,
