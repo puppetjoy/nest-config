@@ -9,6 +9,10 @@
 # See: https://gitlab.joyfullee.me/nest/config/-/blob/main/manifests/tool/bolt.pp
 #
 
+if [[ -r /etc/profile.d/puppetcore.sh ]]; then
+    . /etc/profile.d/puppetcore.sh
+fi
+
 if [[ ! -f 'bolt-project.yaml' ]]; then
     echo "${PWD} is not a Bolt project" >&2
     exit 1
@@ -16,13 +20,72 @@ fi
 
 name=$(ruby -ryaml -e 'puts YAML.load_file("bolt-project.yaml")["name"]')
 
+podman_tty_args=()
+if [[ -t 0 && -t 1 ]]; then
+    podman_tty_args=(-it)
+fi
+
 PODMAN_SOCK='/run/podman/podman.sock'
+podman_sock_args=()
 if [[ -S "$PODMAN_SOCK" ]]; then
-    podman_sock="-e CONTAINER_HOST -v ${PODMAN_SOCK}:${PODMAN_SOCK}:ro"
+    podman_sock_args=(-e CONTAINER_HOST -v "${PODMAN_SOCK}:${PODMAN_SOCK}:ro")
     export CONTAINER_HOST="unix://${PODMAN_SOCK}"
 fi
 
-exec podman run --rm -it -e TERM \
+ssh_auth_sock_args=()
+if [[ -n "${SSH_AUTH_SOCK:-}" && -S "${SSH_AUTH_SOCK}" ]]; then
+    ssh_auth_sock_args=(-e SSH_AUTH_SOCK -v "${SSH_AUTH_SOCK}:${SSH_AUTH_SOCK}:ro")
+fi
+
+kubeconfig_args=()
+kubeconfig_mounts=()
+kubeconfig_container_paths=()
+add_kubeconfig_mount() {
+    local host_dir="$1"
+    local mode="$2"
+    local mounted_dir
+
+    for mounted_dir in "${kubeconfig_mounts[@]}"; do
+        if [[ "$mounted_dir" == "$host_dir" ]]; then
+            return
+        fi
+    done
+
+    kubeconfig_mounts+=("$host_dir")
+    kubeconfig_args+=(-v "${host_dir}:${host_dir}:${mode}")
+}
+
+if [[ -n "${KUBECONFIG:-}" ]]; then
+    IFS=':' read -r -a kubeconfig_paths <<< "$KUBECONFIG"
+    for kubeconfig_path in "${kubeconfig_paths[@]}"; do
+        if [[ -z "$kubeconfig_path" ]]; then
+            continue
+        fi
+
+        if [[ "$kubeconfig_path" != /* ]]; then
+            kubeconfig_path=$(realpath -m "$kubeconfig_path")
+        fi
+
+        kubeconfig_container_paths+=("$kubeconfig_path")
+
+        if [[ -e "$kubeconfig_path" ]]; then
+            add_kubeconfig_mount "$(dirname "$kubeconfig_path")" ro
+        else
+            echo "warning: KUBECONFIG entry does not exist on the host: ${kubeconfig_path}" >&2
+        fi
+    done
+
+    if [[ ${#kubeconfig_container_paths[@]} -gt 0 ]]; then
+        KUBECONFIG=$(IFS=:; echo "${kubeconfig_container_paths[*]}")
+        export KUBECONFIG
+    fi
+fi
+
+if [[ -d /nest/home/kubeconfigs ]]; then
+    add_kubeconfig_mount /nest/home/kubeconfigs rw
+fi
+
+exec podman run --rm "${podman_tty_args[@]}" -e TERM \
     --net=host --dns=127.0.0.53 \
     -w "/modules/${name}" \
     -v "${PWD}:/modules/${name}" \
@@ -30,13 +93,13 @@ exec podman run --rm -it -e TERM \
     -v /etc/puppetlabs/bolt:/etc/puppetlabs/bolt:ro \
     -v /etc/ssh/ssh_known_hosts:/etc/ssh/ssh_known_hosts:ro \
     -v /nest/backup:/nest/backup \
-    -v /nest/home/kubeconfigs:/nest/home/kubeconfigs \
+    "${kubeconfig_args[@]}" \
     -e BUNDLE_RUBYGEMS___PUPPETCORE__PUPPET__COM \
     -e GEM_SOURCE_PUPPETCORE \
     -e PUPPET_FORGE_TOKEN \
     -e KUBECONFIG \
-    -e SSH_AUTH_SOCK -v "${SSH_AUTH_SOCK}:${SSH_AUTH_SOCK}:ro" \
-    $podman_sock \
+    "${ssh_auth_sock_args[@]}" \
+    "${podman_sock_args[@]}" \
     nest/tools/bolt \
     bolt "$@"
 
