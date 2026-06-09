@@ -7,6 +7,7 @@ class nest::tool::whispercpp (
   }
 
   nest::lib::package { [
+    'dev-util/spirv-headers',
     'dev-util/vulkan-headers',
     'media-libs/vulkan-loader',
     'media-libs/shaderc',
