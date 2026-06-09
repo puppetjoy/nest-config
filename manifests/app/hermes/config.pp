@@ -213,6 +213,8 @@ class nest::app::hermes::config {
     $instance_tts_provider      = pick($config['tts_provider'], 'openai')
     $instance_tts_openai_model  = pick($config['tts_openai_model'], 'gpt-4o-mini-tts')
     $instance_tts_openai_voice  = pick($config['tts_openai_voice'], 'alloy')
+    $instance_kubeconfig_path   = $config['kubeconfig_path']
+    $instance_kubeconfig        = $config['kubeconfig_content']
     $instance_extra_packages    = pick($config['extra_packages'], [])
     $instance_release_digest    = pick($config['release_digest_enabled'], false)
 
@@ -273,6 +275,8 @@ class nest::app::hermes::config {
       tts_provider               => $instance_tts_provider,
       tts_openai_model           => $instance_tts_openai_model,
       tts_openai_voice           => $instance_tts_openai_voice,
+      kubeconfig_path            => $instance_kubeconfig_path,
+      kubeconfig_content         => $instance_kubeconfig,
       extra_packages             => $instance_extra_packages,
       release_digest_enabled     => $instance_release_digest,
     }

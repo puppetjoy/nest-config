@@ -56,6 +56,8 @@ define nest::lib::hermes (
   String[1]            $tts_provider             = 'openai',
   String[1]            $tts_openai_model         = 'gpt-4o-mini-tts',
   String[1]            $tts_openai_voice         = 'alloy',
+  Optional[String[1]]  $kubeconfig_path          = undef,
+  Any                  $kubeconfig_content       = undef,
   Array[String[1]]     $extra_packages           = [],
   Boolean              $release_digest_enabled   = false,
 ) {
@@ -70,6 +72,11 @@ define nest::lib::hermes (
   $hermes_config_manager_path       = "${install_dir}/bin/manage-hermes-config"
   $hermes_honcho_config_path        = "${profile_dir}/honcho.json"
   $hermes_skins_dir                 = "${profile_dir}/skins"
+  $kubeconfig_dir                   = "${profile_dir}/kubeconfigs"
+  $effective_kubeconfig_path        = $kubeconfig_path ? {
+    undef   => "${kubeconfig_dir}/eyrie.conf",
+    default => $kubeconfig_path,
+  }
   $systemd_user_dir                 = "/home/${user}/.config/systemd/user"
   $dashboard_oauth_client_id_value  = $dashboard_oauth_client_id ? {
     undef   => '',
@@ -264,6 +271,17 @@ define nest::lib::hermes (
       default => [],
     },
   ].flatten
+  $kubeconfig_env_lines = $kubeconfig_path ? {
+    undef   => $kubeconfig_content ? {
+      undef   => [],
+      default => ["KUBECONFIG=${effective_kubeconfig_path}"],
+    },
+    default => ["KUBECONFIG=${effective_kubeconfig_path}"],
+  }
+  $kubeconfig_subscribe = $kubeconfig_content ? {
+    undef   => [],
+    default => [File[$effective_kubeconfig_path]],
+  }
   $systemd_env_lines = [
     "HERMES_DASHBOARD_BIND_HOST=${dashboard_bind_host}",
     "HERMES_DASHBOARD_PORT=${dashboard_port}",
@@ -274,6 +292,7 @@ define nest::lib::hermes (
     },
     $openai_env_lines,
     $agent_request_env_lines,
+    $kubeconfig_env_lines,
     '',
   ].flatten
 
@@ -398,7 +417,32 @@ define nest::lib::hermes (
     } + $dashboard_theme_config,
   } + $image_gen_config + $plugins_config
 
-  $env_content = [$gitlab_env_lines, $openai_env_lines, $tavily_env_lines, $telegram_env_lines, $agent_request_env_lines].flatten.join("\n")
+  $env_content = [$gitlab_env_lines, $openai_env_lines, $tavily_env_lines, $telegram_env_lines, $agent_request_env_lines, $kubeconfig_env_lines].flatten.join("\n")
+
+  if $kubeconfig_content != undef {
+    $effective_kubeconfig_content = $kubeconfig_content =~ Sensitive ? {
+      true    => $kubeconfig_content,
+      default => Sensitive($kubeconfig_content),
+    }
+
+    file { $kubeconfig_dir:
+      ensure  => directory,
+      mode    => '0700',
+      owner   => $user,
+      group   => $user,
+      require => File[$profile_dir],
+    }
+
+    file { $effective_kubeconfig_path:
+      ensure    => file,
+      mode      => '0600',
+      owner     => $user,
+      group     => $user,
+      content   => $effective_kubeconfig_content,
+      show_diff => false,
+      require   => File[$kubeconfig_dir],
+    }
+  }
 
   file { $hermes_env_path:
     ensure    => file,
@@ -541,6 +585,7 @@ define nest::lib::hermes (
         Exec['share_hermes_codex_auth'],
         File[$hermes_env_path],
         File["${profile_dir}/systemd.env"],
+        $kubeconfig_subscribe,
         File[$hermes_managed_config_path],
         File[$hermes_honcho_config_path],
         Exec["configure_hermes_managed_config_${profile}"],
@@ -582,6 +627,7 @@ define nest::lib::hermes (
         Exec['install_hermes_agent'],
         Exec['share_hermes_codex_auth'],
         File["${profile_dir}/systemd.env"],
+        $kubeconfig_subscribe,
         File[$hermes_managed_config_path],
         Exec["configure_hermes_managed_config_${profile}"],
       ],

@@ -10,6 +10,30 @@
 import os
 import sys
 
+HERMES_HOME = '/home/<%= $user %>/.hermes'
+
+
+def load_env_file(path):
+    try:
+        with open(path, encoding='utf-8') as env_file:
+            for raw_line in env_file:
+                line = raw_line.strip()
+                if not line or line.startswith('#') or '=' not in line:
+                    continue
+                key, value = line.split('=', 1)
+                key = key.strip()
+                if key.startswith('export '):
+                    key = key[len('export '):].strip()
+                if key and all(c.isalnum() or c == '_' for c in key):
+                    os.environ[key] = value.strip()
+    except FileNotFoundError:
+        pass
+
+
+os.environ['HERMES_HOME'] = HERMES_HOME
+load_env_file(os.path.join(HERMES_HOME, 'profiles', '<%= $profile %>', '.env'))
+load_env_file(os.path.join(HERMES_HOME, 'profiles', '<%= $profile %>', 'systemd.env'))
+
 <% if $dev_board { -%>
 os.environ['AGENT_REQUEST_KANBAN_BOARD'] = 'agent-requests-dev'
 os.environ['AGENT_REQUEST_KANBAN_BOARD_OVERRIDE'] = 'agent-requests-dev'
