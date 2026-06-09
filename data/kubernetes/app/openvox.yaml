@@ -642,7 +642,28 @@ patches:
       kind: Deployment
       name: "%{nest::kubernetes::service}-puppetserver"
 
-  10-bootstrap-puppet-code:
+  10-ignore-agent-task-r10k-branches:
+    patch:
+      - op: replace
+        path: /data/r10k_code.yaml
+        value: |
+          # The location to use for storing cached Git repos
+          :cachedir: '/etc/puppetlabs/code/r10k_cache'
+          # A list of git repositories to create
+          :sources:
+            # This will clone the git repository and instantiate an environment per
+            # branch in '/etc/puppetlabs/code/environments'
+            :puppet_repo:
+              remote: 'git@gitlab.joyfullee.me:nest/config.git'
+              basedir: '/etc/puppetlabs/code/environments'
+              ignore_branch_prefixes:
+                - 'talon/'
+    target:
+      version: v1
+      kind: ConfigMap
+      name: "%{nest::kubernetes::service}-puppetserver-r10k-code-config"
+
+  11-bootstrap-puppet-code:
     patch:
       - op: add
         path: /spec/template/spec/initContainers/-
