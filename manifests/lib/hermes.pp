@@ -3,6 +3,7 @@ define nest::lib::hermes (
   String[1]            $display_name             = $title,
   Optional[String[1]]  $profile_icon             = undef,
   Stdlib::Absolutepath $install_dir              = '/opt/hermes-agent',
+  Stdlib::Absolutepath $ca_bundle_file           = '/etc/ssl/certs/ca-certificates.crt',
   String[1]            $user                     = 'joy',
   String[1]            $gitlab_url               = 'https://gitlab.joyfullee.me',
   Any                  $gitlab_token             = undef,
@@ -331,6 +332,10 @@ define nest::lib::hermes (
     $agent_request_env_lines,
     $ssh_env_lines,
     $kubeconfig_env_lines,
+    "SSL_CERT_FILE=${ca_bundle_file}",
+    "REQUESTS_CA_BUNDLE=${ca_bundle_file}",
+    "CURL_CA_BUNDLE=${ca_bundle_file}",
+    'SSL_CERT_DIR=/etc/ssl/certs',
     '',
   ].flatten
 

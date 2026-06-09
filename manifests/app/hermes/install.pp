@@ -180,8 +180,14 @@ class nest::app::hermes::install {
   }
 
   file { '/usr/local/bin/hermes':
-    ensure  => link,
-    target  => "${venv_dir}/bin/hermes",
+    ensure  => file,
+    mode    => '0755',
+    owner   => 'root',
+    group   => 'root',
+    content => epp('nest/app/hermes/cli-wrapper.sh.epp', {
+      'venv_dir'       => $venv_dir,
+      'ca_bundle_file' => $nest::app::hermes::ca_bundle_file,
+    }),
     require => Exec['install_hermes_agent'],
   }
 

@@ -17,6 +17,7 @@ class nest::app::hermes::config {
   $auxiliary_mini_model             = $nest::app::hermes::auxiliary_mini_model
   $image_gen_provider               = $nest::app::hermes::image_gen_provider
   $image_gen_model                  = $nest::app::hermes::image_gen_model
+  $ca_bundle_file                   = $nest::app::hermes::ca_bundle_file
   $compression_timeout              = $nest::app::hermes::compression_timeout
   $web_extract_timeout              = $nest::app::hermes::web_extract_timeout
   $dashboard_bind_host              = $nest::app::hermes::dashboard_bind_host
@@ -234,6 +235,7 @@ class nest::app::hermes::config {
       display_name               => $display_name,
       profile_icon               => $instance_profile_icon,
       install_dir                => $nest::app::hermes::install_dir,
+      ca_bundle_file             => $ca_bundle_file,
       user                       => $nest::user,
       gitlab_url                 => $gitlab_url,
       gitlab_token               => $instance_gitlab_token,

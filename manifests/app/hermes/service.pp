@@ -6,6 +6,7 @@ class nest::app::hermes::service {
   $broker_source_dir            = "${install_dir}/agent-request-broker"
   $pythonpath                   = "${source_dir}:${broker_source_dir}/src"
   $hermes_home_dir              = "/home/${nest::user}/.hermes"
+  $ca_bundle_file               = $nest::app::hermes::ca_bundle_file
   $systemd_user_dir        = "/home/${nest::user}/.config/systemd/user"
   $systemd_main_pid        = '$MAINPID'
 
@@ -134,7 +135,9 @@ class nest::app::hermes::service {
         "VIRTUAL_ENV=${venv_dir}",
         "PYTHONPATH=${pythonpath}",
         "HERMES_HOME=${hermes_home_dir}",
-        'SSL_CERT_FILE=',
+        "SSL_CERT_FILE=${ca_bundle_file}",
+        "REQUESTS_CA_BUNDLE=${ca_bundle_file}",
+        "CURL_CA_BUNDLE=${ca_bundle_file}",
         'SSL_CERT_DIR=/etc/ssl/certs',
       ],
       'Restart'                => 'always',
@@ -180,7 +183,9 @@ class nest::app::hermes::service {
         "HERMES_HOME=${hermes_home_dir}",
         'HERMES_DASHBOARD_TUI=1',
         "HERMES_TUI_DIR=${source_dir}/ui-tui",
-        'SSL_CERT_FILE=',
+        "SSL_CERT_FILE=${ca_bundle_file}",
+        "REQUESTS_CA_BUNDLE=${ca_bundle_file}",
+        "CURL_CA_BUNDLE=${ca_bundle_file}",
         'SSL_CERT_DIR=/etc/ssl/certs',
       ],
       'Restart'          => 'always',
