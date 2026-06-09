@@ -4,18 +4,25 @@ class nest::tool::whispercpp (
 ) {
   portage::makeconf { 'video_cards':
     content => '-* intel amdgpu radeonsi',
+    before  => Nest::Lib::Package['media-libs/mesa'],
   }
 
   nest::lib::package { [
     'dev-util/spirv-headers',
     'dev-util/vulkan-headers',
     'dev-util/vulkan-tools',
-    'media-libs/mesa',
     'media-libs/vulkan-loader',
     'media-libs/shaderc',
     'media-video/ffmpeg',
   ]:
     ensure => installed,
+    before => Nest::Lib::Build['whisper.cpp'],
+  }
+
+  nest::lib::package { 'media-libs/mesa':
+    ensure => installed,
+    binpkg => false,
+    use    => ['vulkan'],
     before => Nest::Lib::Build['whisper.cpp'],
   }
 
