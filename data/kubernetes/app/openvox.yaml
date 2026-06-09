@@ -675,7 +675,7 @@ patches:
             - /bin/sh
             - -ec
             - >-
-              /container-entrypoint.sh deploy environment
+              /container-entrypoint.sh deploy environment main
               --config /etc/puppetlabs/puppet/r10k_code.yaml
               --puppetfile
           env:
