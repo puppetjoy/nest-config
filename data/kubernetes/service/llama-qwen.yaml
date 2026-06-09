@@ -11,9 +11,9 @@ server_args:
   - --model
   - /root/.cache/llama.cpp/bartowski_Qwen_Qwen3.5-122B-A10B-GGUF_Qwen_Qwen3.5-122B-A10B-Q4_K_M_Qwen_Qwen3.5-122B-A10B-Q4_K_M-00001-of-00002.gguf
   - --ctx-size
-  - '262144'
+  - '393216'
   - --parallel
-  - '2'
+  - '3'
   - --jinja
   - --reasoning
   - 'off'
