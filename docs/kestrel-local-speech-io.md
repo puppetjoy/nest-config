@@ -12,18 +12,19 @@ but that design is retired for two reasons:
   owl/Strix Halo as the local accelerator target.
 
 Source cleanup in this repo therefore removes the Kestrel
-`nest::service::speech_io` Hiera instances and drops the `TTS.cpp` tool-image
-source. After the Puppet source is deployed and Kestrel has converged, the old
-Puppet-managed containers become approved orphaned artifacts to stop/disable and
-remove manually:
+`nest::service::speech_io` Hiera instances and drops the retired speech tool-image
+sources, including the old `whisper.cpp` STT image and `TTS.cpp` TTS image. After
+the Puppet source is deployed and Kestrel has converged, the old Puppet-managed
+containers become approved orphaned artifacts to stop/disable and remove manually:
 
 - `container-whisper-whisper.service` / `whisper-whisper`
 - `container-tts-kokoro.service` / `tts-kokoro`
 - ports 2022 and 2023
 
-`whisper.cpp` remains in source only as a useful C/C++ Whisper runtime for future
-non-RISC-V/Vulkan work. Do not rebuild the RISC-V `sifive-u74` speech images for
-this retirement.
+Historical note: the retired Kestrel prototype used `whisper.cpp` for STT before
+speech I/O moved to the Eyrie `voice-speech` service. The current STT path uses
+OpenAI Whisper inside a ROCm/PyTorch Kubernetes workload instead of the retired
+`nest/tools/whisper.cpp` image.
 
 ## Replacement direction
 
