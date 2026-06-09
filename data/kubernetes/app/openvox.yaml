@@ -26,6 +26,12 @@ resources:
       template:
         spec:
           restartPolicy: Never
+          nodeSelector:
+            "node-role.kubernetes.io/%{lookup('node_role')}": ''
+          tolerations:
+            - key: "node-role.kubernetes.io/%{lookup('node_role')}"
+              operator: Exists
+              effect: NoSchedule
           imagePullSecrets: []
           initContainers: []
           containers:
