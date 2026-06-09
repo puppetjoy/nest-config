@@ -1,0 +1,29 @@
+---
+description: 'Deploy Honcho local embedding service'
+
+parameters:
+  deploy:
+    description: 'Run or skip the deployment'
+    type: Boolean
+    default: true
+
+  render_to:
+    description: 'Just render the template'
+    type: String
+    default: ''
+
+  init:
+    description: 'Deploy initial revision'
+    type: Boolean
+    default: false
+
+steps:
+  - description: 'Deploy Honcho embedding endpoint'
+    plan: 'nest::kubernetes::deploy'
+    parameters:
+      service: 'honcho-embeddings'
+      app: 'honcho-embeddings'
+      namespace: 'ai'
+      init: $init
+      deploy: $deploy
+      render_to: $render_to

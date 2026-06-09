@@ -1,7 +1,4 @@
 ---
-include:
-  - 'nest::service::honcho'
-
 plan_base: 'nest::eyrie::ai::honcho'
 service_name: "%{nest::kubernetes::service}"
 
@@ -50,17 +47,29 @@ representation_subthreshold_expiry_job_ttl: 21600
   - name: AUTH_USE_AUTH
     value: 'false'
 
-  # Keep the real OpenAI key available only for the embedding backend until
-  # Honcho has a local embedding service.  llama-qwen returns 501 from
-  # /v1/embeddings, so do not globally point LLM_OPENAI_BASE_URL at it.
-  - name: LLM_OPENAI_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: "%{nest::kubernetes::service}-secrets"
-        key: LLM_OPENAI_API_KEY
+  # Local OpenAI-compatible embedding endpoint.  BGE-M3 emits 1024-dimensional
+  # vectors, so this config must be deployed together with the reviewed
+  # pgvector schema/re-embedding migration; deploying it against the existing
+  # 1536-dimensional OpenAI embeddings will fail Honcho's startup validator.
+  - name: EMBEDDING_MODEL_CONFIG__TRANSPORT
+    value: 'openai'
+  - name: EMBEDDING_MODEL_CONFIG__MODEL
+    value: 'bge-m3'
+  - name: EMBEDDING_MODEL_CONFIG__OVERRIDES__BASE_URL
+    value: 'http://honcho-embeddings/v1'
+  - name: EMBEDDING_MODEL_CONFIG__OVERRIDES__API_KEY_ENV
+    value: 'HONCHO_LOCAL_OPENAI_API_KEY'
+  - name: EMBEDDING_MODEL_CONFIG__DIMENSIONS_MODE
+    value: 'never'
+  - name: EMBEDDING_VECTOR_DIMENSIONS
+    value: '1024'
+  - name: EMBEDDING_MAX_INPUT_TOKENS
+    value: '8192'
+  - name: EMBEDDING_MAX_TOKENS_PER_REQUEST
+    value: '8192'
 
-  # Honcho's OpenAI transport requires an API key value even for the local
-  # OpenAI-compatible llama.cpp service; llama.cpp ignores the placeholder.
+  # Honcho's OpenAI transport requires an API key value even for local
+  # OpenAI-compatible services; llama.cpp ignores the placeholder.
   - name: HONCHO_LOCAL_OPENAI_API_KEY
     value: 'not-a-real-key'
   - name: DERIVER_MODEL_CONFIG__TRANSPORT
@@ -347,16 +356,6 @@ resources:
         kind: "%{lookup('cert_issuer_kind')}"
       dnsNames:
         - "%{nest::kubernetes::fqdn}"
-
-  secrets:
-    apiVersion: v1
-    kind: Secret
-    metadata:
-      name: "%{nest::kubernetes::service}-secrets"
-      namespace: "%{nest::kubernetes::namespace}"
-    type: Opaque
-    data:
-      LLM_OPENAI_API_KEY: "%{nest::service::honcho::openai_api_key_base64}"
 
   postgres-cluster:
     apiVersion: postgresql.cnpg.io/v1

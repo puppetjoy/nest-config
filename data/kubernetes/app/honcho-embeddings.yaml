@@ -1,0 +1,160 @@
+---
+# Private OpenAI-compatible embedding endpoint for Honcho.
+#
+# BGE-M3 gives 1024-dimensional dense vectors with an 8192 token context and
+# broad multilingual support.  It is intentionally separate from llama-qwen:
+# the chat service currently returns 501 for /v1/embeddings and should not be
+# used for Honcho vectorization.
+cache_size: 8Gi
+storage_class: owl-crypt
+image: registry.gitlab.joyfullee.me/nest/tools/llama.cpp:zen5
+model_repo: ggml-org/bge-m3-Q8_0-GGUF
+model_file: bge-m3-q8_0.gguf
+model_path: /cache/models/bge-m3-q8_0.gguf
+model_url: https://huggingface.co/ggml-org/bge-m3-Q8_0-GGUF/resolve/main/bge-m3-q8_0.gguf
+embedding_dimensions: 1024
+max_input_tokens: 8192
+parallel_requests: 4
+
+resources:
+  backup: {}
+  restore: {}
+  registry_auths: {}
+
+  cache:
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: "%{nest::kubernetes::service}-cache"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: "%{lookup('cache_size')}"
+      storageClassName: "%{lookup('storage_class')}"
+
+  deployment:
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: "%{nest::kubernetes::service}"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      replicas: 1
+      strategy:
+        type: Recreate
+      selector:
+        matchLabels:
+          app: "%{nest::kubernetes::service}"
+      template:
+        metadata:
+          labels:
+            app: "%{nest::kubernetes::service}"
+            component: embeddings
+        spec:
+          nodeSelector:
+            kubernetes.io/hostname: owl
+          tolerations:
+            - key: "node-role.kubernetes.io/compute"
+              operator: Exists
+              effect: NoSchedule
+          initContainers:
+            - name: fetch-model
+              image: docker.io/curlimages/curl:8.11.1
+              imagePullPolicy: IfNotPresent
+              securityContext:
+                runAsUser: 0
+                runAsGroup: 0
+              command:
+                - sh
+                - -ceu
+                - |-
+                  mkdir -p "$(dirname "%{lookup('model_path')}")"
+                  if [ ! -s "%{lookup('model_path')}" ]; then
+                    tmp="%{lookup('model_path')}.tmp"
+                    curl -fL --retry 5 --retry-delay 5 --connect-timeout 30 \
+                      -o "$tmp" "%{lookup('model_url')}"
+                    mv "$tmp" "%{lookup('model_path')}"
+                  fi
+                  ls -lh "%{lookup('model_path')}"
+              volumeMounts:
+                - name: cache
+                  mountPath: /cache
+          containers:
+            - name: llama-embedding-server
+              image: "%{lookup('image')}"
+              imagePullPolicy: IfNotPresent
+              command: ['llama-server', '--host', '0.0.0.0']
+              args:
+                - --model
+                - "%{lookup('model_path')}"
+                - --embeddings
+                - --pooling
+                - cls
+                - --ctx-size
+                - "%{lookup('max_input_tokens')}"
+                - --parallel
+                - "%{lookup('parallel_requests')}"
+              ports:
+                - name: http
+                  containerPort: 8080
+              resources:
+                requests:
+                  cpu: '2'
+                  memory: 4Gi
+                limits:
+                  cpu: '8'
+                  memory: 12Gi
+              env:
+                - name: HF_HOME
+                  value: /cache/huggingface
+                - name: LLAMA_ARG_MODEL_URL
+                  value: ''
+              volumeMounts:
+                - name: cache
+                  mountPath: /cache
+              startupProbe:
+                httpGet:
+                  path: /health
+                  port: 8080
+                periodSeconds: 10
+                failureThreshold: 180
+                timeoutSeconds: 2
+              readinessProbe:
+                httpGet:
+                  path: /health
+                  port: 8080
+                periodSeconds: 10
+                failureThreshold: 3
+                timeoutSeconds: 2
+              livenessProbe:
+                httpGet:
+                  path: /health
+                  port: 8080
+                periodSeconds: 30
+                failureThreshold: 3
+                timeoutSeconds: 2
+          volumes:
+            - name: cache
+              persistentVolumeClaim:
+                claimName: "%{nest::kubernetes::service}-cache"
+
+  service:
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: "%{nest::kubernetes::service}"
+      namespace: "%{nest::kubernetes::namespace}"
+      labels:
+        app: "%{nest::kubernetes::service}"
+        component: embeddings
+    spec:
+      type: ClusterIP
+      selector:
+        app: "%{nest::kubernetes::service}"
+      ports:
+        - name: http
+          port: 80
+          targetPort: 8080

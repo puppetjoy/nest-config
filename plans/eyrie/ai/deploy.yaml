@@ -12,6 +12,11 @@ parameters:
     type: Boolean
     default: true
 
+  honcho_embeddings:
+    description: 'Deploy Honcho local embedding service'
+    type: Boolean
+    default: true
+
   honcho:
     description: 'Deploy Honcho memory service'
     type: Boolean
@@ -52,6 +57,12 @@ steps:
     plan: nest::eyrie::ai::deploy_llama
     parameters:
       deploy: $deploy and $llama
+      init: $init
+
+  - description: 'Deploy Honcho local embedding service'
+    plan: nest::eyrie::ai::deploy_honcho_embeddings
+    parameters:
+      deploy: $deploy and $honcho_embeddings
       init: $init
 
   - description: 'Deploy Honcho'

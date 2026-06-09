@@ -1,0 +1,10 @@
+---
+# Concrete Honcho embedding endpoint instance in the ai namespace.
+# The service is private ClusterIP only; Honcho calls http://honcho-embeddings/v1.
+cache_size: 8Gi
+storage_class: owl-crypt
+model_repo: ggml-org/bge-m3-Q8_0-GGUF
+model_file: bge-m3-q8_0.gguf
+embedding_dimensions: 1024
+max_input_tokens: 8192
+parallel_requests: 4
