@@ -31,10 +31,12 @@ stages:
         --file=Containerfile
         --secret=id=ssh_private_key,src="$NEST_CI_PRIVATE_KEY_FILE"
         --squash
-        --tag="${CI_REGISTRY_IMAGE}/${CI_COMMIT_BRANCH}:${CPU}"
+        --tag="${CI_REGISTRY_IMAGE}/${CI_COMMIT_REF_SLUG}:${CPU}"
         empty'
-    - 'podman push "${CI_REGISTRY_IMAGE}/${CI_COMMIT_BRANCH}:${CPU}"'
+    - 'podman push "${CI_REGISTRY_IMAGE}/${CI_COMMIT_REF_SLUG}:${CPU}"'
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: never
     - if: '$BUILD == $CPU'
     - if: '$BUILD'
       when: never
@@ -63,15 +65,17 @@ stages:
   tags: ['r10k']
   script:
     - 'r10k deploy environment "$CI_COMMIT_BRANCH" --modules --verbose'
+  rules:
+    - if: '$CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH !~ /^talon\//'
 
 'Deploy image':
   stage: 'Deploy'
   variables:
-    IMAGE: "${CI_PROJECT_PATH}/${CI_COMMIT_BRANCH}"
+    IMAGE: "${CI_PROJECT_PATH}/${CI_COMMIT_REF_SLUG}"
   script:
     - 'podman login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY" <<< $CI_REGISTRY_PASSWORD'
     - 'podman login -u admin --password-stdin registry.eyrie <<< $EYRIE_REGISTRY_PASSWORD'
-    - 'LOCAL_IMAGE="${CI_REGISTRY_IMAGE}/${CI_COMMIT_BRANCH}:manifest-${CI_PIPELINE_ID}"'
+    - 'LOCAL_IMAGE="${CI_REGISTRY_IMAGE}/${CI_COMMIT_REF_SLUG}:manifest-${CI_PIPELINE_ID}"'
     - 'cleanup() { podman manifest rm "$LOCAL_IMAGE" || true; }; trap cleanup EXIT'
     - 'podman manifest exists "$LOCAL_IMAGE" && podman manifest rm "$LOCAL_IMAGE"'
     - 'podman manifest create "$LOCAL_IMAGE"'
@@ -80,3 +84,7 @@ stages:
     - 'podman manifest add "$LOCAL_IMAGE" "${CI_REGISTRY}/${IMAGE}:sifive-u74"'
     - 'podman manifest push --all "$LOCAL_IMAGE" "${CI_REGISTRY}/${IMAGE}"'
     - 'podman manifest push --all "$LOCAL_IMAGE" "registry.eyrie/${IMAGE}"'
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: never
+    - when: always
