@@ -31,6 +31,8 @@ plan nest::eyrie::openvox::restore (
         namespace: ${namespace}
       spec:
         restartPolicy: Never
+        nodeSelector:
+          node-role.kubernetes.io/workstation: ''
         tolerations:
           - operator: Exists
         containers:

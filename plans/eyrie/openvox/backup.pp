@@ -36,13 +36,15 @@ plan nest::eyrie::openvox::backup (
   run_command("kubectl exec -n ${namespace.shellquote} ${primary_pod.shellquote} -c postgres -- pg_dump -U postgres -d openvoxdb --format=custom > ${tmp_dir.shellquote}/puppetdb.dump", 'localhost', 'Dump PuppetDB')
   run_command("kubectl exec -n ${namespace.shellquote} ${puppetserver_pod.shellquote} -c ${container.shellquote} -- tar -C /etc/puppetlabs -cf - puppet/ssl puppetserver/ca | zstd -T0 -19 -q > ${tmp_dir.shellquote}/puppet-ssl.tar.zst", 'localhost', 'Archive Puppet SSL state')
 
+  $created_at = run_command('date --iso-8601=seconds', 'localhost', 'Get backup timestamp').first.value['stdout'].chomp
+
   $metadata = @("JSON"/L)
     {
       "namespace": "${namespace}",
       "service": "${service}",
       "cnpg_primary": "${primary_pod}",
       "puppetserver_pod": "${puppetserver_pod}",
-      "created_at": "$(date --iso-8601=seconds)"
+      "created_at": "${created_at}"
     }
     | JSON
 
