@@ -8,8 +8,8 @@ cert_issuer_kind: ClusterIssuer
 ingress_class: contour-workstation
 puppet_load_balancer_ip: '172.21.2.0'
 node_role: workstation
-storage_class: ceph-filesystem
-postgres_storage_class: ceph-block
+storage_class: data-crypt
+postgres_storage_class: data-crypt-block
 puppet_server_certname: puppet.eyrie
 puppet_server_alt_names: puppet.eyrie
 puppetboard_fqdn: puppet.eyrie
