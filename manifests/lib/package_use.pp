@@ -1,4 +1,5 @@
 define nest::lib::package_use (
+  Boolean                   $binpkg  = true,
   Enum['present', 'absent'] $ensure  = 'present',
   String                    $package = $name,
   Optional[Nest::UseFlags]  $use     = undef,
@@ -11,8 +12,13 @@ define nest::lib::package_use (
   }
 
   if defined(Package[$name]) {
+    $usepkg_option = $binpkg ? {
+      true    => '',
+      default => ' --usepkg=n',
+    }
+
     exec { "emerge-newuse-${name}":
-      command     => "/usr/bin/emerge -N ${package}",
+      command     => "/usr/bin/emerge -N${usepkg_option} ${package}",
       timeout     => 0,
       refreshonly => true,
     }

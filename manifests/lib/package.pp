@@ -56,6 +56,7 @@ define nest::lib::package (
 
   nest::lib::package_use { $name:
     ensure  => $use_ensure,
+    binpkg  => $binpkg,
     package => $package,
     use     => $use,
   }
