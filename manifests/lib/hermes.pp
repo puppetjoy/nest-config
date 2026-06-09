@@ -58,6 +58,7 @@ define nest::lib::hermes (
   String[1]            $tts_provider             = 'openai',
   String[1]            $tts_openai_model         = 'gpt-4o-mini-tts',
   String[1]            $tts_openai_voice         = 'alloy',
+  Any                  $ssh_private_key          = undef,
   Optional[String[1]]  $kubeconfig_path          = undef,
   Any                  $kubeconfig_content       = undef,
   Array[String[1]]     $extra_packages           = [],
@@ -68,6 +69,8 @@ define nest::lib::hermes (
   $hermes_home_dir                  = "/home/${user}/.hermes"
   $profiles_dir                     = "${hermes_home_dir}/profiles"
   $profile_dir                      = "${profiles_dir}/${profile}"
+  $ssh_dir                          = "${profile_dir}/.ssh"
+  $ssh_private_key_path             = "${ssh_dir}/id_ed25519"
   $hermes_env_path                  = "${profile_dir}/.env"
   $hermes_config_path               = "${profile_dir}/config.yaml"
   $hermes_managed_config_path       = "${profile_dir}/managed-config.yaml"
@@ -197,6 +200,31 @@ define nest::lib::hermes (
     }
   }
 
+  if $ssh_private_key != undef {
+    $effective_ssh_private_key = $ssh_private_key =~ Sensitive ? {
+      true    => $ssh_private_key,
+      default => Sensitive($ssh_private_key),
+    }
+
+    file { $ssh_dir:
+      ensure  => directory,
+      mode    => '0700',
+      owner   => $user,
+      group   => $user,
+      require => File[$profile_dir],
+    }
+
+    file { $ssh_private_key_path:
+      ensure    => file,
+      mode      => '0600',
+      owner     => $user,
+      group     => $user,
+      content   => $effective_ssh_private_key,
+      show_diff => false,
+      require   => File[$ssh_dir],
+    }
+  }
+
   if $google_workspace_enabled {
     file { "${profile_dir}/skills":
       ensure  => directory,
@@ -284,6 +312,13 @@ define nest::lib::hermes (
     undef   => [],
     default => [File[$effective_kubeconfig_path]],
   }
+  $ssh_env_lines = $ssh_private_key ? {
+    undef   => [],
+    default => [
+      "HERMES_SSH_PRIVATE_KEY=${ssh_private_key_path}",
+      "GIT_SSH_COMMAND=\"ssh -i ${ssh_private_key_path} -o IdentitiesOnly=yes\"",
+    ],
+  }
   $systemd_env_lines = [
     "HERMES_DASHBOARD_BIND_HOST=${dashboard_bind_host}",
     "HERMES_DASHBOARD_PORT=${dashboard_port}",
@@ -294,6 +329,7 @@ define nest::lib::hermes (
     },
     $openai_env_lines,
     $agent_request_env_lines,
+    $ssh_env_lines,
     $kubeconfig_env_lines,
     '',
   ].flatten
@@ -429,7 +465,7 @@ define nest::lib::hermes (
     } + $dashboard_theme_config,
   } + $image_gen_config + $plugins_config
 
-  $env_content = [$gitlab_env_lines, $openai_env_lines, $tavily_env_lines, $telegram_env_lines, $agent_request_env_lines, $kubeconfig_env_lines].flatten.join("\n")
+  $env_content = [$gitlab_env_lines, $openai_env_lines, $tavily_env_lines, $telegram_env_lines, $agent_request_env_lines, $ssh_env_lines, $kubeconfig_env_lines].flatten.join("\n")
 
   if $kubeconfig_content != undef {
     $effective_kubeconfig_content = $kubeconfig_content =~ Sensitive ? {
