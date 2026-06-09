@@ -221,6 +221,8 @@ class nest::app::hermes::config {
     $instance_stt_enabled       = pick($config['stt_enabled'], $instance_voice_auto_tts)
     $instance_stt_provider      = pick($config['stt_provider'], 'openai')
     $instance_stt_model         = pick($config['stt_model'], 'gpt-4o-mini-transcribe')
+    $instance_stt_codex_ack     = pick($config['stt_codex_experimental_ack'], false)
+    $instance_stt_codex_model   = $config['stt_codex_model']
     $instance_tts_provider      = pick($config['tts_provider'], 'openai')
     $instance_tts_openai_model  = pick($config['tts_openai_model'], 'gpt-4o-mini-tts')
     $instance_tts_openai_voice  = pick($config['tts_openai_voice'], 'alloy')
@@ -287,6 +289,8 @@ class nest::app::hermes::config {
       stt_enabled                => $instance_stt_enabled,
       stt_provider               => $instance_stt_provider,
       stt_model                  => $instance_stt_model,
+      stt_codex_experimental_ack => $instance_stt_codex_ack,
+      stt_codex_model            => $instance_stt_codex_model,
       tts_provider               => $instance_tts_provider,
       tts_openai_model           => $instance_tts_openai_model,
       tts_openai_voice           => $instance_tts_openai_voice,

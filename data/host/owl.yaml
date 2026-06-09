@@ -13,7 +13,8 @@ nest::distcc_server: true
 nest::dvorak: true
 nest::text_scaling_factor: 1.5
 
-nest::app::hermes::git_ref: 'nest/v0.16.0'
+nest::app::hermes::git_ref: 'hermes/0.16.0-nest'
+nest::app::hermes::git_commit: '3879594e2c591d0a87715539e9d682618904c7ea'
 nest::app::hermes::agent_request_kanban_board: 'agent-requests'
 
 nest::kernel_cmdline:
@@ -166,8 +167,10 @@ nest::app::hermes::instances:
     release_digest_enabled: true
     voice_auto_tts: true
     stt_enabled: true
-    stt_provider: 'openai'
+    stt_provider: 'codex'
     stt_model: 'gpt-4o-mini-transcribe'
+    stt_codex_experimental_ack: true
+    stt_codex_model: 'gpt-4o-mini-transcribe'
     tts_provider: 'openai'
     tts_openai_model: 'gpt-4o-mini-tts'
     tts_openai_voice: 'alloy'
@@ -268,8 +271,10 @@ nest::app::hermes::instances:
     google_workspace_enabled: true
     voice_auto_tts: true
     stt_enabled: true
-    stt_provider: 'openai'
+    stt_provider: 'codex'
     stt_model: 'gpt-4o-mini-transcribe'
+    stt_codex_experimental_ack: true
+    stt_codex_model: 'gpt-4o-mini-transcribe'
     tts_provider: 'openai'
     tts_openai_model: 'gpt-4o-mini-tts'
     tts_openai_voice: 'nova'
