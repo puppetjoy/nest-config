@@ -2,10 +2,11 @@ class nest::tool::llamacpp (
   String $revision = 'master',
 ) {
   portage::makeconf { 'video_cards':
-    content => '-* intel amdgpu radeonsi',
+    content => 'intel amdgpu radeonsi',
   }
 
   nest::lib::package { [
+    'dev-util/spirv-headers',
     'dev-util/vulkan-headers',
     'media-libs/shaderc',
   ]:

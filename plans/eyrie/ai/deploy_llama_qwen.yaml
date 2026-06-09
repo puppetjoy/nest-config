@@ -1,5 +1,5 @@
 ---
-description: 'Deploy the coder LLM'
+description: 'Deploy the Qwen3.5 local LLM'
 
 parameters:
   namespace:
@@ -23,10 +23,10 @@ parameters:
     default: ''
 
 steps:
-  - description: 'Deploy coder llama-server'
+  - description: 'Deploy Qwen3.5 llama-server'
     plan: nest::eyrie::ai::llama::deploy
     parameters:
-      service: 'llama-coder'
+      service: 'llama-qwen'
       namespace: $namespace
       deploy: $deploy
       init: $init

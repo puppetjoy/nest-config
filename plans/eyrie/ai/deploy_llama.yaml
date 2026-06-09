@@ -1,5 +1,5 @@
 ---
-description: 'Deploy LLM servers'
+description: 'Deploy the local Qwen3.5 llama-server'
 
 parameters:
   deploy:
@@ -7,18 +7,8 @@ parameters:
     type: Boolean
     default: true
 
-  general:
-    description: 'Deploy llama-general'
-    type: Boolean
-    default: true
-
-  coder:
-    description: 'Deploy llama-coder'
-    type: Boolean
-    default: true
-
-  multi:
-    description: 'Deploy llama-multi'
+  qwen:
+    description: 'Deploy llama-qwen'
     type: Boolean
     default: true
 
@@ -28,20 +18,8 @@ parameters:
     default: false
 
 steps:
-  - description: 'Deploy general llama-server'
-    plan: nest::eyrie::ai::deploy_llama_general
+  - description: 'Deploy Qwen3.5 llama-server'
+    plan: nest::eyrie::ai::deploy_llama_qwen
     parameters:
-      deploy: $deploy and $general
-      init: $init
-
-  - description: 'Deploy coder llama-server'
-    plan: nest::eyrie::ai::deploy_llama_coder
-    parameters:
-      deploy: $deploy and $coder
-      init: $init
-
-  - description: 'Deploy multi llama-server'
-    plan: nest::eyrie::ai::deploy_llama_multi
-    parameters:
-      deploy: $deploy and $multi
+      deploy: $deploy and $qwen
       init: $init

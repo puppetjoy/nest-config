@@ -1,8 +1,0 @@
----
-# https://huggingface.co/ggml-org/gpt-oss-120b-GGUF
-server_args:
-  - --hf-repo
-  - ggml-org/gpt-oss-120b-GGUF
-  - --ctx-size
-  - '65536'
-  - --jinja

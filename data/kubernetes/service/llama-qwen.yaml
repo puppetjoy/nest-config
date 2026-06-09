@@ -1,0 +1,17 @@
+---
+# Qwen3.5-122B-A10B is a sparse MoE (~10B active parameters per token).
+# bartowski publishes llama.cpp/imatrix GGUF quants; Q4_K_M is ~77.6 GiB,
+# leaving room in owl's ~120 GiB practical memory envelope for llama.cpp and
+# a useful KV cache. Higher Q5/Q6 quants are likely too tight for this node.
+# https://huggingface.co/bartowski/Qwen_Qwen3.5-122B-A10B-GGUF
+# The cache path is the deterministic llama.cpp HF cache filename produced by the
+# initial `--hf-repo ...:Q4_K_M` deployment. Using --model avoids a b9222
+# --hf-repo startup hang observed after the shards were already downloaded.
+server_args:
+  - --model
+  - /root/.cache/llama.cpp/bartowski_Qwen_Qwen3.5-122B-A10B-GGUF_Qwen_Qwen3.5-122B-A10B-Q4_K_M_Qwen_Qwen3.5-122B-A10B-Q4_K_M-00001-of-00002.gguf
+  - --ctx-size
+  - '32768'
+  - --jinja
+  - --reasoning
+  - 'off'

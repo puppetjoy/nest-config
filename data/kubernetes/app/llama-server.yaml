@@ -4,8 +4,9 @@ include:
 
 plan_base: 'nest::eyrie::ai::llama'
 
-# Thin provisioned model cache
-cache_size: 128Gi
+# Qwen3.5-122B-A10B Q4_K_M is ~78 GiB; keep room for split GGUF
+# shards, the KV cache, and llama.cpp metadata in the persistent HF cache.
+cache_size: 160Gi
 storage_class: owl-crypt
 
 resources:
@@ -60,7 +61,10 @@ resources:
           initContainers: []
           containers:
             - name: llama-server
-              image: registry.gitlab.joyfullee.me/nest/tools/llama.cpp
+              image: registry.gitlab.joyfullee.me/nest/tools/llama.cpp:zen5
+              # The zen5 image is built for owl/Strix Halo and reused locally by CRI-O
+              # during this experiment; KubeCM rollout will refresh it after CI pushes.
+              imagePullPolicy: IfNotPresent
               command: ['llama-server', '--host', '0.0.0.0']
               args: "%{alias('server_args')}"
               envFrom:
@@ -69,7 +73,13 @@ resources:
               ports:
                 - containerPort: 8080
               resources:
+                requests:
+                  cpu: '8'
+                  memory: 96Gi
+                  squat.ai/gpu: '1'
                 limits:
+                  cpu: '16'
+                  memory: 120Gi
                   squat.ai/gpu: '1'
               volumeMounts:
                 - name: cache
@@ -77,9 +87,9 @@ resources:
               startupProbe:
                 tcpSocket:
                   port: 8080
-                # Allow up to 60 minutes for initial HF download + startup
+                # Allow up to 2 hours for initial HF download + model load
                 periodSeconds: 10
-                failureThreshold: 360   # 360 * 10s = 3600s = 60m
+                failureThreshold: 720   # 720 * 10s = 7200s = 120m
                 timeoutSeconds: 1
               readinessProbe:
                 tcpSocket:

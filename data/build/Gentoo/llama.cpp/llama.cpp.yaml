@@ -2,5 +2,8 @@
 nest::classes:
   - 'nest::tool::llamacpp'
 
-nest::tool::llamacpp::revision: 'b7595'
+# Qwen3.5 MoE GGUFs use architecture qwen35moe, which is unsupported by
+# the previous b7595 tool image. bartowski's Qwen3.5 quants were produced
+# with llama.cpp b9222, so pin the tool image to that release for serving.
+nest::tool::llamacpp::revision: 'b9222'
 nest::use: ['vulkan']
