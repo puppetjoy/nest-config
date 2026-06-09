@@ -1,0 +1,6 @@
+---
+# Concrete owl/Strix Halo instance of the ROCm speech API.
+# Keep this service private to the ai namespace; Hermes command providers can call
+# the ClusterIP service through `/v1/audio/speech` and `/v1/audio/transcriptions`.
+cache_size: 80Gi
+storage_class: owl-crypt

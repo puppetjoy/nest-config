@@ -1,0 +1,237 @@
+---
+# ROCm-backed local speech API for owl / Strix Halo.
+# The image is AMD's ROCm 7.2.4 PyTorch base; the startup installs the small
+# Python speech server dependencies until this bootstrap is baked into a Nest
+# tool image. Persistent cache keeps model, MIOpen, and pip artifacts across
+# restarts.
+cache_size: 80Gi
+storage_class: owl-crypt
+image: docker.io/rocm/pytorch:rocm7.2.4_ubuntu24.04_py3.12_pytorch_release_2.9.1
+
+resources:
+  backup: {}
+  restore: {}
+  registry_auths: {}
+
+  cache:
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: "%{nest::kubernetes::service}-cache"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: "%{lookup('cache_size')}"
+      storageClassName: "%{lookup('storage_class')}"
+
+  app:
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: "%{nest::kubernetes::service}-app"
+      namespace: "%{nest::kubernetes::namespace}"
+    data:
+      server.py: |
+        import io
+        import os
+        import threading
+
+        import numpy as np
+        import soundfile as sf
+        import torch
+        import whisper
+        from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+        from fastapi.responses import Response
+        from kokoro import KPipeline
+        from pydantic import BaseModel
+
+        try:
+            from scipy.signal import resample_poly
+        except Exception:  # pragma: no cover - startup health reports this
+            resample_poly = None
+
+        app = FastAPI(title='Nest voice-speech', version='0.1.0')
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        lock = threading.Lock()
+        tts_pipeline = None
+        stt_models = {}
+
+        class SpeechRequest(BaseModel):
+            input: str
+            model: str = 'kokoro'
+            voice: str = 'af_heart'
+            response_format: str = 'wav'
+            speed: float = 1.0
+
+        def get_tts_pipeline():
+            global tts_pipeline
+            if tts_pipeline is None:
+                tts_pipeline = KPipeline(lang_code='a')
+            return tts_pipeline
+
+        def get_stt_model(name: str):
+            if name not in stt_models:
+                stt_models[name] = whisper.load_model(name, device=device)
+            return stt_models[name]
+
+        @app.get('/health')
+        def health():
+            return {
+                'ok': True,
+                'torch': torch.__version__,
+                'cuda_available': torch.cuda.is_available(),
+                'device': torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
+                'miopen_find_mode': os.environ.get('MIOPEN_FIND_MODE'),
+            }
+
+        @app.post('/v1/audio/speech')
+        def speech(request: SpeechRequest):
+            if request.response_format != 'wav':
+                raise HTTPException(status_code=400, detail='Only wav response_format is currently supported')
+            with lock:
+                pipeline = get_tts_pipeline()
+                chunks = []
+                for item in pipeline(request.input, voice=request.voice, speed=request.speed):
+                    audio = getattr(item, 'audio', item[-1] if isinstance(item, tuple) else item)
+                    chunks.append(audio)
+            if not chunks:
+                raise HTTPException(status_code=500, detail='TTS produced no audio')
+            arrays = [chunk.detach().cpu().numpy() if hasattr(chunk, 'detach') else np.asarray(chunk) for chunk in chunks]
+            audio = np.concatenate(arrays)
+            out = io.BytesIO()
+            sf.write(out, audio, 24000, format='WAV')
+            return Response(content=out.getvalue(), media_type='audio/wav')
+
+        @app.post('/v1/audio/transcriptions')
+        async def transcriptions(
+            file: UploadFile = File(...),
+            model: str = Form('tiny'),
+            language: str = Form('en'),
+        ):
+            data = await file.read()
+            try:
+                audio, sample_rate = sf.read(io.BytesIO(data), dtype='float32')
+            except Exception as exc:
+                raise HTTPException(status_code=400, detail=f'Could not read audio with libsndfile: {exc}') from exc
+            if audio.ndim > 1:
+                audio = audio.mean(axis=1)
+            if sample_rate != 16000:
+                if resample_poly is None:
+                    raise HTTPException(status_code=500, detail='scipy is unavailable for audio resampling')
+                from math import gcd
+                divisor = gcd(sample_rate, 16000)
+                audio = resample_poly(audio, 16000 // divisor, sample_rate // divisor).astype(np.float32)
+            with lock:
+                stt = get_stt_model(model)
+                result = stt.transcribe(audio, language=language, fp16=torch.cuda.is_available())
+            return {'text': result.get('text', '').strip()}
+
+        if __name__ == '__main__':
+            import uvicorn
+            uvicorn.run(app, host='0.0.0.0', port=8080)
+
+  deployment:
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: "%{nest::kubernetes::service}"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      replicas: 1
+      strategy:
+        type: Recreate
+      selector:
+        matchLabels:
+          app: "%{nest::kubernetes::service}"
+      template:
+        metadata:
+          labels:
+            app: "%{nest::kubernetes::service}"
+        spec:
+          nodeSelector:
+            kubernetes.io/hostname: owl
+          tolerations: "%{alias('tolerations')}"
+          containers:
+            - name: voice-speech
+              image: "%{lookup('image')}"
+              imagePullPolicy: IfNotPresent
+              command: ['/bin/bash', '-lc']
+              args:
+                - |
+                  set -euo pipefail
+                  mkdir -p /cache/pip /cache/whisper /cache/huggingface /cache/miopen
+                  export PIP_CACHE_DIR=/cache/pip
+                  export XDG_CACHE_HOME=/cache
+                  export HF_HOME=/cache/huggingface
+                  export WHISPER_CACHE_DIR=/cache/whisper
+                  export MIOPEN_USER_DB_PATH=/cache/miopen
+                  python3 -m pip install --root-user-action=ignore 'kokoro>=0.9.4' soundfile fastapi uvicorn python-multipart openai-whisper scipy
+                  exec python3 /app/server.py
+              env:
+                - name: MIOPEN_FIND_MODE
+                  value: '2'
+                - name: TORCH_ROCM_AOTRITON_ENABLE_EXPERIMENTAL
+                  value: '1'
+              ports:
+                - containerPort: 8080
+              resources:
+                requests:
+                  cpu: '4'
+                  memory: 8Gi
+                  squat.ai/gpu: '1'
+                limits:
+                  cpu: '12'
+                  memory: 32Gi
+                  squat.ai/gpu: '1'
+              volumeMounts:
+                - name: app
+                  mountPath: /app
+                  readOnly: true
+                - name: cache
+                  mountPath: /cache
+              startupProbe:
+                httpGet:
+                  path: /health
+                  port: 8080
+                periodSeconds: 10
+                failureThreshold: 180
+                timeoutSeconds: 2
+              readinessProbe:
+                httpGet:
+                  path: /health
+                  port: 8080
+                periodSeconds: 10
+                failureThreshold: 3
+                timeoutSeconds: 2
+              livenessProbe:
+                httpGet:
+                  path: /health
+                  port: 8080
+                periodSeconds: 30
+                failureThreshold: 3
+                timeoutSeconds: 2
+          volumes:
+            - name: app
+              configMap:
+                name: "%{nest::kubernetes::service}-app"
+            - name: cache
+              persistentVolumeClaim:
+                claimName: "%{nest::kubernetes::service}-cache"
+
+  service:
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: "%{nest::kubernetes::service}"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      type: ClusterIP
+      selector:
+        app: "%{nest::kubernetes::service}"
+      ports:
+        - name: http
+          port: 80
+          targetPort: 8080

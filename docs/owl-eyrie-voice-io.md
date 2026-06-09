@@ -82,7 +82,20 @@ Only add or deploy the Eyrie speech KubeCM service after the host gate passes:
 6. `llama-qwen` stays `Ready` with no new restarts before and after the voice
    probes.
 
-The service should live in namespace `ai`, schedule on owl, request
-`squat.ai/gpu`, use `owl-crypt` for persistent model/cache storage when needed,
-and preserve the same private-cluster HTTP integration style used by the existing
-`llama-qwen` service.
+The service lives in namespace `ai`, schedules on owl, requests `squat.ai/gpu`,
+uses an `owl-crypt` PVC for Hugging Face/Whisper/MIOpen/cache state, and exposes
+the same private-cluster HTTP integration style used by the existing `llama-qwen`
+service.
+
+Current source adds `voice-speech` as a chartless KubeCM app with:
+
+- `GET /health` reporting PyTorch/ROCm device visibility.
+- `POST /v1/audio/speech` generating Kokoro WAV audio.
+- `POST /v1/audio/transcriptions` transcribing WAV/FLAC input with OpenAI
+  Whisper on the ROCm PyTorch device.
+
+The first deployment uses AMD's ROCm 7.2.4 PyTorch base image and installs the
+small Python speech service dependencies at startup while caching model and MIOpen
+state on the PVC. That keeps the KubeCM service durable and reproducible while a
+follow-up can bake the same dependency set into a Nest-published tool image to
+avoid startup-time pip installation.

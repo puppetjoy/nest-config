@@ -37,6 +37,11 @@ parameters:
     type: Boolean
     default: true
 
+  voice_speech:
+    description: 'Deploy local ROCm speech API'
+    type: Boolean
+    default: false
+
   init:
     description: 'Deploy initial revision'
     type: Boolean
@@ -74,3 +79,9 @@ steps:
     plan: nest::eyrie::ai::deploy_oauth_browser
     parameters:
       deploy: $deploy and $oauth_browser
+
+  - description: 'Deploy local ROCm speech API'
+    plan: nest::eyrie::ai::deploy_voice_speech
+    parameters:
+      deploy: $deploy and $voice_speech
+      init: $init
