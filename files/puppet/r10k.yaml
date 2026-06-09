@@ -5,3 +5,5 @@ sources:
   nest:
     remote: 'git@gitlab.joyfullee.me:nest/config.git'
     basedir: '/etc/puppetlabs/code/environments'
+    ignore_branch_prefixes:
+      - 'talon/'
