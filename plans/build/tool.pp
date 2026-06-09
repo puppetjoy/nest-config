@@ -61,7 +61,7 @@ plan nest::build::tool (
 
   if $init {
     if $refresh {
-      $from_image = "nest/tool/${tool}:${cpu}"
+      $from_image = "${registry}/nest/tools/${tool}:${cpu}"
     } else {
       $from_image = "nest/stage1/server:${cpu}"
     }
