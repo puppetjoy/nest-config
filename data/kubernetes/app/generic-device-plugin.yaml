@@ -13,6 +13,7 @@ values:
             - count: 3
               paths:
                 - path: /dev/dri/renderD128
+                - path: /dev/kfd
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
