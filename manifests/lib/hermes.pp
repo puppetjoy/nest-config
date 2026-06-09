@@ -57,6 +57,7 @@ define nest::lib::hermes (
   String[1]            $tts_openai_model         = 'gpt-4o-mini-tts',
   String[1]            $tts_openai_voice         = 'alloy',
   Array[String[1]]     $extra_packages           = [],
+  Boolean              $release_digest_enabled   = false,
 ) {
   $venv_dir                         = "${install_dir}/venv"
   $venv_python                      = "${venv_dir}/bin/python"
@@ -166,6 +167,25 @@ define nest::lib::hermes (
     group   => $user,
     content => $soul_seed,
     require => File[$profile_dir],
+  }
+
+  if $release_digest_enabled {
+    file { "${profile_dir}/scripts":
+      ensure  => directory,
+      mode    => '0700',
+      owner   => $user,
+      group   => $user,
+      require => File[$profile_dir],
+    }
+
+    file { "${profile_dir}/scripts/release_digest.py":
+      ensure  => file,
+      mode    => '0755',
+      owner   => $user,
+      group   => $user,
+      source  => 'puppet:///modules/nest/app/hermes/release_digest.py',
+      require => File["${profile_dir}/scripts"],
+    }
   }
 
   if $google_workspace_enabled {

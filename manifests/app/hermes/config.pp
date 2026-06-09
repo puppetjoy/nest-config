@@ -214,6 +214,7 @@ class nest::app::hermes::config {
     $instance_tts_openai_model  = pick($config['tts_openai_model'], 'gpt-4o-mini-tts')
     $instance_tts_openai_voice  = pick($config['tts_openai_voice'], 'alloy')
     $instance_extra_packages    = pick($config['extra_packages'], [])
+    $instance_release_digest    = pick($config['release_digest_enabled'], false)
 
     nest::lib::hermes { $instance_name:
       profile                    => $profile,
@@ -273,6 +274,7 @@ class nest::app::hermes::config {
       tts_openai_model           => $instance_tts_openai_model,
       tts_openai_voice           => $instance_tts_openai_voice,
       extra_packages             => $instance_extra_packages,
+      release_digest_enabled     => $instance_release_digest,
     }
   }
 }

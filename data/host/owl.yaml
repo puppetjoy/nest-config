@@ -134,6 +134,7 @@ nest::app::hermes::instances:
     dashboard_public_url: 'https://talon.eyrie'
     dashboard_theme: 'midnight'
     approval_mode: 'off'
+    release_digest_enabled: true
     voice_auto_tts: true
     stt_enabled: true
     stt_provider: 'openai'
