@@ -17,6 +17,11 @@ parameters:
     type: String
     default: $service
 
+  node_role:
+    description: 'Kubernetes node role for the restore pod'
+    type: String[1]
+    default: 'workstation'
+
 steps:
   - description: "Initialize ${service} OpenVox resources"
     plan: nest::eyrie::openvox::restore
@@ -24,4 +29,5 @@ steps:
       namespace: $namespace
       service: $service
       service_name: $service_name
+      node_role: $node_role
       restore: true

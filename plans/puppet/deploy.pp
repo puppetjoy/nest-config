@@ -34,7 +34,7 @@ plan nest::puppet::deploy ( # lint:ignore:deploy_plan_boundary -- code rollout p
     'test'       => ['test'],
     'prod'       => ['prod'],
     'kubernetes' => ['test', 'prod'],
-    'both'       => ['test'],
+    'both'       => ['test', 'prod'],
     'all'        => ['test', 'prod'],
     default      => [],
   }

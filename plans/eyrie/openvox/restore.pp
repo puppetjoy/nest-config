@@ -3,12 +3,14 @@
 # @param namespace Kubernetes namespace
 # @param service Puppet service
 # @param service_name Kubernetes workload service name
+# @param node_role Kubernetes node role for the restore pod
 # @param restore Safety gate
 plan nest::eyrie::openvox::restore (
-  String  $namespace    = 'test',
-  String  $service      = 'puppet',
-  String  $service_name = $service,
-  Boolean $restore      = false,
+  String    $namespace    = 'test',
+  String    $service      = 'puppet',
+  String    $service_name = $service,
+  String[1] $node_role    = 'workstation',
+  Boolean   $restore      = false,
 ) {
   if $restore {
     $backup_dir   = "/nest/backup/${service_name}"
@@ -32,7 +34,7 @@ plan nest::eyrie::openvox::restore (
       spec:
         restartPolicy: Never
         nodeSelector:
-          node-role.kubernetes.io/workstation: ''
+          node-role.kubernetes.io/${node_role}: ''
         tolerations:
           - operator: Exists
         containers:
