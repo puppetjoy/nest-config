@@ -62,5 +62,9 @@ plan nest::build::manifest (
         run_command("podman manifest push --all ${image_real}:${tag} ${r}/${image_real}:${tag}", 'localhost', "Push ${image_real}:${tag} manifest to ${r}")
       }
     }
+
+    if run_command("podman manifest exists ${image_real}:${tag}", 'localhost', "Check if ${image_real}:${tag} manifest remains", '_catch_errors' => true).ok {
+      run_command("podman manifest rm ${image_real}:${tag}", 'localhost', "Remove local ${image_real}:${tag} manifest")
+    }
   }
 }
