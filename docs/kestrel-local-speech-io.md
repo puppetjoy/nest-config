@@ -25,41 +25,39 @@ remove manually:
 non-RISC-V/Vulkan work. Do not rebuild the RISC-V `sifive-u74` speech images for
 this retirement.
 
-## Replacement design
+## Replacement direction
 
-The replacement is `voice-speech` in namespace `ai`, backed by the KubeCM app
-`data/kubernetes/app/speaches.yaml`, service data
-`data/kubernetes/service/voice-speech.yaml`, and deployment plan
-`plans/eyrie/ai/deploy_voice_speech.yaml`. It exposes OpenAI-style endpoints for
-Hermes command providers:
+There is intentionally no CPU bootstrap service. Joy's review direction was to
+skip Speaches and go straight to enabling ROCm on owl, so this branch removes the
+prototype Speaches KubeCM app/plan and first makes owl a real ROCm/HIP-capable
+host:
 
-```yaml
-stt:
-  enabled: true
-  provider: eyrie-voice
-  providers:
-    eyrie-voice:
-      type: command
-      command: "curl -fsS -F file=@{input_path} -F model=Systran/faster-distil-whisper-small.en http://voice-speech.ai/v1/audio/transcriptions | jq -r .text > {output_path}"
-      format: txt
-      timeout: 300
+- `data/platform/strix-halo.yaml` enables the AMD KFD/HSA kernel options that
+  create `/dev/kfd`.
+- `data/host/owl.yaml` includes `nest::service::rocm` and accepts the Gentoo
+  `~amd64` ROCm 7.2 / LLVM 22 package stack needed by `dev-util/rocminfo`,
+  `dev-util/hip`, and `dev-util/hipcc`.
+- `manifests/service/rocm.pp` installs those ROCm/HIP userland packages and
+  selects `amdgpu radeonsi` video cards for the opted-in host.
 
-tts:
-  provider: eyrie-voice
-  providers:
-    eyrie-voice:
-      type: command
-      command: "jq -Rs --arg model speaches-ai/Kokoro-82M-v1.0-ONNX --arg voice af_heart --arg format wav '{input: ., model: $model, voice: $voice, response_format: $format}' {input_path} | curl -fsS -H 'Content-Type: application/json' -d @- http://voice-speech.ai/v1/audio/speech > {output_path}"
-      output_format: wav
-      voice: af_heart
-      voice_compatible: true
-      timeout: 300
-```
+The next Eyrie speech service should be added only after the host gate passes:
+`/dev/kfd` exists, `rocminfo` enumerates the Radeon 8060S, and a Kubernetes test
+pod can see both `/dev/kfd` and `/dev/dri/renderD128` while requesting the
+existing `squat.ai/gpu` resource.
 
-The first source-backed deployment uses Speaches' CPU image on owl with an
-`owl-crypt` model cache PVC. This is intentionally a bootstrap/prototype: live
-owl evidence on 2026-06-09 shows `amdgpu` and `/dev/dri/renderD128`, but no
-`/dev/kfd` and no ROCm/HIP userland tools, so Kubernetes cannot yet run the
-preferred ROCm/HIP path. Once Puppet enables `/dev/kfd` and ROCm/HIP packages,
-retarget the app to an AMD/ROCm image and add `squat.ai/gpu` requests/limits
-using the same resource pattern as `llama-qwen`.
+## Candidate runtime shape after ROCm is live
+
+- TTS: start with a ROCm Kokoro-FastAPI image or build one under the normal Nest
+  tool-image workflow. Kokoro-FastAPI exposes the OpenAI-compatible
+  `POST /v1/audio/speech` route needed by Hermes command providers.
+- STT: start with a PyTorch ROCm Whisper service using OpenAI Whisper or
+  WhisperX-style code, then wrap it with `POST /v1/audio/transcriptions` if the
+  selected runtime does not already expose that route.
+- Integration: keep Hermes on command providers that call private Eyrie HTTP
+  endpoints; do not patch Hermes source for file-in/file-out speech calls.
+
+Do not deploy a KubeCM speech service that only proves CPU health. The next
+source-backed service should request `squat.ai/gpu`, schedule on owl, use an
+`owl-crypt` cache/model PVC if persistent storage is needed, and prove real TTS
+audio plus real STT transcription through live OpenAI-style routes while
+`llama-qwen` remains Ready.

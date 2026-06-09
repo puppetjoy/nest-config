@@ -4,6 +4,7 @@ nest::classes:
   - 'nest::app::hermes'
   - 'nest::service::gitlab_runner'
   - 'nest::service::kubernetes'
+  - 'nest::service::rocm'
   - 'nest::tool::bolt'
   - 'nest::tool::pdk'
 
@@ -22,6 +23,34 @@ nest::kernel_cmdline:
   - 'ttm.page_pool_size=29360128'
 
 nest::service::power::profile: 'performance'
+
+nest::package_keywords:
+  # ROCm/HIP 7.2 stack for owl Strix Halo compute.
+  dev-build/rocm-cmake: {}
+  dev-libs/rocm-comgr: {}
+  dev-libs/rocm-core: {}
+  dev-libs/rocm-device-libs: {}
+  dev-libs/rocr-runtime: {}
+  dev-libs/roct-thunk-interface: {}
+  dev-util/hip: {}
+  dev-util/hipcc: {}
+  dev-util/rocminfo: {}
+  llvm-core/clang: {}
+  llvm-core/clang-common: {}
+  llvm-core/clang-linker-config: {}
+  llvm-core/clang-toolchain-symlinks: {}
+  llvm-core/lld: {}
+  llvm-core/lld-toolchain-symlinks: {}
+  llvm-core/llvm: {}
+  llvm-core/llvm-toolchain-symlinks: {}
+  llvm-core/llvmgold: {}
+  llvm-runtimes/clang-rtlib-config: {}
+  llvm-runtimes/clang-runtime: {}
+  llvm-runtimes/clang-stdlib-config: {}
+  llvm-runtimes/clang-unwindlib-config: {}
+  llvm-runtimes/compiler-rt: {}
+  llvm-runtimes/compiler-rt-sanitizers: {}
+  llvm-runtimes/openmp: {}
 
 nest::service::gitlab_runner::host: 'gitlab.joyfullee.me'
 nest::service::gitlab_runner::instances:

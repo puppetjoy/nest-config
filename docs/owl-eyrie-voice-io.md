@@ -6,7 +6,8 @@ Captured on owl during the redesign:
 
 - Host: `owl`, Linux 6.18.21, x86_64 AMD Ryzen AI MAX+ 395 with Radeon 8060S.
 - GPU visibility: `amdgpu` is loaded and `/dev/dri/renderD128` exists.
-- HIP blocker: `/dev/kfd` is absent and `rocminfo`/`hipcc`/`rocm-smi` are not
+- HIP blocker before this source change: `/dev/kfd` is absent because the live
+  kernel has `# CONFIG_HSA_AMD is not set`; `rocminfo`/`hipcc`/`rocm-smi` are not
   installed in the host tool environment.
 - Strix Halo memory is exposed as shared GTT: about 120 GiB total; with
   `llama-qwen` loaded, roughly 90 GiB was in use and the Qwen pod remained
@@ -14,73 +15,66 @@ Captured on owl during the redesign:
 - Eyrie advertises `squat.ai/gpu: 3` on owl; `llama-qwen` requests one GPU and
   is the coexistence baseline.
 
-## Runtime choice
+## Immediate ROCm/HIP enablement
 
-Use Speaches as the first Eyrie speech API because it is OpenAI-compatible for
-both required routes:
+Joy's review direction is to skip the Speaches CPU bootstrap and go straight to
+enabling ROCm on owl. The source-of-truth changes are therefore host/platform
+enablement first, not a CPU speech workload:
 
-- STT: `/v1/audio/transcriptions`, powered by `faster-whisper`. The
-  `faster-whisper` package describes a CTranslate2 Whisper implementation that
-  is up to 4x faster than OpenAI Whisper for the same accuracy and supports
-  lower-memory int8 modes.
-- TTS: `/v1/audio/speech`, using Kokoro/Piper. Speaches documents
-  `speaches-ai/Kokoro-82M-v1.0-ONNX` and voice `af_heart` for OpenAI-style
-  speech synthesis. Kokoro-82M is small enough to coexist with Qwen and is
-  Apache-licensed/open-weight.
+- `data/platform/strix-halo.yaml` enables:
+  - `CONFIG_HSA_AMD=y` for the AMD KFD/HSA kernel driver and `/dev/kfd`.
+  - `CONFIG_HSA_AMD_SVM=y`, `CONFIG_MEMORY_HOTPLUG=y`,
+    `CONFIG_MEMORY_HOTREMOVE=y`, `CONFIG_ZONE_DEVICE=y`, and
+    `CONFIG_DEVICE_PRIVATE=y` so HIP unified/shared memory support can be
+    selected by the kernel.
+- `data/host/owl.yaml` adds `nest::service::rocm` and host-scoped `~amd64`
+  keyword acceptance for the ROCm 7.2 / LLVM 22 package graph observed by
+  `emerge -pv --autounmask-only dev-util/rocminfo dev-util/hip dev-util/hipcc`.
+- `manifests/service/rocm.pp` installs `dev-util/rocminfo`, `dev-util/hip`, and
+  `dev-util/hipcc`, and makes the opted-in host select `amdgpu radeonsi` Portage
+  video cards.
 
-Alternative TTS candidate: `remsky/Kokoro-FastAPI` is a dedicated Kokoro API
-with CPU, NVIDIA, and experimental x86_64 ROCm images and OpenAI-compatible
-`/v1/audio/speech`. It is the likely fallback if Speaches' combined service is
-not reliable enough, but it would require a second STT service or a thin routing
-wrapper.
+Expected apply behavior:
 
-Rejected target: `TTS.cpp` on Kestrel. Live help output and upstream docs showed
-no deployable Linux Vulkan/ROCm/HIP acceleration path; keeping it would continue
-the failed CPU-bound architecture.
+1. Puppet deploys the source and applies on owl.
+2. ROCm/HIP packages may be built/installed.
+3. Kernel config changes require a managed kernel build/install and an explicit
+   scheduled reboot before `/dev/kfd` can appear.
+4. After the reboot, `rocminfo` should enumerate the Radeon 8060S; if it does
+   not, inspect `dmesg` for `kfd`/`amdgpu` rejection details before adding a
+   KubeCM speech workload.
 
-## Source-backed deployment
+## Runtime choice after ROCm works
 
-KubeCM source:
+The first accepted speech service should be ROCm-backed and OpenAI-compatible,
+not a CPU-only proof of health.
 
-- App: `data/kubernetes/app/speaches.yaml`
-- Service data: `data/kubernetes/service/voice-speech.yaml`
-- Deploy plan: `plans/eyrie/ai/deploy_voice_speech.yaml`
-- Namespace: `ai`
-- Node/storage: pinned to owl with `owl-crypt` PVC cache
+- TTS: Kokoro-FastAPI is the preferred first TTS runtime because it is a
+  Kokoro-82M FastAPI service with an OpenAI-compatible `/v1/audio/speech` route,
+  and current source survey found ROCm-oriented Strix Halo work around that
+  runtime. If the public image is not suitable for Eyrie, build a Nest tool image
+  with ROCm PyTorch and Kokoro-FastAPI rather than falling back to TTS.cpp.
+- STT: use a PyTorch ROCm Whisper-family service first. OpenAI Whisper has a
+  native PyTorch execution path that can use ROCm once `torch` sees HIP, and a
+  thin FastAPI wrapper can expose `/v1/audio/transcriptions` if the selected
+  runtime does not. Faster-whisper/WhisperX can be revisited after ROCm is live,
+  but do not choose a CTranslate2 path unless the ROCm backend is proven on owl.
 
-The bootstrap image is the linux/amd64 digest of
-`ghcr.io/speaches-ai/speaches:latest-cpu`, captured as
-`sha256:1d4f852ff5b148d675bcd751f414835c0bcef2541c1df8ffdeb43714968aafe6`.
-It intentionally does not request `squat.ai/gpu` until `/dev/kfd` and HIP are
-available to containers. This avoids reserving a GPU for a CPU-only image while
-keeping the workload on owl and preserving the exact point where the ROCm path
-will change.
+## KubeCM service gate
 
-## ROCm/HIP enablement plan
+Only add or deploy the Eyrie speech KubeCM service after the host gate passes:
 
-Before switching to a GPU image, express host enablement through Nest
-Puppet/Bolt source and verify after an explicit reboot window if kernel config
-or device-node changes require one:
+1. `/dev/kfd` and `/dev/dri/renderD128` exist on owl.
+2. `rocminfo` or an equivalent HIP probe enumerates the Radeon 8060S.
+3. A test pod scheduled to owl with `squat.ai/gpu: 1` can see the KFD/DRI devices
+   and run a HIP/PyTorch probe.
+4. The selected runtime returns a real audio file from `POST /v1/audio/speech`.
+5. The selected STT route returns a real transcript from
+   `POST /v1/audio/transcriptions`.
+6. `llama-qwen` stays `Ready` with no new restarts before and after the voice
+   probes.
 
-1. Host has `/dev/kfd` and `/dev/dri/renderD128`.
-2. Host ROCm/HIP userland tools (`rocminfo` or equivalent) can enumerate the
-   Radeon 8060S.
-3. Kubernetes pods can see the same devices with the generic device plugin.
-4. A Speaches/Kokoro ROCm image or a dedicated Kokoro-FastAPI ROCm image
-   generates real audio.
-5. Add `squat.ai/gpu: '1'` requests/limits to the speech pod and size it so
-   `llama-qwen` keeps one GPU allocation and its 120 Gi memory ceiling.
-
-## Verification gates
-
-The service is not accepted merely because the pod is healthy. Prove both real
-paths:
-
-1. Generate a short WAV through `POST /v1/audio/speech` with
-   `speaches-ai/Kokoro-82M-v1.0-ONNX` and `af_heart`; verify the result is an
-   audio file.
-2. Feed that generated WAV back to `POST /v1/audio/transcriptions` with
-   `Systran/faster-distil-whisper-small.en`; verify the transcript contains the
-   prompt text.
-3. Check `llama-qwen` remains `Ready`, with no new restarts, before and after
-   speech generation.
+The service should live in namespace `ai`, schedule on owl, request
+`squat.ai/gpu`, use `owl-crypt` for persistent model/cache storage when needed,
+and preserve the same private-cluster HTTP integration style used by the existing
+`llama-qwen` service.
