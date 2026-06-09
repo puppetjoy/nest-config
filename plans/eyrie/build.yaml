@@ -48,6 +48,9 @@ steps:
   - description: 'Deploy network'
     plan: nest::kubernetes::deploy_network
 
+  - description: 'Deploy Metrics Server'
+    plan: nest::kubernetes::deploy_metrics_server
+
   - description: 'Deploy storage'
     plan: nest::kubernetes::deploy_storage
 

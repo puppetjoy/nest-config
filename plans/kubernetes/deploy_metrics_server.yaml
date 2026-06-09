@@ -1,0 +1,27 @@
+---
+description: 'Deploy Kubernetes Metrics Server'
+
+parameters:
+  deploy:
+    description: 'Run or skip the deployment'
+    type: Boolean
+    default: true
+
+  render_to:
+    description: 'Just render the template'
+    type: String
+    default: ''
+
+steps:
+  - description: 'Deploy Metrics Server'
+    plan: 'nest::kubernetes::deploy'
+    parameters:
+      service: 'metrics-server'
+      app: 'metrics-server'
+      chart: 'metrics-server/metrics-server'
+      namespace: 'kube-system'
+      repo_url: 'https://kubernetes-sigs.github.io/metrics-server/'
+      version: '3.13.0'
+      wait: true
+      deploy: $deploy
+      render_to: $render_to
