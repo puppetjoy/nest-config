@@ -1,0 +1,34 @@
+---
+# Pin the speech API to owl so it uses owl-crypt local storage and stays close
+# to the Strix Halo accelerator that will host the ROCm/HIP path after /dev/kfd
+# is enabled. It intentionally does not request squat.ai/gpu while running the
+# CPU Speaches bootstrap image.
+node_name: owl
+
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+          - key: kubernetes.io/hostname
+            operator: In
+            values:
+              - "%{lookup('node_name')}"
+
+tolerations:
+  - key: node-role.kubernetes.io/compute
+    operator: Exists
+    effect: NoSchedule
+
+pod_resources:
+  requests:
+    cpu: '4'
+    memory: 8Gi
+  limits:
+    cpu: '12'
+    memory: 24Gi
+
+# Requested model ids for Hermes command providers and verification probes.
+stt_model: Systran/faster-distil-whisper-small.en
+tts_model: speaches-ai/Kokoro-82M-v1.0-ONNX
+tts_voice: af_heart

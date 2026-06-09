@@ -1,0 +1,112 @@
+---
+# OpenAI-compatible local speech API for both STT and TTS. Speaches uses
+# faster-whisper for /v1/audio/transcriptions and Kokoro/Piper for
+# /v1/audio/speech. This CPU image is the deployable bootstrap while owl
+# lacks /dev/kfd; switch to a ROCm image and add squat.ai/gpu only after
+# Puppet/host enablement proves HIP devices inside Kubernetes.
+#
+# Upstream image evidence captured 2026-06-09:
+# ghcr.io/speaches-ai/speaches:latest-cpu linux/amd64 digest
+# sha256:1d4f852ff5b148d675bcd751f414835c0bcef2541c1df8ffdeb43714968aafe6
+include: []
+
+plan_base: 'nest::eyrie::ai::voice'
+
+image: ghcr.io/speaches-ai/speaches@sha256:1d4f852ff5b148d675bcd751f414835c0bcef2541c1df8ffdeb43714968aafe6
+cache_size: 32Gi
+storage_class: owl-crypt
+
+resources:
+  backup: {}
+  restore: {}
+  registry_auths: {}
+
+  storage:
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: "%{nest::kubernetes::service}-cache"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: "%{lookup('cache_size')}"
+      storageClassName: "%{lookup('storage_class')}"
+
+  deployment:
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: "%{nest::kubernetes::service}"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      replicas: 1
+      strategy:
+        type: Recreate
+      selector:
+        matchLabels:
+          app: "%{nest::kubernetes::service}"
+      template:
+        metadata:
+          labels:
+            app: "%{nest::kubernetes::service}"
+        spec:
+          affinity: "%{alias('affinity')}"
+          tolerations: "%{alias('tolerations')}"
+          containers:
+            - name: speaches
+              image: "%{lookup('image')}"
+              imagePullPolicy: IfNotPresent
+              ports:
+                - containerPort: 8000
+              env:
+                - name: HF_HOME
+                  value: /home/ubuntu/.cache/huggingface
+                - name: XDG_CACHE_HOME
+                  value: /home/ubuntu/.cache
+              resources: "%{alias('pod_resources')}"
+              volumeMounts:
+                - name: cache
+                  mountPath: /home/ubuntu/.cache
+              startupProbe:
+                httpGet:
+                  path: /health
+                  port: 8000
+                periodSeconds: 10
+                failureThreshold: 60
+                timeoutSeconds: 2
+              readinessProbe:
+                httpGet:
+                  path: /health
+                  port: 8000
+                periodSeconds: 5
+                failureThreshold: 3
+                timeoutSeconds: 2
+              livenessProbe:
+                httpGet:
+                  path: /health
+                  port: 8000
+                periodSeconds: 15
+                failureThreshold: 4
+                timeoutSeconds: 2
+          volumes:
+            - name: cache
+              persistentVolumeClaim:
+                claimName: "%{nest::kubernetes::service}-cache"
+
+  service:
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: "%{nest::kubernetes::service}"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      type: ClusterIP
+      selector:
+        app: "%{nest::kubernetes::service}"
+      ports:
+        - name: http
+          port: 80
+          targetPort: 8000

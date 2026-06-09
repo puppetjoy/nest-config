@@ -1,87 +1,65 @@
-# Kestrel local speech I/O
+# Retired Kestrel local speech I/O
 
-This documents the source-backed speech endpoints prepared for Hermes Agent and
-agent-request-broker integration. The services are host-local Podman containers
-on `kestrel`; no Kubernetes resources, `.eyrie` service names, or new DNS aliases
-are used.
+Kestrel is no longer the Nest speech I/O target. The previous Podman speech
+prototype used `whisper.cpp` on port 2022 and `TTS.cpp`/Kokoro on port 2023,
+but that design is retired for two reasons:
 
-## Runtime selection
+- `TTS.cpp` on Linux/RISC-V exposed CPU/thread and Metal-oriented controls, not
+  a deployable Vulkan/ROCm/HIP path for Kestrel's Radeon RX 7600. CPU synthesis
+  was too slow for Joy's Hermes voice loop.
+- Joy wants speech I/O modeled like the Eyrie `llama-qwen` service: Kubernetes
+  source under `data/kubernetes`, deployment plans under `plans/eyrie/ai`, and
+  owl/Strix Halo as the local accelerator target.
 
-- STT: `whisper.cpp` built from source with GGML Vulkan and FFmpeg conversion
-  support. The image includes `ggml-large-v3-turbo-q5_0.bin` from
-  `ggerganov/whisper.cpp`.
-- TTS: `TTS.cpp` built from source, using the Kokoro GGUF CPU path because
-  upstream documents Kokoro as CPU/quantization-capable but not Vulkan-capable.
-  The image includes `Kokoro_espeak_Q5.gguf` from `mmwillet2/Kokoro_GGUF`.
-- Existing kestrel `llama-util` is left source-managed but stopped so the RX 7600
-  render device can be used by the STT container.
+Source cleanup in this repo therefore removes the Kestrel
+`nest::service::speech_io` Hiera instances and drops the `TTS.cpp` tool-image
+source. After the Puppet source is deployed and Kestrel has converged, the old
+Puppet-managed containers become approved orphaned artifacts to stop/disable and
+remove manually:
 
-## Endpoints
+- `container-whisper-whisper.service` / `whisper-whisper`
+- `container-tts-kokoro.service` / `tts-kokoro`
+- ports 2022 and 2023
 
-- STT health: `http://kestrel:2022/health`
-- STT OpenAI-style transcription endpoint:
-  `http://kestrel:2022/v1/audio/transcriptions`
-- TTS health: `http://kestrel:2023/health`
-- TTS OpenAI-style speech endpoint:
-  `http://kestrel:2023/v1/audio/speech`
-- TTS voices endpoint: `http://kestrel:2023/v1/audio/voices`
+`whisper.cpp` remains in source only as a useful C/C++ Whisper runtime for future
+non-RISC-V/Vulkan work. Do not rebuild the RISC-V `sifive-u74` speech images for
+this retirement.
 
-## Future Hermes command-provider shapes
+## Replacement design
 
-Do not wire these into Hermes profiles until the source branch has been reviewed,
-the tool images have been built/published, and kestrel has converged.
-
-STT command provider shape:
+The replacement is `voice-speech` in namespace `ai`, backed by the KubeCM app
+`data/kubernetes/app/speaches.yaml`, service data
+`data/kubernetes/service/voice-speech.yaml`, and deployment plan
+`plans/eyrie/ai/deploy_voice_speech.yaml`. It exposes OpenAI-style endpoints for
+Hermes command providers:
 
 ```yaml
 stt:
   enabled: true
-  provider: kestrel-whisper
+  provider: eyrie-voice
   providers:
-    kestrel-whisper:
+    eyrie-voice:
       type: command
-      command: "curl -fsS -F file=@{input_path} http://kestrel:2022/v1/audio/transcriptions | jq -r .text > {output_path}"
+      command: "curl -fsS -F file=@{input_path} -F model=Systran/faster-distil-whisper-small.en http://voice-speech.ai/v1/audio/transcriptions | jq -r .text > {output_path}"
       format: txt
-      language: en
       timeout: 300
-```
 
-TTS command provider shape:
-
-```yaml
 tts:
-  provider: kestrel-kokoro
+  provider: eyrie-voice
   providers:
-    kestrel-kokoro:
+    eyrie-voice:
       type: command
-      command: "jq -Rs --arg format wav '{input: ., response_format: $format}' {input_path} | curl -fsS -H 'Content-Type: application/json' -d @- http://kestrel:2023/v1/audio/speech > {output_path}"
+      command: "jq -Rs --arg model speaches-ai/Kokoro-82M-v1.0-ONNX --arg voice af_heart --arg format wav '{input: ., model: $model, voice: $voice, response_format: $format}' {input_path} | curl -fsS -H 'Content-Type: application/json' -d @- http://voice-speech.ai/v1/audio/speech > {output_path}"
       output_format: wav
       voice: af_heart
       voice_compatible: true
-      timeout: 120
+      timeout: 300
 ```
 
-## Source surfaces
-
-- Build classes: `nest::tool::whispercpp`, `nest::tool::ttscpp`
-- Build Hiera: `data/build/Gentoo/whisper.cpp/whisper.cpp.yaml`,
-  `data/build/Gentoo/tts.cpp/tts.cpp.yaml`
-- Host service classes: `nest::service::speech_io`, `nest::lib::whisper_server`,
-  `nest::lib::tts_server`
-- Kestrel Hiera: `data/host/kestrel.yaml`
-
-## Review/rollout gates
-
-1. Create/push the companion GitLab CI wrapper projects for `nest/tools/whisper.cpp`
-   and `nest/tools/tts.cpp` using the same `gitlab-ci.yml` shape as
-   `nest/tools/llama.cpp`.
-2. Run the sifive-u74 tool-image pipelines and publish
-   `registry.gitlab.joyfullee.me/nest/tools/whisper.cpp:sifive-u74` and
-   `registry.gitlab.joyfullee.me/nest/tools/tts.cpp:sifive-u74` plus their
-   manifest tags.
-3. Deploy Puppet source, converge `kestrel` twice, and verify:
-   - `container-whisper-whisper` active on port 2022
-   - `container-tts-kokoro` active on port 2023
-   - `container-llama-util` stopped/disabled
-   - `/dev/dri/renderD128` visible to the whisper container
-   - real transcription and speech synthesis requests return expected text/audio
+The first source-backed deployment uses Speaches' CPU image on owl with an
+`owl-crypt` model cache PVC. This is intentionally a bootstrap/prototype: live
+owl evidence on 2026-06-09 shows `amdgpu` and `/dev/dri/renderD128`, but no
+`/dev/kfd` and no ROCm/HIP userland tools, so Kubernetes cannot yet run the
+preferred ROCm/HIP path. Once Puppet enables `/dev/kfd` and ROCm/HIP packages,
+retarget the app to an AMD/ROCm image and add `squat.ai/gpu` requests/limits
+using the same resource pattern as `llama-qwen`.
