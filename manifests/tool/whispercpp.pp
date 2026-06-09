@@ -3,7 +3,15 @@ class nest::tool::whispercpp (
   String $model_url = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin',
 ) {
   portage::makeconf { 'video_cards':
-    content => '-* intel amdgpu radeonsi',
+    content => 'intel amdgpu radeonsi',
+    before  => Nest::Lib::Package['media-libs/mesa'],
+  }
+
+  # The tool-image build applies this class directly rather than the full Nest
+  # base profile, so set the global USE flag needed by Mesa's Vulkan drivers
+  # here instead of relying on nest::base::portage to render nest::use.
+  portage::makeconf { 'use':
+    content => 'vulkan',
     before  => Nest::Lib::Package['media-libs/mesa'],
   }
 
