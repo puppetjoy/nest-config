@@ -1,0 +1,7 @@
+---
+values:
+  args:
+    # Eyrie kubelet serving certs are cluster-internal/self-managed and
+    # include expired or missing IP SANs, so Metrics Server must skip kubelet
+    # TLS verification just like the retired Dashboard-bundled deployment did.
+    - --kubelet-insecure-tls
