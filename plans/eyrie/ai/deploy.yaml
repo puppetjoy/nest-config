@@ -47,6 +47,11 @@ parameters:
     type: Boolean
     default: false
 
+  voice_chatterbox:
+    description: 'Deploy local ROCm Chatterbox-Turbo candidate API'
+    type: Boolean
+    default: false
+
   init:
     description: 'Deploy initial revision'
     type: Boolean
@@ -95,4 +100,10 @@ steps:
     plan: nest::eyrie::ai::deploy_voice_speech
     parameters:
       deploy: $deploy and $voice_speech
+      init: $init
+
+  - description: 'Deploy local ROCm Chatterbox-Turbo candidate API'
+    plan: nest::eyrie::ai::deploy_voice_chatterbox
+    parameters:
+      deploy: $deploy and $voice_chatterbox
       init: $init

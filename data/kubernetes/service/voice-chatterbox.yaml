@@ -1,0 +1,5 @@
+---
+# Concrete owl/Strix Halo instance of the ROCm Chatterbox-Turbo candidate API.
+# Keep this service private to the ai namespace until Talon/Star provider switching is separately approved.
+cache_size: 80Gi
+storage_class: owl-crypt
