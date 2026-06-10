@@ -58,11 +58,19 @@ resources:
         except Exception:  # pragma: no cover - startup health reports this
             resample_poly = None
 
-        app = FastAPI(title='Nest voice-speech', version='0.2.0')
+        app = FastAPI(title='Nest voice-speech', version='0.3.0')
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
         lock = threading.Lock()
         tts_pipelines = {}
         stt_models = {}
+        STT_MODELS = [
+            'tiny',
+            'base',
+            'small',
+            'medium',
+            'large-v3-turbo',
+            'large-v3',
+        ]
 
         VOICE_LANG_CODES = {
             'af': 'a', 'am': 'a',
@@ -149,10 +157,22 @@ resources:
                 voices.add(os.path.splitext(os.path.basename(path))[0])
             return sorted(voices)
 
+        def cached_stt_models():
+            models = set()
+            for path in glob.glob('/cache/whisper/*.pt'):
+                models.add(os.path.splitext(os.path.basename(path))[0])
+            return sorted(models)
+
+        def normalize_stt_model(name: str):
+            return name.removeprefix('whisper-')
+
         def get_stt_model(name: str):
-            if name not in stt_models:
-                stt_models[name] = whisper.load_model(name, device=device)
-            return stt_models[name]
+            model_name = normalize_stt_model(name)
+            if model_name not in STT_MODELS:
+                raise HTTPException(status_code=400, detail=f'Unsupported STT model: {name}')
+            if model_name not in stt_models:
+                stt_models[model_name] = whisper.load_model(model_name, device=device)
+            return stt_models[model_name]
 
         @app.get('/health')
         def health():
@@ -167,6 +187,7 @@ resources:
                 'loaded_tts_langs': sorted(tts_pipelines.keys()),
                 'loaded_stt_models': sorted(stt_models.keys()),
                 'cached_voices': cached_voices(),
+                'cached_stt_models': cached_stt_models(),
             }
 
         @app.get('/v1/audio/voices')
@@ -183,9 +204,7 @@ resources:
             return {
                 'data': [
                     {'id': 'kokoro', 'object': 'model', 'owned_by': 'nest'},
-                    {'id': 'whisper-tiny', 'object': 'model', 'owned_by': 'nest'},
-                    {'id': 'whisper-base', 'object': 'model', 'owned_by': 'nest'},
-                    {'id': 'whisper-small', 'object': 'model', 'owned_by': 'nest'},
+                    *[{'id': f'whisper-{name}', 'object': 'model', 'owned_by': 'nest'} for name in STT_MODELS],
                 ]
             }
 
@@ -230,6 +249,9 @@ resources:
             file: UploadFile = File(...),
             model: str = Form('tiny'),
             language: str = Form('en'),
+            temperature: float = Form(0.0),
+            condition_on_previous_text: bool = Form(False),
+            initial_prompt: str | None = Form(None),
         ):
             data = await file.read()
             try:
@@ -246,7 +268,15 @@ resources:
                 audio = resample_poly(audio, 16000 // divisor, sample_rate // divisor).astype(np.float32)
             with lock:
                 stt = get_stt_model(model)
-                result = stt.transcribe(audio, language=language, fp16=torch.cuda.is_available())
+                options = {
+                    'language': language,
+                    'temperature': temperature,
+                    'condition_on_previous_text': condition_on_previous_text,
+                    'fp16': torch.cuda.is_available(),
+                }
+                if initial_prompt:
+                    options['initial_prompt'] = initial_prompt
+                result = stt.transcribe(audio, **options)
             return {'text': result.get('text', '').strip()}
 
         if __name__ == '__main__':
