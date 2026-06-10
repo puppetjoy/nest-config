@@ -36,7 +36,7 @@ DOC_MAX_CHARS = int(os.environ.get("HONCHO_MIGRATION_DOC_MAX_CHARS", "24000"))
 # just the configured context window.  Some stored code/log messages tokenize
 # much larger than their character count, so keep halving below this target if
 # the endpoint still rejects the truncated prefix.
-DOC_MIN_CHARS = int(os.environ.get("HONCHO_MIGRATION_DOC_MIN_CHARS", "512"))
+DOC_MIN_CHARS = int(os.environ.get("HONCHO_MIGRATION_DOC_MIN_CHARS", "128"))
 SKIP_RESET = os.environ.get("HONCHO_MIGRATION_SKIP_RESET", "false").lower() == "true"
 SKIP_DOCUMENTS = os.environ.get("HONCHO_MIGRATION_SKIP_DOCUMENTS", "false").lower() == "true"
 

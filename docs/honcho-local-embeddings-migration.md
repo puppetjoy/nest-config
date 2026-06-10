@@ -110,7 +110,7 @@ init=true`, followed by normal mode `init=false`.
    exceeds the local embedding model token or physical batch limit, the script
    retries that row individually with a truncated prefix and reports only an
    aggregate `truncated_overlong` count.  The individual fallback starts at the
-   truncation floor (512 characters by default) rather than probing the full
+   truncation floor (128 characters by default) rather than probing the full
    overlong payload again, and keeps halving below that if llama.cpp still
    rejects a pathological high-token prefix, because the server's physical
    ubatch limit is lower than the configured embedding context.  If the script
