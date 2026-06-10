@@ -9,7 +9,6 @@ class nest::app::hermes (
   String[1]                      $agent_request_kanban_board  = 'agent-requests',
   String[1]                      $gitlab_url                  = 'https://gitlab.joyfullee.me',
   Optional[Sensitive[String[1]]] $gitlab_token                = undef,
-  Optional[Sensitive[String[1]]] $openai_api_key              = undef,
   Optional[Sensitive[String[1]]] $tavily_api_key              = undef,
   Optional[Sensitive[String[1]]] $telegram_bot_token          = undef,
   Hash[String[1], Any]           $codex_oauth_slots           = {},

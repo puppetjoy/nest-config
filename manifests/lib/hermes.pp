@@ -8,7 +8,6 @@ define nest::lib::hermes (
   String[1]            $gitlab_url               = 'https://gitlab.joyfullee.me',
   Any                  $gitlab_token             = undef,
   Boolean              $gitlab_enabled           = false,
-  Any                  $openai_api_key           = undef,
   Any                  $tavily_api_key           = undef,
   Any                  $telegram_bot_token       = undef,
   Boolean              $telegram_enabled         = true,
@@ -54,8 +53,7 @@ define nest::lib::hermes (
   Boolean              $google_workspace_enabled = false,
   Boolean              $voice_auto_tts           = false,
   Boolean              $stt_enabled              = false,
-  String[1]            $stt_provider             = 'openai',
-  String[1]            $stt_model                = 'gpt-4o-mini-transcribe',
+  String[1]            $stt_provider             = 'voice-speech',
   Optional[String[1]]  $stt_voice_speech_endpoint= undef,
   String[1]            $stt_voice_speech_model   = 'whisper-large-v3-turbo',
   String[1]            $stt_voice_speech_language= 'en',
@@ -63,9 +61,7 @@ define nest::lib::hermes (
   String[1]            $stt_voice_speech_temp    = '0.0',
   Boolean              $stt_voice_speech_prev_text= false,
   Integer[1]           $stt_voice_speech_timeout = 300,
-  String[1]            $tts_provider             = 'openai',
-  String[1]            $tts_openai_model         = 'gpt-4o-mini-tts',
-  String[1]            $tts_openai_voice         = 'alloy',
+  String[1]            $tts_provider             = 'voice-speech',
   Optional[String[1]]  $tts_voice_speech_endpoint= undef,
   String[1]            $tts_voice_speech_voice   = 'af_heart',
   String[1]            $tts_voice_speech_model   = 'kokoro',
@@ -287,14 +283,6 @@ define nest::lib::hermes (
     },
   }
 
-  $openai_env_lines = $openai_api_key ? {
-    undef   => [],
-    default => $openai_api_key =~ Sensitive[String[1]] ? {
-      true    => ["OPENAI_API_KEY=${openai_api_key.unwrap}", "VOICE_TOOLS_OPENAI_KEY=${openai_api_key.unwrap}"],
-      default => ["OPENAI_API_KEY=${openai_api_key}", "VOICE_TOOLS_OPENAI_KEY=${openai_api_key}"],
-    },
-  }
-
   $telegram_env_lines = $telegram_bot_token ? {
     undef   => [],
     default => $telegram_enabled ? {
@@ -339,7 +327,6 @@ define nest::lib::hermes (
       undef   => [],
       default => ["SSH_AUTH_SOCK=${ssh_auth_sock}"],
     },
-    $openai_env_lines,
     $telegram_env_lines,
     $agent_request_env_lines,
     $ssh_env_lines,
@@ -456,9 +443,6 @@ define nest::lib::hermes (
     'stt'              => {
       'enabled'  => $stt_enabled,
       'provider' => $stt_provider,
-      'openai'   => {
-        'model' => $stt_model,
-      },
     } + $stt_voice_speech_provider_config,
     'tts'              => ({
       'provider'  => $tts_provider,
@@ -467,10 +451,6 @@ define nest::lib::hermes (
           '__managed_absent__' => true,
         },
       } + $tts_voice_speech_providers,
-      'openai'    => {
-        'model' => $tts_openai_model,
-        'voice' => $tts_openai_voice,
-      },
     }),
     'auxiliary'        => {
       'compression' => {
@@ -521,7 +501,7 @@ define nest::lib::hermes (
     } + $dashboard_theme_config,
   } + $image_gen_config + $plugins_config
 
-  $env_content = [$gitlab_env_lines, $openai_env_lines, $tavily_env_lines, $telegram_env_lines, $agent_request_env_lines, $ssh_env_lines, $kubeconfig_env_lines].flatten.join("\n")
+  $env_content = [$gitlab_env_lines, $tavily_env_lines, $telegram_env_lines, $agent_request_env_lines, $ssh_env_lines, $kubeconfig_env_lines].flatten.join("\n")
 
   if $kubeconfig_content != undef {
     $effective_kubeconfig_content = $kubeconfig_content =~ Sensitive ? {

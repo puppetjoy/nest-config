@@ -1,7 +1,6 @@
 class nest::app::hermes::config {
   $gitlab_url                       = $nest::app::hermes::gitlab_url
   $gitlab_token                     = $nest::app::hermes::gitlab_token
-  $openai_api_key                   = $nest::app::hermes::openai_api_key
   $tavily_api_key                   = $nest::app::hermes::tavily_api_key
   $telegram_bot_token               = $nest::app::hermes::telegram_bot_token
   $codex_oauth_slots                = $nest::app::hermes::codex_oauth_slots
@@ -146,10 +145,6 @@ class nest::app::hermes::config {
       undef   => $tavily_api_key,
       default => $config['tavily_api_key'],
     }
-    $instance_openai_api_key    = $config['openai_api_key'] ? {
-      undef   => $openai_api_key,
-      default => $config['openai_api_key'],
-    }
     $instance_telegram_token    = $config['telegram_bot_token'] ? {
       undef   => $telegram_bot_token,
       default => $config['telegram_bot_token'],
@@ -219,8 +214,7 @@ class nest::app::hermes::config {
     $instance_google_workspace  = pick($config['google_workspace_enabled'], false)
     $instance_voice_auto_tts    = pick($config['voice_auto_tts'], false)
     $instance_stt_enabled       = pick($config['stt_enabled'], $instance_voice_auto_tts)
-    $instance_stt_provider      = pick($config['stt_provider'], 'openai')
-    $instance_stt_model         = pick($config['stt_model'], 'gpt-4o-mini-transcribe')
+    $instance_stt_provider      = pick($config['stt_provider'], 'voice-speech')
     $instance_voice_speech_url  = $config['stt_voice_speech_endpoint']
     $instance_voice_speech_model = pick($config['stt_voice_speech_model'], 'whisper-large-v3-turbo')
     $instance_voice_speech_lang = pick($config['stt_voice_speech_language'], 'en')
@@ -228,9 +222,7 @@ class nest::app::hermes::config {
     $instance_voice_speech_temp = pick($config['stt_voice_speech_temp'], pick($config['stt_voice_speech_temperature'], '0.0'))
     $instance_voice_speech_prev = pick($config['stt_voice_speech_condition_on_previous_text'], false)
     $instance_voice_speech_timeout = pick($config['stt_voice_speech_timeout'], 300)
-    $instance_tts_provider             = pick($config['tts_provider'], 'openai')
-    $instance_tts_openai_model         = pick($config['tts_openai_model'], 'gpt-4o-mini-tts')
-    $instance_tts_openai_voice         = pick($config['tts_openai_voice'], 'alloy')
+    $instance_tts_provider             = pick($config['tts_provider'], 'voice-speech')
     $instance_tts_voice_speech_url     = $config['tts_voice_speech_endpoint']
     $instance_tts_voice_speech_voice   = pick($config['tts_voice_speech_voice'], 'af_heart')
     $instance_tts_voice_speech_model   = pick($config['tts_voice_speech_model'], 'kokoro')
@@ -251,7 +243,6 @@ class nest::app::hermes::config {
       gitlab_url                 => $gitlab_url,
       gitlab_token               => $instance_gitlab_token,
       gitlab_enabled             => $instance_gitlab_enabled,
-      openai_api_key             => $instance_openai_api_key,
       tavily_api_key             => $instance_tavily_api_key,
       telegram_bot_token         => $instance_telegram_token,
       telegram_enabled           => $instance_telegram_enabled,
@@ -297,7 +288,6 @@ class nest::app::hermes::config {
       voice_auto_tts             => $instance_voice_auto_tts,
       stt_enabled                => $instance_stt_enabled,
       stt_provider               => $instance_stt_provider,
-      stt_model                  => $instance_stt_model,
       stt_voice_speech_endpoint  => $instance_voice_speech_url,
       stt_voice_speech_model     => $instance_voice_speech_model,
       stt_voice_speech_language  => $instance_voice_speech_lang,
@@ -306,8 +296,6 @@ class nest::app::hermes::config {
       stt_voice_speech_prev_text => $instance_voice_speech_prev,
       stt_voice_speech_timeout   => $instance_voice_speech_timeout,
       tts_provider               => $instance_tts_provider,
-      tts_openai_model           => $instance_tts_openai_model,
-      tts_openai_voice           => $instance_tts_openai_voice,
       tts_voice_speech_endpoint  => $instance_tts_voice_speech_url,
       tts_voice_speech_voice     => $instance_tts_voice_speech_voice,
       tts_voice_speech_model     => $instance_tts_voice_speech_model,
