@@ -34,6 +34,10 @@ define nest::lib::hermes (
   Optional[String[1]]  $dashboard_oauth_portal_url= undef,
   String[1]            $agent_request_kanban_board= 'agent-requests',
   Boolean              $kanban_dispatch_in_gateway= true,
+  Optional[String[1]]  $git_user_name            = undef,
+  Optional[String[1]]  $git_user_email           = undef,
+  Optional[String[1]]  $git_signing_key          = undef,
+  Boolean              $git_commit_sign          = true,
   Boolean              $gateway_enabled          = true,
   Optional[String[1]]  $ssh_auth_sock            = undef,
   String[1]            $honcho_base_url          = 'https://honcho.eyrie',
@@ -316,8 +320,67 @@ define nest::lib::hermes (
     undef   => [],
     default => [
       "HERMES_SSH_PRIVATE_KEY=${ssh_private_key_path}",
-      "GIT_SSH_COMMAND=\"ssh -i ${ssh_private_key_path} -o IdentitiesOnly=yes\"",
+      "GIT_SSH_COMMAND=\"ssh -i ${ssh_private_key_path} -o IdentitiesOnly=yes -o ControlMaster=no -o ControlPath=none\"",
     ],
+  }
+  $effective_git_signing_key = $git_signing_key ? {
+    undef   => $ssh_private_key ? {
+      undef   => undef,
+      default => $ssh_private_key_path,
+    },
+    default => $git_signing_key,
+  }
+  $git_ssh_command = $ssh_private_key ? {
+    undef   => undef,
+    default => "ssh -i ${ssh_private_key_path} -o IdentitiesOnly=yes -o ControlMaster=no -o ControlPath=none",
+  }
+  $git_config_signing_lines = $effective_git_signing_key ? {
+    undef   => [],
+    default => [
+      'GIT_CONFIG_KEY_2=user.signingkey',
+      "GIT_CONFIG_VALUE_2=${effective_git_signing_key}",
+      'GIT_CONFIG_KEY_3=gpg.format',
+      'GIT_CONFIG_VALUE_3=ssh',
+      'GIT_CONFIG_KEY_4=commit.gpgsign',
+      "GIT_CONFIG_VALUE_4=${git_commit_sign}",
+    ],
+  }
+  $git_config_ssh_lines = $git_ssh_command ? {
+    undef   => [],
+    default => [
+      'GIT_CONFIG_KEY_5=core.sshCommand',
+      "GIT_CONFIG_VALUE_5=${git_ssh_command}",
+    ],
+  }
+  $git_config_count = 2 + (length($git_config_signing_lines) / 2) + (length($git_config_ssh_lines) / 2)
+  $git_env_lines = ($git_user_name and $git_user_email) ? {
+    true    => [
+      "GIT_AUTHOR_NAME=${git_user_name}",
+      "GIT_AUTHOR_EMAIL=${git_user_email}",
+      "GIT_COMMITTER_NAME=${git_user_name}",
+      "GIT_COMMITTER_EMAIL=${git_user_email}",
+      "AGENT_REQUEST_GIT_USER_NAME=${git_user_name}",
+      "AGENT_REQUEST_GIT_USER_EMAIL=${git_user_email}",
+      $effective_git_signing_key ? {
+        undef   => [],
+        default => [
+          "AGENT_REQUEST_GIT_SIGNING_KEY=${effective_git_signing_key}",
+          "AGENT_REQUEST_GIT_COMMIT_GPGSIGN=${git_commit_sign}",
+        ],
+      },
+      $git_ssh_command ? {
+        undef   => [],
+        default => ["AGENT_REQUEST_GIT_SSH_COMMAND=${git_ssh_command}"],
+      },
+      "GIT_CONFIG_COUNT=${git_config_count}",
+      'GIT_CONFIG_KEY_0=user.name',
+      "GIT_CONFIG_VALUE_0=${git_user_name}",
+      'GIT_CONFIG_KEY_1=user.email',
+      "GIT_CONFIG_VALUE_1=${git_user_email}",
+      $git_config_signing_lines,
+      $git_config_ssh_lines,
+    ].flatten,
+    default => [],
   }
   $systemd_env_lines = [
     "HERMES_DASHBOARD_BIND_HOST=${dashboard_bind_host}",
@@ -330,6 +393,7 @@ define nest::lib::hermes (
     $telegram_env_lines,
     $agent_request_env_lines,
     $ssh_env_lines,
+    $git_env_lines,
     $kubeconfig_env_lines,
     "SSL_CERT_FILE=${ca_bundle_file}",
     "REQUESTS_CA_BUNDLE=${ca_bundle_file}",

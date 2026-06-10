@@ -37,6 +37,32 @@ if [[ -n "${SSH_AUTH_SOCK:-}" && -S "${SSH_AUTH_SOCK}" ]]; then
     ssh_auth_sock_args=(-e SSH_AUTH_SOCK -v "${SSH_AUTH_SOCK}:${SSH_AUTH_SOCK}:ro")
 fi
 
+git_identity_args=()
+if [[ -n "${GIT_SSH_COMMAND:-}" ]]; then
+    git_identity_args+=(-e GIT_SSH_COMMAND)
+fi
+if [[ -n "${AGENT_REQUEST_GIT_SSH_COMMAND:-}" ]]; then
+    git_identity_args+=(-e AGENT_REQUEST_GIT_SSH_COMMAND)
+fi
+if [[ -n "${HERMES_SSH_PRIVATE_KEY:-}" && -r "${HERMES_SSH_PRIVATE_KEY}" ]]; then
+    hermes_ssh_dir=$(dirname "${HERMES_SSH_PRIVATE_KEY}")
+    git_identity_args+=(-e HERMES_SSH_PRIVATE_KEY -v "${hermes_ssh_dir}:${hermes_ssh_dir}:ro")
+fi
+for git_env_name in \
+    GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL \
+    AGENT_REQUEST_GIT_USER_NAME AGENT_REQUEST_GIT_USER_EMAIL \
+    AGENT_REQUEST_GIT_SIGNING_KEY AGENT_REQUEST_GIT_COMMIT_GPGSIGN \
+    GIT_CONFIG_COUNT; do
+    if [[ -n "${!git_env_name:-}" ]]; then
+        git_identity_args+=(-e "${git_env_name}")
+    fi
+done
+if [[ -n "${GIT_CONFIG_COUNT:-}" && "${GIT_CONFIG_COUNT}" =~ ^[0-9]+$ ]]; then
+    for ((git_config_index = 0; git_config_index < GIT_CONFIG_COUNT; git_config_index++)); do
+        git_identity_args+=(-e "GIT_CONFIG_KEY_${git_config_index}" -e "GIT_CONFIG_VALUE_${git_config_index}")
+    done
+fi
+
 kubeconfig_args=()
 kubeconfig_mounts=()
 kubeconfig_container_paths=()
@@ -98,6 +124,7 @@ exec podman run --rm "${podman_tty_args[@]}" -e TERM \
     -e GEM_SOURCE_PUPPETCORE \
     -e PUPPET_FORGE_TOKEN \
     -e KUBECONFIG \
+    "${git_identity_args[@]}" \
     "${ssh_auth_sock_args[@]}" \
     "${podman_sock_args[@]}" \
     nest/tools/bolt \

@@ -162,6 +162,8 @@ nest::app::hermes::instances:
     dashboard_port: 9119
     dashboard_public_url: 'https://talon.eyrie'
     dashboard_theme: 'midnight'
+    git_user_name: 'Talon'
+    git_user_email: 'talon@joyfullee.me'
     approval_mode: 'off'
     release_digest_enabled: true
     voice_auto_tts: true

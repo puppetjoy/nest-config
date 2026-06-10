@@ -180,6 +180,10 @@ class nest::app::hermes::config {
     $instance_dashboard_bind    = pick($config['dashboard_bind_host'], $dashboard_bind_host)
     $instance_dashboard_port    = pick($config['dashboard_port'], 9119)
     $instance_dashboard_url     = pick($config['dashboard_public_url'], "https://${instance_name}.eyrie")
+    $instance_git_user_name     = $config['git_user_name']
+    $instance_git_user_email    = $config['git_user_email']
+    $instance_git_signing_key   = $config['git_signing_key']
+    $instance_git_commit_sign   = pick($config['git_commit_sign'], true)
     $instance_ssh_auth_sock     = $config['ssh_auth_sock']
     $instance_dashboard_theme   = $config['dashboard_theme']
     $instance_oauth_client_id   = $config['dashboard_oauth_client_id'] ? {
@@ -264,6 +268,10 @@ class nest::app::hermes::config {
       dashboard_bind_host        => $instance_dashboard_bind,
       dashboard_port             => $instance_dashboard_port,
       dashboard_public_url       => $instance_dashboard_url,
+      git_user_name              => $instance_git_user_name,
+      git_user_email             => $instance_git_user_email,
+      git_signing_key            => $instance_git_signing_key,
+      git_commit_sign            => $instance_git_commit_sign,
       ssh_auth_sock              => $instance_ssh_auth_sock,
       dashboard_theme            => $instance_dashboard_theme,
       dashboard_oauth_client_id  => $instance_oauth_client_id,
