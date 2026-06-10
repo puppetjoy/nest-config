@@ -14,6 +14,7 @@ model_path: /cache/models/bge-m3-q8_0.gguf
 model_url: https://huggingface.co/ggml-org/bge-m3-Q8_0-GGUF/resolve/main/bge-m3-q8_0.gguf
 embedding_dimensions: 1024
 max_input_tokens: 8192
+physical_batch_size: 2048
 parallel_requests: 4
 
 resources:
@@ -95,6 +96,8 @@ resources:
                 - cls
                 - --ctx-size
                 - "%{lookup('max_input_tokens')}"
+                - --ubatch-size
+                - "%{lookup('physical_batch_size')}"
                 - --parallel
                 - "%{lookup('parallel_requests')}"
               ports:

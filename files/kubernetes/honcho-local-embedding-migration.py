@@ -39,6 +39,11 @@ def log(message: str) -> None:
     print(f"[{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}] {message}", flush=True)
 
 
+def is_embedding_size_error(error: Exception) -> bool:
+    message = str(error)
+    return "maximum token limit" in message or "too large to process" in message
+
+
 async def scalar_int(db: AsyncSession, sql: str, params: dict | None = None) -> int:
     row = (await db.execute(text(sql), params or {})).first()
     return int(row[0]) if row is not None else 0
@@ -137,10 +142,10 @@ async def embed_documents() -> int:
                 break
             try:
                 embeddings = await embedding_client.simple_batch_embed([d.content for d in docs])
-            except ValueError as e:
-                if "maximum token limit" not in str(e):
+            except Exception as e:
+                if not is_embedding_size_error(e):
                     raise
-                log("documents: batch exceeded embedding token limit; retrying documents individually with truncation")
+                log("documents: batch exceeded embedding size limit; retrying documents individually with truncation")
                 embeddings = []
                 for doc in docs:
                     content = doc.content
@@ -151,8 +156,8 @@ async def embed_documents() -> int:
                             if limit < len(content):
                                 truncated += 1
                             break
-                        except ValueError as doc_error:
-                            if "maximum token limit" not in str(doc_error) or limit <= DOC_MIN_CHARS:
+                        except Exception as doc_error:
+                            if not is_embedding_size_error(doc_error) or limit <= DOC_MIN_CHARS:
                                 raise
                             limit = max(DOC_MIN_CHARS, limit // 2)
             if len(embeddings) != len(docs):
