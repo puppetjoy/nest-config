@@ -428,20 +428,18 @@ define nest::lib::hermes (
       },
     },
   }
-  $tts_voice_speech_provider_config = $tts_voice_speech_endpoint ? {
+  $tts_voice_speech_providers = $tts_voice_speech_endpoint ? {
     undef   => {},
     default => {
-      'providers' => {
-        'voice-speech' => {
-          'type'             => 'command',
-          'command'          => "${install_dir}/bin/hermes-voice-speech-tts --endpoint ${tts_voice_speech_endpoint} --text-file {input_path} --output {output_path} --voice {voice} --model {model} --format {format} --speed {speed}",
-          'output_format'    => 'wav',
-          'voice'            => $tts_voice_speech_voice,
-          'model'            => $tts_voice_speech_model,
-          'timeout'          => $tts_voice_speech_timeout,
-          'max_text_length'  => 4096,
-          'voice_compatible' => true,
-        },
+      'voice-speech' => {
+        'type'             => 'command',
+        'command'          => "${install_dir}/bin/hermes-voice-speech-tts --endpoint ${tts_voice_speech_endpoint} --text-file {input_path} --output {output_path} --voice {voice} --model {model} --format {format} --speed {speed}",
+        'output_format'    => 'wav',
+        'voice'            => $tts_voice_speech_voice,
+        'model'            => $tts_voice_speech_model,
+        'timeout'          => $tts_voice_speech_timeout,
+        'max_text_length'  => 4096,
+        'voice_compatible' => true,
       },
     },
   }
@@ -476,12 +474,17 @@ define nest::lib::hermes (
       },
     } + $stt_codex_config + $stt_voice_speech_provider_config,
     'tts'              => ({
-      'provider' => $tts_provider,
-      'openai'   => {
+      'provider'  => $tts_provider,
+      'providers' => {
+        'chatterbox' => {
+          '__managed_absent__' => true,
+        },
+      } + $tts_voice_speech_providers,
+      'openai'    => {
         'model' => $tts_openai_model,
         'voice' => $tts_openai_voice,
       },
-    } + $tts_voice_speech_provider_config),
+    }),
     'auxiliary'        => {
       'compression' => {
         'provider' => $auxiliary_provider,
