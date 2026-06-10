@@ -3,16 +3,15 @@
 # dialectic levels.  This promotes the former 35B fast lane to llama-qwen and
 # removes the resident 122B model from the source-managed deployment.
 model_repo: bartowski/Qwen_Qwen3.5-35B-A3B-GGUF
-model_file: Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf
-model_path: /cache/models/Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf
-model_url: https://huggingface.co/bartowski/Qwen_Qwen3.5-35B-A3B-GGUF/resolve/main/Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf
-ctx_size: '524288'
+model_file: Qwen_Qwen3.5-35B-A3B-Q5_K_M.gguf
+model_path: /cache/models/Qwen_Qwen3.5-35B-A3B-Q5_K_M.gguf
+model_url: https://huggingface.co/bartowski/Qwen_Qwen3.5-35B-A3B-GGUF/resolve/main/Qwen_Qwen3.5-35B-A3B-Q5_K_M.gguf
+ctx_size: '1048576'
 parallel_requests: '4'
 cpu_request: '8'
 cpu_limit: '16'
 memory_request: 32Gi
 memory_limit: 112Gi
-# Preserve the existing llama-qwen PVC size during the 122B -> 35B transition;
-# shrinking or recreating the cache can be handled after the live rollout is
-# verified and any stale 122B cache cleanup is approved.
-cache_size: 160Gi
+# Keep room for a higher-quality 35B quant while preserving stale 122B cache
+# artifacts for a separately approved cleanup.
+cache_size: 240Gi
