@@ -1,0 +1,238 @@
+{
+  "schema": 1,
+  "created_at_utc": "2026-06-10T07:47:21Z",
+  "task_id": "t_e9f23762",
+  "request_id": "ar-20260610-074245-1df476",
+  "provider": "chatterbox-turbo",
+  "production_tts_changed": false,
+  "norm_loudness": false,
+  "stt_prompt": "Talon Star Honcho Eyrie KubeCM llama-qwen GitLab Puppet Kubernetes OpenVox ROCm kubectl owl voice-speech Chatterbox Kokoro",
+  "torch": "2.9.1+rocm7.2.4.git39497456",
+  "hip": "7.2.53211-97f5574fe2",
+  "device": "cuda",
+  "gpu": "Radeon 8060S Graphics",
+  "rocm_gtt_before": "{\"card0\": {\"GTT Total Memory (B)\": \"120259084288\", \"GTT Total Used Memory (B)\": \"52672131072\"}}\n",
+  "presets": [
+    {
+      "persona": "talon",
+      "preset": "talon-elegant",
+      "source_candidate": "star-alloy-elegant",
+      "description": "Talon candidate: warm, focused, clever, clear, calm ops voice; owl-ish without baby/chibi tone.",
+      "reference_wav": "/tmp/chatterbox_acceptance/references/star-alloy-elegant.wav",
+      "reference_sha256": "41a7d95035c73b5c77de3af38c9b74fef11a3aac32a5b3dcdbebad949db1f600",
+      "samples": [
+        {
+          "name": "notification",
+          "spoken_text": "Talon has a review-ready update. The Chatterbox candidate pack is complete, the selected references are source-managed, and production T T S remains unchanged.",
+          "wav": "/tmp/chatterbox_acceptance/out/talon-elegant/notification.wav",
+          "sha256": "31c9c8ede5fd7b0fee3f323e63ef875597d4908f1c2709dfb3e47b2cf7a4dd3e",
+          "wall_seconds": 18.852,
+          "audio_seconds": 10.24,
+          "rtf": 1.841,
+          "ffprobe": {
+            "codec": "WAV",
+            "sample_rate": 24000,
+            "channels": 1,
+            "frames": 245760,
+            "duration": 10.24,
+            "size": 491564
+          },
+          "stt_roundtrip": {
+            "model": "small",
+            "initial_prompt": "Talon Star Honcho Eyrie KubeCM llama-qwen GitLab Puppet Kubernetes OpenVox ROCm kubectl owl voice-speech Chatterbox Kokoro",
+            "wall_seconds": 0.317,
+            "text": "Talon has a review-ready update. The Chatterbox candidate pack is complete. The selected references are source-managed and production TS remains unchanged."
+          },
+          "local_wav": "artifacts/chatterbox-acceptance-20260610T074721Z/generated/talon-elegant/notification.wav"
+        },
+        {
+          "name": "ops_update",
+          "spoken_text": "Status: cube control in namespace A I reports deploy voice speech ready. The health endpoint is green, the manifest is saved, and Joy can review the audio before any provider switch.",
+          "wav": "/tmp/chatterbox_acceptance/out/talon-elegant/ops_update.wav",
+          "sha256": "44ca5371d5bbbad3fa51fd4dddd68af00b2b27c0ac14cfdcaf682a5edd46b5f5",
+          "wall_seconds": 10.595,
+          "audio_seconds": 11.32,
+          "rtf": 0.936,
+          "ffprobe": {
+            "codec": "WAV",
+            "sample_rate": 24000,
+            "channels": 1,
+            "frames": 271680,
+            "duration": 11.32,
+            "size": 543404
+          },
+          "stt_roundtrip": {
+            "model": "small",
+            "initial_prompt": "Talon Star Honcho Eyrie KubeCM llama-qwen GitLab Puppet Kubernetes OpenVox ROCm kubectl owl voice-speech Chatterbox Kokoro",
+            "wall_seconds": 0.372,
+            "text": "Status, KubeCtrl in namespace AI reports deploy voice-speech ready. The health endpoint is green, the manifest is saved, and Joy can review the audio before any provider switch."
+          },
+          "local_wav": "artifacts/chatterbox-acceptance-20260610T074721Z/generated/talon-elegant/ops_update.wav"
+        },
+        {
+          "name": "persona",
+          "spoken_text": "I am Talon, a small watchful owl at a laptop. I keep the thread focused, name the evidence, and explain the next safe step for Joy without rushing.",
+          "wav": "/tmp/chatterbox_acceptance/out/talon-elegant/persona.wav",
+          "sha256": "b739aa19265246ee64e04e637f34ebc8cadd7ca170ad8d9cd6c6fd13979e1ebc",
+          "wall_seconds": 9.339,
+          "audio_seconds": 10.12,
+          "rtf": 0.923,
+          "ffprobe": {
+            "codec": "WAV",
+            "sample_rate": 24000,
+            "channels": 1,
+            "frames": 242880,
+            "duration": 10.12,
+            "size": 485804
+          },
+          "stt_roundtrip": {
+            "model": "small",
+            "initial_prompt": "Talon Star Honcho Eyrie KubeCM llama-qwen GitLab Puppet Kubernetes OpenVox ROCm kubectl owl voice-speech Chatterbox Kokoro",
+            "wall_seconds": 0.333,
+            "text": "I am Talon, a small watchful owl at a laptop. I keep the thread focused, name the evidence and explain the next safe step for joy without rushing."
+          },
+          "local_wav": "artifacts/chatterbox-acceptance-20260610T074721Z/generated/talon-elegant/persona.wav"
+        },
+        {
+          "name": "style_probe",
+          "spoken_text": "[chuckle] Tiny owl checkpoint: the fix is source-managed, the live service is untouched, and the next move waits for approval.",
+          "wav": "/tmp/chatterbox_acceptance/out/talon-elegant/style_probe.wav",
+          "sha256": "3c8c8a8cd7990a3caf9186853f5f87a9c6819839a1358199542c3a5546e53ff1",
+          "wall_seconds": 6.897,
+          "audio_seconds": 7.36,
+          "rtf": 0.937,
+          "ffprobe": {
+            "codec": "WAV",
+            "sample_rate": 24000,
+            "channels": 1,
+            "frames": 176640,
+            "duration": 7.36,
+            "size": 353324
+          },
+          "stt_roundtrip": {
+            "model": "small",
+            "initial_prompt": "Talon Star Honcho Eyrie KubeCM llama-qwen GitLab Puppet Kubernetes OpenVox ROCm kubectl owl voice-speech Chatterbox Kokoro",
+            "wall_seconds": 0.247,
+            "text": "Tiny owl checkpoint. The fix is source managed, the live service is untouched, and the next move waits for approval."
+          },
+          "local_wav": "artifacts/chatterbox-acceptance-20260610T074721Z/generated/talon-elegant/style_probe.wav"
+        }
+      ],
+      "acceptance_dir": "artifacts/chatterbox-acceptance-20260610T074721Z/generated/talon-elegant"
+    },
+    {
+      "persona": "star",
+      "preset": "star-clear",
+      "source_candidate": "star-nova-clear",
+      "description": "Star candidate: clear, bright, soft, friendly operations voice for local Chatterbox review.",
+      "reference_wav": "/tmp/chatterbox_acceptance/references/star-nova-clear.wav",
+      "reference_sha256": "40faa648c03da6dc1fd466d1d9dd3178ae88acf21107d6b24926dc3e8391360d",
+      "samples": [
+        {
+          "name": "notification",
+          "spoken_text": "Star has a clear review update. The chosen Chatterbox voice is packaged as a candidate preset, artifacts are ready, and Talon and Star production voices are unchanged.",
+          "wav": "/tmp/chatterbox_acceptance/out/star-clear/notification.wav",
+          "sha256": "a97840c93caf75fec9d420e7bec9287f589236d6f64e56ceec1714dee0732fcb",
+          "wall_seconds": 9.533,
+          "audio_seconds": 10.08,
+          "rtf": 0.946,
+          "ffprobe": {
+            "codec": "WAV",
+            "sample_rate": 24000,
+            "channels": 1,
+            "frames": 241920,
+            "duration": 10.08,
+            "size": 483884
+          },
+          "stt_roundtrip": {
+            "model": "small",
+            "initial_prompt": "Talon Star Honcho Eyrie KubeCM llama-qwen GitLab Puppet Kubernetes OpenVox ROCm kubectl owl voice-speech Chatterbox Kokoro",
+            "wall_seconds": 0.338,
+            "text": "Star has a clear review update. The chosen Chatterbox voice is packaged as a candidate preset. Artifacts are ready and Talon and Star production voices are unchanged."
+          },
+          "local_wav": "artifacts/chatterbox-acceptance-20260610T074721Z/generated/star-clear/notification.wav"
+        },
+        {
+          "name": "ops_update",
+          "spoken_text": "Status: the local voice speech service is ready on owl. Whisper large v three turbo can transcribe the acceptance samples with the Nest vocabulary prompt.",
+          "wav": "/tmp/chatterbox_acceptance/out/star-clear/ops_update.wav",
+          "sha256": "31e810523eabf41b492673444a21aa32eaf6bd1c1e6cee9ebb037aeba81919aa",
+          "wall_seconds": 8.162,
+          "audio_seconds": 8.72,
+          "rtf": 0.936,
+          "ffprobe": {
+            "codec": "WAV",
+            "sample_rate": 24000,
+            "channels": 1,
+            "frames": 209280,
+            "duration": 8.72,
+            "size": 418604
+          },
+          "stt_roundtrip": {
+            "model": "small",
+            "initial_prompt": "Talon Star Honcho Eyrie KubeCM llama-qwen GitLab Puppet Kubernetes OpenVox ROCm kubectl owl voice-speech Chatterbox Kokoro",
+            "wall_seconds": 0.324,
+            "text": "Status The local voice-speech service is ready on owl. Whisper Large B3 Turbo can transcribe the acceptance samples with the Nest Vocabulary Prompt."
+          },
+          "local_wav": "artifacts/chatterbox-acceptance-20260610T074721Z/generated/star-clear/ops_update.wav"
+        },
+        {
+          "name": "persona",
+          "spoken_text": "I am Star: bright, careful, and easy to follow. I can hand Joy a concise status update, keep Eyrie and Honcho names understandable, and leave the decision unhurried.",
+          "wav": "/tmp/chatterbox_acceptance/out/star-clear/persona.wav",
+          "sha256": "ad4ab50d20870e11f9df45b43362992c65ea58f30fd1f4c46ef4bc37e8762fa0",
+          "wall_seconds": 10.607,
+          "audio_seconds": 11.64,
+          "rtf": 0.911,
+          "ffprobe": {
+            "codec": "WAV",
+            "sample_rate": 24000,
+            "channels": 1,
+            "frames": 279360,
+            "duration": 11.64,
+            "size": 558764
+          },
+          "stt_roundtrip": {
+            "model": "small",
+            "initial_prompt": "Talon Star Honcho Eyrie KubeCM llama-qwen GitLab Puppet Kubernetes OpenVox ROCm kubectl owl voice-speech Chatterbox Kokoro",
+            "wall_seconds": 0.383,
+            "text": "I am star, bright, careful, and easy to follow. I can handjoy a concise status update, keep ARI and Honcho names understandable, and leave the decision unhurried."
+          },
+          "local_wav": "artifacts/chatterbox-acceptance-20260610T074721Z/generated/star-clear/persona.wav"
+        },
+        {
+          "name": "style_probe",
+          "spoken_text": "[chuckle] Soft checkpoint: this is only a candidate voice, not a rollout. The safe path is listen, review, then approve later if it fits.",
+          "wav": "/tmp/chatterbox_acceptance/out/star-clear/style_probe.wav",
+          "sha256": "5592c4060b55460954b4157bebab4929cdcd410d2eed2667331936930e451e32",
+          "wall_seconds": 8.442,
+          "audio_seconds": 9.16,
+          "rtf": 0.922,
+          "ffprobe": {
+            "codec": "WAV",
+            "sample_rate": 24000,
+            "channels": 1,
+            "frames": 219840,
+            "duration": 9.16,
+            "size": 439724
+          },
+          "stt_roundtrip": {
+            "model": "small",
+            "initial_prompt": "Talon Star Honcho Eyrie KubeCM llama-qwen GitLab Puppet Kubernetes OpenVox ROCm kubectl owl voice-speech Chatterbox Kokoro",
+            "wall_seconds": 0.316,
+            "text": "Huh. Soft checkpoint. This is only a candidate voice. Not a rollout. The safe path is listen, review, then approve later if it fits."
+          },
+          "local_wav": "artifacts/chatterbox-acceptance-20260610T074721Z/generated/star-clear/style_probe.wav"
+        }
+      ],
+      "acceptance_dir": "artifacts/chatterbox-acceptance-20260610T074721Z/generated/star-clear"
+    }
+  ],
+  "model_load_seconds": 5.0,
+  "sample_rate": 24000,
+  "rocm_gtt_after_load": "{\"card0\": {\"GTT Total Memory (B)\": \"120259084288\", \"GTT Total Used Memory (B)\": \"55648071680\"}}\n",
+  "rocm_gtt_after": "{\"card0\": {\"GTT Total Memory (B)\": \"120259084288\", \"GTT Total Used Memory (B)\": \"57780359168\"}}\n",
+  "stt_endpoint": "http://10.108.246.221/v1/audio/transcriptions",
+  "stt_model": "small",
+  "stt_context_prompt": "Talon Star Honcho Eyrie KubeCM llama-qwen GitLab Puppet Kubernetes OpenVox ROCm kubectl owl voice-speech Chatterbox Kokoro"
+}
