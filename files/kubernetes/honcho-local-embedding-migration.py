@@ -32,7 +32,11 @@ TARGET_DIM = int(os.environ.get("EMBEDDING_VECTOR_DIMENSIONS", "1024"))
 DOC_BATCH_SIZE = int(os.environ.get("HONCHO_MIGRATION_DOC_BATCH_SIZE", "64"))
 MESSAGE_BATCH_SIZE = int(os.environ.get("HONCHO_MIGRATION_MESSAGE_BATCH_SIZE", "64"))
 DOC_MAX_CHARS = int(os.environ.get("HONCHO_MIGRATION_DOC_MAX_CHARS", "24000"))
-DOC_MIN_CHARS = int(os.environ.get("HONCHO_MIGRATION_DOC_MIN_CHARS", "2048"))
+# llama.cpp embedding failures report physical batch/ubatch token limits, not
+# just the configured context window.  Some stored code/log messages tokenize
+# much larger than their character count, so keep halving below this target if
+# the endpoint still rejects the truncated prefix.
+DOC_MIN_CHARS = int(os.environ.get("HONCHO_MIGRATION_DOC_MIN_CHARS", "512"))
 SKIP_RESET = os.environ.get("HONCHO_MIGRATION_SKIP_RESET", "false").lower() == "true"
 SKIP_DOCUMENTS = os.environ.get("HONCHO_MIGRATION_SKIP_DOCUMENTS", "false").lower() == "true"
 
@@ -53,13 +57,23 @@ async def scalar_int(db: AsyncSession, sql: str, params: dict | None = None) -> 
 
 async def embed_truncated_content(content: str, max_chars: int = DOC_MAX_CHARS) -> tuple[list[float], bool]:
     limit = min(len(content), max_chars)
-    while True:
+    target_floor = max(1, min(DOC_MIN_CHARS, limit))
+    while limit >= 1:
         try:
             return await embedding_client.embed(content[:limit]), limit < len(content)
         except Exception as error:
-            if not is_embedding_size_error(error) or limit <= DOC_MIN_CHARS:
+            if not is_embedding_size_error(error):
                 raise
-            limit = max(DOC_MIN_CHARS, limit // 2)
+            if limit <= 1:
+                raise
+            if limit > target_floor:
+                limit = max(target_floor, limit // 2)
+            else:
+                # The endpoint is failing on physical ubatch tokens even below
+                # the desired floor; keep shrinking so a pathological single
+                # message/document does not abort the whole migration.
+                limit = max(1, limit // 2)
+    raise RuntimeError("unreachable embedding truncation state")
 
 
 async def preflight() -> None:

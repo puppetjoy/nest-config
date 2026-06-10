@@ -109,8 +109,12 @@ init=true`, followed by normal mode `init=false`.
    Documents store a single vector per row; if an existing document or message
    exceeds the local embedding model token or physical batch limit, the script
    retries that row individually with a truncated prefix and reports only an
-   aggregate `truncated_overlong` count.  If the script fails after completing
-   documents but before completing messages/indexes, it may be resumed with
+   aggregate `truncated_overlong` count.  The truncation floor defaults to 512
+   characters and keeps halving below that if llama.cpp still rejects a
+   pathological high-token prefix, because the server's physical ubatch limit is
+   lower than the configured embedding context.  If the script fails after
+   completing documents but before completing messages/indexes, it may be
+   resumed with
    `HONCHO_MIGRATION_SKIP_RESET=true` and
    `HONCHO_MIGRATION_SKIP_DOCUMENTS=true` after verifying document population.
    Keep batches modest (for example 128 documents/messages at a time) and print
