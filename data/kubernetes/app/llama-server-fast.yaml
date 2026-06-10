@@ -14,17 +14,19 @@ model_repo: bartowski/Qwen_Qwen3.5-35B-A3B-GGUF
 model_file: Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf
 model_path: /cache/models/Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf
 model_url: https://huggingface.co/bartowski/Qwen_Qwen3.5-35B-A3B-GGUF/resolve/main/Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf
-# Keep the initial fast lane to 2 x 32k-context slots. The 35B-A3B model
-# OOM-killed with a 131072 total context (4 x 32k slots) beside llama-qwen;
-# Honcho's interactive minimal/low prompts are usually 4k-8k input tokens, so
-# this preserves useful context while cutting the KV cache in half.
-ctx_size: '65536'
-parallel_requests: '2'
+# Keep the initial fast lane to one 32k-context slot. The 35B-A3B model
+# OOM-killed with both 131072 total context (4 x 32k slots) and 65536 total
+# context (2 x 32k slots) beside llama-qwen; Honcho's interactive minimal/low
+# prompts are usually 4k-8k input tokens, so this preserves useful context
+# while minimizing KV-cache pressure for the 35B canary.
+ctx_size: '32768'
+parallel_requests: '1'
 cpu_request: '4'
 cpu_limit: '12'
 # Owl currently has enough allocatable headroom for one more GPU pod but not a
 # second large memory request beside llama-qwen. Keep the request scheduler-fit
 # sized and rely on the higher limit for llama.cpp/GTT-backed runtime headroom.
+# Service data may raise this further if live cgroup headroom is needed.
 memory_request: 16Gi
 memory_limit: 72Gi
 
