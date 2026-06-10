@@ -443,9 +443,18 @@ define nest::lib::hermes (
     'stt'              => {
       'enabled'  => $stt_enabled,
       'provider' => $stt_provider,
+      'codex'    => {
+        '__managed_absent__' => true,
+      },
+      'openai'   => {
+        '__managed_absent__' => true,
+      },
     } + $stt_voice_speech_provider_config,
     'tts'              => ({
       'provider'  => $tts_provider,
+      'openai'    => {
+        '__managed_absent__' => true,
+      },
       'providers' => {
         'chatterbox' => {
           '__managed_absent__' => true,
