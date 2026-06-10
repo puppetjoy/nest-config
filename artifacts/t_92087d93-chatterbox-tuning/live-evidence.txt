@@ -1,0 +1,88 @@
+=== kubectl pods/svc ===
+NAME                                    READY   STATUS    RESTARTS   AGE   IP               NODE   NOMINATED NODE   READINESS GATES
+pod/voice-chatterbox-6697b88b86-f58ns   1/1     Running   0          30m   192.168.13.197   owl    <none>           <none>
+=== health ===
+{
+    "ok": true,
+    "version": "0.1.0",
+    "model_loaded": true,
+    "model_load_seconds": 6.024,
+    "torch": "2.9.1+rocm7.2.4.git39497456",
+    "hip": "7.2.53211-97f5574fe2",
+    "cuda_available": true,
+    "device": "Radeon 8060S Graphics",
+    "chatterbox_tts": "0.1.7",
+    "aliases_active": {
+        "talon": "talon-elegant",
+        "star": "star-clear"
+    },
+    "aliases_pending_final_approval": {},
+    "voices": [
+        "star-clear",
+        "talon-elegant"
+    ],
+    "reference_state": {
+        "talon-elegant": {
+            "exists": true,
+            "sha256_ok": true
+        },
+        "star-clear": {
+            "exists": true,
+            "sha256_ok": true
+        }
+    },
+    "norm_loudness": false,
+    "production_tts_changed": true
+}
+=== models ===
+{
+    "data": [
+        {
+            "id": "chatterbox-turbo",
+            "object": "model",
+            "owned_by": "nest"
+        }
+    ]
+}
+=== voices ===
+{
+    "default": "talon-elegant",
+    "recommended": [
+        "star-clear",
+        "talon-elegant"
+    ],
+    "aliases_active": {
+        "talon": "talon-elegant",
+        "star": "star-clear"
+    },
+    "aliases_pending_final_approval": {},
+    "data": [
+        {
+            "id": "star-clear",
+            "object": "voice",
+            "persona": "star",
+            "source_candidate": "star-nova-clear",
+            "reference_sha256": "40faa648c03da6dc1fd466d1d9dd3178ae88acf21107d6b24926dc3e8391360d"
+        },
+        {
+            "id": "talon-elegant",
+            "object": "voice",
+            "persona": "talon",
+            "source_candidate": "star-alloy-elegant",
+            "reference_sha256": "41a7d95035c73b5c77de3af38c9b74fef11a3aac32a5b3dcdbebad949db1f600"
+        }
+    ]
+}
+=== one response headers ===
+HTTP/1.1 200 OK
+date: Wed, 10 Jun 2026 14:48:58 GMT
+server: uvicorn
+x-nest-tts-provider: chatterbox-turbo
+x-nest-tts-voice: talon-elegant
+x-nest-tts-normalized: true
+x-nest-tts-norm-loudness: false
+x-nest-tts-seconds: 1.800
+x-nest-tts-wall-seconds: 10.689
+x-nest-tts-rtf: 5.938
+content-length: 86444
+content-type: audio/wav

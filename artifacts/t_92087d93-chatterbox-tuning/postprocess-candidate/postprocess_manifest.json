@@ -1,0 +1,66 @@
+[
+  {
+    "name": "agent_request_received",
+    "before_path": "/home/joy/projects/.worktrees/nest-config/t_92087d93/artifacts/t_92087d93-chatterbox-tuning/baseline/agent_request_received.wav",
+    "after_path": "/home/joy/projects/.worktrees/nest-config/t_92087d93/artifacts/t_92087d93-chatterbox-tuning/postprocess-candidate/agent_request_received.wav",
+    "before_seconds": 5.6,
+    "after_seconds": 5.39,
+    "duration_delta_seconds": 0.21,
+    "metrics": {
+      "enabled": true,
+      "trim_start_seconds": 0.0,
+      "trim_end_seconds": 0.21,
+      "gated_segments": 3,
+      "trim_offset_seconds": 0.0
+    },
+    "sha256": "b2c5476b559d6a18177dfb0ee22ef0884ac612fa5aa7f4b9a90c34b32f8aa961"
+  },
+  {
+    "name": "long_ops",
+    "before_path": "/home/joy/projects/.worktrees/nest-config/t_92087d93/artifacts/t_92087d93-chatterbox-tuning/baseline/long_ops.wav",
+    "after_path": "/home/joy/projects/.worktrees/nest-config/t_92087d93/artifacts/t_92087d93-chatterbox-tuning/postprocess-candidate/long_ops.wav",
+    "before_seconds": 12.8,
+    "after_seconds": 12.55,
+    "duration_delta_seconds": 0.25,
+    "metrics": {
+      "enabled": true,
+      "trim_start_seconds": 0.0,
+      "trim_end_seconds": 0.25,
+      "gated_segments": 11,
+      "trim_offset_seconds": 0.0
+    },
+    "sha256": "8a3bcbae58bdf9c098be0b8f605c12c143fd2f03303b4f727b9dec16eb8b4198"
+  },
+  {
+    "name": "ops_tokens",
+    "before_path": "/home/joy/projects/.worktrees/nest-config/t_92087d93/artifacts/t_92087d93-chatterbox-tuning/baseline/ops_tokens.wav",
+    "after_path": "/home/joy/projects/.worktrees/nest-config/t_92087d93/artifacts/t_92087d93-chatterbox-tuning/postprocess-candidate/ops_tokens.wav",
+    "before_seconds": 5.48,
+    "after_seconds": 5.33,
+    "duration_delta_seconds": 0.15,
+    "metrics": {
+      "enabled": true,
+      "trim_start_seconds": 0.0,
+      "trim_end_seconds": 0.15,
+      "gated_segments": 4,
+      "trim_offset_seconds": 0.0
+    },
+    "sha256": "7a970a15247f4644a31922474baac1bb458e775834f455694012745a63c52355"
+  },
+  {
+    "name": "short_ack",
+    "before_path": "/home/joy/projects/.worktrees/nest-config/t_92087d93/artifacts/t_92087d93-chatterbox-tuning/baseline/short_ack.wav",
+    "after_path": "/home/joy/projects/.worktrees/nest-config/t_92087d93/artifacts/t_92087d93-chatterbox-tuning/postprocess-candidate/short_ack.wav",
+    "before_seconds": 0.76,
+    "after_seconds": 0.55,
+    "duration_delta_seconds": 0.21,
+    "metrics": {
+      "enabled": true,
+      "trim_start_seconds": 0.02,
+      "trim_end_seconds": 0.19,
+      "gated_segments": 0,
+      "trim_offset_seconds": 0.02
+    },
+    "sha256": "b97785e5533da374c80cefc4e6e4cc77f7f6cc9c41bc3b6572e10340e8266773"
+  }
+]
