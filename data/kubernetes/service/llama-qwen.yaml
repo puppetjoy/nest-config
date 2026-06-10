@@ -10,6 +10,7 @@ mmproj_file: mmproj-F16.gguf
 mmproj_path: /cache/models/Qwen3.6-35B-A3B-mmproj-F16.gguf
 mmproj_url: https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF/resolve/main/mmproj-F16.gguf
 image_max_tokens: '4096'
+min_p: '0.0'
 ctx_size: '1048576'
 parallel_requests: '4'
 cpu_request: '8'
