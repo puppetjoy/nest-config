@@ -1,5 +1,5 @@
 ---
-description: 'Deploy the Qwen3.5 local LLM'
+description: 'Deploy the Qwen3.6 local LLM'
 
 parameters:
   namespace:
@@ -23,7 +23,7 @@ parameters:
     default: ''
 
 steps:
-  - description: 'Deploy Qwen3.5 llama-server'
+  - description: 'Deploy Qwen3.6 llama-server'
     plan: nest::eyrie::ai::llama::deploy
     parameters:
       service: 'llama-qwen'

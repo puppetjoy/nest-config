@@ -1,5 +1,5 @@
 ---
-description: 'Deploy the canonical local Qwen3.5 llama-server'
+description: 'Deploy the canonical local Qwen3.6 llama-server'
 
 parameters:
   deploy:
@@ -18,7 +18,7 @@ parameters:
     default: false
 
 steps:
-  - description: 'Deploy canonical Qwen3.5 llama-server'
+  - description: 'Deploy canonical Qwen3.6 llama-server'
     plan: nest::eyrie::ai::deploy_llama_qwen
     parameters:
       deploy: $deploy and $qwen

@@ -1,14 +1,14 @@
 ---
 # Canonical local generative model for Hermes private/local work and all Honcho
-# dialectic levels.  This promotes the former 35B fast lane to llama-qwen and
-# removes the resident 122B model from the source-managed deployment.
-model_repo: bartowski/Qwen_Qwen3.5-35B-A3B-GGUF
-model_file: Qwen_Qwen3.5-35B-A3B-Q5_K_M.gguf
-model_path: /cache/models/Qwen_Qwen3.5-35B-A3B-Q5_K_M.gguf
-model_url: https://huggingface.co/bartowski/Qwen_Qwen3.5-35B-A3B-GGUF/resolve/main/Qwen_Qwen3.5-35B-A3B-Q5_K_M.gguf
-mmproj_file: mmproj-Qwen_Qwen3.5-35B-A3B-f16.gguf
-mmproj_path: /cache/models/mmproj-Qwen_Qwen3.5-35B-A3B-f16.gguf
-mmproj_url: https://huggingface.co/bartowski/Qwen_Qwen3.5-35B-A3B-GGUF/resolve/main/mmproj-Qwen_Qwen3.5-35B-A3B-f16.gguf
+# dialectic levels.  This keeps the 35B-A3B sole-model shape while promoting
+# the resident service from Qwen3.5 to Qwen3.6.
+model_repo: unsloth/Qwen3.6-35B-A3B-GGUF
+model_file: Qwen3.6-35B-A3B-UD-Q5_K_M.gguf
+model_path: /cache/models/Qwen3.6-35B-A3B-UD-Q5_K_M.gguf
+model_url: https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF/resolve/main/Qwen3.6-35B-A3B-UD-Q5_K_M.gguf
+mmproj_file: mmproj-F16.gguf
+mmproj_path: /cache/models/Qwen3.6-35B-A3B-mmproj-F16.gguf
+mmproj_url: https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF/resolve/main/mmproj-F16.gguf
 image_max_tokens: '4096'
 ctx_size: '1048576'
 parallel_requests: '4'
@@ -16,6 +16,5 @@ cpu_request: '8'
 cpu_limit: '16'
 memory_request: 32Gi
 memory_limit: 112Gi
-# Keep room for a higher-quality 35B quant while preserving stale 122B cache
-# artifacts for a separately approved cleanup.
+# Keep room for the Qwen3.6 Q5 quant plus current Qwen3.5 rollback artifacts.
 cache_size: 240Gi
