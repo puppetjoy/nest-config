@@ -20,6 +20,22 @@ values:
   contour:
     affinity: *affinity
     tolerations: *tolerations
+    resources:
+      limits:
+        memory: 1Gi
+      requests:
+        memory: 512Mi
   envoy:
     affinity: *affinity
     tolerations: *tolerations
+    resources:
+      limits:
+        memory: 1Gi
+      requests:
+        memory: 512Mi
+    shutdownManager:
+      resources:
+        limits:
+          memory: 512Mi
+        requests:
+          memory: 256Mi
