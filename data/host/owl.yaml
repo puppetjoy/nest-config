@@ -177,9 +177,13 @@ nest::app::hermes::instances:
     stt_voice_speech_temp: '0.0'
     stt_voice_speech_condition_on_previous_text: false
     stt_voice_speech_timeout: 300
-    tts_provider: 'chatterbox'
+    tts_provider: 'voice-speech'
     tts_openai_model: 'gpt-4o-mini-tts'
     tts_openai_voice: 'alloy'
+    tts_voice_speech_endpoint: 'http://10.108.246.221'
+    tts_voice_speech_voice: 'af_alloy'
+    tts_voice_speech_model: 'kokoro'
+    tts_voice_speech_timeout: 60
     tts_chatterbox_endpoint: 'http://10.108.157.193'
     tts_chatterbox_voice: 'talon'
     tts_chatterbox_model: 'chatterbox-turbo'
@@ -292,9 +296,13 @@ nest::app::hermes::instances:
     stt_voice_speech_temp: '0.0'
     stt_voice_speech_condition_on_previous_text: false
     stt_voice_speech_timeout: 300
-    tts_provider: 'chatterbox'
+    tts_provider: 'voice-speech'
     tts_openai_model: 'gpt-4o-mini-tts'
     tts_openai_voice: 'nova'
+    tts_voice_speech_endpoint: 'http://10.108.246.221'
+    tts_voice_speech_voice: 'af_nova'
+    tts_voice_speech_model: 'kokoro'
+    tts_voice_speech_timeout: 60
     tts_chatterbox_endpoint: 'http://10.108.157.193'
     tts_chatterbox_voice: 'star'
     tts_chatterbox_model: 'chatterbox-turbo'

@@ -68,6 +68,10 @@ define nest::lib::hermes (
   String[1]            $tts_provider             = 'openai',
   String[1]            $tts_openai_model         = 'gpt-4o-mini-tts',
   String[1]            $tts_openai_voice         = 'alloy',
+  Optional[String[1]]  $tts_voice_speech_endpoint= undef,
+  String[1]            $tts_voice_speech_voice   = 'af_heart',
+  String[1]            $tts_voice_speech_model   = 'kokoro',
+  Integer[1]           $tts_voice_speech_timeout = 60,
   Optional[String[1]]  $tts_chatterbox_endpoint  = undef,
   Optional[String[1]]  $tts_chatterbox_voice     = undef,
   String[1]            $tts_chatterbox_model     = 'chatterbox-turbo',
@@ -445,6 +449,23 @@ define nest::lib::hermes (
       },
     },
   }
+  $tts_voice_speech_provider_config = $tts_voice_speech_endpoint ? {
+    undef   => {},
+    default => {
+      'providers' => {
+        'voice-speech' => {
+          'type'             => 'command',
+          'command'          => "${install_dir}/bin/hermes-voice-speech-tts --endpoint ${tts_voice_speech_endpoint} --text-file {input_path} --output {output_path} --voice {voice} --model {model} --format {format} --speed {speed}",
+          'output_format'    => 'wav',
+          'voice'            => $tts_voice_speech_voice,
+          'model'            => $tts_voice_speech_model,
+          'timeout'          => $tts_voice_speech_timeout,
+          'max_text_length'  => 4096,
+          'voice_compatible' => true,
+        },
+      },
+    },
+  }
   $effective_skin_content = $skin_content ? {
     undef   => undef,
     default => "${skin_content}${skin_banner_hero_yaml}",
@@ -481,7 +502,7 @@ define nest::lib::hermes (
         'model' => $tts_openai_model,
         'voice' => $tts_openai_voice,
       },
-    } + $tts_chatterbox_provider_config),
+    } + $tts_chatterbox_provider_config + $tts_voice_speech_provider_config),
     'auxiliary'        => {
       'compression' => {
         'provider' => $auxiliary_provider,
