@@ -12,6 +12,11 @@ parameters:
     type: Boolean
     default: true
 
+  qwen_fast:
+    description: 'Deploy llama-qwen-fast'
+    type: Boolean
+    default: true
+
   init:
     description: 'Deploy initial revision'
     type: Boolean
@@ -22,4 +27,10 @@ steps:
     plan: nest::eyrie::ai::deploy_llama_qwen
     parameters:
       deploy: $deploy and $qwen
+      init: $init
+
+  - description: 'Deploy fast Qwen3.5 llama-server'
+    plan: nest::eyrie::ai::deploy_llama_qwen_fast
+    parameters:
+      deploy: $deploy and $qwen_fast
       init: $init

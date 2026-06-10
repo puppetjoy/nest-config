@@ -1,0 +1,20 @@
+---
+# Qwen3.5-35B-A3B is a sparse MoE (~3B active parameters per token), selected
+# as the first Honcho minimal/low dialectic fast-lane candidate.  Q4_K_M is the
+# bartowski recommended default quant at about 22.3 GiB, leaving room on owl for
+# llama.cpp, a 4-slot 32K/slot KV cache, and the existing 122B rollback service.
+# https://huggingface.co/bartowski/Qwen_Qwen3.5-35B-A3B-GGUF
+model_repo: bartowski/Qwen_Qwen3.5-35B-A3B-GGUF
+model_file: Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf
+model_path: /cache/models/Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf
+model_url: https://huggingface.co/bartowski/Qwen_Qwen3.5-35B-A3B-GGUF/resolve/main/Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf
+ctx_size: '131072'
+parallel_requests: '4'
+cpu_request: '4'
+cpu_limit: '12'
+# Owl currently has enough allocatable headroom for one more GPU pod but not a
+# second large memory request beside llama-qwen. Keep the request scheduler-fit
+# sized and rely on the higher limit for llama.cpp/GTT-backed runtime headroom.
+memory_request: 16Gi
+memory_limit: 72Gi
+cache_size: 48Gi
