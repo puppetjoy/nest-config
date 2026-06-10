@@ -322,6 +322,8 @@ resources:
         metadata:
           labels:
             app: "%{nest::kubernetes::service}"
+          annotations:
+            joyfullee.me/chatterbox-cutover-revision: "%{lookup('cutover_revision')}"
         spec:
           nodeSelector:
             kubernetes.io/hostname: owl

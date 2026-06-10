@@ -5,3 +5,4 @@
 cache_size: 80Gi
 storage_class: owl-crypt
 cluster_ip: 10.108.157.193
+cutover_revision: approved-20260610-140808
