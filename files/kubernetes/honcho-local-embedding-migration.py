@@ -175,7 +175,7 @@ async def embed_documents() -> int:
                 log("documents: batch exceeded embedding size limit; retrying documents individually with truncation")
                 embeddings = []
                 for doc in docs:
-                    embedding, was_truncated = await embed_truncated_content(doc.content)
+                    embedding, was_truncated = await embed_truncated_content(doc.content, max_chars=DOC_MIN_CHARS)
                     embeddings.append(embedding)
                     if was_truncated:
                         truncated += 1
@@ -240,7 +240,7 @@ async def embed_messages() -> int:
                 log("messages: batch exceeded embedding size limit; retrying messages individually with truncation")
                 embedded = {}
                 for public_id, content in id_to_content.items():
-                    embedding, was_truncated = await embed_truncated_content(content)
+                    embedding, was_truncated = await embed_truncated_content(content, max_chars=DOC_MIN_CHARS)
                     embedded[public_id] = [embedding]
                     if was_truncated:
                         truncated_messages += 1
