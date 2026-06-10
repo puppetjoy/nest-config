@@ -71,8 +71,8 @@ PY
 - The existing 122B deployment renders `--ctx-size 262144 --parallel 2`.
 - The fast deployment uses image
   `registry.gitlab.joyfullee.me/nest/tools/llama.cpp:zen5`, model path
-  `/cache/models/Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf`, one GPU, a scheduler-fit
-  16Gi request with a 96Gi cgroup limit, and one 32K-context slot.
+  `/cache/models/Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf`, one GPU, an 8Gi
+  scheduler-fit request with a 96Gi cgroup limit, and one 32K-context slot.
 - Honcho minimal/low env vars point to `llama-qwen-fast`; medium/high/max and
   dream env vars still point to `llama-qwen`.
 

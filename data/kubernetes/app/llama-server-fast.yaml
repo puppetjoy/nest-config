@@ -25,7 +25,9 @@ cpu_limit: '12'
 # second large memory request beside llama-qwen. Keep the request scheduler-fit
 # sized and rely on the higher limit for llama.cpp/GTT-backed runtime headroom.
 # Service data may raise this further if live cgroup headroom is needed.
-memory_request: 16Gi
+# Keep the scheduler request low enough to co-schedule beside the 96Gi-request
+# 122B lane; the 96Gi cgroup limit is the real llama.cpp runtime headroom.
+memory_request: 8Gi
 memory_limit: 96Gi
 
 resources:
