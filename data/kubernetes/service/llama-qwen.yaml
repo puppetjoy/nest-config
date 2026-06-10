@@ -1,11 +1,11 @@
 ---
 # Canonical local generative model for Hermes private/local work and all Honcho
 # dialectic levels.  This keeps the 35B-A3B sole-model shape while promoting
-# the resident service from Qwen3.5 to Qwen3.6.
+# the resident service from Qwen3.6 Q5 to Qwen3.6 Q8_0.
 model_repo: unsloth/Qwen3.6-35B-A3B-GGUF
-model_file: Qwen3.6-35B-A3B-UD-Q5_K_M.gguf
-model_path: /cache/models/Qwen3.6-35B-A3B-UD-Q5_K_M.gguf
-model_url: https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF/resolve/main/Qwen3.6-35B-A3B-UD-Q5_K_M.gguf
+model_file: Qwen3.6-35B-A3B-Q8_0.gguf
+model_path: /cache/models/Qwen3.6-35B-A3B-Q8_0.gguf
+model_url: https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF/resolve/main/Qwen3.6-35B-A3B-Q8_0.gguf
 mmproj_file: mmproj-F16.gguf
 mmproj_path: /cache/models/Qwen3.6-35B-A3B-mmproj-F16.gguf
 mmproj_url: https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF/resolve/main/mmproj-F16.gguf
