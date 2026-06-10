@@ -7,13 +7,21 @@ stages:
   - 'Build'
   - 'Deploy'
 
+.all-branch-ci:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH'
+    - if: '$CI_COMMIT_TAG'
+
 'Validate':
+  extends: .all-branch-ci
   image: '${CI_REGISTRY}/nest/tools/pdk'
   stage: 'Test'
   script:
     - 'pdk validate'
 
 'Unit Test':
+  extends: .all-branch-ci
   image: '${CI_REGISTRY}/nest/tools/pdk'
   stage: 'Test'
   script:
@@ -35,12 +43,10 @@ stages:
         empty'
     - 'podman push "${CI_REGISTRY_IMAGE}/${CI_COMMIT_REF_SLUG}:${CPU}"'
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $BUILD == $CPU'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $BUILD'
       when: never
-    - if: '$BUILD == $CPU'
-    - if: '$BUILD'
-      when: never
-    - when: always
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
 
 'Build haswell':
   extends: .template
@@ -66,7 +72,7 @@ stages:
   script:
     - 'r10k deploy environment "$CI_COMMIT_BRANCH" --modules --verbose'
   rules:
-    - if: '$CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH !~ /^talon\//'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
 
 'Deploy image':
   stage: 'Deploy'
@@ -85,6 +91,4 @@ stages:
     - 'podman manifest push --all "$LOCAL_IMAGE" "${CI_REGISTRY}/${IMAGE}"'
     - 'podman manifest push --all "$LOCAL_IMAGE" "registry.eyrie/${IMAGE}"'
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: never
-    - when: always
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
