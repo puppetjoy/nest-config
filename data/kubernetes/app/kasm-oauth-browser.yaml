@@ -7,8 +7,8 @@ service_name: oauth-browser
 
 cert_issuer: eyrie-ca
 cert_issuer_kind: ClusterIssuer
-ingress_class: contour-compute
-node_role: compute
+ingress_class: contour-workstation
+node_role: workstation
 image: docker.io/kasmweb/chrome:1.18.0
 launch_url: https://chatgpt.com/
 app_args: >-
@@ -18,7 +18,7 @@ app_args: >-
   --user-data-dir=/home/kasm-user/.config/talon-oauth-chrome
   --remote-debugging-address=0.0.0.0
   --remote-debugging-port=9222
-storage_class: owl-crypt
+storage_class: data-crypt
 profile_storage_size: 8Gi
 bitwarden_extension_id: nngceckbapebfimnlniiiahkandclblb
 bitwarden_update_url: https://clients2.google.com/service/update2/crx
