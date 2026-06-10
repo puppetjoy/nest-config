@@ -168,8 +168,6 @@ nest::app::hermes::instances:
     stt_enabled: true
     stt_provider: 'voice-speech'
     stt_model: 'gpt-4o-mini-transcribe'
-    stt_codex_experimental_ack: true
-    stt_codex_model: 'gpt-4o-mini-transcribe'
     stt_voice_speech_endpoint: 'http://10.108.246.221'
     stt_voice_speech_model: 'whisper-large-v3-turbo'
     stt_voice_speech_language: 'en'
@@ -283,8 +281,6 @@ nest::app::hermes::instances:
     stt_enabled: true
     stt_provider: 'voice-speech'
     stt_model: 'gpt-4o-mini-transcribe'
-    stt_codex_experimental_ack: true
-    stt_codex_model: 'gpt-4o-mini-transcribe'
     stt_voice_speech_endpoint: 'http://10.108.246.221'
     stt_voice_speech_model: 'whisper-large-v3-turbo'
     stt_voice_speech_language: 'en'

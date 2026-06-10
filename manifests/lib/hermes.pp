@@ -56,8 +56,6 @@ define nest::lib::hermes (
   Boolean              $stt_enabled              = false,
   String[1]            $stt_provider             = 'openai',
   String[1]            $stt_model                = 'gpt-4o-mini-transcribe',
-  Boolean              $stt_codex_experimental_ack= false,
-  Optional[String[1]]  $stt_codex_model          = undef,
   Optional[String[1]]  $stt_voice_speech_endpoint= undef,
   String[1]            $stt_voice_speech_model   = 'whisper-large-v3-turbo',
   String[1]            $stt_voice_speech_language= 'en',
@@ -398,17 +396,6 @@ define nest::lib::hermes (
     default => { 'expected_bot_id' => $telegram_bot_id },
   }
   $telegram_config = $telegram_bot_username_config + $telegram_bot_id_config
-  $stt_codex_config = ($stt_provider == 'codex' or $stt_codex_experimental_ack or $stt_codex_model != undef) ? {
-    true    => {
-      'codex' => {
-        'experimental_ack' => $stt_codex_experimental_ack,
-      } + ($stt_codex_model ? {
-        undef   => {},
-        default => { 'model' => $stt_codex_model },
-      }),
-    },
-    default => {},
-  }
   $stt_voice_speech_condition_arg = $stt_voice_speech_prev_text ? {
     true    => '--condition-on-previous-text',
     default => '',
@@ -472,7 +459,7 @@ define nest::lib::hermes (
       'openai'   => {
         'model' => $stt_model,
       },
-    } + $stt_codex_config + $stt_voice_speech_provider_config,
+    } + $stt_voice_speech_provider_config,
     'tts'              => ({
       'provider'  => $tts_provider,
       'providers' => {
