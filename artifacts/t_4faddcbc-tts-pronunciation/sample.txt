@@ -1,0 +1,1 @@
+Agent request ar-20260610-143610-99551e is blocked by task t_922b6ec2. Commit 9204d2f9 updates voice-chatterbox for KubeCM, llama-qwen, ROCm, OpenVox, and https://talon.eyrie/api/events.
