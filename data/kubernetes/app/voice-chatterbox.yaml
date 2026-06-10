@@ -44,6 +44,7 @@ resources:
         import io
         import json
         import os
+        import re
         import threading
         import time
         from pathlib import Path
@@ -57,7 +58,7 @@ resources:
 
         from chatterbox.tts_turbo import ChatterboxTurboTTS
 
-        app = FastAPI(title='Nest voice-chatterbox', version='0.1.1')
+        app = FastAPI(title='Nest voice-chatterbox', version='0.1.2')
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
         lock = threading.Lock()
         model = None
@@ -82,11 +83,12 @@ resources:
         pending_aliases = {}
 
         PRONUNCIATIONS = [
-            ('KubeCM', 'cube see em'),
-            ('kubectl', 'cube control'),
-            ('Eyrie', 'airy'),
-            ('OpenVox', 'open vox'),
-            ('ROCm', 'rock em'),
+            (re.compile(r'\bKubeCM\b'), 'cube see em'),
+            (re.compile(r'\bkubectl\b'), 'cube control'),
+            (re.compile(r'\bllama-qwen\b', re.IGNORECASE), 'llama qwen'),
+            (re.compile(r'\bEyrie\b'), 'airy'),
+            (re.compile(r'\bOpenVox\b'), 'open vox'),
+            (re.compile(r'\bROCm\b'), 'rock em'),
         ]
 
         class SpeechRequest(BaseModel):
@@ -110,11 +112,84 @@ resources:
                 return None
 
 
+        DIGIT_NAMES = {
+            '0': 'zero',
+            '1': 'one',
+            '2': 'two',
+            '3': 'three',
+            '4': 'four',
+            '5': 'five',
+            '6': 'six',
+            '7': 'seven',
+            '8': 'eight',
+            '9': 'nine',
+        }
+
+
+        def spell_identifier(value: str):
+            spoken = []
+            for char in value:
+                if char == '-':
+                    spoken.append('dash')
+                elif char == '_':
+                    spoken.append('underscore')
+                elif char == '/':
+                    spoken.append('slash')
+                elif char == '.':
+                    spoken.append('dot')
+                elif char.isalpha():
+                    spoken.append(char.upper())
+                else:
+                    spoken.append(DIGIT_NAMES.get(char, char))
+            return ' '.join(spoken)
+
+
+        def spell_task_id(value: str):
+            # Say task ids as "task T nine two..." rather than letting the
+            # model blend "t_<hex>" into an unintelligible word.
+            body = value.split('_', 1)[1] if '_' in value else value
+            return 'task T ' + spell_identifier(body)
+
+
+        def spell_agent_request_id(value: str):
+            body = value[3:] if value.lower().startswith('ar-') else value
+            return 'agent request A R dash ' + spell_identifier(body)
+
+
+        def normalize_url(scheme: str, value: str):
+            suffix = ''
+            while value and value[-1] in '.!?':
+                suffix = value[-1] + suffix
+                value = value[:-1]
+            parts = value.split('/', 1)
+            host = parts[0].replace('-', ' dash ').replace('.', ' dot ')
+            path = parts[1].replace('-', ' dash ').replace('_', ' underscore ').replace('/', ' slash ') if len(parts) > 1 else ''
+            return scheme + ' link ' + host + ((' slash ' + path) if path else '') + suffix
+
+
+        def normalize_notification_phrases(text: str):
+            # Chatterbox was breathing/gasping at a hard phrase boundary after
+            # "Agent request received" in Telegram notification copy.  Keep
+            # the visible text canonical and smooth only the speech input.
+            return re.sub(
+                r'\bAgent request received\b[\s:;.!?—–-]*',
+                'Agent request received, ',
+                text,
+                flags=re.IGNORECASE,
+            )
+
+
         def normalize_for_tts(text: str):
-            normalized = text
-            for source, replacement in PRONUNCIATIONS:
-                normalized = normalized.replace(source, replacement)
-            return ' '.join(normalized.split()).strip()
+            normalized = normalize_notification_phrases(text)
+            normalized = re.sub(r'https://([^\s,;]+)', lambda m: normalize_url('H T T P S', m.group(1)), normalized)
+            normalized = re.sub(r'http://([^\s,;]+)', lambda m: normalize_url('H T T P', m.group(1)), normalized)
+            normalized = re.sub(r'\b(ar-\d{8}-\d{6}-[0-9a-f]+)\b', lambda m: spell_agent_request_id(m.group(1)), normalized, flags=re.IGNORECASE)
+            normalized = re.sub(r'\b(?:task\s+)?(t_[0-9a-f]+)\b', lambda m: spell_task_id(m.group(1)), normalized, flags=re.IGNORECASE)
+            for pattern, replacement in PRONUNCIATIONS:
+                normalized = pattern.sub(replacement, normalized)
+            normalized = re.sub(r'(?<!\w)/(?!\w)', ' slash ', normalized)
+            normalized = re.sub(r'\s+', ' ', normalized).strip()
+            return normalized
 
 
         def sha256(path: Path):
@@ -269,9 +344,15 @@ resources:
                     'top_k': {'default': 1000, 'min': 1, 'max': 2000},
                     'repetition_penalty': {'default': 1.2, 'min': 1.0, 'max': 2.0},
                     'postprocess_audio': 'leading/trailing trim plus mild low-energy inter-phrase attenuation',
+                    'text_normalization': 'smooth Agent request received phrase boundary, spell task/request ids and operational tokens',
                 },
                 'production_tts_changed': True,
             }
+
+
+        @app.get('/v1/audio/normalize')
+        def normalize(text: str):
+            return {'input': text, 'normalized': normalize_for_tts(text)}
 
 
         @app.get('/v1/audio/voices')
@@ -336,6 +417,7 @@ resources:
                 'X-Nest-TTS-Provider': 'chatterbox-turbo',
                 'X-Nest-TTS-Voice': preset_name,
                 'X-Nest-TTS-Normalized': str(request.normalize).lower(),
+                'X-Nest-TTS-Normalized-SHA256': hashlib.sha256(input_text.encode('utf-8')).hexdigest(),
                 'X-Nest-TTS-Norm-Loudness': 'false',
                 'X-Nest-TTS-Temperature': f'{request.temperature:.3f}',
                 'X-Nest-TTS-Top-P': f'{request.top_p:.3f}',

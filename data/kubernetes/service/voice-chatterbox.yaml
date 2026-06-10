@@ -5,4 +5,4 @@
 cache_size: 80Gi
 storage_class: owl-crypt
 cluster_ip: 10.108.157.193
-cutover_revision: tuning-t_92087d93-20260610
+cutover_revision: notification-tts-t_8e723288-20260610
