@@ -33,6 +33,15 @@ class nest::app::hermes::service {
     require => File["${install_dir}/bin"],
   }
 
+  file { "${install_dir}/bin/hermes-chatterbox-tts":
+    ensure  => file,
+    mode    => '0755',
+    owner   => 'root',
+    group   => 'root',
+    source  => 'puppet:///modules/nest/app/hermes/chatterbox-tts-command.py',
+    require => File["${install_dir}/bin"],
+  }
+
   file { "${install_dir}/bin/hermes-dashboard":
     ensure  => file,
     mode    => '0755',
