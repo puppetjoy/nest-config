@@ -420,41 +420,82 @@ resources:
             def do_DELETE(self):
                 self.proxy()
 
-            def send_json(self, status, payload):
+            def request_content_length(self):
+                value = self.headers.get('Content-Length')
+                if value is None or value == '':
+                    return 0
+                try:
+                    length = int(value)
+                except ValueError:
+                    return None
+                if length < 0:
+                    return None
+                return length
+
+            def send_json(self, status, payload, close=False, extra_headers=None):
                 data = json.dumps(payload, sort_keys=True).encode('utf-8')
+                if close:
+                    self.close_connection = True
                 self.send_response(status)
                 self.send_header('Content-Type', 'application/json')
                 self.send_header('Content-Length', str(len(data)))
+                if close:
+                    self.send_header('Connection', 'close')
+                for key, value in (extra_headers or {}).items():
+                    self.send_header(key, value)
                 self.end_headers()
                 if self.command != 'HEAD':
                     self.wfile.write(data)
 
+            def read_request_body(self, content_length):
+                if not content_length:
+                    return None
+                return self.rfile.read(content_length)
+
             def proxy(self):
-                acquired = semaphore.acquire(timeout=QUEUE_TIMEOUT_SECONDS)
-                if not acquired:
-                    self.send_response(503)
-                    self.send_header('Content-Type', 'application/json')
-                    self.send_header('Retry-After', str(int(QUEUE_TIMEOUT_SECONDS)))
-                    payload = json.dumps({
-                        'error': 'honcho llama-qwen concurrency limit reached',
-                        'max_concurrent': MAX_CONCURRENT,
-                    }).encode('utf-8')
-                    self.send_header('Content-Length', str(len(payload)))
-                    self.end_headers()
-                    if self.command != 'HEAD':
-                        self.wfile.write(payload)
+                global active_upstream
+
+                if self.headers.get('Transfer-Encoding'):
+                    log(f'bad_request method={self.command} path={self.path} unsupported_transfer_encoding={self.headers.get("Transfer-Encoding")!r}')
+                    self.send_json(400, {'error': 'Transfer-Encoding is not supported by this limiter'}, close=True)
                     return
 
-                global active_upstream
+                content_length = self.request_content_length()
+                if content_length is None:
+                    log(f'bad_request method={self.command} path={self.path} invalid_content_length={self.headers.get("Content-Length")!r}')
+                    self.send_json(400, {'error': 'invalid Content-Length'}, close=True)
+                    return
+
+                acquired = semaphore.acquire(timeout=QUEUE_TIMEOUT_SECONDS)
+                if not acquired:
+                    log(f'reject method={self.command} path={self.path} content_length={content_length} active={active_upstream}/{MAX_CONCURRENT}')
+                    self.send_json(503, {
+                        'error': 'honcho llama-qwen concurrency limit reached',
+                        'max_concurrent': MAX_CONCURRENT,
+                    }, close=True, extra_headers={
+                        'Retry-After': str(int(QUEUE_TIMEOUT_SECONDS)),
+                    })
+                    return
+
                 with active_lock:
                     active_upstream += 1
                     current_active = active_upstream
-                log(f'start method={self.command} path={self.path} active={current_active}/{MAX_CONCURRENT}')
+                log(f'start method={self.command} path={self.path} content_length={content_length} active={current_active}/{MAX_CONCURRENT}')
 
                 sent_response = False
+                conn = None
                 try:
-                    content_length = int(self.headers.get('Content-Length', '0') or 0)
-                    request_body = self.rfile.read(content_length) if content_length else None
+                    try:
+                        request_body = self.read_request_body(content_length)
+                    except Exception as exc:
+                        log(f'bad_request method={self.command} path={self.path} read_error={exc!r}')
+                        self.send_json(400, {'error': 'failed to read request body'}, close=True)
+                        return
+                    if content_length and len(request_body or b'') != content_length:
+                        log(f'bad_request method={self.command} path={self.path} incomplete_body={len(request_body or b"")}/{content_length}')
+                        self.send_json(400, {'error': 'incomplete request body'}, close=True)
+                        return
+
                     headers = {
                         key: value
                         for key, value in self.headers.items()
@@ -482,8 +523,10 @@ resources:
                 except Exception as exc:
                     log(f'upstream_error method={self.command} path={self.path} error={exc!r}')
                     if not sent_response:
-                        self.send_json(502, {'error': 'honcho llama-qwen limiter upstream error'})
+                        self.send_json(502, {'error': 'honcho llama-qwen limiter upstream error'}, close=True)
                 finally:
+                    if conn is not None:
+                        conn.close()
                     with active_lock:
                         active_upstream -= 1
                         current_active = active_upstream
