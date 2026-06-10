@@ -91,17 +91,17 @@ representation_subthreshold_expiry_job_ttl: 21600
   - name: DIALECTIC_LEVELS__minimal__MODEL_CONFIG__TRANSPORT
     value: 'openai'
   - name: DIALECTIC_LEVELS__minimal__MODEL_CONFIG__MODEL
-    value: 'llama-qwen-fast'
+    value: 'llama-qwen'
   - name: DIALECTIC_LEVELS__minimal__MODEL_CONFIG__OVERRIDES__BASE_URL
-    value: 'http://llama-qwen-fast/v1'
+    value: 'http://llama-qwen/v1'
   - name: DIALECTIC_LEVELS__minimal__MODEL_CONFIG__OVERRIDES__API_KEY_ENV
     value: 'HONCHO_LOCAL_OPENAI_API_KEY'
   - name: DIALECTIC_LEVELS__low__MODEL_CONFIG__TRANSPORT
     value: 'openai'
   - name: DIALECTIC_LEVELS__low__MODEL_CONFIG__MODEL
-    value: 'llama-qwen-fast'
+    value: 'llama-qwen'
   - name: DIALECTIC_LEVELS__low__MODEL_CONFIG__OVERRIDES__BASE_URL
-    value: 'http://llama-qwen-fast/v1'
+    value: 'http://llama-qwen/v1'
   - name: DIALECTIC_LEVELS__low__MODEL_CONFIG__OVERRIDES__API_KEY_ENV
     value: 'HONCHO_LOCAL_OPENAI_API_KEY'
   - name: DIALECTIC_LEVELS__medium__MODEL_CONFIG__TRANSPORT

@@ -1,5 +1,5 @@
 ---
-description: 'Deploy the local Qwen3.5 llama-server'
+description: 'Deploy the canonical local Qwen3.5 llama-server'
 
 parameters:
   deploy:
@@ -12,25 +12,14 @@ parameters:
     type: Boolean
     default: true
 
-  qwen_fast:
-    description: 'Deploy llama-qwen-fast'
-    type: Boolean
-    default: true
-
   init:
     description: 'Deploy initial revision'
     type: Boolean
     default: false
 
 steps:
-  - description: 'Deploy Qwen3.5 llama-server'
+  - description: 'Deploy canonical Qwen3.5 llama-server'
     plan: nest::eyrie::ai::deploy_llama_qwen
     parameters:
       deploy: $deploy and $qwen
-      init: $init
-
-  - description: 'Deploy fast Qwen3.5 llama-server'
-    plan: nest::eyrie::ai::deploy_llama_qwen_fast
-    parameters:
-      deploy: $deploy and $qwen_fast
       init: $init

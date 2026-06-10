@@ -1,25 +1,18 @@
 ---
-# Qwen3.5-122B-A10B is a sparse MoE (~10B active parameters per token).
-# bartowski publishes llama.cpp/imatrix GGUF quants; Q4_K_M is ~77.6 GiB,
-# leaving room in owl's ~120 GiB practical memory envelope for llama.cpp and
-# a useful KV cache. Higher Q5/Q6 quants are likely too tight for this node.
-# https://huggingface.co/bartowski/Qwen_Qwen3.5-122B-A10B-GGUF
-# The cache path is the deterministic llama.cpp HF cache filename produced by the
-# initial `--hf-repo ...:Q4_K_M` deployment. Using --model avoids a b9222
-# --hf-repo startup hang observed after the shards were already downloaded.
-# Cap dynamic-resolution image inputs at 4096 tokens: high enough for screenshots
-# and OCR probes in a 128K slot, while bounding accidental huge image prompts.
-server_args:
-  - --model
-  - /root/.cache/llama.cpp/bartowski_Qwen_Qwen3.5-122B-A10B-GGUF_Qwen_Qwen3.5-122B-A10B-Q4_K_M_Qwen_Qwen3.5-122B-A10B-Q4_K_M-00001-of-00002.gguf
-  - --mmproj
-  - /root/.cache/llama.cpp/bartowski_Qwen_Qwen3.5-122B-A10B-GGUF_mmproj-Qwen_Qwen3.5-122B-A10B-f16.gguf
-  - --image-max-tokens
-  - '4096'
-  - --ctx-size
-  - '262144'
-  - --parallel
-  - '2'
-  - --jinja
-  - --reasoning
-  - 'off'
+# Canonical local generative model for Hermes private/local work and all Honcho
+# dialectic levels.  This promotes the former 35B fast lane to llama-qwen and
+# removes the resident 122B model from the source-managed deployment.
+model_repo: bartowski/Qwen_Qwen3.5-35B-A3B-GGUF
+model_file: Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf
+model_path: /cache/models/Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf
+model_url: https://huggingface.co/bartowski/Qwen_Qwen3.5-35B-A3B-GGUF/resolve/main/Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf
+ctx_size: '524288'
+parallel_requests: '4'
+cpu_request: '8'
+cpu_limit: '16'
+memory_request: 32Gi
+memory_limit: 112Gi
+# Preserve the existing llama-qwen PVC size during the 122B -> 35B transition;
+# shrinking or recreating the cache can be handled after the live rollout is
+# verified and any stale 122B cache cleanup is approved.
+cache_size: 160Gi

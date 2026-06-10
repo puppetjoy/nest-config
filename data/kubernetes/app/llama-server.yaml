@@ -4,10 +4,23 @@ include:
 
 plan_base: 'nest::eyrie::ai::llama'
 
-# Qwen3.5-122B-A10B Q4_K_M is ~78 GiB; keep room for split GGUF
-# shards, the KV cache, and llama.cpp metadata in the persistent HF cache.
+# Canonical local generative model service.  The 35B-A3B MoE replaces the
+# previous resident 122B lane and removes the split-lane topology.  Keep the
+# cache PVC large enough for the existing llama-qwen claim during transition;
+# stale 122B cache contents can be cleaned after the rollout is accepted.
 cache_size: 160Gi
 storage_class: owl-crypt
+image: registry.gitlab.joyfullee.me/nest/tools/llama.cpp:zen5
+model_repo: bartowski/Qwen_Qwen3.5-35B-A3B-GGUF
+model_file: Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf
+model_path: /cache/models/Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf
+model_url: https://huggingface.co/bartowski/Qwen_Qwen3.5-35B-A3B-GGUF/resolve/main/Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf
+ctx_size: '524288'
+parallel_requests: '4'
+cpu_request: '8'
+cpu_limit: '16'
+memory_request: 32Gi
+memory_limit: 112Gi
 
 resources:
   backup: {}
@@ -56,17 +69,49 @@ resources:
           labels:
             app: "%{nest::kubernetes::service}"
         spec:
-          affinity: "%{alias('affinity')}"
-          tolerations: "%{alias('tolerations')}"
-          initContainers: []
+          nodeSelector:
+            kubernetes.io/hostname: owl
+          tolerations:
+            - key: "node-role.kubernetes.io/compute"
+              operator: Exists
+              effect: NoSchedule
+          initContainers:
+            - name: fetch-model
+              image: docker.io/curlimages/curl:8.11.1
+              imagePullPolicy: IfNotPresent
+              securityContext:
+                runAsUser: 0
+                runAsGroup: 0
+              command:
+                - sh
+                - -ceu
+                - |-
+                  mkdir -p "$(dirname "%{lookup('model_path')}")"
+                  if [ ! -s "%{lookup('model_path')}" ]; then
+                    tmp="%{lookup('model_path')}.tmp"
+                    curl -fL --retry 5 --retry-delay 5 --connect-timeout 30 \
+                      -o "$tmp" "%{lookup('model_url')}"
+                    mv "$tmp" "%{lookup('model_path')}"
+                  fi
+                  ls -lh "%{lookup('model_path')}"
+              volumeMounts:
+                - name: cache
+                  mountPath: /cache
           containers:
             - name: llama-server
-              image: registry.gitlab.joyfullee.me/nest/tools/llama.cpp:zen5
-              # The zen5 image is built for owl/Strix Halo and reused locally by CRI-O
-              # during this experiment; KubeCM rollout will refresh it after CI pushes.
+              image: "%{lookup('image')}"
               imagePullPolicy: IfNotPresent
               command: ['llama-server', '--host', '0.0.0.0']
-              args: "%{alias('server_args')}"
+              args:
+                - --model
+                - "%{lookup('model_path')}"
+                - --ctx-size
+                - "%{lookup('ctx_size')}"
+                - --parallel
+                - "%{lookup('parallel_requests')}"
+                - --jinja
+                - --reasoning
+                - 'off'
               envFrom:
                 - secretRef:
                     name: "%{nest::kubernetes::service}"
@@ -74,22 +119,22 @@ resources:
                 - containerPort: 8080
               resources:
                 requests:
-                  cpu: '8'
-                  memory: 96Gi
+                  cpu: "%{lookup('cpu_request')}"
+                  memory: "%{lookup('memory_request')}"
                   squat.ai/gpu: '1'
                 limits:
-                  cpu: '16'
-                  memory: 120Gi
+                  cpu: "%{lookup('cpu_limit')}"
+                  memory: "%{lookup('memory_limit')}"
                   squat.ai/gpu: '1'
               volumeMounts:
                 - name: cache
-                  mountPath: /root/.cache
+                  mountPath: /cache
               startupProbe:
                 tcpSocket:
                   port: 8080
-                # Allow up to 2 hours for initial HF download + model load
+                # Allow up to 1 hour for initial model download + load
                 periodSeconds: 10
-                failureThreshold: 720   # 720 * 10s = 7200s = 120m
+                failureThreshold: 360
                 timeoutSeconds: 1
               readinessProbe:
                 tcpSocket:
@@ -100,9 +145,9 @@ resources:
               livenessProbe:
                 tcpSocket:
                   port: 8080
-                # Don’t be too twitchy; inference can stall briefly under load
+                # Don't be too twitchy; inference can stall briefly under load
                 periodSeconds: 10
-                failureThreshold: 6     # ~60s
+                failureThreshold: 6
                 timeoutSeconds: 1
           volumes:
             - name: cache
@@ -115,6 +160,8 @@ resources:
     metadata:
       name: "%{nest::kubernetes::service}"
       namespace: "%{nest::kubernetes::namespace}"
+      labels:
+        app: "%{nest::kubernetes::service}"
     spec:
       type: ClusterIP
       selector:
