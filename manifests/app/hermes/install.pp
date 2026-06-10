@@ -191,6 +191,15 @@ class nest::app::hermes::install {
     require => Exec['install_hermes_agent'],
   }
 
+  file { "${install_dir}/bin/hermes-chatterbox-tts":
+    ensure  => file,
+    source  => 'puppet:///modules/nest/app/hermes/chatterbox-tts-command.py',
+    mode    => '0755',
+    owner   => 'root',
+    group   => 'root',
+    require => Exec['install_hermes_agent'],
+  }
+
   file { '/usr/local/bin/hermes-codex-auth-status':
     ensure => absent,
   }

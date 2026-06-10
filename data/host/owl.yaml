@@ -171,9 +171,13 @@ nest::app::hermes::instances:
     stt_model: 'gpt-4o-mini-transcribe'
     stt_codex_experimental_ack: true
     stt_codex_model: 'gpt-4o-mini-transcribe'
-    tts_provider: 'openai'
+    tts_provider: 'chatterbox'
     tts_openai_model: 'gpt-4o-mini-tts'
     tts_openai_voice: 'alloy'
+    tts_chatterbox_endpoint: 'http://10.108.157.193'
+    tts_chatterbox_voice: 'talon'
+    tts_chatterbox_model: 'chatterbox-turbo'
+    tts_chatterbox_timeout: 180
     telegram_bot_username: 'talonopsbot'
     telegram_bot_id: '8625589001'
   star:
@@ -275,8 +279,12 @@ nest::app::hermes::instances:
     stt_model: 'gpt-4o-mini-transcribe'
     stt_codex_experimental_ack: true
     stt_codex_model: 'gpt-4o-mini-transcribe'
-    tts_provider: 'openai'
+    tts_provider: 'chatterbox'
     tts_openai_model: 'gpt-4o-mini-tts'
     tts_openai_voice: 'nova'
+    tts_chatterbox_endpoint: 'http://10.108.157.193'
+    tts_chatterbox_voice: 'star'
+    tts_chatterbox_model: 'chatterbox-turbo'
+    tts_chatterbox_timeout: 180
     telegram_bot_username: 'joyfulstarbot'
     telegram_bot_id: '8571651712'

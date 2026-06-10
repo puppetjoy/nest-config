@@ -226,6 +226,10 @@ class nest::app::hermes::config {
     $instance_tts_provider      = pick($config['tts_provider'], 'openai')
     $instance_tts_openai_model  = pick($config['tts_openai_model'], 'gpt-4o-mini-tts')
     $instance_tts_openai_voice  = pick($config['tts_openai_voice'], 'alloy')
+    $instance_chatterbox_url    = $config['tts_chatterbox_endpoint']
+    $instance_chatterbox_voice  = $config['tts_chatterbox_voice']
+    $instance_chatterbox_model  = pick($config['tts_chatterbox_model'], 'chatterbox-turbo')
+    $instance_chatterbox_timeout = pick($config['tts_chatterbox_timeout'], 180)
     $instance_ssh_private_key   = $config['ssh_private_key']
     $instance_kubeconfig_path   = $config['kubeconfig_path']
     $instance_kubeconfig        = $config['kubeconfig_content']
@@ -294,6 +298,10 @@ class nest::app::hermes::config {
       tts_provider               => $instance_tts_provider,
       tts_openai_model           => $instance_tts_openai_model,
       tts_openai_voice           => $instance_tts_openai_voice,
+      tts_chatterbox_endpoint    => $instance_chatterbox_url,
+      tts_chatterbox_voice       => $instance_chatterbox_voice,
+      tts_chatterbox_model       => $instance_chatterbox_model,
+      tts_chatterbox_timeout     => $instance_chatterbox_timeout,
       ssh_private_key            => $instance_ssh_private_key,
       kubeconfig_path            => $instance_kubeconfig_path,
       kubeconfig_content         => $instance_kubeconfig,

@@ -69,12 +69,12 @@ resources:
             preset_manifest = json.load(fh)
 
         presets = {preset['preset']: preset for preset in preset_manifest['presets']}
-        active_aliases = {}
-        pending_aliases = {
-            preset.get('alias_after_final_approval'): preset['preset']
+        active_aliases = {
+            preset['alias_after_final_approval']: preset['preset']
             for preset in preset_manifest['presets']
             if preset.get('alias_after_final_approval')
         }
+        pending_aliases = {}
 
         PRONUNCIATIONS = [
             ('KubeCM', 'cube see em'),
@@ -161,7 +161,7 @@ resources:
                 'voices': sorted(presets.keys()),
                 'reference_state': reference_state,
                 'norm_loudness': False,
-                'production_tts_changed': False,
+                'production_tts_changed': True,
             }
 
 
@@ -238,8 +238,8 @@ resources:
       presets.json: |
         {
           "schema": 1,
-          "purpose": "Generated-reference Chatterbox candidate presets for future local Talon/Star review; not a production provider switch.",
-          "production_tts_changed": false,
+          "purpose": "Generated-reference Chatterbox presets for Talon/Star local production TTS after final approval.",
+          "production_tts_changed": true,
           "no_user_recordings": true,
           "source_artifact_dir": "/home/joy/projects/.worktrees/hermes-agent/t_b09f8cd2/artifacts/chatterbox-voice-grid-20260610T071928Z",
           "source_request_id": "ar-20260610-071520-ea6b74",
@@ -461,6 +461,7 @@ resources:
       namespace: "%{nest::kubernetes::namespace}"
     spec:
       type: ClusterIP
+      clusterIP: "%{lookup('cluster_ip')}"
       selector:
         app: "%{nest::kubernetes::service}"
       ports:

@@ -61,6 +61,10 @@ define nest::lib::hermes (
   String[1]            $tts_provider             = 'openai',
   String[1]            $tts_openai_model         = 'gpt-4o-mini-tts',
   String[1]            $tts_openai_voice         = 'alloy',
+  Optional[String[1]]  $tts_chatterbox_endpoint  = undef,
+  Optional[String[1]]  $tts_chatterbox_voice     = undef,
+  String[1]            $tts_chatterbox_model     = 'chatterbox-turbo',
+  Integer[1]           $tts_chatterbox_timeout   = 180,
   Any                  $ssh_private_key          = undef,
   Optional[String[1]]  $kubeconfig_path          = undef,
   Any                  $kubeconfig_content       = undef,
@@ -398,6 +402,23 @@ define nest::lib::hermes (
     },
     default => {},
   }
+  $tts_chatterbox_provider_config = $tts_chatterbox_endpoint ? {
+    undef   => {},
+    default => {
+      'providers' => {
+        'chatterbox' => {
+          'type'             => 'command',
+          'command'          => "${install_dir}/bin/hermes-chatterbox-tts --endpoint ${tts_chatterbox_endpoint} --text-file {input_path} --output {output_path} --voice {voice} --model {model} --format {format} --speed {speed}",
+          'output_format'    => 'wav',
+          'voice'            => pick($tts_chatterbox_voice, $tts_openai_voice),
+          'model'            => $tts_chatterbox_model,
+          'timeout'          => $tts_chatterbox_timeout,
+          'max_text_length'  => 4096,
+          'voice_compatible' => true,
+        },
+      },
+    },
+  }
   $effective_skin_content = $skin_content ? {
     undef   => undef,
     default => "${skin_content}${skin_banner_hero_yaml}",
@@ -428,13 +449,13 @@ define nest::lib::hermes (
         'model' => $stt_model,
       },
     } + $stt_codex_config,
-    'tts'              => {
+    'tts'              => ({
       'provider' => $tts_provider,
       'openai'   => {
         'model' => $tts_openai_model,
         'voice' => $tts_openai_voice,
       },
-    },
+    } + $tts_chatterbox_provider_config),
     'auxiliary'        => {
       'compression' => {
         'provider' => $auxiliary_provider,

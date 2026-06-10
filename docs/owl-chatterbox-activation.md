@@ -42,19 +42,34 @@ verification step:
 - `GET /v1/audio/voices`
 - `POST /v1/audio/speech`
 
-Only the reviewed preset names are active initially:
+Only the reviewed preset names and approved short aliases are active after the
+final cutover approval:
 
 - `talon-elegant`
 - `star-clear`
+- `talon` -> `talon-elegant`
+- `star` -> `star-clear`
 
-The short aliases `talon` and `star` remain inactive. The API reports them as
-`aliases_pending_final_approval` and returns HTTP 409 if a caller tries to use
-one before the final provider-switch approval.
+The aliases were intentionally inactive during the candidate verification phase;
+Joy approved the final provider switch before this activation.
 
-## Verification still required before profile activation
+## Profile activation
 
-After review/merge, deploy the candidate service through the managed plan and
-collect live evidence before changing Talon or Star production TTS settings:
+Talon and Star use the Hermes `tts.providers.chatterbox` command provider. The
+provider calls the private `voice-chatterbox` ClusterIP endpoint from owl through
+`/opt/hermes-agent/bin/hermes-chatterbox-tts` and requests the approved short
+voice aliases:
+
+- Talon: `tts_provider: chatterbox`, `tts_chatterbox_voice: talon`
+- Star: `tts_provider: chatterbox`, `tts_chatterbox_voice: star`
+
+The OpenAI TTS model/voice fields remain in Hiera as reference/fallback metadata
+but are not selected while `tts_provider` is `chatterbox`.
+
+## Verification checklist
+
+After each source change, deploy through the managed plans and keep collecting
+live evidence for the Chatterbox service and Hermes profile runtime paths:
 
 1. `bolt plan run nest::eyrie::ai::deploy_voice_chatterbox`
 2. `kubectl -n ai get pod,svc -l app=voice-chatterbox -o wide`
