@@ -65,8 +65,56 @@ Post-processing was tested offline on the baseline WAVs using the same trim/gate
 | short_ack | 0.760 | 0.550 | 0.210 | 0.020 | 0.190 | 0 | `baseline/short_ack.wav` | `postprocess-candidate/short_ack.wav` |
 | long_ops | 12.800 | 12.550 | 0.250 | 0.000 | 0.250 | 11 | `baseline/long_ops.wav` | `postprocess-candidate/long_ops.wav` |
 
+## After-deploy production evidence
+
+Joy accepted the review handoff, then commit `d6c030d7` was pushed to the task branch and `origin/main`. `bolt plan run nest::puppet::deploy` succeeded after installing missing Bolt modules in this isolated worktree, and the managed KubeCM deploy rolled `ai/voice-chatterbox` to version `0.1.1`.
+
+Live service after deploy:
+
+- Deployment: `ai/deployment.apps/voice-chatterbox`, `1/1` available.
+- Pod: `voice-chatterbox-dcc6dd4b8-rlw55`, `Ready`, 0 restarts.
+- Service: `voice-chatterbox`, ClusterIP `10.108.157.193`, port 80.
+- Health: version `0.1.1`, model loaded, Torch `2.9.1+rocm7.2.4.git39497456`, HIP `7.2.53211-97f5574fe2`, GPU `Radeon 8060S Graphics`, Chatterbox `0.1.7`.
+- Aliases: `talon -> talon-elegant`, `star -> star-clear`; `conditionals_cached` included `talon-elegant` after the probes.
+- `/v1/audio/voices` returned both production voices with the expected reference SHA256 values.
+- `kubectl top pod` after deploy: `1064m` CPU and `2517Mi` memory.
+- Hermes `text_to_speech` used provider `chatterbox`, returned voice-compatible Opus at `/home/joy/.hermes/profiles/talon/audio_cache/tts_20260610_111149.ogg` (`4.7865s`, mono 48 kHz).
+
+## After-deploy endpoint benchmark
+
+Endpoint: `http://10.108.157.193/v1/audio/speech`, voice `talon`, `postprocess_audio=true`.
+
+| Sample | HTTP | Client wall s | Audio s | Client RTF | Server wall s | Server RTF | Postprocess summary | WAV |
+|---|---:|---:|---:|---:|---:|---:|---|---|
+| agent_request_received | 200 | 8.036 | 8.390 | 0.958 | 8.020 | 0.956 | 7 gated, trim start/end 0.02/0.19s | `after-deploy/agent_request_received.wav` |
+| ops_tokens | 200 | 6.567 | 6.710 | 0.979 | 6.558 | 0.977 | 6 gated, trim end 0.17s | `after-deploy/ops_tokens.wav` |
+| short_ack | 200 | 1.304 | 0.570 | 2.288 | 1.300 | 2.281 | no gates, trim end 0.23s | `after-deploy/short_ack.wav` |
+| long_ops | 200 | 12.388 | 13.250 | 0.935 | 12.373 | 0.934 | 10 gated, trim end 0.11s | `after-deploy/long_ops.wav` |
+
+The representative long notification prompts now run modestly faster than realtime (`0.934–0.979` server RTF). The very short `Done.` prompt still has high RTF because fixed request/model overhead dominates sub-second audio.
+
+Concurrency probe with two simultaneous requests after deploy:
+
+| Request | Status | Client wall s | Server wall s | Server audio s | Server RTF |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 200 | 16.661 | 16.648 | 8.910 | 1.868 |
+| 2 | 200 | 8.192 | 8.179 | 8.620 | 0.949 |
+
+Total wall for the pair was `16.677s`, so the global lock still serializes generation. This is intentional for safety; remove it only after a dedicated Chatterbox/ROCm thread-safety probe.
+
+## After-deploy GPU/resource observation
+
+A resource probe generated `after-deploy/resource-probe.wav` while sampling `rocm-smi` inside the pod. The probe itself was slower (`13.19s` audio in `32.603s`, server RTF `2.472`) because the repeated `kubectl exec rocm-smi` sampling was intrusive; treat it as resource evidence, not endpoint latency evidence.
+
+During that probe, `rocm-smi` samples showed:
+
+- GPU use range: `61–82%`, mostly mid-60s.
+- Socket graphics package power range: about `55–89W`.
+- Edge temperature range: `48–56C`.
+- VRAM allocation reported `99%`, matching the resident model-heavy service shape.
+
 ## Recommendation
 
-Ship the source change for review, then deploy with KubeCM after approval and run live after-deploy benchmarks against version `0.1.1`. The likely safe latency win is conditionals caching plus reduced returned audio tail; do not remove the global lock until a separate ROCm/thread-safety probe proves shared Chatterbox state is safe under concurrent generation.
+Deployment is complete and healthy. Keep version `0.1.1` in production: it adds useful response-header evidence, caches prepared conditionals, exposes safe generation knobs, and trims/gates low-energy breath/silence without changing the selected Talon/Star voices. The measured latency improvement is modest but real for longer prompts; further speed work should be a separate runtime/model investigation rather than removing the global lock casually.
 
-Rollback is straightforward: revert the `data/kubernetes/app/voice-chatterbox.yaml` server wrapper and `data/kubernetes/service/voice-chatterbox.yaml` `cutover_revision` bump, then redeploy the prior Chatterbox KubeCM release or switch Hermes TTS back to the Kokoro provider if needed.
+Rollback remains straightforward: revert the `data/kubernetes/app/voice-chatterbox.yaml` server wrapper and `data/kubernetes/service/voice-chatterbox.yaml` `cutover_revision` bump, then redeploy the prior Chatterbox KubeCM release or switch Hermes TTS back to the Kokoro provider if needed.

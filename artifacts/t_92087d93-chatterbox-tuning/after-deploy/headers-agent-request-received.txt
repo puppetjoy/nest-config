@@ -1,0 +1,18 @@
+HTTP/1.1 200 OK
+date: Wed, 10 Jun 2026 15:08:01 GMT
+server: uvicorn
+x-nest-tts-provider: chatterbox-turbo
+x-nest-tts-voice: talon-elegant
+x-nest-tts-normalized: true
+x-nest-tts-norm-loudness: false
+x-nest-tts-temperature: 0.800
+x-nest-tts-top-p: 0.950
+x-nest-tts-top-k: 1000
+x-nest-tts-repetition-penalty: 1.200
+x-nest-tts-postprocess: {"enabled": true, "gated_segments": 0, "trim_end_seconds": 0.18, "trim_offset_seconds": 0.02, "trim_start_seconds": 0.02}
+x-nest-tts-seconds: 1.400
+x-nest-tts-wall-seconds: 1.977
+x-nest-tts-rtf: 1.412
+content-length: 67244
+content-type: audio/wav
+

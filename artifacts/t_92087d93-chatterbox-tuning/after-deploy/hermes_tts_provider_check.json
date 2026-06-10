@@ -1,0 +1,14 @@
+{
+  "tool": "text_to_speech",
+  "provider": "chatterbox",
+  "voice_compatible": true,
+  "output_path": "/home/joy/.hermes/profiles/talon/audio_cache/tts_20260610_111149.ogg",
+  "ffprobe": {
+    "codec_name": "opus",
+    "sample_rate": 48000,
+    "channels": 1,
+    "duration_seconds": 4.7865,
+    "size_bytes": 38911
+  },
+  "prompt": "Agent request received: Chatterbox latency tuning is deployed and ready for verification."
+}
