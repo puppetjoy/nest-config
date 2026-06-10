@@ -56,7 +56,7 @@ define nest::lib::hermes (
   Boolean              $stt_enabled              = false,
   String[1]            $stt_provider             = 'openai',
   String[1]            $stt_model                = 'gpt-4o-mini-transcribe',
-  Boolean              $stt_codex_experimental_ack = false,
+  Boolean              $stt_codex_experimental_ack= false,
   Optional[String[1]]  $stt_codex_model          = undef,
   String[1]            $tts_provider             = 'openai',
   String[1]            $tts_openai_model         = 'gpt-4o-mini-tts',
