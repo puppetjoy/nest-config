@@ -14,8 +14,12 @@ model_repo: bartowski/Qwen_Qwen3.5-35B-A3B-GGUF
 model_file: Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf
 model_path: /cache/models/Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf
 model_url: https://huggingface.co/bartowski/Qwen_Qwen3.5-35B-A3B-GGUF/resolve/main/Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf
-ctx_size: '131072'
-parallel_requests: '4'
+# Keep the initial fast lane to 2 x 32k-context slots. The 35B-A3B model
+# OOM-killed with a 131072 total context (4 x 32k slots) beside llama-qwen;
+# Honcho's interactive minimal/low prompts are usually 4k-8k input tokens, so
+# this preserves useful context while cutting the KV cache in half.
+ctx_size: '65536'
+parallel_requests: '2'
 cpu_request: '4'
 cpu_limit: '12'
 # Owl currently has enough allocatable headroom for one more GPU pod but not a

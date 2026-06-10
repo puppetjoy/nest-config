@@ -28,7 +28,10 @@ Rationale:
   PVC, HF token secret, model-fetch init container, llama-server Deployment, and
   ClusterIP Service.
 - `data/kubernetes/service/llama-qwen-fast.yaml` selects the 35B-A3B Q4_K_M
-  model, `--ctx-size 131072`, and `--parallel 4` for four 32K-context slots.
+  model, `--ctx-size 65536`, and `--parallel 2` for two 32K-context slots.
+  The first live start with `--ctx-size 131072 --parallel 4` OOM-killed during
+  model load beside the existing 122B lane, so the initial 35B canary keeps the
+  same per-slot context while halving total KV cache.
 - `plans/eyrie/ai/deploy_llama_qwen_fast.yaml` deploys the new service.
 - `plans/eyrie/ai/deploy_llama.yaml` now includes `qwen_fast` alongside the
   original `qwen` switch.
@@ -62,7 +65,7 @@ PY
 - The fast deployment uses image
   `registry.gitlab.joyfullee.me/nest/tools/llama.cpp:zen5`, model path
   `/cache/models/Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf`, one GPU, a scheduler-fit
-  16Gi request with a 72Gi limit, and 4 parallel slots.
+  16Gi request with a 72Gi limit, and 2 parallel 32K-context slots.
 - Honcho minimal/low env vars point to `llama-qwen-fast`; medium/high/max and
   dream env vars still point to `llama-qwen`.
 
