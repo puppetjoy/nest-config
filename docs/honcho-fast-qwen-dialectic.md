@@ -1,29 +1,29 @@
 # Honcho fast Qwen dialectic lane
 
 This branch stages a source-managed `llama-qwen-fast` llama.cpp service for
-Honcho's interactive dialectic path.  The existing 122B `llama-qwen` service is
-left untouched for medium/high/max dialectic, dreams, summary, deriver, and
-rollback.
+Honcho's interactive dialectic path.  The existing 122B `llama-qwen` service
+remains the medium/high/max dialectic, dreams, summary, deriver, and rollback
+lane, but is now intentionally reduced from 3 x 128K slots to 2 x 128K slots to
+free shared/GTT memory for the fast-lane canary.
 
 ## Model choice
 
-First candidate was `bartowski/Qwen_Qwen3.5-35B-A3B-GGUF`, file
-`Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf`. Live co-residency testing showed it
-OOM-killed beside the existing 122B lane even after reducing to one 32K slot
-and a 96Gi cgroup limit, so the deployed fast lane now uses the reviewed 14B
-fallback: `bartowski/Qwen_Qwen3-14B-GGUF`, file
-`Qwen_Qwen3-14B-Q4_K_M.gguf`.
+First candidate is `bartowski/Qwen_Qwen3.5-35B-A3B-GGUF`, file
+`Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf`. Initial live co-residency testing
+OOM-killed beside the existing 3-slot 122B lane even after reducing to one 32K
+slot and a 96Gi cgroup limit. Joy then steered this task to retry 35B-A3B only
+after shrinking the existing 122B lane from 3 x 128K slots to 2 x 128K slots,
+which should free roughly one 128K slot's worth of shared/GTT memory.
 
 Rationale:
 
-- Joy steered this task toward Qwen3.5-35B-A3B before dense 9B/14B fallbacks.
-  The 35B candidate was attempted first and failed the co-resident live memory
-  gate, so the fallback stays within Joy's requested evidence-based downgrade
-  path.
-- The deployed Qwen3-14B Q4_K_M model should be materially faster than the
-  current 122B-A10B lane while preserving more quality than a dense 9B fallback.
-- The Q4_K_M GGUF is listed by the Hugging Face model API/search as available in
-  the bartowski repo at 9,001,753,632 bytes.
+- Joy steered this task toward Qwen3.5-35B-A3B before dense 9B/14B fallbacks,
+  and then specifically asked to free 122B headroom before giving up on 35B-A3B.
+- The existing 122B service still exposes two 128K slots for higher-quality
+  traffic and rollback, while releasing the third slot's memory pressure.
+- The fast lane is intentionally conservative at one 32K slot for the first
+  post-shrink 35B-A3B co-residency test. If it still fails, downgrade again with
+  the recorded OOM and GTT/headroom evidence.
 - The service has a separate 48Gi `owl-crypt` cache PVC and fetches the GGUF
   with a curl init container.  That matches the reviewed `honcho-embeddings`
   pattern and avoids relying on llama.cpp direct HTTPS/HF download behavior.
@@ -33,10 +33,11 @@ Rationale:
 - `data/kubernetes/app/llama-server-fast.yaml` defines the chartless KubeCM app:
   PVC, HF token secret, model-fetch init container, llama-server Deployment, and
   ClusterIP Service.
-- `data/kubernetes/service/llama-qwen-fast.yaml` selects the Qwen3-14B Q4_K_M
-  fallback model, `--ctx-size 65536`, and `--parallel 2` for two 32K-context
-  slots. The original 35B-A3B candidate failed live co-residency because
-  starts with 4, 2, and 1 slot OOM-killed beside the existing 122B lane.
+- `data/kubernetes/service/llama-qwen.yaml` reduces the existing 122B lane to
+  `--ctx-size 262144` and `--parallel 2`, preserving two 128K slots.
+- `data/kubernetes/service/llama-qwen-fast.yaml` selects the Qwen3.5-35B-A3B
+  Q4_K_M model, `--ctx-size 32768`, and `--parallel 1` for a conservative
+  one-slot retry after the 122B shrink.
 - `plans/eyrie/ai/deploy_llama_qwen_fast.yaml` deploys the new service.
 - `plans/eyrie/ai/deploy_llama.yaml` now includes `qwen_fast` alongside the
   original `qwen` switch.
@@ -67,10 +68,11 @@ PY
 - `Deployment/llama-qwen-fast`, `Service/llama-qwen-fast`,
   `PersistentVolumeClaim/llama-qwen-fast-cache`, and `Secret/llama-qwen-fast`
   render in namespace `ai`.
+- The existing 122B deployment renders `--ctx-size 262144 --parallel 2`.
 - The fast deployment uses image
   `registry.gitlab.joyfullee.me/nest/tools/llama.cpp:zen5`, model path
-  `/cache/models/Qwen_Qwen3-14B-Q4_K_M.gguf`, one GPU, a scheduler-fit
-  16Gi request with a 48Gi cgroup limit, and two 32K-context slots.
+  `/cache/models/Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf`, one GPU, a scheduler-fit
+  16Gi request with a 96Gi cgroup limit, and one 32K-context slot.
 - Honcho minimal/low env vars point to `llama-qwen-fast`; medium/high/max and
   dream env vars still point to `llama-qwen`.
 
@@ -80,6 +82,11 @@ PY
 cd /home/joy/projects/nest/config
 git fetch
 bolt plan run nest::puppet::deploy
+bolt plan run nest::eyrie::ai::deploy_llama_qwen
+kubectl -n ai rollout status deploy/llama-qwen --timeout=90m
+kubectl -n ai get deploy/llama-qwen -o jsonpath='{.spec.template.spec.containers[0].args}'
+# Verify /props total_slots=2 and n_ctx=131072 before deploying the fast lane.
+
 bolt plan run nest::eyrie::ai::deploy_llama_qwen_fast
 kubectl -n ai rollout status deploy/llama-qwen-fast --timeout=90m
 kubectl -n ai get deploy,pod,svc,pvc -l app=llama-qwen-fast -o wide
@@ -115,10 +122,9 @@ kubectl -n ai get deploy/honcho-api -o json | jq -r '
   [.name, .value] | @tsv'
 ```
 
-Target: minimal under about 8s and low under about 15s if the fallback runtime is
-fast enough.  If 14B misses those targets or quality is insufficient, keep the
-evidence and try a smaller 9B fallback or revisit the 35B-A3B canary with a
-different runtime/resource shape.
+Target: minimal under about 8s and low under about 15s if the canary runtime is
+fast enough. If 35B-A3B still fails after the 122B shrink, keep the evidence and
+fall back to the already-probed 14B or 9B class with source-managed commits.
 
 ## Rollback
 
