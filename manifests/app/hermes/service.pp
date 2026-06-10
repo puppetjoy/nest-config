@@ -34,12 +34,7 @@ class nest::app::hermes::service {
   }
 
   file { "${install_dir}/bin/hermes-chatterbox-tts":
-    ensure  => file,
-    mode    => '0755',
-    owner   => 'root',
-    group   => 'root',
-    source  => 'puppet:///modules/nest/app/hermes/chatterbox-tts-command.py',
-    require => File["${install_dir}/bin"],
+    ensure => absent,
   }
 
   file { "${install_dir}/bin/hermes-voice-speech-stt":

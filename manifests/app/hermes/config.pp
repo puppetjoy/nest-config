@@ -226,7 +226,7 @@ class nest::app::hermes::config {
     $instance_voice_speech_url  = $config['stt_voice_speech_endpoint']
     $instance_voice_speech_model = pick($config['stt_voice_speech_model'], 'whisper-large-v3-turbo')
     $instance_voice_speech_lang = pick($config['stt_voice_speech_language'], 'en')
-    $instance_voice_speech_prompt = pick($config['stt_voice_speech_prompt'], 'Talon Star Honcho Eyrie KubeCM llama-qwen GitLab Puppet Kubernetes OpenVox ROCm kubectl owl voice-speech Chatterbox Kokoro')
+    $instance_voice_speech_prompt = pick($config['stt_voice_speech_prompt'], 'Talon Star Honcho Eyrie KubeCM llama-qwen GitLab Puppet Kubernetes OpenVox ROCm kubectl owl voice-speech Kokoro')
     $instance_voice_speech_temp = pick($config['stt_voice_speech_temp'], pick($config['stt_voice_speech_temperature'], '0.0'))
     $instance_voice_speech_prev = pick($config['stt_voice_speech_condition_on_previous_text'], false)
     $instance_voice_speech_timeout = pick($config['stt_voice_speech_timeout'], 300)
@@ -237,10 +237,6 @@ class nest::app::hermes::config {
     $instance_tts_voice_speech_voice   = pick($config['tts_voice_speech_voice'], 'af_heart')
     $instance_tts_voice_speech_model   = pick($config['tts_voice_speech_model'], 'kokoro')
     $instance_tts_voice_speech_timeout = pick($config['tts_voice_speech_timeout'], 60)
-    $instance_chatterbox_url           = $config['tts_chatterbox_endpoint']
-    $instance_chatterbox_voice         = $config['tts_chatterbox_voice']
-    $instance_chatterbox_model         = pick($config['tts_chatterbox_model'], 'chatterbox-turbo')
-    $instance_chatterbox_timeout = pick($config['tts_chatterbox_timeout'], 180)
     $instance_ssh_private_key   = $config['ssh_private_key']
     $instance_kubeconfig_path   = $config['kubeconfig_path']
     $instance_kubeconfig        = $config['kubeconfig_content']
@@ -320,10 +316,6 @@ class nest::app::hermes::config {
       tts_voice_speech_voice     => $instance_tts_voice_speech_voice,
       tts_voice_speech_model     => $instance_tts_voice_speech_model,
       tts_voice_speech_timeout   => $instance_tts_voice_speech_timeout,
-      tts_chatterbox_endpoint    => $instance_chatterbox_url,
-      tts_chatterbox_voice       => $instance_chatterbox_voice,
-      tts_chatterbox_model       => $instance_chatterbox_model,
-      tts_chatterbox_timeout     => $instance_chatterbox_timeout,
       ssh_private_key            => $instance_ssh_private_key,
       kubeconfig_path            => $instance_kubeconfig_path,
       kubeconfig_content         => $instance_kubeconfig,

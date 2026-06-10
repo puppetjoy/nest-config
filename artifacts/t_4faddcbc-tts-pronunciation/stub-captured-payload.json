@@ -1,7 +1,0 @@
-{
-  "input": "Agent request A R two zero two six zero six one zero, one four three six one zero, nine nine five five one E is blocked by task T nine two two B six E C two. Commit nine two zero four D two F nine updates voice-chatterbox for Kube C M, llama Qwen, R O C M, Open Vox, and H T T P S, talon dot eyrie slash api slash events.\n",
-  "model": "chatterbox-turbo",
-  "voice": "talon",
-  "response_format": "wav",
-  "speed": 1.0
-}

@@ -61,7 +61,7 @@ define nest::lib::hermes (
   Optional[String[1]]  $stt_voice_speech_endpoint= undef,
   String[1]            $stt_voice_speech_model   = 'whisper-large-v3-turbo',
   String[1]            $stt_voice_speech_language= 'en',
-  String[1]            $stt_voice_speech_prompt  = 'Talon Star Honcho Eyrie KubeCM llama-qwen GitLab Puppet Kubernetes OpenVox ROCm kubectl owl voice-speech Chatterbox Kokoro',
+  String[1]            $stt_voice_speech_prompt  = 'Talon Star Honcho Eyrie KubeCM llama-qwen GitLab Puppet Kubernetes OpenVox ROCm kubectl owl voice-speech Kokoro',
   String[1]            $stt_voice_speech_temp    = '0.0',
   Boolean              $stt_voice_speech_prev_text= false,
   Integer[1]           $stt_voice_speech_timeout = 300,
@@ -72,10 +72,6 @@ define nest::lib::hermes (
   String[1]            $tts_voice_speech_voice   = 'af_heart',
   String[1]            $tts_voice_speech_model   = 'kokoro',
   Integer[1]           $tts_voice_speech_timeout = 60,
-  Optional[String[1]]  $tts_chatterbox_endpoint  = undef,
-  Optional[String[1]]  $tts_chatterbox_voice     = undef,
-  String[1]            $tts_chatterbox_model     = 'chatterbox-turbo',
-  Integer[1]           $tts_chatterbox_timeout   = 180,
   Any                  $ssh_private_key          = undef,
   Optional[String[1]]  $kubeconfig_path          = undef,
   Any                  $kubeconfig_content       = undef,
@@ -432,23 +428,6 @@ define nest::lib::hermes (
       },
     },
   }
-  $tts_chatterbox_provider_config = $tts_chatterbox_endpoint ? {
-    undef   => {},
-    default => {
-      'providers' => {
-        'chatterbox' => {
-          'type'             => 'command',
-          'command'          => "${install_dir}/bin/hermes-chatterbox-tts --endpoint ${tts_chatterbox_endpoint} --text-file {input_path} --output {output_path} --voice {voice} --model {model} --format {format} --speed {speed}",
-          'output_format'    => 'wav',
-          'voice'            => pick($tts_chatterbox_voice, $tts_openai_voice),
-          'model'            => $tts_chatterbox_model,
-          'timeout'          => $tts_chatterbox_timeout,
-          'max_text_length'  => 4096,
-          'voice_compatible' => true,
-        },
-      },
-    },
-  }
   $tts_voice_speech_provider_config = $tts_voice_speech_endpoint ? {
     undef   => {},
     default => {
@@ -502,7 +481,7 @@ define nest::lib::hermes (
         'model' => $tts_openai_model,
         'voice' => $tts_openai_voice,
       },
-    } + $tts_chatterbox_provider_config + $tts_voice_speech_provider_config),
+    } + $tts_voice_speech_provider_config),
     'auxiliary'        => {
       'compression' => {
         'provider' => $auxiliary_provider,

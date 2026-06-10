@@ -1,2 +1,0 @@
-NAME                                CPU(cores)   MEMORY(bytes)
-voice-chatterbox-6697b88b86-f58ns   2m           3232Mi

@@ -1,8 +1,0 @@
----
-# Concrete owl/Strix Halo instance of the ROCm Chatterbox-Turbo candidate API.
-# This remains private to the ai namespace/cluster network while Talon and Star
-# call it from owl through the stable ClusterIP command-provider endpoint.
-cache_size: 80Gi
-storage_class: owl-crypt
-cluster_ip: 10.108.157.193
-cutover_revision: notification-tts-t_8e723288-20260610

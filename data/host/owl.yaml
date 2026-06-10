@@ -173,7 +173,7 @@ nest::app::hermes::instances:
     stt_voice_speech_endpoint: 'http://10.108.246.221'
     stt_voice_speech_model: 'whisper-large-v3-turbo'
     stt_voice_speech_language: 'en'
-    stt_voice_speech_prompt: 'Talon Star Honcho Eyrie KubeCM llama-qwen GitLab Puppet Kubernetes OpenVox ROCm kubectl owl voice-speech Chatterbox Kokoro'
+    stt_voice_speech_prompt: 'Talon Star Honcho Eyrie KubeCM llama-qwen GitLab Puppet Kubernetes OpenVox ROCm kubectl owl voice-speech Kokoro'
     stt_voice_speech_temp: '0.0'
     stt_voice_speech_condition_on_previous_text: false
     stt_voice_speech_timeout: 300
@@ -184,10 +184,6 @@ nest::app::hermes::instances:
     tts_voice_speech_voice: 'af_alloy'
     tts_voice_speech_model: 'kokoro'
     tts_voice_speech_timeout: 60
-    tts_chatterbox_endpoint: 'http://10.108.157.193'
-    tts_chatterbox_voice: 'talon'
-    tts_chatterbox_model: 'chatterbox-turbo'
-    tts_chatterbox_timeout: 180
     telegram_bot_username: 'talonopsbot'
     telegram_bot_id: '8625589001'
   star:
@@ -292,7 +288,7 @@ nest::app::hermes::instances:
     stt_voice_speech_endpoint: 'http://10.108.246.221'
     stt_voice_speech_model: 'whisper-large-v3-turbo'
     stt_voice_speech_language: 'en'
-    stt_voice_speech_prompt: 'Talon Star Honcho Eyrie KubeCM llama-qwen GitLab Puppet Kubernetes OpenVox ROCm kubectl owl voice-speech Chatterbox Kokoro'
+    stt_voice_speech_prompt: 'Talon Star Honcho Eyrie KubeCM llama-qwen GitLab Puppet Kubernetes OpenVox ROCm kubectl owl voice-speech Kokoro'
     stt_voice_speech_temp: '0.0'
     stt_voice_speech_condition_on_previous_text: false
     stt_voice_speech_timeout: 300
@@ -303,9 +299,5 @@ nest::app::hermes::instances:
     tts_voice_speech_voice: 'af_nova'
     tts_voice_speech_model: 'kokoro'
     tts_voice_speech_timeout: 60
-    tts_chatterbox_endpoint: 'http://10.108.157.193'
-    tts_chatterbox_voice: 'star'
-    tts_chatterbox_model: 'chatterbox-turbo'
-    tts_chatterbox_timeout: 180
     telegram_bot_username: 'joyfulstarbot'
     telegram_bot_id: '8571651712'

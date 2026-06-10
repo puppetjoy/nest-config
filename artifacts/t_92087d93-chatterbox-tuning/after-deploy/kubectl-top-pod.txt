@@ -1,2 +1,0 @@
-NAME                               CPU(cores)   MEMORY(bytes)   
-voice-chatterbox-dcc6dd4b8-rlw55   1064m        2517Mi          
