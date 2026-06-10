@@ -14,6 +14,11 @@ postgres_storage_class: owl-crypt
 postgres_storage_size: 16Gi
 redis_storage_class: owl-crypt
 redis_storage_size: 1Gi
+honcho_llama_qwen_limiter_service: llama-qwen-honcho
+honcho_llama_qwen_base_url: "http://%{lookup('honcho_llama_qwen_limiter_service')}/v1"
+honcho_llama_qwen_upstream: llama-qwen
+honcho_llama_qwen_max_concurrent: '2'
+honcho_llama_qwen_queue_timeout_seconds: '30'
 representation_batch_max_tokens: '1024'
 representation_subthreshold_ttl: '7 days'
 representation_subthreshold_expiry_schedule: '17 */6 * * *'
@@ -77,7 +82,7 @@ representation_subthreshold_expiry_job_ttl: 21600
   - name: DERIVER_MODEL_CONFIG__MODEL
     value: 'llama-qwen'
   - name: DERIVER_MODEL_CONFIG__OVERRIDES__BASE_URL
-    value: 'http://llama-qwen/v1'
+    value: "%{lookup('honcho_llama_qwen_base_url')}"
   - name: DERIVER_MODEL_CONFIG__OVERRIDES__API_KEY_ENV
     value: 'HONCHO_LOCAL_OPENAI_API_KEY'
   - name: SUMMARY_MODEL_CONFIG__TRANSPORT
@@ -85,7 +90,7 @@ representation_subthreshold_expiry_job_ttl: 21600
   - name: SUMMARY_MODEL_CONFIG__MODEL
     value: 'llama-qwen'
   - name: SUMMARY_MODEL_CONFIG__OVERRIDES__BASE_URL
-    value: 'http://llama-qwen/v1'
+    value: "%{lookup('honcho_llama_qwen_base_url')}"
   - name: SUMMARY_MODEL_CONFIG__OVERRIDES__API_KEY_ENV
     value: 'HONCHO_LOCAL_OPENAI_API_KEY'
   - name: DIALECTIC_LEVELS__minimal__MODEL_CONFIG__TRANSPORT
@@ -93,7 +98,7 @@ representation_subthreshold_expiry_job_ttl: 21600
   - name: DIALECTIC_LEVELS__minimal__MODEL_CONFIG__MODEL
     value: 'llama-qwen'
   - name: DIALECTIC_LEVELS__minimal__MODEL_CONFIG__OVERRIDES__BASE_URL
-    value: 'http://llama-qwen/v1'
+    value: "%{lookup('honcho_llama_qwen_base_url')}"
   - name: DIALECTIC_LEVELS__minimal__MODEL_CONFIG__OVERRIDES__API_KEY_ENV
     value: 'HONCHO_LOCAL_OPENAI_API_KEY'
   - name: DIALECTIC_LEVELS__low__MODEL_CONFIG__TRANSPORT
@@ -101,7 +106,7 @@ representation_subthreshold_expiry_job_ttl: 21600
   - name: DIALECTIC_LEVELS__low__MODEL_CONFIG__MODEL
     value: 'llama-qwen'
   - name: DIALECTIC_LEVELS__low__MODEL_CONFIG__OVERRIDES__BASE_URL
-    value: 'http://llama-qwen/v1'
+    value: "%{lookup('honcho_llama_qwen_base_url')}"
   - name: DIALECTIC_LEVELS__low__MODEL_CONFIG__OVERRIDES__API_KEY_ENV
     value: 'HONCHO_LOCAL_OPENAI_API_KEY'
   - name: DIALECTIC_LEVELS__medium__MODEL_CONFIG__TRANSPORT
@@ -109,7 +114,7 @@ representation_subthreshold_expiry_job_ttl: 21600
   - name: DIALECTIC_LEVELS__medium__MODEL_CONFIG__MODEL
     value: 'llama-qwen'
   - name: DIALECTIC_LEVELS__medium__MODEL_CONFIG__OVERRIDES__BASE_URL
-    value: 'http://llama-qwen/v1'
+    value: "%{lookup('honcho_llama_qwen_base_url')}"
   - name: DIALECTIC_LEVELS__medium__MODEL_CONFIG__OVERRIDES__API_KEY_ENV
     value: 'HONCHO_LOCAL_OPENAI_API_KEY'
   - name: DIALECTIC_LEVELS__high__MODEL_CONFIG__TRANSPORT
@@ -117,7 +122,7 @@ representation_subthreshold_expiry_job_ttl: 21600
   - name: DIALECTIC_LEVELS__high__MODEL_CONFIG__MODEL
     value: 'llama-qwen'
   - name: DIALECTIC_LEVELS__high__MODEL_CONFIG__OVERRIDES__BASE_URL
-    value: 'http://llama-qwen/v1'
+    value: "%{lookup('honcho_llama_qwen_base_url')}"
   - name: DIALECTIC_LEVELS__high__MODEL_CONFIG__OVERRIDES__API_KEY_ENV
     value: 'HONCHO_LOCAL_OPENAI_API_KEY'
   - name: DIALECTIC_LEVELS__max__MODEL_CONFIG__TRANSPORT
@@ -125,7 +130,7 @@ representation_subthreshold_expiry_job_ttl: 21600
   - name: DIALECTIC_LEVELS__max__MODEL_CONFIG__MODEL
     value: 'llama-qwen'
   - name: DIALECTIC_LEVELS__max__MODEL_CONFIG__OVERRIDES__BASE_URL
-    value: 'http://llama-qwen/v1'
+    value: "%{lookup('honcho_llama_qwen_base_url')}"
   - name: DIALECTIC_LEVELS__max__MODEL_CONFIG__OVERRIDES__API_KEY_ENV
     value: 'HONCHO_LOCAL_OPENAI_API_KEY'
   - name: DREAM_DEDUCTION_MODEL_CONFIG__TRANSPORT
@@ -133,7 +138,7 @@ representation_subthreshold_expiry_job_ttl: 21600
   - name: DREAM_DEDUCTION_MODEL_CONFIG__MODEL
     value: 'llama-qwen'
   - name: DREAM_DEDUCTION_MODEL_CONFIG__OVERRIDES__BASE_URL
-    value: 'http://llama-qwen/v1'
+    value: "%{lookup('honcho_llama_qwen_base_url')}"
   - name: DREAM_DEDUCTION_MODEL_CONFIG__OVERRIDES__API_KEY_ENV
     value: 'HONCHO_LOCAL_OPENAI_API_KEY'
   - name: DREAM_INDUCTION_MODEL_CONFIG__TRANSPORT
@@ -141,7 +146,7 @@ representation_subthreshold_expiry_job_ttl: 21600
   - name: DREAM_INDUCTION_MODEL_CONFIG__MODEL
     value: 'llama-qwen'
   - name: DREAM_INDUCTION_MODEL_CONFIG__OVERRIDES__BASE_URL
-    value: 'http://llama-qwen/v1'
+    value: "%{lookup('honcho_llama_qwen_base_url')}"
   - name: DREAM_INDUCTION_MODEL_CONFIG__OVERRIDES__API_KEY_ENV
     value: 'HONCHO_LOCAL_OPENAI_API_KEY'
 
@@ -342,6 +347,235 @@ resources:
                       value: "%{alias('representation_batch_max_tokens')}"
                     - name: SUBTHRESHOLD_REPRESENTATION_TTL
                       value: "%{lookup('representation_subthreshold_ttl')}"
+
+  qwen-limiter-script:
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: "%{lookup('honcho_llama_qwen_limiter_service')}-script"
+      namespace: "%{nest::kubernetes::namespace}"
+      labels:
+        app: "%{lookup('honcho_llama_qwen_limiter_service')}"
+        component: qwen-limiter
+    data:
+      limiter.py: |-
+        import http.client
+        import json
+        import os
+        import sys
+        import threading
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+        MAX_CONCURRENT = int(os.environ.get('MAX_CONCURRENT', '2'))
+        QUEUE_TIMEOUT_SECONDS = float(os.environ.get('QUEUE_TIMEOUT_SECONDS', '30'))
+        UPSTREAM_HOST = os.environ.get('UPSTREAM_HOST', 'llama-qwen')
+        UPSTREAM_PORT = int(os.environ.get('UPSTREAM_PORT', '80'))
+        UPSTREAM_TIMEOUT_SECONDS = float(os.environ.get('UPSTREAM_TIMEOUT_SECONDS', '600'))
+
+        semaphore = threading.BoundedSemaphore(MAX_CONCURRENT)
+        active_lock = threading.Lock()
+        active_upstream = 0
+
+        HOP_BY_HOP_HEADERS = {
+            'connection',
+            'keep-alive',
+            'proxy-authenticate',
+            'proxy-authorization',
+            'te',
+            'trailer',
+            'transfer-encoding',
+            'upgrade',
+        }
+
+        def log(message):
+            print(message, file=sys.stderr, flush=True)
+
+        class LimiterHandler(BaseHTTPRequestHandler):
+            protocol_version = 'HTTP/1.1'
+
+            def do_GET(self):
+                if self.path == '/limiter/status':
+                    self.send_json(200, {
+                        'status': 'ok',
+                        'max_concurrent': MAX_CONCURRENT,
+                        'active_upstream': active_upstream,
+                        'queue_timeout_seconds': QUEUE_TIMEOUT_SECONDS,
+                        'upstream': f'http://{UPSTREAM_HOST}:{UPSTREAM_PORT}',
+                    })
+                    return
+                self.proxy()
+
+            def do_HEAD(self):
+                self.proxy()
+
+            def do_POST(self):
+                self.proxy()
+
+            def do_PUT(self):
+                self.proxy()
+
+            def do_PATCH(self):
+                self.proxy()
+
+            def do_DELETE(self):
+                self.proxy()
+
+            def send_json(self, status, payload):
+                data = json.dumps(payload, sort_keys=True).encode('utf-8')
+                self.send_response(status)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Content-Length', str(len(data)))
+                self.end_headers()
+                if self.command != 'HEAD':
+                    self.wfile.write(data)
+
+            def proxy(self):
+                acquired = semaphore.acquire(timeout=QUEUE_TIMEOUT_SECONDS)
+                if not acquired:
+                    self.send_response(503)
+                    self.send_header('Content-Type', 'application/json')
+                    self.send_header('Retry-After', str(int(QUEUE_TIMEOUT_SECONDS)))
+                    payload = json.dumps({
+                        'error': 'honcho llama-qwen concurrency limit reached',
+                        'max_concurrent': MAX_CONCURRENT,
+                    }).encode('utf-8')
+                    self.send_header('Content-Length', str(len(payload)))
+                    self.end_headers()
+                    if self.command != 'HEAD':
+                        self.wfile.write(payload)
+                    return
+
+                global active_upstream
+                with active_lock:
+                    active_upstream += 1
+                    current_active = active_upstream
+                log(f'start method={self.command} path={self.path} active={current_active}/{MAX_CONCURRENT}')
+
+                sent_response = False
+                try:
+                    content_length = int(self.headers.get('Content-Length', '0') or 0)
+                    request_body = self.rfile.read(content_length) if content_length else None
+                    headers = {
+                        key: value
+                        for key, value in self.headers.items()
+                        if key.lower() not in HOP_BY_HOP_HEADERS and key.lower() != 'host'
+                    }
+                    headers['Host'] = UPSTREAM_HOST
+
+                    conn = http.client.HTTPConnection(UPSTREAM_HOST, UPSTREAM_PORT, timeout=UPSTREAM_TIMEOUT_SECONDS)
+                    conn.request(self.command, self.path, body=request_body, headers=headers)
+                    response = conn.getresponse()
+                    response_body = response.read()
+
+                    self.send_response(response.status, response.reason)
+                    sent_response = True
+                    for key, value in response.getheaders():
+                        lower_key = key.lower()
+                        if lower_key in HOP_BY_HOP_HEADERS or lower_key == 'content-length':
+                            continue
+                        self.send_header(key, value)
+                    self.send_header('Content-Length', str(len(response_body)))
+                    self.send_header('X-Honcho-Qwen-Limiter-Max-Concurrent', str(MAX_CONCURRENT))
+                    self.end_headers()
+                    if self.command != 'HEAD' and response_body:
+                        self.wfile.write(response_body)
+                except Exception as exc:
+                    log(f'upstream_error method={self.command} path={self.path} error={exc!r}')
+                    if not sent_response:
+                        self.send_json(502, {'error': 'honcho llama-qwen limiter upstream error'})
+                finally:
+                    with active_lock:
+                        active_upstream -= 1
+                        current_active = active_upstream
+                    semaphore.release()
+                    log(f'finish method={self.command} path={self.path} active={current_active}/{MAX_CONCURRENT}')
+
+            def log_message(self, fmt, *args):
+                log('%s - - [%s] %s' % (self.client_address[0], self.log_date_time_string(), fmt % args))
+
+        if __name__ == '__main__':
+            bind = ('0.0.0.0', int(os.environ.get('PORT', '8000')))
+            server = ThreadingHTTPServer(bind, LimiterHandler)
+            log(f'honcho llama-qwen limiter listening on {bind[0]}:{bind[1]} max_concurrent={MAX_CONCURRENT}')
+            server.serve_forever()
+
+  qwen-limiter-deployment:
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: "%{lookup('honcho_llama_qwen_limiter_service')}"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app: "%{lookup('honcho_llama_qwen_limiter_service')}"
+          component: qwen-limiter
+      template:
+        metadata:
+          labels:
+            app: "%{lookup('honcho_llama_qwen_limiter_service')}"
+            component: qwen-limiter
+        spec:
+          affinity: *affinity
+          tolerations: *tolerations
+          containers:
+            - name: limiter
+              image: "%{lookup('honcho_image')}"
+              command:
+                - /app/.venv/bin/python
+                - /opt/honcho-qwen-limiter/limiter.py
+              env:
+                - name: MAX_CONCURRENT
+                  value: "%{alias('honcho_llama_qwen_max_concurrent')}"
+                - name: QUEUE_TIMEOUT_SECONDS
+                  value: "%{alias('honcho_llama_qwen_queue_timeout_seconds')}"
+                - name: UPSTREAM_HOST
+                  value: "%{lookup('honcho_llama_qwen_upstream')}"
+                - name: UPSTREAM_PORT
+                  value: '80'
+              ports:
+                - name: http
+                  containerPort: 8000
+              readinessProbe:
+                httpGet:
+                  path: /limiter/status
+                  port: 8000
+                periodSeconds: 5
+                timeoutSeconds: 2
+              livenessProbe:
+                httpGet:
+                  path: /limiter/status
+                  port: 8000
+                periodSeconds: 10
+                timeoutSeconds: 2
+              volumeMounts:
+                - name: limiter-script
+                  mountPath: /opt/honcho-qwen-limiter
+                  readOnly: true
+          volumes:
+            - name: limiter-script
+              configMap:
+                name: "%{lookup('honcho_llama_qwen_limiter_service')}-script"
+
+  qwen-limiter-service:
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: "%{lookup('honcho_llama_qwen_limiter_service')}"
+      namespace: "%{nest::kubernetes::namespace}"
+      labels:
+        app: "%{lookup('honcho_llama_qwen_limiter_service')}"
+        component: qwen-limiter
+    spec:
+      type: ClusterIP
+      selector:
+        app: "%{lookup('honcho_llama_qwen_limiter_service')}"
+        component: qwen-limiter
+      ports:
+        - name: http
+          port: 80
+          targetPort: 8000
 
   certs:
     apiVersion: cert-manager.io/v1
