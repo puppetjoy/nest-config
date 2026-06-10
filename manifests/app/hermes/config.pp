@@ -223,6 +223,13 @@ class nest::app::hermes::config {
     $instance_stt_model         = pick($config['stt_model'], 'gpt-4o-mini-transcribe')
     $instance_stt_codex_ack     = pick($config['stt_codex_experimental_ack'], false)
     $instance_stt_codex_model   = $config['stt_codex_model']
+    $instance_voice_speech_url  = $config['stt_voice_speech_endpoint']
+    $instance_voice_speech_model = pick($config['stt_voice_speech_model'], 'whisper-large-v3-turbo')
+    $instance_voice_speech_lang = pick($config['stt_voice_speech_language'], 'en')
+    $instance_voice_speech_prompt = pick($config['stt_voice_speech_prompt'], 'Talon Star Honcho Eyrie KubeCM llama-qwen GitLab Puppet Kubernetes OpenVox ROCm kubectl owl voice-speech Chatterbox Kokoro')
+    $instance_voice_speech_temp = pick($config['stt_voice_speech_temp'], pick($config['stt_voice_speech_temperature'], '0.0'))
+    $instance_voice_speech_prev = pick($config['stt_voice_speech_condition_on_previous_text'], false)
+    $instance_voice_speech_timeout = pick($config['stt_voice_speech_timeout'], 300)
     $instance_tts_provider      = pick($config['tts_provider'], 'openai')
     $instance_tts_openai_model  = pick($config['tts_openai_model'], 'gpt-4o-mini-tts')
     $instance_tts_openai_voice  = pick($config['tts_openai_voice'], 'alloy')
@@ -295,6 +302,13 @@ class nest::app::hermes::config {
       stt_model                  => $instance_stt_model,
       stt_codex_experimental_ack => $instance_stt_codex_ack,
       stt_codex_model            => $instance_stt_codex_model,
+      stt_voice_speech_endpoint  => $instance_voice_speech_url,
+      stt_voice_speech_model     => $instance_voice_speech_model,
+      stt_voice_speech_language  => $instance_voice_speech_lang,
+      stt_voice_speech_prompt    => $instance_voice_speech_prompt,
+      stt_voice_speech_temp      => $instance_voice_speech_temp,
+      stt_voice_speech_prev_text => $instance_voice_speech_prev,
+      stt_voice_speech_timeout   => $instance_voice_speech_timeout,
       tts_provider               => $instance_tts_provider,
       tts_openai_model           => $instance_tts_openai_model,
       tts_openai_voice           => $instance_tts_openai_voice,

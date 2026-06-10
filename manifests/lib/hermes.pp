@@ -58,6 +58,13 @@ define nest::lib::hermes (
   String[1]            $stt_model                = 'gpt-4o-mini-transcribe',
   Boolean              $stt_codex_experimental_ack= false,
   Optional[String[1]]  $stt_codex_model          = undef,
+  Optional[String[1]]  $stt_voice_speech_endpoint= undef,
+  String[1]            $stt_voice_speech_model   = 'whisper-large-v3-turbo',
+  String[1]            $stt_voice_speech_language= 'en',
+  String[1]            $stt_voice_speech_prompt  = 'Talon Star Honcho Eyrie KubeCM llama-qwen GitLab Puppet Kubernetes OpenVox ROCm kubectl owl voice-speech Chatterbox Kokoro',
+  String[1]            $stt_voice_speech_temp    = '0.0',
+  Boolean              $stt_voice_speech_prev_text= false,
+  Integer[1]           $stt_voice_speech_timeout = 300,
   String[1]            $tts_provider             = 'openai',
   String[1]            $tts_openai_model         = 'gpt-4o-mini-tts',
   String[1]            $tts_openai_voice         = 'alloy',
@@ -402,6 +409,25 @@ define nest::lib::hermes (
     },
     default => {},
   }
+  $stt_voice_speech_condition_arg = $stt_voice_speech_prev_text ? {
+    true    => '--condition-on-previous-text',
+    default => '',
+  }
+  $stt_voice_speech_provider_config = $stt_voice_speech_endpoint ? {
+    undef   => {},
+    default => {
+      'providers' => {
+        'voice-speech' => {
+          'type'     => 'command',
+          'command'  => "${install_dir}/bin/hermes-voice-speech-stt --endpoint ${stt_voice_speech_endpoint} --input {input_path} --output {output_path} --model {model} --language {language} --format {format} --temperature ${stt_voice_speech_temp} --timeout ${stt_voice_speech_timeout} --initial-prompt '${stt_voice_speech_prompt}' ${stt_voice_speech_condition_arg}",
+          'format'   => 'txt',
+          'language' => $stt_voice_speech_language,
+          'model'    => $stt_voice_speech_model,
+          'timeout'  => $stt_voice_speech_timeout,
+        },
+      },
+    },
+  }
   $tts_chatterbox_provider_config = $tts_chatterbox_endpoint ? {
     undef   => {},
     default => {
@@ -448,7 +474,7 @@ define nest::lib::hermes (
       'openai'   => {
         'model' => $stt_model,
       },
-    } + $stt_codex_config,
+    } + $stt_codex_config + $stt_voice_speech_provider_config,
     'tts'              => ({
       'provider' => $tts_provider,
       'openai'   => {

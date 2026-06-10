@@ -167,10 +167,17 @@ nest::app::hermes::instances:
     release_digest_enabled: true
     voice_auto_tts: true
     stt_enabled: true
-    stt_provider: 'codex'
+    stt_provider: 'voice-speech'
     stt_model: 'gpt-4o-mini-transcribe'
     stt_codex_experimental_ack: true
     stt_codex_model: 'gpt-4o-mini-transcribe'
+    stt_voice_speech_endpoint: 'http://10.108.246.221'
+    stt_voice_speech_model: 'whisper-large-v3-turbo'
+    stt_voice_speech_language: 'en'
+    stt_voice_speech_prompt: 'Talon Star Honcho Eyrie KubeCM llama-qwen GitLab Puppet Kubernetes OpenVox ROCm kubectl owl voice-speech Chatterbox Kokoro'
+    stt_voice_speech_temp: '0.0'
+    stt_voice_speech_condition_on_previous_text: false
+    stt_voice_speech_timeout: 300
     tts_provider: 'chatterbox'
     tts_openai_model: 'gpt-4o-mini-tts'
     tts_openai_voice: 'alloy'
@@ -275,10 +282,17 @@ nest::app::hermes::instances:
     google_workspace_enabled: true
     voice_auto_tts: true
     stt_enabled: true
-    stt_provider: 'codex'
+    stt_provider: 'voice-speech'
     stt_model: 'gpt-4o-mini-transcribe'
     stt_codex_experimental_ack: true
     stt_codex_model: 'gpt-4o-mini-transcribe'
+    stt_voice_speech_endpoint: 'http://10.108.246.221'
+    stt_voice_speech_model: 'whisper-large-v3-turbo'
+    stt_voice_speech_language: 'en'
+    stt_voice_speech_prompt: 'Talon Star Honcho Eyrie KubeCM llama-qwen GitLab Puppet Kubernetes OpenVox ROCm kubectl owl voice-speech Chatterbox Kokoro'
+    stt_voice_speech_temp: '0.0'
+    stt_voice_speech_condition_on_previous_text: false
+    stt_voice_speech_timeout: 300
     tts_provider: 'chatterbox'
     tts_openai_model: 'gpt-4o-mini-tts'
     tts_openai_voice: 'nova'
