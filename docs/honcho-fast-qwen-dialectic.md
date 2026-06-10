@@ -7,17 +7,23 @@ rollback.
 
 ## Model choice
 
-First candidate: `bartowski/Qwen_Qwen3.5-35B-A3B-GGUF`, file
-`Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf`.
+First candidate was `bartowski/Qwen_Qwen3.5-35B-A3B-GGUF`, file
+`Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf`. Live co-residency testing showed it
+OOM-killed beside the existing 122B lane even after reducing to one 32K slot
+and a 96Gi cgroup limit, so the deployed fast lane now uses the reviewed 14B
+fallback: `bartowski/Qwen_Qwen3-14B-GGUF`, file
+`Qwen_Qwen3-14B-Q5_K_M.gguf`.
 
 Rationale:
 
 - Joy steered this task toward Qwen3.5-35B-A3B before dense 9B/14B fallbacks.
-- The model is sparse/MoE with about 3B activated parameters per token, so it
-  should be materially faster than the current 122B-A10B lane while preserving
-  more quality than a dense 9B fallback.
-- The Q4_K_M GGUF is the publisher's recommended default quant and is listed by
-  the Hugging Face model API/search as available in the bartowski repo.
+  The 35B candidate was attempted first and failed the co-resident live memory
+  gate, so the fallback stays within Joy's requested evidence-based downgrade
+  path.
+- The deployed Qwen3-14B Q5_K_M model should be materially faster than the
+  current 122B-A10B lane while preserving more quality than a dense 9B fallback.
+- The Q5_K_M GGUF is listed by the Hugging Face model API/search as available in
+  the bartowski repo at 10,514,570,272 bytes.
 - The service has a separate 48Gi `owl-crypt` cache PVC and fetches the GGUF
   with a curl init container.  That matches the reviewed `honcho-embeddings`
   pattern and avoids relying on llama.cpp direct HTTPS/HF download behavior.
@@ -27,12 +33,10 @@ Rationale:
 - `data/kubernetes/app/llama-server-fast.yaml` defines the chartless KubeCM app:
   PVC, HF token secret, model-fetch init container, llama-server Deployment, and
   ClusterIP Service.
-- `data/kubernetes/service/llama-qwen-fast.yaml` selects the 35B-A3B Q4_K_M
-  model, `--ctx-size 32768`, and `--parallel 1` for one 32K-context slot.
-  Live starts with `--ctx-size 131072 --parallel 4` and then
-  `--ctx-size 65536 --parallel 2` both OOM-killed during model/context load
-  beside the existing 122B lane, so this keeps the first 35B canary at the
-  minimum useful Honcho interactive context before falling back to 14B/9B.
+- `data/kubernetes/service/llama-qwen-fast.yaml` selects the Qwen3-14B Q5_K_M
+  fallback model, `--ctx-size 65536`, and `--parallel 2` for two 32K-context
+  slots. The original 35B-A3B candidate failed live co-residency because
+  starts with 4, 2, and 1 slot OOM-killed beside the existing 122B lane.
 - `plans/eyrie/ai/deploy_llama_qwen_fast.yaml` deploys the new service.
 - `plans/eyrie/ai/deploy_llama.yaml` now includes `qwen_fast` alongside the
   original `qwen` switch.
@@ -65,8 +69,8 @@ PY
   render in namespace `ai`.
 - The fast deployment uses image
   `registry.gitlab.joyfullee.me/nest/tools/llama.cpp:zen5`, model path
-  `/cache/models/Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf`, one GPU, a scheduler-fit
-  16Gi request with a 96Gi cgroup limit, and one 32K-context slot.
+  `/cache/models/Qwen_Qwen3-14B-Q5_K_M.gguf`, one GPU, a scheduler-fit
+  16Gi request with a 96Gi cgroup limit, and two 32K-context slots.
 - Honcho minimal/low env vars point to `llama-qwen-fast`; medium/high/max and
   dream env vars still point to `llama-qwen`.
 

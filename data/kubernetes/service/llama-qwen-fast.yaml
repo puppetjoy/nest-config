@@ -1,17 +1,16 @@
 ---
-# Qwen3.5-35B-A3B is a sparse MoE (~3B active parameters per token), selected
-# as the first Honcho minimal/low dialectic fast-lane candidate.  Q4_K_M is the
-# bartowski recommended default quant at about 22.3 GiB. Live starts
-# OOM-killed with 4-slot and 2-slot 32K/slot KV caches beside the existing 122B
-# rollback service, so the 35B canary is minimized to one 32K slot before
-# falling back to a smaller model family.
-# https://huggingface.co/bartowski/Qwen_Qwen3.5-35B-A3B-GGUF
-model_repo: bartowski/Qwen_Qwen3.5-35B-A3B-GGUF
-model_file: Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf
-model_path: /cache/models/Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf
-model_url: https://huggingface.co/bartowski/Qwen_Qwen3.5-35B-A3B-GGUF/resolve/main/Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf
-ctx_size: '32768'
-parallel_requests: '1'
+# Qwen3.5-35B-A3B was the preferred first candidate, but it OOM-killed beside
+# the existing 122B rollback lane even after reducing to one 32K slot and a
+# 96Gi cgroup limit. Use the reviewed fallback family: dense Qwen3-14B at
+# Q5_K_M for a better quality/speed tradeoff than 9B while remaining small
+# enough to co-reside with llama-qwen.
+# https://huggingface.co/bartowski/Qwen_Qwen3-14B-GGUF
+model_repo: bartowski/Qwen_Qwen3-14B-GGUF
+model_file: Qwen_Qwen3-14B-Q5_K_M.gguf
+model_path: /cache/models/Qwen_Qwen3-14B-Q5_K_M.gguf
+model_url: https://huggingface.co/bartowski/Qwen_Qwen3-14B-GGUF/resolve/main/Qwen_Qwen3-14B-Q5_K_M.gguf
+ctx_size: '65536'
+parallel_requests: '2'
 cpu_request: '4'
 cpu_limit: '12'
 # Owl currently has enough allocatable headroom for one more GPU pod but not a

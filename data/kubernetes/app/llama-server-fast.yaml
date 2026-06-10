@@ -4,9 +4,11 @@ include:
 
 plan_base: 'nest::eyrie::ai::llama'
 
-# Fast Honcho dialectic lane: keep a smaller sparse Qwen model separate from
-# the 122B llama-qwen service so medium/high/max/dream workloads keep their
-# existing quality/capacity and rollback stays a Honcho env-only redeploy.
+# Fast Honcho dialectic lane: keep a smaller Qwen model separate from the 122B
+# llama-qwen service so medium/high/max/dream workloads keep their existing
+# quality/capacity and rollback stays a Honcho env-only redeploy. Service data
+# currently selects the 14B fallback after the 35B-A3B candidate OOM-killed in
+# live co-residency testing.
 cache_size: 48Gi
 storage_class: owl-crypt
 image: registry.gitlab.joyfullee.me/nest/tools/llama.cpp:zen5
