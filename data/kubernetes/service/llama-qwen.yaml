@@ -6,6 +6,10 @@ model_repo: bartowski/Qwen_Qwen3.5-35B-A3B-GGUF
 model_file: Qwen_Qwen3.5-35B-A3B-Q5_K_M.gguf
 model_path: /cache/models/Qwen_Qwen3.5-35B-A3B-Q5_K_M.gguf
 model_url: https://huggingface.co/bartowski/Qwen_Qwen3.5-35B-A3B-GGUF/resolve/main/Qwen_Qwen3.5-35B-A3B-Q5_K_M.gguf
+mmproj_file: mmproj-Qwen_Qwen3.5-35B-A3B-f16.gguf
+mmproj_path: /cache/models/mmproj-Qwen_Qwen3.5-35B-A3B-f16.gguf
+mmproj_url: https://huggingface.co/bartowski/Qwen_Qwen3.5-35B-A3B-GGUF/resolve/main/mmproj-Qwen_Qwen3.5-35B-A3B-f16.gguf
+image_max_tokens: '4096'
 ctx_size: '1048576'
 parallel_requests: '4'
 cpu_request: '8'

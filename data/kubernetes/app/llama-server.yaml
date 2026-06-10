@@ -15,6 +15,10 @@ model_repo: bartowski/Qwen_Qwen3.5-35B-A3B-GGUF
 model_file: Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf
 model_path: /cache/models/Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf
 model_url: https://huggingface.co/bartowski/Qwen_Qwen3.5-35B-A3B-GGUF/resolve/main/Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf
+mmproj_file: mmproj-Qwen_Qwen3.5-35B-A3B-f16.gguf
+mmproj_path: /cache/models/mmproj-Qwen_Qwen3.5-35B-A3B-f16.gguf
+mmproj_url: https://huggingface.co/bartowski/Qwen_Qwen3.5-35B-A3B-GGUF/resolve/main/mmproj-Qwen_Qwen3.5-35B-A3B-f16.gguf
+image_max_tokens: '4096'
 ctx_size: '524288'
 parallel_requests: '4'
 cpu_request: '8'
@@ -93,7 +97,14 @@ resources:
                       -o "$tmp" "%{lookup('model_url')}"
                     mv "$tmp" "%{lookup('model_path')}"
                   fi
+                  if [ ! -s "%{lookup('mmproj_path')}" ]; then
+                    tmp="%{lookup('mmproj_path')}.tmp"
+                    curl -fL --retry 5 --retry-delay 5 --connect-timeout 30 \
+                      -o "$tmp" "%{lookup('mmproj_url')}"
+                    mv "$tmp" "%{lookup('mmproj_path')}"
+                  fi
                   ls -lh "%{lookup('model_path')}"
+                  ls -lh "%{lookup('mmproj_path')}"
               volumeMounts:
                 - name: cache
                   mountPath: /cache
@@ -109,6 +120,10 @@ resources:
                 - "%{lookup('ctx_size')}"
                 - --parallel
                 - "%{lookup('parallel_requests')}"
+                - --mmproj
+                - "%{lookup('mmproj_path')}"
+                - --image-max-tokens
+                - "%{lookup('image_max_tokens')}"
                 - --jinja
                 - --reasoning
                 - 'off'
