@@ -6,23 +6,18 @@ plan_base: 'nest::eyrie::ai::llama'
 
 # Fast Honcho dialectic lane: keep a smaller Qwen model separate from the 122B
 # llama-qwen service so medium/high/max/dream workloads keep their existing
-# quality/capacity and rollback stays a Honcho env-only redeploy. Service data
-# currently selects the 14B fallback after the 35B-A3B candidate OOM-killed in
-# live co-residency testing.
+# quality/capacity and rollback stays a Honcho env-only redeploy.
 cache_size: 48Gi
 storage_class: owl-crypt
 image: registry.gitlab.joyfullee.me/nest/tools/llama.cpp:zen5
-model_repo: bartowski/Qwen_Qwen3.5-35B-A3B-GGUF
-model_file: Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf
-model_path: /cache/models/Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf
-model_url: https://huggingface.co/bartowski/Qwen_Qwen3.5-35B-A3B-GGUF/resolve/main/Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf
-# Keep the initial fast lane to one 32k-context slot. The 35B-A3B model
-# OOM-killed with both 131072 total context (4 x 32k slots) and 65536 total
-# context (2 x 32k slots) beside llama-qwen; Honcho's interactive minimal/low
-# prompts are usually 4k-8k input tokens, so this preserves useful context
-# while minimizing KV-cache pressure for the 35B canary.
-ctx_size: '32768'
-parallel_requests: '1'
+model_repo: bartowski/Qwen_Qwen3-14B-GGUF
+model_file: Qwen_Qwen3-14B-Q4_K_M.gguf
+model_path: /cache/models/Qwen_Qwen3-14B-Q4_K_M.gguf
+model_url: https://huggingface.co/bartowski/Qwen_Qwen3-14B-GGUF/resolve/main/Qwen_Qwen3-14B-Q4_K_M.gguf
+# The preferred 35B-A3B canary OOM-killed even at 1 x 32k beside llama-qwen.
+# Fall back to 14B Q4_K_M while preserving two 32k interactive slots.
+ctx_size: '65536'
+parallel_requests: '2'
 cpu_request: '4'
 cpu_limit: '12'
 # Owl currently has enough allocatable headroom for one more GPU pod but not a
@@ -30,7 +25,7 @@ cpu_limit: '12'
 # sized and rely on the higher limit for llama.cpp/GTT-backed runtime headroom.
 # Service data may raise this further if live cgroup headroom is needed.
 memory_request: 16Gi
-memory_limit: 72Gi
+memory_limit: 48Gi
 
 resources:
   backup: {}
