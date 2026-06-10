@@ -1,20 +1,20 @@
 ---
-# Canonical local generative model for Hermes private/local work and all Honcho
-# dialectic levels.  This keeps the 35B-A3B sole-model shape while promoting
-# the resident service from Qwen3.5 to Qwen3.6.
-model_repo: unsloth/Qwen3.6-35B-A3B-GGUF
+# Canonical local generative model for Hermes private/local work and Honcho
+# dialectic levels.  Joy has accepted prioritizing Qwen3.6 MTP/speculative
+# decoding over the previous multimodal and four-slot behavior, so this service
+# uses the MTP GGUF artifact directly on the resident llama-qwen endpoint.
+model_repo: unsloth/Qwen3.6-35B-A3B-MTP-GGUF
 model_file: Qwen3.6-35B-A3B-UD-Q5_K_M.gguf
-model_path: /cache/models/Qwen3.6-35B-A3B-UD-Q5_K_M.gguf
-model_url: https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF/resolve/main/Qwen3.6-35B-A3B-UD-Q5_K_M.gguf
-mmproj_file: mmproj-F16.gguf
-mmproj_path: /cache/models/Qwen3.6-35B-A3B-mmproj-F16.gguf
-mmproj_url: https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF/resolve/main/mmproj-F16.gguf
-image_max_tokens: '4096'
-ctx_size: '1048576'
-parallel_requests: '4'
+model_path: /cache/models/Qwen3.6-35B-A3B-MTP-UD-Q5_K_M.gguf
+model_url: https://huggingface.co/unsloth/Qwen3.6-35B-A3B-MTP-GGUF/resolve/main/Qwen3.6-35B-A3B-UD-Q5_K_M.gguf
+ctx_size: '262144'
+parallel_requests: '1'
+spec_draft_n_max: '2'
+spec_draft_type_k: q4_0
+spec_draft_type_v: q4_0
 cpu_request: '8'
 cpu_limit: '16'
 memory_request: 32Gi
 memory_limit: 112Gi
-# Keep room for the Qwen3.6 Q5 quant plus current Qwen3.5 rollback artifacts.
+# Keep room for the Qwen3.6 MTP Q5 quant plus Qwen3.6/Qwen3.5 rollback artifacts.
 cache_size: 240Gi

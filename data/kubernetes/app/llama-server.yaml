@@ -4,23 +4,23 @@ include:
 
 plan_base: 'nest::eyrie::ai::llama'
 
-# Canonical local generative model service.  The 35B-A3B MoE replaces the
-# previous resident 122B lane and removes the split-lane topology.  Keep the
-# cache PVC large enough for the existing llama-qwen claim during transition;
-# stale 122B cache contents can be cleaned after the rollout is accepted.
-cache_size: 160Gi
+# Canonical local generative model service.  Joy has chosen to prioritize
+# Qwen3.6 MTP/speculative decoding over multimodal and multi-slot behavior, so
+# the resident llama-qwen service runs the MTP artifact directly rather than a
+# sidecar/candidate service.  llama.cpp currently requires draft-mtp without
+# --mmproj and with a single parallel slot.
+cache_size: 240Gi
 storage_class: owl-crypt
 image: registry.gitlab.joyfullee.me/nest/tools/llama.cpp:zen5
-model_repo: unsloth/Qwen3.6-35B-A3B-GGUF
+model_repo: unsloth/Qwen3.6-35B-A3B-MTP-GGUF
 model_file: Qwen3.6-35B-A3B-UD-Q4_K_M.gguf
-model_path: /cache/models/Qwen3.6-35B-A3B-UD-Q4_K_M.gguf
-model_url: https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF/resolve/main/Qwen3.6-35B-A3B-UD-Q4_K_M.gguf
-mmproj_file: mmproj-F16.gguf
-mmproj_path: /cache/models/Qwen3.6-35B-A3B-mmproj-F16.gguf
-mmproj_url: https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF/resolve/main/mmproj-F16.gguf
-image_max_tokens: '4096'
-ctx_size: '524288'
-parallel_requests: '4'
+model_path: /cache/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf
+model_url: https://huggingface.co/unsloth/Qwen3.6-35B-A3B-MTP-GGUF/resolve/main/Qwen3.6-35B-A3B-UD-Q4_K_M.gguf
+ctx_size: '262144'
+parallel_requests: '1'
+spec_draft_n_max: '2'
+spec_draft_type_k: q4_0
+spec_draft_type_v: q4_0
 cpu_request: '8'
 cpu_limit: '16'
 memory_request: 32Gi
@@ -97,14 +97,7 @@ resources:
                       -o "$tmp" "%{lookup('model_url')}"
                     mv "$tmp" "%{lookup('model_path')}"
                   fi
-                  if [ ! -s "%{lookup('mmproj_path')}" ]; then
-                    tmp="%{lookup('mmproj_path')}.tmp"
-                    curl -fL --retry 5 --retry-delay 5 --connect-timeout 30 \
-                      -o "$tmp" "%{lookup('mmproj_url')}"
-                    mv "$tmp" "%{lookup('mmproj_path')}"
-                  fi
                   ls -lh "%{lookup('model_path')}"
-                  ls -lh "%{lookup('mmproj_path')}"
               volumeMounts:
                 - name: cache
                   mountPath: /cache
@@ -120,13 +113,17 @@ resources:
                 - "%{lookup('ctx_size')}"
                 - --parallel
                 - "%{lookup('parallel_requests')}"
-                - --mmproj
-                - "%{lookup('mmproj_path')}"
-                - --image-max-tokens
-                - "%{lookup('image_max_tokens')}"
                 - --jinja
                 - --reasoning
                 - 'off'
+                - --spec-type
+                - draft-mtp
+                - --spec-draft-n-max
+                - "%{lookup('spec_draft_n_max')}"
+                - --spec-draft-type-k
+                - "%{lookup('spec_draft_type_k')}"
+                - --spec-draft-type-v
+                - "%{lookup('spec_draft_type_v')}"
               envFrom:
                 - secretRef:
                     name: "%{nest::kubernetes::service}"
