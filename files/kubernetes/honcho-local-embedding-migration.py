@@ -33,6 +33,8 @@ DOC_BATCH_SIZE = int(os.environ.get("HONCHO_MIGRATION_DOC_BATCH_SIZE", "64"))
 MESSAGE_BATCH_SIZE = int(os.environ.get("HONCHO_MIGRATION_MESSAGE_BATCH_SIZE", "64"))
 DOC_MAX_CHARS = int(os.environ.get("HONCHO_MIGRATION_DOC_MAX_CHARS", "24000"))
 DOC_MIN_CHARS = int(os.environ.get("HONCHO_MIGRATION_DOC_MIN_CHARS", "2048"))
+SKIP_RESET = os.environ.get("HONCHO_MIGRATION_SKIP_RESET", "false").lower() == "true"
+SKIP_DOCUMENTS = os.environ.get("HONCHO_MIGRATION_SKIP_DOCUMENTS", "false").lower() == "true"
 
 
 def log(message: str) -> None:
@@ -47,6 +49,17 @@ def is_embedding_size_error(error: Exception) -> bool:
 async def scalar_int(db: AsyncSession, sql: str, params: dict | None = None) -> int:
     row = (await db.execute(text(sql), params or {})).first()
     return int(row[0]) if row is not None else 0
+
+
+async def embed_truncated_content(content: str, max_chars: int = DOC_MAX_CHARS) -> tuple[list[float], bool]:
+    limit = min(len(content), max_chars)
+    while True:
+        try:
+            return await embedding_client.embed(content[:limit]), limit < len(content)
+        except Exception as error:
+            if not is_embedding_size_error(error) or limit <= DOC_MIN_CHARS:
+                raise
+            limit = max(DOC_MIN_CHARS, limit // 2)
 
 
 async def preflight() -> None:
@@ -148,18 +161,10 @@ async def embed_documents() -> int:
                 log("documents: batch exceeded embedding size limit; retrying documents individually with truncation")
                 embeddings = []
                 for doc in docs:
-                    content = doc.content
-                    limit = min(len(content), DOC_MAX_CHARS)
-                    while True:
-                        try:
-                            embeddings.append(await embedding_client.embed(content[:limit]))
-                            if limit < len(content):
-                                truncated += 1
-                            break
-                        except Exception as doc_error:
-                            if not is_embedding_size_error(doc_error) or limit <= DOC_MIN_CHARS:
-                                raise
-                            limit = max(DOC_MIN_CHARS, limit // 2)
+                    embedding, was_truncated = await embed_truncated_content(doc.content)
+                    embeddings.append(embedding)
+                    if was_truncated:
+                        truncated += 1
             if len(embeddings) != len(docs):
                 raise RuntimeError(f"document batch returned {len(embeddings)} embeddings for {len(docs)} docs")
             for doc, embedding in zip(docs, embeddings, strict=True):
@@ -205,6 +210,7 @@ async def embed_messages() -> int:
     log(f"messages: embedding with batch_size={MESSAGE_BATCH_SIZE}")
     total_messages = 0
     total_embeddings = 0
+    truncated_messages = 0
     started = time.monotonic()
     async with tracked_db("local_embedding_migration_messages") as db:
         while True:
@@ -212,7 +218,18 @@ async def embed_messages() -> int:
             if not messages:
                 break
             id_to_content = {m.public_id: m.content for m in messages if m.content and m.content.strip()}
-            embedded = await embedding_client.batch_embed(id_to_content)
+            try:
+                embedded = await embedding_client.batch_embed(id_to_content)
+            except Exception as e:
+                if not is_embedding_size_error(e):
+                    raise
+                log("messages: batch exceeded embedding size limit; retrying messages individually with truncation")
+                embedded = {}
+                for public_id, content in id_to_content.items():
+                    embedding, was_truncated = await embed_truncated_content(content)
+                    embedded[public_id] = [embedding]
+                    if was_truncated:
+                        truncated_messages += 1
             objects: list[models.MessageEmbedding] = []
             for message in messages:
                 for embedding in embedded.get(message.public_id, []):
@@ -241,7 +258,7 @@ async def embed_messages() -> int:
                 )
     log(
         f"messages: complete messages={total_messages} embeddings={total_embeddings} "
-        f"elapsed={time.monotonic() - started:.1f}s"
+        f"truncated_overlong={truncated_messages} elapsed={time.monotonic() - started:.1f}s"
     )
     return total_embeddings
 
@@ -313,8 +330,14 @@ async def recreate_indexes_and_verify() -> None:
 async def main() -> None:
     started = time.monotonic()
     await preflight()
-    await reset_schema()
-    await embed_documents()
+    if SKIP_RESET:
+        log("schema: reset skipped by HONCHO_MIGRATION_SKIP_RESET=true")
+    else:
+        await reset_schema()
+    if SKIP_DOCUMENTS:
+        log("documents: skipped by HONCHO_MIGRATION_SKIP_DOCUMENTS=true")
+    else:
+        await embed_documents()
     await embed_messages()
     await recreate_indexes_and_verify()
     log(f"migration complete total_elapsed={time.monotonic() - started:.1f}s")

@@ -106,12 +106,15 @@ init=true`, followed by normal mode `init=false`.
 
    Use Honcho's `embedding_client` rather than handcrafted HTTP calls so token
    chunking, batching, and dimension validation match the application runtime.
-   Documents store a single vector per row; if an existing document exceeds the
-   local embedding model token or physical batch limit, the script retries that
-   document individually with a truncated prefix and reports only an aggregate
-   `truncated_overlong` count.  Keep batches modest (for example 128
-   documents/messages at a time) and print progress counts only, not message
-   contents.
+   Documents store a single vector per row; if an existing document or message
+   exceeds the local embedding model token or physical batch limit, the script
+   retries that row individually with a truncated prefix and reports only an
+   aggregate `truncated_overlong` count.  If the script fails after completing
+   documents but before completing messages/indexes, it may be resumed with
+   `HONCHO_MIGRATION_SKIP_RESET=true` and
+   `HONCHO_MIGRATION_SKIP_DOCUMENTS=true` after verifying document population.
+   Keep batches modest (for example 128 documents/messages at a time) and print
+   progress counts only, not message contents.
 
 3. Deploy the Honcho config in this branch:
 
