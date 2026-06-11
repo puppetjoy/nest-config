@@ -4,7 +4,7 @@ service_name: "%{nest::kubernetes::service}"
 
 cert_issuer: eyrie-ca
 cert_issuer_kind: ClusterIssuer
-honcho_image: registry.eyrie/nest/forks/honcho:honcho-v3-0-8-nest-dream-length-retry
+honcho_image: registry.eyrie/nest/forks/honcho:honcho-v3-0-8-nest-dream-controlled-fail
 honcho_database: honcho
 honcho_user: honcho
 ingress_class: contour-compute
@@ -141,19 +141,19 @@ representation_subthreshold_expiry_job_ttl: 21600
   # Dream cycles were still producing large prompts and length-finished local
   # Qwen calls after no-thinking/output-cap tuning.  Keep truncation detection
   # intact and reduce dream context/tool pressure instead of raising caps or
-  # limiter concurrency: shorter history/tool results plus fewer high-surprisal
-  # hint observations make each deduction/induction loop cheaper and easier to
-  # complete.
+  # limiter concurrency: shorter history/tool results, fewer high-surprisal hint
+  # observations, and fail-fast length handling make each cycle cheaper and stop
+  # partial outputs from looking like durable dream progress.
   - name: DREAM_MAX_INPUT_TOKENS
-    value: '10000'
+    value: '8000'
   - name: DREAM_MAX_TOOL_ITERATIONS
-    value: '5'
+    value: '3'
   - name: DREAM_HISTORY_TOKEN_LIMIT
-    value: '2048'
+    value: '1536'
   - name: DREAM_SURPRISAL__SAMPLE_SIZE
-    value: '40'
+    value: '24'
   - name: DREAM_SURPRISAL__TOP_PERCENT_SURPRISAL
-    value: '0.03'
+    value: '0.02'
   - name: DERIVER_MODEL_CONFIG__TRANSPORT
     value: 'openai'
   - name: DERIVER_MODEL_CONFIG__MODEL
@@ -234,8 +234,6 @@ representation_subthreshold_expiry_job_ttl: 21600
     value: 'HONCHO_LOCAL_OPENAI_API_KEY'
   - name: DREAM_DEDUCTION_MODEL_CONFIG__OVERRIDES__PROVIDER_PARAMS__CHAT_TEMPLATE_KWARGS__ENABLE_THINKING
     value: 'false'
-  - name: DREAM_DEDUCTION_MODEL_CONFIG__OVERRIDES__PROVIDER_PARAMS__LENGTH_RETRY_MAX_TOKENS
-    value: '512'
   - name: DREAM_INDUCTION_MODEL_CONFIG__TRANSPORT
     value: 'openai'
   - name: DREAM_INDUCTION_MODEL_CONFIG__MODEL
@@ -246,8 +244,6 @@ representation_subthreshold_expiry_job_ttl: 21600
     value: 'HONCHO_LOCAL_OPENAI_API_KEY'
   - name: DREAM_INDUCTION_MODEL_CONFIG__OVERRIDES__PROVIDER_PARAMS__CHAT_TEMPLATE_KWARGS__ENABLE_THINKING
     value: 'false'
-  - name: DREAM_INDUCTION_MODEL_CONFIG__OVERRIDES__PROVIDER_PARAMS__LENGTH_RETRY_MAX_TOKENS
-    value: '512'
 
 resources:
   registry_auths: {}
