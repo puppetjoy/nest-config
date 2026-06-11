@@ -4,7 +4,7 @@ service_name: "%{nest::kubernetes::service}"
 
 cert_issuer: eyrie-ca
 cert_issuer_kind: ClusterIssuer
-honcho_image: ghcr.io/plastic-labs/honcho:v3.0.8
+honcho_image: registry.eyrie/nest/forks/honcho:honcho-v3-0-8-nest
 honcho_database: honcho
 honcho_user: honcho
 ingress_class: contour-compute
@@ -136,6 +136,8 @@ representation_subthreshold_expiry_job_ttl: 21600
     value: "%{lookup('honcho_llama_qwen_base_url')}"
   - name: DIALECTIC_LEVELS__minimal__MODEL_CONFIG__OVERRIDES__API_KEY_ENV
     value: 'HONCHO_LOCAL_OPENAI_API_KEY'
+  - name: DIALECTIC_LEVELS__minimal__MODEL_CONFIG__OVERRIDES__PROVIDER_PARAMS__CHAT_TEMPLATE_KWARGS__ENABLE_THINKING
+    value: 'false'
   - name: DIALECTIC_LEVELS__low__MODEL_CONFIG__TRANSPORT
     value: 'openai'
   - name: DIALECTIC_LEVELS__low__MODEL_CONFIG__MODEL
@@ -144,6 +146,8 @@ representation_subthreshold_expiry_job_ttl: 21600
     value: "%{lookup('honcho_llama_qwen_base_url')}"
   - name: DIALECTIC_LEVELS__low__MODEL_CONFIG__OVERRIDES__API_KEY_ENV
     value: 'HONCHO_LOCAL_OPENAI_API_KEY'
+  - name: DIALECTIC_LEVELS__low__MODEL_CONFIG__OVERRIDES__PROVIDER_PARAMS__CHAT_TEMPLATE_KWARGS__ENABLE_THINKING
+    value: 'false'
   - name: DIALECTIC_LEVELS__medium__MODEL_CONFIG__TRANSPORT
     value: 'openai'
   - name: DIALECTIC_LEVELS__medium__MODEL_CONFIG__MODEL

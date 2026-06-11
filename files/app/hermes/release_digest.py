@@ -388,11 +388,14 @@ except m.PackageNotFoundError:
 def watch_honcho() -> WatchResult:
     values = read(REPO / "data/kubernetes/app/honcho.yaml")
     current = {
-        "honcho": first_match(r"(?m)^honcho_image:\s*ghcr\.io/plastic-labs/honcho:(\S+)\s*$", values, "Honcho image", flags=0),
+        "honcho": first_match(r"(?m)^honcho_image:\s*(?:ghcr\.io/plastic-labs/honcho:|registry\.eyrie/nest/forks/honcho:)(\S+)\s*$", values, "Honcho image", flags=0),
         "honcho_ai": installed_python_package_version("honcho-ai"),
         "postgres": first_match(r"(?m)^postgres_image:\s*ghcr\.io/cloudnative-pg/postgresql:(\S+)\s*$", values, "CNPG Postgres image", flags=0),
         "redis": first_match(r"(?m)^\s*image:\s*docker\.io/library/redis:(\S+)\s*$", values, "Redis image", flags=0),
     }
+    honcho_branch_tag = re.fullmatch(r"honcho-v(\d+)-(\d+)-(\d+)-nest", current["honcho"])
+    if honcho_branch_tag:
+        current["honcho"] = f"v{honcho_branch_tag.group(1)}.{honcho_branch_tag.group(2)}.{honcho_branch_tag.group(3)}"
     honcho_latest = max([t for t in ghcr_tags("plastic-labs/honcho") if re.fullmatch(r"v\d+\.\d+\.\d+", t)], key=version_key)
     honcho_ai_latest = str((fetch_json("https://pypi.org/pypi/honcho-ai/json").get("info") or {}).get("version") or "")
     pg_major = re.match(r"^(\d+)\.", current["postgres"])
