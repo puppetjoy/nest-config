@@ -264,7 +264,7 @@ resources:
           template:
             metadata:
               labels:
-                app: "%{nest::kubernetes::service}"
+                app: "%{nest::kubernetes::service}-roundtrip-monitor"
                 component: roundtrip-monitor
             spec:
               restartPolicy: Never
