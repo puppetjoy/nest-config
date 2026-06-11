@@ -4,7 +4,7 @@ service_name: "%{nest::kubernetes::service}"
 
 cert_issuer: eyrie-ca
 cert_issuer_kind: ClusterIssuer
-honcho_image: registry.eyrie/nest/forks/honcho:honcho-v3-0-8-nest-enable-thinking
+honcho_image: registry.eyrie/nest/forks/honcho:honcho-v3-0-8-nest-dream-budget
 honcho_database: honcho
 honcho_user: honcho
 ingress_class: contour-compute
@@ -144,6 +144,10 @@ representation_subthreshold_expiry_job_ttl: 21600
   # limiter concurrency: shorter history/tool results plus fewer high-surprisal
   # hint observations make each deduction/induction loop cheaper and easier to
   # complete.
+  - name: DREAM_MAX_INPUT_TOKENS
+    value: '10000'
+  - name: DREAM_MAX_TOOL_ITERATIONS
+    value: '5'
   - name: DREAM_HISTORY_TOKEN_LIMIT
     value: '2048'
   - name: DREAM_SURPRISAL__SAMPLE_SIZE
