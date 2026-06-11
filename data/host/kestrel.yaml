@@ -45,12 +45,12 @@ nest::service::llama_server::instances:
   qwen35:
     # Best-fit Qwen3.5 dense Q8 target for Kestrel's RX 7600-class 8 GiB GPU.
     # `--ctx-size` is a total server budget split across `--parallel` slots in
-    # current llama.cpp; 98304 therefore starts with two 49152-token slots.
+    # current llama.cpp; 131072 therefore gives two 65536-token slots.
     # The MTP GGUF is not selected because Unsloth/HF currently document that
     # Qwen3.5 MTP is incompatible with `-np > 1`, and Joy explicitly asked for
     # two max-context slots.
     repo: unsloth/Qwen3.5-4B-GGUF:Q8_0
-    kv_size: 98304
+    kv_size: 131072
     parallel: 2
     gpu_layers: 999
     flash_attention: true

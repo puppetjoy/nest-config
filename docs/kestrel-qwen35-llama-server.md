@@ -51,7 +51,7 @@ as a one-slot experiment only.
 nest::service::llama_server::instances:
   qwen35:
     repo: unsloth/Qwen3.5-4B-GGUF:Q8_0
-    kv_size: 98304
+    kv_size: 131072
     parallel: 2
     gpu_layers: 999
     flash_attention: true
@@ -64,21 +64,23 @@ llama-server \
   --host 0.0.0.0 \
   --port 8080 \
   --hf-repo unsloth/Qwen3.5-4B-GGUF:Q8_0 \
-  --ctx-size 98304 \
+  --ctx-size 131072 \
   --n-gpu-layers 999 \
   --parallel 2 \
   --flash-attn on
 ```
 
 Current llama.cpp treats `--ctx-size` as a total context budget split across
-`--parallel` slots, so this starts at two slots of 49,152 tokens each.
+`--parallel` slots. The reviewed first boot started at two slots of 49,152
+tokens each. Live ladder testing after review confirmed 114,688 total context
+(two 57,344-token slots) and 131,072 total context (two 65,536-token slots) both
+reached `/health`, so the source-managed target is now 131,072 total context.
 
-This is intentionally conservative for first boot: the model file alone is
-4.175 GiB, and the Qwen3.5 text config has 32 layers with every fourth layer as
-full attention. A rough F16 KV estimate for full-attention layers is about
-32 KiB per token, or about 3 GiB at 98,304 total tokens. That leaves limited
-headroom on an 8 GiB GPU for Vulkan/runtime overhead. After review, live testing
-should try 114,688 and 131,072 total context only if the 98,304 launch is stable.
+This remains a close fit on the RX 7600-class GPU because the model, Vulkan
+runtime, KV cache, and auto-loaded Qwen3.5 multimodal projector together nearly
+fill 8 GiB VRAM at 131,072 total context. If later workload smokes show OOM,
+Vulkan allocation failure, swap pressure, or slot instability, roll back to
+114,688 or 98,304 total context.
 
 ## Review/deploy verification plan
 
@@ -94,19 +96,18 @@ After Joy accepts the source handoff:
 4. Verify API shape:
    - `curl http://kestrel:8080/health`
    - `curl http://kestrel:8080/props`
-   - `curl http://kestrel:8080/slots` should show two slots and the expected
-     per-slot context.
-   - OpenAI-compatible `/v1/chat/completions` smoke.
+   - `curl http://kestrel:8080/slots` should show two 65,536-token slots at the
+     final 131,072 total-context setting.
+   - OpenAI-compatible `/v1/chat/completions` smoke. Qwen3.5 thinking mode may
+     emit `reasoning_content` first; pass `chat_template_kwargs.enable_thinking=false`
+     for a short content-bearing health smoke.
 5. Verify memory/pressure:
    - llama startup logs for Vulkan device selection and buffer allocations.
    - amdgpu/sysfs VRAM/GTT counters if present.
    - host `free -h`, `podman stats`, and container logs after smoke.
-6. If stable, increase only one step at a time:
-   - 114,688 total context (57,344 per slot)
-   - 131,072 total context (65,536 per slot)
-   Roll back to 98,304 total context on OOM, Vulkan allocation failure, slot
-   instability, or swap pressure.
+6. Roll back to 114,688 or 98,304 total context on OOM, Vulkan allocation
+   failure, slot instability, or swap pressure.
 
-Rollback is to restore the previous stopped utility instance or set
+Rollback is to restore a lower `kv_size` or set
 `ensure: stopped` on `qwen35`, deploy Puppet, apply on Kestrel, and verify port
 8080 is no longer listening.
