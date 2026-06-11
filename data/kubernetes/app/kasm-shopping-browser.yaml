@@ -7,8 +7,8 @@ service_name: shopping
 
 cert_issuer: eyrie-ca
 cert_issuer_kind: ClusterIssuer
-ingress_class: contour-workstation
-node_role: workstation
+ingress_class: contour-compute
+node_role: compute
 image: docker.io/kasmweb/chrome:1.18.0
 launch_url: https://www.amazon.com/
 app_args: >-
@@ -18,7 +18,7 @@ app_args: >-
   --user-data-dir=/home/kasm-user/.config/star-shopping-chrome
   --remote-debugging-address=0.0.0.0
   --remote-debugging-port=9222
-storage_class: data-crypt
+storage_class: owl-crypt
 profile_storage_size: 8Gi
 bitwarden_extension_id: nngceckbapebfimnlniiiahkandclblb
 bitwarden_update_url: https://clients2.google.com/service/update2/crx
