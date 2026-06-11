@@ -544,8 +544,7 @@ define nest::lib::hermes (
       'tool_progress_command' => true,
       'platforms'             => {
         'telegram' => {
-          'tool_progress'       => 'all',
-          'tool_preview_length' => 500,
+          'tool_progress' => 'all',
         },
       },
     } + $display_skin_config,
