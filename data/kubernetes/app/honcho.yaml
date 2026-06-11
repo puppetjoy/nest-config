@@ -425,6 +425,62 @@ resources:
         def log(message):
             print(message, file=sys.stderr, flush=True)
 
+        def summarize_chat_request(request_body):
+            if not request_body:
+                return 'request_json=empty'
+            try:
+                payload = json.loads(request_body.decode('utf-8'))
+            except Exception:
+                return 'request_json=unparsed'
+            if not isinstance(payload, dict):
+                return 'request_json=non_object'
+            messages = payload.get('messages')
+            tools = payload.get('tools')
+            if isinstance(messages, list):
+                message_count = len(messages)
+                message_chars = sum(
+                    len(str(message.get('content') or ''))
+                    for message in messages
+                    if isinstance(message, dict)
+                )
+            else:
+                message_count = 'n/a'
+                message_chars = 'n/a'
+            tool_count = len(tools) if isinstance(tools, list) else 0
+            max_tokens = payload.get('max_tokens') or payload.get('max_completion_tokens')
+            reasoning = payload.get('reasoning') if isinstance(payload, dict) else None
+            reasoning_max = reasoning.get('max_tokens') if isinstance(reasoning, dict) else None
+            return (
+                f'max_tokens={max_tokens!r} stream={payload.get("stream", False)!r} '
+                f'messages={message_count} message_chars={message_chars} '
+                f'tools={tool_count} tool_choice={payload.get("tool_choice")!r} '
+                f'reasoning_max_tokens={reasoning_max!r}'
+            )
+
+        def summarize_chat_response(response_body):
+            if not response_body:
+                return 'response_json=empty'
+            try:
+                payload = json.loads(response_body.decode('utf-8'))
+            except Exception:
+                return 'response_json=unparsed'
+            if not isinstance(payload, dict):
+                return 'response_json=non_object'
+            choices = payload.get('choices')
+            first_choice = choices[0] if isinstance(choices, list) and choices else {}
+            usage = payload.get('usage') if isinstance(payload.get('usage'), dict) else {}
+            message = first_choice.get('message') if isinstance(first_choice, dict) else {}
+            content = message.get('content') if isinstance(message, dict) else None
+            tool_calls = message.get('tool_calls') if isinstance(message, dict) else None
+            return (
+                f'finish_reason={first_choice.get("finish_reason")!r} '
+                f'prompt_tokens={usage.get("prompt_tokens")!r} '
+                f'completion_tokens={usage.get("completion_tokens")!r} '
+                f'total_tokens={usage.get("total_tokens")!r} '
+                f'content_chars={len(content) if isinstance(content, str) else 0} '
+                f'tool_calls={len(tool_calls) if isinstance(tool_calls, list) else 0}'
+            )
+
         class LimiterHandler(BaseHTTPRequestHandler):
             protocol_version = 'HTTP/1.1'
 
@@ -530,6 +586,8 @@ resources:
                         log(f'bad_request method={self.command} path={self.path} incomplete_body={len(request_body or b"")}/{content_length}')
                         self.send_json(400, {'error': 'incomplete request body'}, close=True)
                         return
+                    if self.command == 'POST' and self.path.startswith('/v1/chat/completions'):
+                        log(f'request_summary path={self.path} {summarize_chat_request(request_body)}')
 
                     headers = {
                         key: value
@@ -542,6 +600,8 @@ resources:
                     conn.request(self.command, self.path, body=request_body, headers=headers)
                     response = conn.getresponse()
                     response_body = response.read()
+                    if self.command == 'POST' and self.path.startswith('/v1/chat/completions'):
+                        log(f'response_summary path={self.path} status={response.status} {summarize_chat_response(response_body)}')
 
                     self.send_response(response.status, response.reason)
                     sent_response = True
