@@ -6,6 +6,7 @@ class nest::tool::llamacpp (
   }
 
   nest::lib::package { [
+    'dev-libs/openssl',
     'dev-util/spirv-headers',
     'dev-util/vulkan-headers',
     'media-libs/shaderc',
@@ -34,6 +35,7 @@ class nest::tool::llamacpp (
         '-DGGML_RV_ZICBOP=OFF',
         '-DGGML_RV_ZIHINTPAUSE=OFF',
         '-DGGML_VULKAN=ON',
+        '-DLLAMA_OPENSSL=ON',
       ].join(' '),
       'cmake --build build',
       'cmake --install build',
