@@ -95,6 +95,16 @@ def _normalize_path(match: re.Match[str]) -> str:
     return f"path {spoken}{suffix}"
 
 
+def _normalize_pause_punctuation(text: str) -> str:
+    """Add Kokoro-friendly pauses for list labels without changing visible text."""
+    # Kokoro tends to run label-style colons into the following word. A speech-
+    # only period gives a reliable phrase boundary while keeping identifiers,
+    # URLs, times, and ratios intact.
+    text = re.sub(r"(?<!\d):\s+(?=[A-Za-z])", ". ", text)
+    text = re.sub(r";\s+(?=[A-Za-z])", ". ", text)
+    return text
+
+
 def normalize_tts_text(text: str) -> str:
     """Return a speech-only rendering for operational Hermes notifications."""
     normalized = text
@@ -120,6 +130,7 @@ def normalize_tts_text(text: str) -> str:
     normalized = re.sub(r"(?<!\w)/(?:[A-Za-z0-9._-]+/?)+", _normalize_path, normalized)
     for pattern, replacement in _PRONUNCIATION_REPLACEMENTS:
         normalized = pattern.sub(replacement, normalized)
+    normalized = _normalize_pause_punctuation(normalized)
     normalized = re.sub(r"\s+", " ", normalized).strip()
     return normalized
 

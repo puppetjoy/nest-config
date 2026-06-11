@@ -58,7 +58,7 @@ resources:
         except Exception:  # pragma: no cover - startup health reports this
             resample_poly = None
 
-        app = FastAPI(title='Nest voice-speech', version='0.3.0')
+        app = FastAPI(title='Nest voice-speech', version='0.3.1')
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
         lock = threading.Lock()
         tts_pipelines = {}
@@ -129,6 +129,14 @@ resources:
             path = parts[1].replace('-', ' dash ').replace('_', ' underscore ').replace('/', ' slash ') if len(parts) > 1 else ''
             return scheme + ' link ' + host + ((' slash ' + path) if path else '') + suffix
 
+        def normalize_pause_punctuation(text: str):
+            # Speech-only phrase boundaries for list labels. Kokoro often runs
+            # colon/semicolon labels into the next word unless it sees a
+            # stronger sentence boundary.
+            text = re.sub(r'(?<!\d):\s+(?=[A-Za-z])', '. ', text)
+            text = re.sub(r';\s+(?=[A-Za-z])', '. ', text)
+            return text
+
         def normalize_for_tts(text: str):
             normalized = text
             normalized = re.sub(r'https://([^\s,;]+)', lambda m: normalize_url('H T T P S', m.group(1)), normalized)
@@ -137,6 +145,7 @@ resources:
             normalized = re.sub(r'\b(?:task\s+)?(t_[0-9a-f]+)\b', lambda m: 'task ' + spell_identifier(m.group(1)), normalized, flags=re.IGNORECASE)
             for pattern, replacement in PRONUNCIATIONS:
                 normalized = pattern.sub(replacement, normalized)
+            normalized = normalize_pause_punctuation(normalized)
             normalized = re.sub(r'(?<!\w)/(?!\w)', ' slash ', normalized)
             normalized = re.sub(r'\s+', ' ', normalized).strip()
             return normalized
