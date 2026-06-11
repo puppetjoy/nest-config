@@ -81,15 +81,32 @@ representation_subthreshold_expiry_job_ttl: 21600
   # Keep Honcho's local Qwen calls bounded so slow generations do not hold the
   # two allowed llama-qwen slots for long 1000+ token responses.  The model,
   # endpoint, and 2-of-4 slot topology stay unchanged; these caps only apply
-  # downward pressure to generated output length and dialectic tool loops.
+  # downward pressure to generated output length, input context, and dialectic
+  # tool loops.
   - name: LLM_DEFAULT_MAX_TOKENS
     value: '1024'
+  - name: LLM_MAX_TOOL_OUTPUT_CHARS
+    value: '5000'
+  - name: LLM_MAX_MESSAGE_CONTENT_CHARS
+    value: '1000'
+  - name: GET_CONTEXT_MAX_TOKENS
+    value: '24000'
+  - name: DERIVER_MAX_INPUT_TOKENS
+    value: '12000'
+  - name: DERIVER_WORKING_REPRESENTATION_MAX_OBSERVATIONS
+    value: '40'
   - name: DERIVER_MODEL_CONFIG__MAX_OUTPUT_TOKENS
     value: '512'
   - name: SUMMARY_MAX_TOKENS_SHORT
     value: '512'
   - name: SUMMARY_MAX_TOKENS_LONG
     value: '1536'
+  - name: DIALECTIC_MAX_INPUT_TOKENS
+    value: '16000'
+  - name: DIALECTIC_HISTORY_TOKEN_LIMIT
+    value: '4096'
+  - name: DIALECTIC_SESSION_HISTORY_MAX_TOKENS
+    value: '2048'
   - name: DIALECTIC_MAX_OUTPUT_TOKENS
     value: '1024'
   - name: DIALECTIC_LEVELS__minimal__MAX_OUTPUT_TOKENS
@@ -120,6 +137,8 @@ representation_subthreshold_expiry_job_ttl: 21600
     value: "%{lookup('honcho_llama_qwen_base_url')}"
   - name: DERIVER_MODEL_CONFIG__OVERRIDES__API_KEY_ENV
     value: 'HONCHO_LOCAL_OPENAI_API_KEY'
+  - name: DERIVER_MODEL_CONFIG__OVERRIDES__PROVIDER_PARAMS__CHAT_TEMPLATE_KWARGS__ENABLE_THINKING
+    value: 'false'
   - name: SUMMARY_MODEL_CONFIG__TRANSPORT
     value: 'openai'
   - name: SUMMARY_MODEL_CONFIG__MODEL
@@ -128,6 +147,8 @@ representation_subthreshold_expiry_job_ttl: 21600
     value: "%{lookup('honcho_llama_qwen_base_url')}"
   - name: SUMMARY_MODEL_CONFIG__OVERRIDES__API_KEY_ENV
     value: 'HONCHO_LOCAL_OPENAI_API_KEY'
+  - name: SUMMARY_MODEL_CONFIG__OVERRIDES__PROVIDER_PARAMS__CHAT_TEMPLATE_KWARGS__ENABLE_THINKING
+    value: 'false'
   - name: DIALECTIC_LEVELS__minimal__MODEL_CONFIG__TRANSPORT
     value: 'openai'
   - name: DIALECTIC_LEVELS__minimal__MODEL_CONFIG__MODEL
@@ -156,6 +177,8 @@ representation_subthreshold_expiry_job_ttl: 21600
     value: "%{lookup('honcho_llama_qwen_base_url')}"
   - name: DIALECTIC_LEVELS__medium__MODEL_CONFIG__OVERRIDES__API_KEY_ENV
     value: 'HONCHO_LOCAL_OPENAI_API_KEY'
+  - name: DIALECTIC_LEVELS__medium__MODEL_CONFIG__OVERRIDES__PROVIDER_PARAMS__CHAT_TEMPLATE_KWARGS__ENABLE_THINKING
+    value: 'false'
   - name: DIALECTIC_LEVELS__high__MODEL_CONFIG__TRANSPORT
     value: 'openai'
   - name: DIALECTIC_LEVELS__high__MODEL_CONFIG__MODEL
@@ -164,6 +187,8 @@ representation_subthreshold_expiry_job_ttl: 21600
     value: "%{lookup('honcho_llama_qwen_base_url')}"
   - name: DIALECTIC_LEVELS__high__MODEL_CONFIG__OVERRIDES__API_KEY_ENV
     value: 'HONCHO_LOCAL_OPENAI_API_KEY'
+  - name: DIALECTIC_LEVELS__high__MODEL_CONFIG__OVERRIDES__PROVIDER_PARAMS__CHAT_TEMPLATE_KWARGS__ENABLE_THINKING
+    value: 'false'
   - name: DIALECTIC_LEVELS__max__MODEL_CONFIG__TRANSPORT
     value: 'openai'
   - name: DIALECTIC_LEVELS__max__MODEL_CONFIG__MODEL
@@ -172,6 +197,8 @@ representation_subthreshold_expiry_job_ttl: 21600
     value: "%{lookup('honcho_llama_qwen_base_url')}"
   - name: DIALECTIC_LEVELS__max__MODEL_CONFIG__OVERRIDES__API_KEY_ENV
     value: 'HONCHO_LOCAL_OPENAI_API_KEY'
+  - name: DIALECTIC_LEVELS__max__MODEL_CONFIG__OVERRIDES__PROVIDER_PARAMS__CHAT_TEMPLATE_KWARGS__ENABLE_THINKING
+    value: 'false'
   - name: DREAM_DEDUCTION_MODEL_CONFIG__TRANSPORT
     value: 'openai'
   - name: DREAM_DEDUCTION_MODEL_CONFIG__MODEL
@@ -180,6 +207,8 @@ representation_subthreshold_expiry_job_ttl: 21600
     value: "%{lookup('honcho_llama_qwen_base_url')}"
   - name: DREAM_DEDUCTION_MODEL_CONFIG__OVERRIDES__API_KEY_ENV
     value: 'HONCHO_LOCAL_OPENAI_API_KEY'
+  - name: DREAM_DEDUCTION_MODEL_CONFIG__OVERRIDES__PROVIDER_PARAMS__CHAT_TEMPLATE_KWARGS__ENABLE_THINKING
+    value: 'false'
   - name: DREAM_INDUCTION_MODEL_CONFIG__TRANSPORT
     value: 'openai'
   - name: DREAM_INDUCTION_MODEL_CONFIG__MODEL
@@ -188,6 +217,8 @@ representation_subthreshold_expiry_job_ttl: 21600
     value: "%{lookup('honcho_llama_qwen_base_url')}"
   - name: DREAM_INDUCTION_MODEL_CONFIG__OVERRIDES__API_KEY_ENV
     value: 'HONCHO_LOCAL_OPENAI_API_KEY'
+  - name: DREAM_INDUCTION_MODEL_CONFIG__OVERRIDES__PROVIDER_PARAMS__CHAT_TEMPLATE_KWARGS__ENABLE_THINKING
+    value: 'false'
 
 resources:
   registry_auths: {}
