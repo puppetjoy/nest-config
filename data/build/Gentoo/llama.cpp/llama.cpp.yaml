@@ -2,9 +2,8 @@
 nest::classes:
   - 'nest::tool::llamacpp'
 
-# Qwen3.5/Qwen3.6 MoE GGUFs use architecture qwen35moe, which is unsupported
-# by the previous b7595 tool image.  The current llama-qwen deployment has
-# validated b9222 with qwen35moe, multimodal projector loading, Vulkan, and
-# 4x262K slots, so keep this release pin until a newer image is benchmarked.
-nest::tool::llamacpp::revision: 'b9222'
+# Qwen3.5 dense GGUFs use architecture qwen35, which is unsupported by the
+# previous b7595 Kestrel tool image.  b9592 is the current upstream release at
+# rollout time and contains both qwen35 and qwen35moe model support.
+nest::tool::llamacpp::revision: 'b9592'
 nest::use: ['vulkan']
