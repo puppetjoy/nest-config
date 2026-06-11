@@ -137,6 +137,19 @@ representation_subthreshold_expiry_job_ttl: 21600
     value: '1536'
   - name: DREAM_INDUCTION_MODEL_CONFIG__MAX_OUTPUT_TOKENS
     value: '1536'
+
+  # Dream cycles were still producing large prompts and length-finished local
+  # Qwen calls after no-thinking/output-cap tuning.  Keep truncation detection
+  # intact and reduce dream context/tool pressure instead of raising caps or
+  # limiter concurrency: shorter history tool results plus fewer high-surprisal
+  # hint observations make each deduction/induction loop cheaper and easier to
+  # complete.
+  - name: DREAM_HISTORY_TOKEN_LIMIT
+    value: '4096'
+  - name: DREAM_SURPRISAL__SAMPLE_SIZE
+    value: '80'
+  - name: DREAM_SURPRISAL__TOP_PERCENT_SURPRISAL
+    value: '0.05'
   - name: DERIVER_MODEL_CONFIG__TRANSPORT
     value: 'openai'
   - name: DERIVER_MODEL_CONFIG__MODEL
