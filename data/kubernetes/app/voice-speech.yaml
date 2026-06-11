@@ -8,11 +8,297 @@
 cache_size: 80Gi
 storage_class: owl-crypt
 image: docker.io/rocm/pytorch:rocm7.2.4_ubuntu24.04_py3.12_pytorch_release_2.9.1
+app_version: '0.3.2'
+roundtrip_monitor_schedule: '17 * * * *'
+roundtrip_monitor_image: "%{lookup('config_registry')}/nest/stage1/server"
+roundtrip_monitor_expected_words: 'Joy,Talon,Star,voice,speech,request,recorded'
+roundtrip_monitor_max_rtf: '1.0'
+roundtrip_monitor_max_restarts: '0'
 
 resources:
   backup: {}
   restore: {}
   registry_auths: {}
+
+  roundtrip-monitor-service-account:
+    apiVersion: v1
+    kind: ServiceAccount
+    metadata:
+      name: "%{nest::kubernetes::service}-roundtrip-monitor"
+      namespace: "%{nest::kubernetes::namespace}"
+
+  roundtrip-monitor-role:
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: Role
+    metadata:
+      name: "%{nest::kubernetes::service}-roundtrip-monitor"
+      namespace: "%{nest::kubernetes::namespace}"
+    rules:
+      - apiGroups: ['']
+        resources: ['pods']
+        verbs: ['get', 'list']
+
+  roundtrip-monitor-role-binding:
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: RoleBinding
+    metadata:
+      name: "%{nest::kubernetes::service}-roundtrip-monitor"
+      namespace: "%{nest::kubernetes::namespace}"
+    subjects:
+      - kind: ServiceAccount
+        name: "%{nest::kubernetes::service}-roundtrip-monitor"
+        namespace: "%{nest::kubernetes::namespace}"
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: Role
+      name: "%{nest::kubernetes::service}-roundtrip-monitor"
+
+  roundtrip-monitor-script:
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: "%{nest::kubernetes::service}-roundtrip-monitor"
+      namespace: "%{nest::kubernetes::namespace}"
+    data:
+      monitor.py: |
+        import contextlib
+        import json
+        import os
+        import ssl
+        import struct
+        import sys
+        import tempfile
+        import time
+        import urllib.error
+        import urllib.parse
+        import urllib.request
+        import uuid
+        import wave
+
+        ENDPOINT = os.environ.get('VOICE_SPEECH_ENDPOINT', 'http://voice-speech').rstrip('/')
+        EXPECTED_VERSION = os.environ.get('EXPECTED_VERSION', '')
+        EXPECTED_VOICES = [v for v in os.environ.get('EXPECTED_VOICES', 'af_alloy,af_nova').split(',') if v]
+        EXPECTED_WORDS = [w.lower() for w in os.environ.get('EXPECTED_WORDS', '').split(',') if w]
+        MAX_RTF = float(os.environ.get('MAX_RTF', '1.0'))
+        MAX_RESTARTS = int(os.environ.get('MAX_RESTARTS', '0'))
+        PROMPT = os.environ.get(
+            'ROUNDTRIP_PROMPT',
+            'Joy—voice speech monitor. Talon and Star use voice-speech. Request recorded and task recorded.',
+        )
+        STT_MODEL = os.environ.get('STT_MODEL', 'whisper-large-v3-turbo')
+        STT_PROMPT = os.environ.get('STT_PROMPT', 'Talon Star Eyrie KubeCM voice-speech Kokoro')
+
+        def fail(message, **details):
+            print(json.dumps({'ok': False, 'error': message, **details}, sort_keys=True), file=sys.stderr)
+            raise SystemExit(1)
+
+        def get_json(path):
+            with urllib.request.urlopen(f'{ENDPOINT}{path}', timeout=30) as response:
+                return json.loads(response.read().decode('utf-8'))
+
+        def post_json_audio(path, payload):
+            request = urllib.request.Request(
+                f'{ENDPOINT}{path}',
+                data=json.dumps(payload).encode('utf-8'),
+                headers={'Content-Type': 'application/json', 'Accept': 'audio/wav'},
+                method='POST',
+            )
+            start = time.monotonic()
+            with urllib.request.urlopen(request, timeout=120) as response:
+                body = response.read()
+                headers = {key.lower(): value for key, value in response.headers.items()}
+            return body, headers, time.monotonic() - start
+
+        def post_multipart_transcription(audio):
+            boundary = '----nest-voice-speech-' + uuid.uuid4().hex
+            fields = {
+                'model': STT_MODEL,
+                'language': 'en',
+                'temperature': '0',
+                'condition_on_previous_text': 'false',
+                'initial_prompt': STT_PROMPT,
+            }
+            parts = []
+            for key, value in fields.items():
+                parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{key}"\r\n\r\n{value}\r\n'.encode())
+            parts.append(
+                f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="roundtrip.wav"\r\nContent-Type: audio/wav\r\n\r\n'.encode()
+                + audio
+                + b'\r\n'
+            )
+            parts.append(f'--{boundary}--\r\n'.encode())
+            request = urllib.request.Request(
+                f'{ENDPOINT}/v1/audio/transcriptions',
+                data=b''.join(parts),
+                headers={'Content-Type': f'multipart/form-data; boundary={boundary}'},
+                method='POST',
+            )
+            with urllib.request.urlopen(request, timeout=180) as response:
+                return json.loads(response.read().decode('utf-8'))
+
+        def wav_stats(audio):
+            with tempfile.NamedTemporaryFile(suffix='.wav') as tmp:
+                tmp.write(audio)
+                tmp.flush()
+                with contextlib.closing(wave.open(tmp.name, 'rb')) as wav:
+                    frames = wav.readframes(wav.getnframes())
+                    duration = wav.getnframes() / float(wav.getframerate()) if wav.getframerate() else 0.0
+                    if frames and wav.getsampwidth() == 2:
+                        count = len(frames) // 2
+                        samples = struct.unpack('<' + 'h' * count, frames)
+                        rms = int((sum(sample * sample for sample in samples) / count) ** 0.5) if count else 0
+                    elif frames:
+                        rms = 1
+                    else:
+                        rms = 0
+                    return {
+                        'channels': wav.getnchannels(),
+                        'sample_rate': wav.getframerate(),
+                        'sample_width': wav.getsampwidth(),
+                        'frames': wav.getnframes(),
+                        'duration': round(duration, 3),
+                        'rms': rms,
+                    }
+
+        def pod_restarts():
+            token_path = '/var/run/secrets/kubernetes.io/serviceaccount/token'
+            ca_path = '/var/run/secrets/kubernetes.io/serviceaccount/ca.crt'
+            namespace_path = '/var/run/secrets/kubernetes.io/serviceaccount/namespace'
+            if not os.path.exists(token_path):
+                return None
+            namespace = open(namespace_path, encoding='utf-8').read().strip()
+            token = open(token_path, encoding='utf-8').read().strip()
+            host = os.environ.get('KUBERNETES_SERVICE_HOST')
+            port = os.environ.get('KUBERNETES_SERVICE_PORT', '443')
+            if not host:
+                return None
+            url = f'https://{host}:{port}/api/v1/namespaces/{namespace}/pods?labelSelector=app%3Dvoice-speech'
+            request = urllib.request.Request(url, headers={'Authorization': f'Bearer {token}'})
+            context = ssl.create_default_context(cafile=ca_path)
+            with urllib.request.urlopen(request, timeout=30, context=context) as response:
+                pods = json.loads(response.read().decode('utf-8')).get('items', [])
+            return {
+                pod['metadata']['name']: sum(cs.get('restartCount', 0) for cs in pod.get('status', {}).get('containerStatuses', []))
+                for pod in pods
+            }
+
+        def main():
+            health = get_json('/health')
+            if not health.get('ok'):
+                fail('health not ok', health=health)
+            if EXPECTED_VERSION and health.get('version') != EXPECTED_VERSION:
+                fail('source/live version drift', expected_version=EXPECTED_VERSION, live_version=health.get('version'))
+
+            voices = get_json('/v1/audio/voices')
+            available = set(voices.get('recommended', [])) | set(voices.get('cached', []))
+            missing_voices = sorted(set(EXPECTED_VOICES) - available)
+            if missing_voices:
+                fail('expected voices missing', missing_voices=missing_voices, voices=voices)
+
+            audio, headers, wall = post_json_audio('/v1/audio/speech', {
+                'input': PROMPT,
+                'model': 'kokoro',
+                'voice': EXPECTED_VOICES[0] if EXPECTED_VOICES else 'af_alloy',
+                'response_format': 'wav',
+                'speed': 1.0,
+                'normalize': True,
+            })
+            if not audio:
+                fail('tts returned empty audio')
+            stats = wav_stats(audio)
+            if stats['duration'] <= 1.0 or stats['rms'] <= 1:
+                fail('tts audio is too short or silent', audio_stats=stats)
+            rtf = float(headers.get('x-nest-tts-rtf', '0') or 0)
+            if rtf > MAX_RTF:
+                fail('tts rtf too high', rtf=rtf, max_rtf=MAX_RTF, audio_stats=stats)
+
+            transcript = post_multipart_transcription(audio).get('text', '')
+            lower = transcript.lower()
+            missing_words = [word for word in EXPECTED_WORDS if word not in lower]
+            if missing_words:
+                fail('stt transcript missing expected words', missing_words=missing_words, transcript=transcript)
+
+            restarts = pod_restarts()
+            if restarts is not None:
+                bad = {name: count for name, count in restarts.items() if count > MAX_RESTARTS}
+                if bad:
+                    fail('voice-speech pod restarts exceeded threshold', restarts=restarts, max_restarts=MAX_RESTARTS)
+
+            print(json.dumps({
+                'ok': True,
+                'health_version': health.get('version'),
+                'voices_checked': EXPECTED_VOICES,
+                'tts_wall_seconds': round(wall, 3),
+                'tts_rtf': rtf,
+                'audio': stats,
+                'transcript': transcript,
+                'pod_restarts': restarts,
+            }, sort_keys=True))
+
+        if __name__ == '__main__':
+            try:
+                main()
+            except urllib.error.HTTPError as exc:
+                fail('http error', status=exc.code, body=exc.read().decode('utf-8', 'replace'))
+            except Exception as exc:
+                fail(type(exc).__name__, detail=str(exc))
+
+  roundtrip-monitor:
+    apiVersion: batch/v1
+    kind: CronJob
+    metadata:
+      name: "%{nest::kubernetes::service}-roundtrip-monitor"
+      namespace: "%{nest::kubernetes::namespace}"
+      labels:
+        app: "%{nest::kubernetes::service}"
+        component: roundtrip-monitor
+    spec:
+      concurrencyPolicy: Forbid
+      schedule: "%{lookup('roundtrip_monitor_schedule')}"
+      timeZone: 'America/New_York'
+      successfulJobsHistoryLimit: 3
+      failedJobsHistoryLimit: 3
+      jobTemplate:
+        spec:
+          ttlSecondsAfterFinished: 86400
+          template:
+            metadata:
+              labels:
+                app: "%{nest::kubernetes::service}"
+                component: roundtrip-monitor
+            spec:
+              restartPolicy: Never
+              serviceAccountName: "%{nest::kubernetes::service}-roundtrip-monitor"
+              containers:
+                - name: monitor
+                  image: "%{lookup('roundtrip_monitor_image')}"
+                  imagePullPolicy: IfNotPresent
+                  command: ['python3', '/monitor/monitor.py']
+                  env:
+                    - name: VOICE_SPEECH_ENDPOINT
+                      value: "http://%{nest::kubernetes::service}"
+                    - name: EXPECTED_VERSION
+                      value: "%{lookup('app_version')}"
+                    - name: EXPECTED_VOICES
+                      value: 'af_alloy,af_nova'
+                    - name: EXPECTED_WORDS
+                      value: "%{lookup('roundtrip_monitor_expected_words')}"
+                    - name: MAX_RTF
+                      value: "%{lookup('roundtrip_monitor_max_rtf')}"
+                    - name: MAX_RESTARTS
+                      value: "%{lookup('roundtrip_monitor_max_restarts')}"
+                    - name: STT_MODEL
+                      value: 'whisper-large-v3-turbo'
+                    - name: STT_PROMPT
+                      value: 'Talon Star Honcho Eyrie KubeCM llama-qwen GitLab Puppet Kubernetes OpenVox ROCm kubectl owl voice-speech Kokoro'
+                  volumeMounts:
+                    - name: monitor
+                      mountPath: /monitor
+                      readOnly: true
+              volumes:
+                - name: monitor
+                  configMap:
+                    name: "%{nest::kubernetes::service}-roundtrip-monitor"
 
   cache:
     apiVersion: v1
@@ -58,7 +344,7 @@ resources:
         except Exception:  # pragma: no cover - startup health reports this
             resample_poly = None
 
-        app = FastAPI(title='Nest voice-speech', version='0.3.2')
+        app = FastAPI(title='Nest voice-speech', version='%{lookup("app_version")}')
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
         lock = threading.Lock()
         tts_pipelines = {}
@@ -127,6 +413,10 @@ resources:
             return text
 
         def normalize_for_tts(text: str):
+            exact_match = re.match(r'^\s*(?:exact|verbatim)\s*:\s*(.+)\s*$', text, flags=re.IGNORECASE | re.DOTALL)
+            if exact_match:
+                return re.sub(r'\s+', ' ', exact_match.group(1)).strip()
+
             normalized = text
             normalized = re.sub(r'https://([^\s,;]+)', lambda m: normalize_url('H T T P S', m.group(1)), normalized)
             normalized = re.sub(r'http://([^\s,;]+)', lambda m: normalize_url('H T T P', m.group(1)), normalized)

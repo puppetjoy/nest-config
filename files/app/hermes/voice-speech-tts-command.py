@@ -73,6 +73,10 @@ def normalize_tts_text(text: str) -> str:
     the wrapper only prevents raw operational IDs, hashes, URLs, and paths from
     leaking into audio when it is called directly.
     """
+    exact_match = re.match(r"^\s*(?:exact|verbatim)\s*:\s*(.+)\s*$", text, flags=re.IGNORECASE | re.DOTALL)
+    if exact_match:
+        return re.sub(r"\s+", " ", exact_match.group(1)).strip()
+
     normalized = text
     normalized = re.sub(r"https?://[^\s)>,]+", _normalize_url, normalized)
     normalized = re.sub(r"\b(?:agent\s+request|request)\s+ar-[0-9]{8}-[0-9]{6}-[0-9a-fA-F]{6,12}\b", "request recorded", normalized, flags=re.IGNORECASE)

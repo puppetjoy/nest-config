@@ -1,0 +1,59 @@
+{
+  "description": "Canonical Nest-side speech-normalization regression corpus for the current voice-speech Kokoro/Whisper stack. Hermes and agent-request-broker should mirror these behavior classes in their own suites without importing Joy/Nest-specific implementation details upstream.",
+  "policy": {
+    "retain": [
+      "Suppress low-value Agent Request ids, task ids, review acceptance ids, checksums, hashes, and commit hashes in speech output.",
+      "Shorten URLs and filesystem paths so audio says useful location words instead of slash-heavy literals.",
+      "Preserve operational proper nouns through the Nest pronunciation table when the Nest wrapper or service is called directly.",
+      "Honor exact:/verbatim: escape hatches for cases where Joy explicitly wants literal speech text.",
+      "Keep Telegram/Markdown visual text unchanged; this corpus covers speech-only rendering, not visible notification text."
+    ],
+    "reject": [
+      "Do not reintroduce dash insertion as active cadence policy.",
+      "Do not reintroduce Joy-opening stretch, onset padding, clip stitching, or post-audio pause surgery.",
+      "Do not spell out full hashes/checksums/request ids by default."
+    ]
+  },
+  "cases": [
+    {
+      "id": "agent-request-and-task-id-suppression",
+      "input": "Agent request ar-20260611-221637-455545 is on task t_bc669095.",
+      "expected": "request recorded is on task recorded."
+    },
+    {
+      "id": "review-acceptance-id-suppression",
+      "input": "Acceptance ID rva-20260611-220749-36c65f was recorded.",
+      "expected": "review acceptance recorded was recorded."
+    },
+    {
+      "id": "checksum-and-commit-suppression",
+      "input": "checksum bc2170371ef7b984bb449cba7a5140ecd3573f3a020b32ea1415ae997667a3b6 commit f70994374 shipped.",
+      "expected": "checksum recorded commit recorded shipped."
+    },
+    {
+      "id": "path-and-url-shortening",
+      "input": "See /home/joy/projects/nest/config/data/kubernetes/app/voice-speech.yaml and https://gitlab.joyfullee.me/nest/config.",
+      "expected": "See path home joy projects and more and link."
+    },
+    {
+      "id": "operational-pronunciations",
+      "input": "KubeCM, Eyrie, OpenVox, ROCm, kubectl, and llama-qwen stay recognizable.",
+      "expected": "cube see em, airy, open vox, rock em, cube control, and llama qwen stay recognizable."
+    },
+    {
+      "id": "verbatim-escape",
+      "input": "verbatim: Speak ar-20260611-221637-455545 and /home/joy literally.",
+      "expected": "Speak ar-20260611-221637-455545 and /home/joy literally."
+    },
+    {
+      "id": "exact-escape",
+      "input": "exact: Keep KubeCM and Eyrie as written.",
+      "expected": "Keep KubeCM and Eyrie as written."
+    },
+    {
+      "id": "no-rejected-dash-cadence-rewrite",
+      "input": "Status: healthy. Rollout: complete. Queue: normal tail.",
+      "expected": "Status: healthy. Rollout: complete. Queue: normal tail."
+    }
+  ]
+}
