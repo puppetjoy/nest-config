@@ -58,7 +58,7 @@ resources:
         except Exception:  # pragma: no cover - startup health reports this
             resample_poly = None
 
-        app = FastAPI(title='Nest voice-speech', version='0.3.1')
+        app = FastAPI(title='Nest voice-speech', version='0.3.2')
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
         lock = threading.Lock()
         tts_pipelines = {}
@@ -102,51 +102,46 @@ resources:
             speed: float = 1.0
             normalize: bool = True
 
-        def spell_identifier(value: str):
-            spoken = []
-            for char in value:
-                if char == '-':
-                    spoken.append('dash')
-                elif char == '_':
-                    spoken.append('underscore')
-                elif char == '/':
-                    spoken.append('slash')
-                elif char == '.':
-                    spoken.append('dot')
-                elif char.isalpha():
-                    spoken.append(char.upper())
-                else:
-                    spoken.append(char)
-            return ' '.join(spoken)
-
         def normalize_url(scheme: str, value: str):
             suffix = ''
             while value and value[-1] in '.!?':
                 suffix = value[-1] + suffix
                 value = value[:-1]
-            parts = value.split('/', 1)
-            host = parts[0].replace('-', ' dash ').replace('.', ' dot ')
-            path = parts[1].replace('-', ' dash ').replace('_', ' underscore ').replace('/', ' slash ') if len(parts) > 1 else ''
-            return scheme + ' link ' + host + ((' slash ' + path) if path else '') + suffix
+            return 'link' + suffix
 
-        def normalize_pause_punctuation(text: str):
-            # Speech-only phrase boundaries for list labels. Kokoro often runs
-            # colon/semicolon labels into the next word unless it sees a
-            # stronger sentence boundary.
-            text = re.sub(r'(?<!\d):\s+(?=[A-Za-z])', '. ', text)
-            text = re.sub(r';\s+(?=[A-Za-z])', '. ', text)
+        def normalize_path(match):
+            value = match.group(0)
+            suffix = ''
+            while value and value[-1] in '.,;:':
+                suffix = value[-1] + suffix
+                value = value[:-1]
+            parts = [part for part in value.split('/') if part and part != '~']
+            if not parts:
+                return 'path recorded' + suffix
+            return 'path ' + ' '.join(parts[:3]) + (' and more' if len(parts) > 3 else '') + suffix
+
+        def smooth_recorded_phrases(text: str):
+            text = re.sub(r'\b(?:request\s+recorded\s*){2,}', 'request recorded', text, flags=re.IGNORECASE)
+            text = re.sub(r'\b(?:task\s+recorded\s*){2,}', 'task recorded', text, flags=re.IGNORECASE)
+            text = re.sub(r'\brecorded\s+recorded\b', 'recorded', text, flags=re.IGNORECASE)
             return text
 
         def normalize_for_tts(text: str):
             normalized = text
             normalized = re.sub(r'https://([^\s,;]+)', lambda m: normalize_url('H T T P S', m.group(1)), normalized)
             normalized = re.sub(r'http://([^\s,;]+)', lambda m: normalize_url('H T T P', m.group(1)), normalized)
-            normalized = re.sub(r'\b(ar-\d{8}-\d{6}-[0-9a-f]+)\b', lambda m: 'agent request ' + spell_identifier(m.group(1)), normalized, flags=re.IGNORECASE)
-            normalized = re.sub(r'\b(?:task\s+)?(t_[0-9a-f]+)\b', lambda m: 'task ' + spell_identifier(m.group(1)), normalized, flags=re.IGNORECASE)
+            normalized = re.sub(r'\b(?:agent\s+request|request)\s+ar-[0-9]{8}-[0-9]{6}-[0-9a-f]{6,12}\b', 'request recorded', normalized, flags=re.IGNORECASE)
+            normalized = re.sub(r'\bar-[0-9]{8}-[0-9]{6}-[0-9a-f]{6,12}\b', 'request recorded', normalized, flags=re.IGNORECASE)
+            normalized = re.sub(r'\b(?:acceptance\s+ID\s*[:=]?\s*)?rva-[0-9]{8}-[0-9]{6}-[0-9a-f]{6,12}\b', 'review acceptance recorded', normalized, flags=re.IGNORECASE)
+            normalized = re.sub(r'\btask\s+t_[0-9a-f]{8,16}\b', 'task recorded', normalized, flags=re.IGNORECASE)
+            normalized = re.sub(r'\bt_[0-9a-f]{8,16}\b', 'task recorded', normalized, flags=re.IGNORECASE)
+            normalized = re.sub(r'\b(commit|revision|rev)\s*[:=]?\s*[0-9a-f]{7,40}\b', r'\1 recorded', normalized, flags=re.IGNORECASE)
+            normalized = re.sub(r'\b(?:sha(?:-?256)?|checksum|digest|hash)\s*[:=]?\s*[0-9a-f]{32,128}\b', 'checksum recorded', normalized, flags=re.IGNORECASE)
+            normalized = re.sub(r'\b[0-9a-f]{32,128}\b', 'checksum recorded', normalized, flags=re.IGNORECASE)
+            normalized = re.sub(r'(?<!\w)/(?:[A-Za-z0-9._-]+/?)+', normalize_path, normalized)
             for pattern, replacement in PRONUNCIATIONS:
                 normalized = pattern.sub(replacement, normalized)
-            normalized = normalize_pause_punctuation(normalized)
-            normalized = re.sub(r'(?<!\w)/(?!\w)', ' slash ', normalized)
+            normalized = smooth_recorded_phrases(normalized)
             normalized = re.sub(r'\s+', ' ', normalized).strip()
             return normalized
 

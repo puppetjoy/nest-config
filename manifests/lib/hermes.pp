@@ -519,11 +519,7 @@ define nest::lib::hermes (
       'openai'    => {
         '__managed_absent__' => true,
       },
-      'providers' => {
-        'chatterbox' => {
-          '__managed_absent__' => true,
-        },
-      } + $tts_voice_speech_providers,
+      'providers' => $tts_voice_speech_providers,
     }),
     'auxiliary'        => {
       'compression' => {

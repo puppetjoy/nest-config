@@ -33,10 +33,6 @@ class nest::app::hermes::service {
     require => File["${install_dir}/bin"],
   }
 
-  file { "${install_dir}/bin/hermes-chatterbox-tts":
-    ensure => absent,
-  }
-
   file { "${install_dir}/bin/hermes-voice-speech-stt":
     ensure  => file,
     mode    => '0755',

@@ -1,1 +1,0 @@
-Joy—Agent request blocked. The worker needs a decision before changing /home/joy/projects/nest/config or opening https://talon.eyrie/status.

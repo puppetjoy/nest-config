@@ -16,19 +16,6 @@ from pathlib import Path
 
 DEFAULT_SPEECH_PATH = "/v1/audio/speech"
 
-_DIGIT_WORDS = {
-    "0": "zero",
-    "1": "one",
-    "2": "two",
-    "3": "three",
-    "4": "four",
-    "5": "five",
-    "6": "six",
-    "7": "seven",
-    "8": "eight",
-    "9": "nine",
-}
-
 # Kokoro benefits from human-readable Nest spellings more than raw acronyms.
 # Keep this table small and operational so ordinary prose remains natural.
 _PRONUNCIATION_REPLACEMENTS = (
@@ -50,38 +37,13 @@ def _endpoint_url(endpoint: str) -> str:
     return urllib.parse.urljoin(endpoint.rstrip("/") + "/", DEFAULT_SPEECH_PATH.lstrip("/"))
 
 
-def _spell_chars(value: str) -> str:
-    words: list[str] = []
-    for char in value:
-        if char.isdigit():
-            words.append(_DIGIT_WORDS[char])
-        elif char.isalpha():
-            words.append(char.upper())
-        elif char == "-":
-            words.append("dash")
-        elif char == "_":
-            words.append("underscore")
-        elif char == ".":
-            words.append("dot")
-        elif char == "/":
-            words.append("slash")
-    return " ".join(words)
-
-
 def _normalize_url(match: re.Match[str]) -> str:
     url = match.group(0)
     suffix = ""
     while url.endswith((".", ",", ";", ":", "!", "?")):
         suffix = url[-1] + suffix
         url = url[:-1]
-    spoken = re.sub(r"^https://", "H T T P S link ", url, flags=re.IGNORECASE)
-    spoken = re.sub(r"^http://", "H T T P link ", spoken, flags=re.IGNORECASE)
-    spoken = spoken.replace("/", " slash ")
-    spoken = spoken.replace(".", " dot ")
-    spoken = spoken.replace("-", " dash ")
-    spoken = spoken.replace("_", " underscore ")
-    spoken = re.sub(r"\s+", " ", spoken).strip()
-    return f"{spoken}{suffix}"
+    return f"link{suffix}"
 
 
 def _normalize_path(match: re.Match[str]) -> str:
@@ -90,47 +52,41 @@ def _normalize_path(match: re.Match[str]) -> str:
     while path.endswith((".", ",", ";", ":")):
         suffix = path[-1] + suffix
         path = path[:-1]
-    spoken = path.replace("/", " slash ").replace("-", " dash ").replace("_", " underscore ")
-    spoken = re.sub(r"\s+", " ", spoken).strip()
-    return f"path {spoken}{suffix}"
+    useful_parts = [part for part in Path(path).parts if part not in {"/", "~"}]
+    if not useful_parts:
+        return f"path recorded{suffix}"
+    return f"path {' '.join(useful_parts[:3])}{' and more' if len(useful_parts) > 3 else ''}{suffix}"
 
 
-def _normalize_pause_punctuation(text: str) -> str:
-    """Add Kokoro-friendly pauses for list labels without changing visible text."""
-    # Kokoro tends to run label-style colons into the following word. A speech-
-    # only period gives a reliable phrase boundary while keeping identifiers,
-    # URLs, times, and ratios intact.
-    text = re.sub(r"(?<!\d):\s+(?=[A-Za-z])", ". ", text)
-    text = re.sub(r";\s+(?=[A-Za-z])", ". ", text)
+def _smooth_recorded_phrases(text: str) -> str:
+    text = re.sub(r"\b(?:request\s+recorded\s*){2,}", "request recorded", text, flags=re.IGNORECASE)
+    text = re.sub(r"\b(?:task\s+recorded\s*){2,}", "task recorded", text, flags=re.IGNORECASE)
+    text = re.sub(r"\brecorded\s+recorded\b", "recorded", text, flags=re.IGNORECASE)
     return text
 
 
 def normalize_tts_text(text: str) -> str:
-    """Return a speech-only rendering for operational Hermes notifications."""
+    """Return a concise speech-only rendering for operational Hermes notifications.
+
+    This wrapper is now a maintenance fallback rather than a cadence experiment:
+    Hermes owns rich speech normalization before invoking command providers, while
+    the wrapper only prevents raw operational IDs, hashes, URLs, and paths from
+    leaking into audio when it is called directly.
+    """
     normalized = text
     normalized = re.sub(r"https?://[^\s)>,]+", _normalize_url, normalized)
-    normalized = re.sub(
-        r"\b((?:agent request|request)\s+)?ar-([0-9]{8})-([0-9]{6})-([0-9a-fA-F]{6})\b",
-        lambda m: f"{m.group(1) or 'agent request '}A R, {_spell_chars(m.group(2))}, {_spell_chars(m.group(3))}, {_spell_chars(m.group(4))}",
-        normalized,
-        flags=re.IGNORECASE,
-    )
-    normalized = re.sub(
-        r"\b(task\s+)?t_([0-9a-fA-F]{8})\b",
-        lambda m: f"{m.group(1) or 'task '}T, {_spell_chars(m.group(2))}",
-        normalized,
-        flags=re.IGNORECASE,
-    )
-    normalized = re.sub(
-        r"\b(commit|sha|hash)\s+([0-9a-fA-F]{7,40})\b",
-        lambda m: f"{m.group(1)} {_spell_chars(m.group(2))}",
-        normalized,
-        flags=re.IGNORECASE,
-    )
+    normalized = re.sub(r"\b(?:agent\s+request|request)\s+ar-[0-9]{8}-[0-9]{6}-[0-9a-fA-F]{6,12}\b", "request recorded", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"\bar-[0-9]{8}-[0-9]{6}-[0-9a-fA-F]{6,12}\b", "request recorded", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"\b(?:acceptance\s+ID\s*[:=]?\s*)?rva-[0-9]{8}-[0-9]{6}-[0-9a-fA-F]{6,12}\b", "review acceptance recorded", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"\btask\s+t_[0-9a-fA-F]{8,16}\b", "task recorded", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"\bt_[0-9a-fA-F]{8,16}\b", "task recorded", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"\b(commit|revision|rev)\s*[:=]?\s*[0-9a-fA-F]{7,40}\b", r"\1 recorded", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"\b(?:sha(?:-?256)?|checksum|digest|hash)\s*[:=]?\s*[0-9a-fA-F]{32,128}\b", "checksum recorded", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"\b[0-9a-fA-F]{32,128}\b", "checksum recorded", normalized)
     normalized = re.sub(r"(?<!\w)/(?:[A-Za-z0-9._-]+/?)+", _normalize_path, normalized)
     for pattern, replacement in _PRONUNCIATION_REPLACEMENTS:
         normalized = pattern.sub(replacement, normalized)
-    normalized = _normalize_pause_punctuation(normalized)
+    normalized = _smooth_recorded_phrases(normalized)
     normalized = re.sub(r"\s+", " ", normalized).strip()
     return normalized
 
