@@ -95,6 +95,8 @@ representation_subthreshold_expiry_job_ttl: 21600
     value: '12000'
   - name: DERIVER_WORKING_REPRESENTATION_MAX_OBSERVATIONS
     value: '32'
+  - name: DERIVER_REPRESENTATION_OUTPUT_MAX_OBSERVATIONS
+    value: '6'
   - name: DERIVER_MODEL_CONFIG__MAX_OUTPUT_TOKENS
     value: '512'
   - name: SUMMARY_MAX_TOKENS_SHORT
