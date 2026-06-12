@@ -4,8 +4,6 @@ class nest::app::hermes::config {
   $tavily_api_key                   = $nest::app::hermes::tavily_api_key
   $telegram_bot_token               = $nest::app::hermes::telegram_bot_token
   $voice_tools_openai_key           = $nest::app::hermes::voice_tools_openai_key
-  $codex_oauth_slots                = $nest::app::hermes::codex_oauth_slots
-  $codex_oauth_default_label        = $nest::app::hermes::codex_oauth_default_label
   $telegram_allowed                 = $nest::app::hermes::telegram_allowed
   $telegram_home                    = $nest::app::hermes::telegram_home
   $telegram_bot_username            = $nest::app::hermes::telegram_bot_username
@@ -31,13 +29,10 @@ class nest::app::hermes::config {
   $instances                        = $nest::app::hermes::instances
   $instance_secrets                 = $nest::app::hermes::instance_secrets
 
-  $hermes_config_dir       = "/home/${nest::user}/.config/hermes"
-  $hermes_home_dir         = "/home/${nest::user}/.hermes"
-  $profiles_dir            = "${hermes_home_dir}/profiles"
-  $codex_auth_manager_path = "${nest::app::hermes::install_dir}/bin/hermes-share-codex-auth"
-  $codex_auth_slots_dir    = "${hermes_home_dir}/codex-auth"
-  $codex_auth_slots_path   = "${codex_auth_slots_dir}/slots.json"
-  $codex_auth_active_path  = "${codex_auth_slots_dir}/active-label"
+  $hermes_config_dir    = "/home/${nest::user}/.config/hermes"
+  $hermes_home_dir      = "/home/${nest::user}/.hermes"
+  $profiles_dir         = "${hermes_home_dir}/profiles"
+  $codex_auth_slots_dir = "${hermes_home_dir}/codex-auth"
 
   file { $hermes_config_dir:
     ensure => directory,
@@ -62,68 +57,12 @@ class nest::app::hermes::config {
   }
 
   file { $codex_auth_slots_dir:
-    ensure  => directory,
-    mode    => '0700',
+    ensure  => absent,
+    force   => true,
+    recurse => true,
     owner   => $nest::user,
     group   => $nest::user,
     require => File[$hermes_home_dir],
-  }
-
-  if !empty($codex_oauth_slots) {
-    file { $codex_auth_slots_path:
-      ensure    => file,
-      mode      => '0600',
-      owner     => $nest::user,
-      group     => $nest::user,
-      content   => Sensitive(stdlib::to_json({ 'slots' => $codex_oauth_slots })),
-      show_diff => false,
-      require   => File[$codex_auth_slots_dir],
-    }
-
-    file { $codex_auth_active_path:
-      ensure  => file,
-      mode    => '0600',
-      owner   => $nest::user,
-      group   => $nest::user,
-      content => "${codex_oauth_default_label}\n",
-      replace => false,
-      require => File[$codex_auth_slots_dir],
-    }
-  }
-
-  $codex_auth_slots_args = empty($codex_oauth_slots) ? {
-    true    => '',
-    default => "--slots-file ${codex_auth_slots_path} --active-file ${codex_auth_active_path} --default-label ${codex_oauth_default_label}",
-  }
-
-  $codex_auth_profiles = $instances.map |String[1] $instance_name, Hash $instance_config| {
-    pick($instance_config['profile'], $instance_name)
-  }
-
-  if $codex_auth_profiles.length > 0 {
-    $codex_auth_profile_args = $codex_auth_profiles.join(' ')
-    $codex_auth_require = empty($codex_oauth_slots) ? {
-      true    => [
-        File[$hermes_home_dir],
-        File[$profiles_dir],
-        File[$codex_auth_manager_path],
-      ],
-      default => [
-        File[$hermes_home_dir],
-        File[$profiles_dir],
-        File[$codex_auth_manager_path],
-        File[$codex_auth_slots_path],
-        File[$codex_auth_active_path],
-      ],
-    }
-
-    exec { 'share_hermes_codex_auth':
-      command     => "${codex_auth_manager_path} apply --home /home/${nest::user} ${codex_auth_slots_args} ${codex_auth_profile_args}",
-      unless      => "${codex_auth_manager_path} check --home /home/${nest::user} ${codex_auth_slots_args} ${codex_auth_profile_args}",
-      user        => $nest::user,
-      environment => ["HOME=/home/${nest::user}"],
-      require     => $codex_auth_require,
-    }
   }
 
   $instances.each |String[1] $instance_name, Hash $instance_config| {

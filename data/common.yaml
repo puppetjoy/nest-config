@@ -16,8 +16,6 @@ lookup_options:
     convert_to: 'Sensitive'
   nest::app::hermes::voice_tools_openai_key:
     convert_to: 'Sensitive'
-  nest::app::hermes::codex_oauth_slots:
-    merge: 'deep'
   nest::app::hermes::instances:
     merge: 'deep'
   nest::app::hermes::instance_secrets:
