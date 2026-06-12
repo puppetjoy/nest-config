@@ -11,6 +11,7 @@ class nest::app::hermes (
   Optional[Sensitive[String[1]]] $gitlab_token                = undef,
   Optional[Sensitive[String[1]]] $tavily_api_key              = undef,
   Optional[Sensitive[String[1]]] $telegram_bot_token          = undef,
+  Optional[Sensitive[String[1]]] $voice_tools_openai_key      = undef,
   Hash[String[1], Any]           $codex_oauth_slots           = {},
   String[1]                      $codex_oauth_default_label   = 'primary',
   String[1]                      $telegram_allowed            = '8756212310',

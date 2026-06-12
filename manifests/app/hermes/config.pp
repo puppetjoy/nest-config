@@ -3,6 +3,7 @@ class nest::app::hermes::config {
   $gitlab_token                     = $nest::app::hermes::gitlab_token
   $tavily_api_key                   = $nest::app::hermes::tavily_api_key
   $telegram_bot_token               = $nest::app::hermes::telegram_bot_token
+  $voice_tools_openai_key           = $nest::app::hermes::voice_tools_openai_key
   $codex_oauth_slots                = $nest::app::hermes::codex_oauth_slots
   $codex_oauth_default_label        = $nest::app::hermes::codex_oauth_default_label
   $telegram_allowed                 = $nest::app::hermes::telegram_allowed
@@ -237,6 +238,13 @@ class nest::app::hermes::config {
     $instance_tts_voice_speech_voice   = pick($config['tts_voice_speech_voice'], 'af_heart')
     $instance_tts_voice_speech_model   = pick($config['tts_voice_speech_model'], 'kokoro')
     $instance_tts_voice_speech_timeout = pick($config['tts_voice_speech_timeout'], 60)
+    $instance_voice_tools_openai_key   = $config['voice_tools_openai_key'] ? {
+      undef   => $voice_tools_openai_key,
+      default => $config['voice_tools_openai_key'],
+    }
+    $instance_tts_openai_model         = pick($config['tts_openai_model'], 'gpt-4o-mini-tts')
+    $instance_tts_openai_voice         = pick($config['tts_openai_voice'], 'alloy')
+    $instance_tts_openai_base_url      = pick($config['tts_openai_base_url'], 'https://api.openai.com/v1')
     $instance_ssh_private_key   = $config['ssh_private_key']
     $instance_kubeconfig_path   = $config['kubeconfig_path']
     $instance_kubeconfig        = $config['kubeconfig_content']
@@ -317,6 +325,10 @@ class nest::app::hermes::config {
       tts_voice_speech_voice     => $instance_tts_voice_speech_voice,
       tts_voice_speech_model     => $instance_tts_voice_speech_model,
       tts_voice_speech_timeout   => $instance_tts_voice_speech_timeout,
+      voice_tools_openai_key     => $instance_voice_tools_openai_key,
+      tts_openai_model           => $instance_tts_openai_model,
+      tts_openai_voice           => $instance_tts_openai_voice,
+      tts_openai_base_url        => $instance_tts_openai_base_url,
       ssh_private_key            => $instance_ssh_private_key,
       kubeconfig_path            => $instance_kubeconfig_path,
       kubeconfig_content         => $instance_kubeconfig,

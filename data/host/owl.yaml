@@ -176,11 +176,10 @@ nest::app::hermes::instances:
     stt_voice_speech_temp: '0.0'
     stt_voice_speech_condition_on_previous_text: false
     stt_voice_speech_timeout: 300
-    tts_provider: 'voice-speech'
-    tts_voice_speech_endpoint: 'https://voice-speech.eyrie'
-    tts_voice_speech_voice: 'af_alloy'
-    tts_voice_speech_model: 'kokoro'
-    tts_voice_speech_timeout: 60
+    tts_provider: 'openai'
+    tts_openai_model: 'gpt-4o-mini-tts'
+    tts_openai_voice: 'alloy'
+    tts_openai_base_url: 'https://api.openai.com/v1'
     telegram_bot_username: 'talonopsbot'
     telegram_bot_id: '8625589001'
   star:
@@ -286,11 +285,10 @@ nest::app::hermes::instances:
     stt_voice_speech_temp: '0.0'
     stt_voice_speech_condition_on_previous_text: false
     stt_voice_speech_timeout: 300
-    tts_provider: 'voice-speech'
-    tts_voice_speech_endpoint: 'https://voice-speech.eyrie'
-    tts_voice_speech_voice: 'af_nova'
-    tts_voice_speech_model: 'kokoro'
-    tts_voice_speech_timeout: 60
+    tts_provider: 'openai'
+    tts_openai_model: 'gpt-4o-mini-tts'
+    tts_openai_voice: 'nova'
+    tts_openai_base_url: 'https://api.openai.com/v1'
     telegram_bot_username: 'joyfulstarbot'
     telegram_bot_id: '8571651712'
   beryl:
