@@ -209,6 +209,8 @@ resources:
     metadata:
       name: "%{nest::kubernetes::service}"
       namespace: "%{nest::kubernetes::namespace}"
+      annotations:
+        projectcontour.io/response-timeout: infinity
     spec:
       ingressClassName: "%{lookup('ingress_class')}"
       rules:
