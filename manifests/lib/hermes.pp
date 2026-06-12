@@ -18,6 +18,7 @@ define nest::lib::hermes (
   String[1]            $model_provider           = 'openai-codex',
   String[1]            $model_name               = 'gpt-5.5',
   String[1]            $model_base_url           = 'https://chatgpt.com/backend-api/codex',
+  Hash[String[1], Any] $providers                = {},
   String[1]            $auxiliary_provider       = 'openai-codex',
   String[1]            $auxiliary_mini_model     = 'gpt-5.4-mini',
   Optional[String[1]]  $image_gen_provider       = undef,
@@ -33,6 +34,8 @@ define nest::lib::hermes (
   Boolean              $dashboard_profile_switcher= false,
   Optional[String[1]]  $dashboard_oauth_client_id= undef,
   Optional[String[1]]  $dashboard_oauth_portal_url= undef,
+  Hash[String[1], Any] $terminal                 = {},
+  Hash[String[1], String[1]] $environment        = {},
   String[1]            $agent_request_kanban_board= 'agent-requests',
   Boolean              $kanban_dispatch_in_gateway= true,
   Optional[String[1]]  $git_user_name            = undef,
@@ -383,6 +386,7 @@ define nest::lib::hermes (
     ].flatten,
     default => [],
   }
+  $extra_env_lines = $environment.map |String[1] $key, String[1] $value| { "${key}=${value}" }
   $systemd_env_lines = [
     "HERMES_DASHBOARD_BIND_HOST=${dashboard_bind_host}",
     "HERMES_DASHBOARD_PORT=${dashboard_port}",
@@ -396,6 +400,7 @@ define nest::lib::hermes (
     $ssh_env_lines,
     $git_env_lines,
     $kubeconfig_env_lines,
+    $extra_env_lines,
     "SSL_CERT_FILE=${ca_bundle_file}",
     "REQUESTS_CA_BUNDLE=${ca_bundle_file}",
     "CURL_CA_BUNDLE=${ca_bundle_file}",
@@ -437,6 +442,14 @@ define nest::lib::hermes (
   }
   $dashboard_profile_switcher_config = {
     'show_profile_switcher' => $dashboard_profile_switcher,
+  }
+  $providers_config = empty($providers) ? {
+    true    => {},
+    default => { 'providers' => $providers },
+  }
+  $terminal_config = empty($terminal) ? {
+    true    => {},
+    default => { 'terminal' => $terminal },
   }
   $agent_directory_profile_icon_config = $profile_icon ? {
     undef   => {},
@@ -571,7 +584,7 @@ define nest::lib::hermes (
         'portal_url' => $dashboard_oauth_portal_url_value,
       },
     } + $dashboard_theme_config + $dashboard_profile_switcher_config,
-  } + $image_gen_config + $plugins_config
+  } + $providers_config + $terminal_config + $image_gen_config + $plugins_config
 
   $env_content = [$gitlab_env_lines, $tavily_env_lines, $telegram_env_lines, $agent_request_env_lines, $ssh_env_lines, $kubeconfig_env_lines].flatten.join("\n")
 

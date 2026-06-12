@@ -20,6 +20,7 @@ class nest::app::hermes (
   String[1]                      $model_provider              = 'openai-codex',
   String[1]                      $model_name                  = 'gpt-5.5',
   String[1]                      $model_base_url              = 'https://chatgpt.com/backend-api/codex',
+  Hash[String[1], Any]           $providers                   = {},
   String[1]                      $auxiliary_provider          = 'openai-codex',
   String[1]                      $auxiliary_mini_model        = 'gpt-5.4-mini',
   Optional[String[1]]            $image_gen_provider          = undef,
@@ -29,6 +30,8 @@ class nest::app::hermes (
   String[1]                      $dashboard_bind_host         = '0.0.0.0',
   Optional[String[1]]            $dashboard_oauth_client_id   = undef,
   Optional[String[1]]            $dashboard_oauth_portal_url  = undef,
+  Hash[String[1], Any]           $terminal                    = {},
+  Hash[String[1], String[1]]     $environment                 = {},
   Array[String[1]]               $toolsets                    = [
     'agent_directory',
     'agent_requests',

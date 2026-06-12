@@ -293,3 +293,133 @@ nest::app::hermes::instances:
     tts_voice_speech_timeout: 60
     telegram_bot_username: 'joyfulstarbot'
     telegram_bot_id: '8571651712'
+  beryl:
+    profile: 'beryl'
+    display_name: 'Beryl'
+    profile_icon: '🐝'
+    skin_name: 'beryl-worker-bee'
+    skin_banner_hero_source: 'nest/app/hermes/skins/beryl-worker-bee-banner-hero.ansi'
+    skin_content: |
+      name: beryl-worker-bee
+      description: Beryl worker bee — honey amber and cream with beryl-green checklist tools
+      colors:
+        banner_border: '#D89A22'
+        banner_title: '#FFF0C2'
+        banner_accent: '#45D6A0'
+        banner_dim: '#7A5A2E'
+        banner_text: '#FFF7DC'
+        ui_accent: '#48D6A6'
+        ui_label: '#F4B942'
+        ui_ok: '#66E0A3'
+        ui_error: '#EF6A73'
+        ui_warn: '#F6C453'
+        prompt: '#FFF7DC'
+        input_rule: '#5F4A24'
+        response_border: '#E6A93B'
+        status_bar_bg: '#24180B'
+        status_bar_text: '#FFF1C9'
+        status_bar_strong: '#56E0AD'
+        status_bar_dim: '#B8894E'
+        status_bar_good: '#66E0A3'
+        status_bar_warn: '#F6C453'
+        status_bar_bad: '#EF6A73'
+        status_bar_critical: '#FF4E64'
+        session_label: '#56E0AD'
+        session_border: '#D89A22'
+      spinner:
+        waiting_faces:
+          - '🐝'
+          - '☑'
+          - '✦'
+          - '◇'
+        thinking_faces:
+          - '🐝'
+          - '☑'
+          - '⋯'
+          - '◇'
+        thinking_verbs:
+          - checking the list
+          - making a small flight
+          - gathering the facts
+          - sorting the cells
+          - following the steps
+          - bringing it back
+        wings:
+          - ['‹', '›']
+          - ['<', '>']
+          - ['⌜', '⌟']
+          - ['⟪', '⟫']
+      branding:
+        agent_name: Beryl
+        banner_subtitle: ''
+        welcome: Beryl is ready with the checklist. Type your message or /help for commands.
+        goodbye: Beryl is returning to the hive. 🐝
+        response_label: ' 🐝 Beryl '
+        prompt_symbol: '🐝'
+        help_header: '(🐝) Beryl commands'
+      banner_logo: '__none__'
+      tool_prefix: '╏'
+      tool_emojis:
+        terminal: '🖥️'
+        file: '📄'
+        web: '🔎'
+        browser: '🌐'
+        skills: '📚'
+        agent_directory: '🗂️'
+        agent_requests: '🐝'
+        oauth_browser: '🔐'
+        shopping_browser: '🛒'
+        kanban: '📋'
+        todo: '☑️'
+        gitlab: '🦊'
+    providers:
+      llama-qwen:
+        name: 'llama-qwen'
+        api: 'https://llama-qwen.eyrie/v1'
+        default_model: 'qwen'
+        models:
+          qwen: {}
+        discover_models: true
+    model_provider: 'custom:llama-qwen'
+    model_name: 'qwen'
+    model_base_url: 'https://llama-qwen.eyrie/v1'
+    auxiliary_provider: 'custom:llama-qwen'
+    auxiliary_mini_model: 'qwen'
+    terminal:
+      backend: 'docker'
+      docker_image: 'registry.eyrie/nest/stage1/server:latest'
+      docker_persist_across_processes: true
+      docker_run_as_host_user: true
+      container_persistent: true
+    environment:
+      HERMES_DOCKER_BINARY: '/usr/bin/podman'
+    gitlab_enabled: false
+    honcho_workspace: 'hermes'
+    honcho_user_peer: 'joy'
+    honcho_ai_peer: 'beryl'
+    gateway_enabled: true
+    kanban_dispatch_in_gateway: true
+    dashboard_enabled: true
+    dashboard_port: 9122
+    dashboard_public_url: 'https://beryl.eyrie'
+    dashboard_theme: 'cyberpunk'
+    git_user_name: 'Beryl'
+    git_user_email: 'beryl@joyfullee.me'
+    approval_mode: 'manual'
+    voice_auto_tts: true
+    stt_enabled: true
+    stt_provider: 'voice-speech'
+    stt_voice_speech_endpoint: 'http://10.108.246.221'
+    stt_voice_speech_model: 'whisper-large-v3-turbo'
+    stt_voice_speech_language: 'en'
+    stt_voice_speech_prompt: 'Beryl Talon Star Honcho Eyrie KubeCM llama-qwen GitLab Puppet Kubernetes OpenVox ROCm kubectl owl voice-speech Kokoro'
+    stt_voice_speech_temp: '0.0'
+    stt_voice_speech_condition_on_previous_text: false
+    stt_voice_speech_timeout: 300
+    tts_provider: 'voice-speech'
+    tts_voice_speech_endpoint: 'http://10.108.246.221'
+    tts_voice_speech_voice: 'af_kore'
+    tts_voice_speech_model: 'kokoro'
+    tts_voice_speech_timeout: 60
+    telegram_bot_username: 'berylbeebot'
+    telegram_bot_id: '8968373190'

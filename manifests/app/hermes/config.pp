@@ -12,6 +12,7 @@ class nest::app::hermes::config {
   $model_provider                   = $nest::app::hermes::model_provider
   $model_name                       = $nest::app::hermes::model_name
   $model_base_url                   = $nest::app::hermes::model_base_url
+  $providers                        = $nest::app::hermes::providers
   $auxiliary_provider               = $nest::app::hermes::auxiliary_provider
   $auxiliary_mini_model             = $nest::app::hermes::auxiliary_mini_model
   $image_gen_provider               = $nest::app::hermes::image_gen_provider
@@ -22,6 +23,8 @@ class nest::app::hermes::config {
   $dashboard_bind_host              = $nest::app::hermes::dashboard_bind_host
   $dashboard_oauth_client_id        = $nest::app::hermes::dashboard_oauth_client_id
   $dashboard_oauth_portal_url       = $nest::app::hermes::dashboard_oauth_portal_url
+  $terminal                         = $nest::app::hermes::terminal
+  $environment                      = $nest::app::hermes::environment
   $toolsets                         = $nest::app::hermes::toolsets
   $agent_request_kanban_board       = $nest::app::hermes::agent_request_kanban_board
   $instances                        = $nest::app::hermes::instances
@@ -163,6 +166,7 @@ class nest::app::hermes::config {
     $instance_model_provider    = pick($config['model_provider'], $model_provider)
     $instance_model_name        = pick($config['model_name'], $model_name)
     $instance_model_base_url    = pick($config['model_base_url'], $model_base_url)
+    $instance_providers         = pick($config['providers'], $providers)
     $instance_aux_provider      = pick($config['auxiliary_provider'], $auxiliary_provider)
     $instance_aux_model         = pick($config['auxiliary_mini_model'], $auxiliary_mini_model)
     $instance_image_provider    = $config['image_gen_provider'] ? {
@@ -194,6 +198,8 @@ class nest::app::hermes::config {
       undef   => $dashboard_oauth_portal_url,
       default => $config['dashboard_oauth_portal_url'],
     }
+    $instance_terminal          = pick($config['terminal'], $terminal)
+    $instance_environment       = pick($config['environment'], $environment)
     $instance_gateway_enabled   = pick($config['gateway_enabled'], true)
     $instance_kanban_dispatch   = pick($config['kanban_dispatch_in_gateway'], true)
     $instance_honcho_base_url   = pick($config['honcho_base_url'], 'https://honcho.eyrie')
@@ -257,6 +263,7 @@ class nest::app::hermes::config {
       model_provider             => $instance_model_provider,
       model_name                 => $instance_model_name,
       model_base_url             => $instance_model_base_url,
+      providers                  => $instance_providers,
       auxiliary_provider         => $instance_aux_provider,
       auxiliary_mini_model       => $instance_aux_model,
       image_gen_provider         => $instance_image_provider,
@@ -276,6 +283,8 @@ class nest::app::hermes::config {
       dashboard_theme            => $instance_dashboard_theme,
       dashboard_oauth_client_id  => $instance_oauth_client_id,
       dashboard_oauth_portal_url => $instance_oauth_portal_url,
+      terminal                   => $instance_terminal,
+      environment                => $instance_environment,
       agent_request_kanban_board => $agent_request_kanban_board,
       kanban_dispatch_in_gateway => $instance_kanban_dispatch,
       gateway_enabled            => $instance_gateway_enabled,

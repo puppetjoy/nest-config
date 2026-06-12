@@ -32,6 +32,11 @@ parameters:
     type: Boolean
     default: true
 
+  beryl:
+    description: 'Deploy Beryl dashboard edge'
+    type: Boolean
+    default: true
+
   shopping_browser:
     description: 'Deploy Kasm Shopping Browser'
     type: Boolean
@@ -80,6 +85,11 @@ steps:
     plan: nest::eyrie::ai::deploy_star
     parameters:
       deploy: $deploy and $star
+
+  - description: 'Deploy Beryl dashboard edge'
+    plan: nest::eyrie::ai::deploy_beryl
+    parameters:
+      deploy: $deploy and $beryl
 
   - description: 'Deploy Kasm Shopping Browser'
     plan: nest::eyrie::ai::deploy_shopping_browser

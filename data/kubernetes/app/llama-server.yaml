@@ -3,6 +3,9 @@ include:
  - 'nest::service::llama_server'
 
 plan_base: 'nest::eyrie::ai::llama'
+cert_issuer: eyrie-ca
+cert_issuer_kind: ClusterIssuer
+ingress_class: contour-compute
 
 # Canonical local generative model service.  The 35B-A3B MoE replaces the
 # previous resident 122B lane and removes the split-lane topology.  Keep the
@@ -185,3 +188,41 @@ resources:
         - name: http
           port: 80
           targetPort: 8080
+
+  certs:
+    apiVersion: cert-manager.io/v1
+    kind: Certificate
+    metadata:
+      name: "%{nest::kubernetes::service}-certs"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      secretName: "%{nest::kubernetes::service}-certs"
+      issuerRef:
+        name: "%{lookup('cert_issuer')}"
+        kind: "%{lookup('cert_issuer_kind')}"
+      dnsNames:
+        - "%{nest::kubernetes::fqdn}"
+
+  ingress:
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: "%{nest::kubernetes::service}"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      ingressClassName: "%{lookup('ingress_class')}"
+      rules:
+        - host: "%{nest::kubernetes::fqdn}"
+          http:
+            paths:
+              - path: /
+                pathType: Prefix
+                backend:
+                  service:
+                    name: "%{nest::kubernetes::service}"
+                    port:
+                      number: 80
+      tls:
+        - secretName: "%{nest::kubernetes::service}-certs"
+          hosts:
+            - "%{nest::kubernetes::fqdn}"

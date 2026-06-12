@@ -118,6 +118,8 @@ nest::cnames:
   honcho.eyrie: 'ingress-compute.eyrie'
   talon.eyrie: 'ingress-compute.eyrie'
   star.eyrie: 'ingress-compute.eyrie'
+  beryl.eyrie: 'ingress-compute.eyrie'
+  llama-qwen.eyrie: 'ingress-compute.eyrie'
   shopping.eyrie: 'ingress-compute.eyrie'
   oauth-browser.eyrie: 'ingress-compute.eyrie'
   llama-util.nest: 'kestrel.nest'

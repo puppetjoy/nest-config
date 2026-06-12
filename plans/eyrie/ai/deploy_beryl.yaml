@@ -1,0 +1,18 @@
+---
+description: 'Deploy Beryl dashboard edge'
+
+parameters:
+  deploy:
+    description: 'Run or skip the deployment'
+    type: Boolean
+    default: true
+
+steps:
+  - description: 'Deploy Beryl dashboard edge'
+    plan: 'nest::kubernetes::deploy'
+    parameters:
+      service: 'beryl'
+      app: 'hermes-dashboard'
+      namespace: 'ai'
+      init: false
+      deploy: $deploy
