@@ -7,6 +7,10 @@
 # keeps model, MIOpen, and pip artifacts across restarts.
 cache_size: 80Gi
 storage_class: owl-crypt
+service_name: "%{nest::kubernetes::service}"
+cert_issuer: eyrie-ca
+cert_issuer_kind: ClusterIssuer
+ingress_class: contour-compute
 image: docker.io/rocm/pytorch:rocm7.2.4_ubuntu24.04_py3.12_pytorch_release_2.9.1
 app_version: '0.3.2'
 roundtrip_monitor_schedule: '17 * * * *'
@@ -686,3 +690,43 @@ resources:
         - name: http
           port: 80
           targetPort: 8080
+
+  certs:
+    apiVersion: cert-manager.io/v1
+    kind: Certificate
+    metadata:
+      name: "%{nest::kubernetes::service}-certs"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      secretName: "%{nest::kubernetes::service}-certs"
+      issuerRef:
+        name: "%{lookup('cert_issuer')}"
+        kind: "%{lookup('cert_issuer_kind')}"
+      dnsNames:
+        - "%{nest::kubernetes::fqdn}"
+
+  ingress:
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: "%{nest::kubernetes::service}"
+      namespace: "%{nest::kubernetes::namespace}"
+      annotations:
+        projectcontour.io/response-timeout: infinity
+    spec:
+      ingressClassName: "%{lookup('ingress_class')}"
+      rules:
+        - host: "%{nest::kubernetes::fqdn}"
+          http:
+            paths:
+              - path: /
+                pathType: Prefix
+                backend:
+                  service:
+                    name: "%{nest::kubernetes::service}"
+                    port:
+                      name: http
+      tls:
+        - secretName: "%{nest::kubernetes::service}-certs"
+          hosts:
+            - "%{nest::kubernetes::fqdn}"

@@ -6,11 +6,11 @@ what is in production now and which experiments are retired.
 
 ## Production architecture
 
-Talon and Star use the private Eyrie `voice-speech` service for both STT and
-TTS through Hermes command providers. The service runs in the Kubernetes `ai`
-namespace as `voice-speech`, is private to the cluster, and is currently pinned
-to owl. It uses ROCm PyTorch on the Strix Halo GPU, Kokoro for TTS, and OpenAI
-Whisper for STT.
+Talon, Star, and Beryl use the private Eyrie `voice-speech` service for both
+STT and TTS through Hermes command providers. The service runs in the
+Kubernetes `ai` namespace as `voice-speech`, is exposed at the private HTTPS
+name `https://voice-speech.eyrie`, and is currently pinned to owl. It uses
+ROCm PyTorch on the Strix Halo GPU, Kokoro for TTS, and OpenAI Whisper for STT.
 
 The boundary is intentionally thin:
 
@@ -42,17 +42,17 @@ Current source owners:
 
 ## Profile settings
 
-The production Talon and Star profile settings are rendered from
+The production Talon, Star, and Beryl profile settings are rendered from
 `data/host/owl.yaml`.
 
 Shared defaults:
 
 - `voice_auto_tts: true`
 - `stt_provider: voice-speech`
-- `stt_voice_speech_endpoint: http://10.108.246.221`
+- `stt_voice_speech_endpoint: https://voice-speech.eyrie`
 - `stt_voice_speech_model: whisper-large-v3-turbo`
 - `tts_provider: voice-speech`
-- `tts_voice_speech_endpoint: http://10.108.246.221`
+- `tts_voice_speech_endpoint: https://voice-speech.eyrie`
 - `tts_voice_speech_model: kokoro`
 - `tts_voice_speech_format: wav`
 - `tts_voice_compatible: true`
@@ -63,6 +63,7 @@ Profile voice choices:
 
 - Talon: `af_alloy`
 - Star: `af_nova`
+- Beryl: `af_kore`
 
 The shared STT initial prompt includes local operational vocabulary such as
 Talon, Star, Honcho, Eyrie, KubeCM, llama-qwen, GitLab, Puppet, Kubernetes,
