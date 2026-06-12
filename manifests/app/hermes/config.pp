@@ -87,8 +87,8 @@ class nest::app::hermes::config {
       $codex_auth_profile_args = $codex_auth_profiles.join(' ')
 
       exec { 'manage_hermes_codex_auth_pool':
-        command     => "${codex_auth_manager_path} apply --home /home/${nest::user} --pool-file ${codex_auth_pool_path} ${codex_auth_profile_args}",
-        unless      => "${codex_auth_manager_path} check --home /home/${nest::user} --pool-file ${codex_auth_pool_path} ${codex_auth_profile_args}",
+        command     => "/bin/sh -c '${codex_auth_manager_path} apply --home /home/${nest::user} --pool-file ${codex_auth_pool_path} ${codex_auth_profile_args}'",
+        unless      => "/bin/sh -c 'test -x ${codex_auth_manager_path} && ${codex_auth_manager_path} check --home /home/${nest::user} --pool-file ${codex_auth_pool_path} ${codex_auth_profile_args}'",
         user        => $nest::user,
         environment => ["HOME=/home/${nest::user}"],
         logoutput   => 'on_failure',
