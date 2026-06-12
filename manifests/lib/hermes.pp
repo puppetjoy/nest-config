@@ -30,6 +30,7 @@ define nest::lib::hermes (
   Stdlib::Port         $dashboard_port           = 9119,
   String[1]            $dashboard_public_url     = "https://${title}.eyrie",
   Optional[String[1]]  $dashboard_theme          = undef,
+  Boolean              $dashboard_profile_switcher= false,
   Optional[String[1]]  $dashboard_oauth_client_id= undef,
   Optional[String[1]]  $dashboard_oauth_portal_url= undef,
   String[1]            $agent_request_kanban_board= 'agent-requests',
@@ -434,6 +435,9 @@ define nest::lib::hermes (
     undef   => {},
     default => { 'theme' => $dashboard_theme },
   }
+  $dashboard_profile_switcher_config = {
+    'show_profile_switcher' => $dashboard_profile_switcher,
+  }
   $agent_directory_profile_icon_config = $profile_icon ? {
     undef   => {},
     default => { 'profile_icon' => $profile_icon },
@@ -566,7 +570,7 @@ define nest::lib::hermes (
         'client_id'  => $dashboard_oauth_client_id_value,
         'portal_url' => $dashboard_oauth_portal_url_value,
       },
-    } + $dashboard_theme_config,
+    } + $dashboard_theme_config + $dashboard_profile_switcher_config,
   } + $image_gen_config + $plugins_config
 
   $env_content = [$gitlab_env_lines, $tavily_env_lines, $telegram_env_lines, $agent_request_env_lines, $ssh_env_lines, $kubeconfig_env_lines].flatten.join("\n")
