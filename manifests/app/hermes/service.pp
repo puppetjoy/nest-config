@@ -92,10 +92,16 @@ class nest::app::hermes::service {
   $agent_request_review_commands = [
     'agent-request-approve',
     'agent-request-propose',
+    'agent-request-accept-review',
     'agent-request-maintain',
     'agent-request-supersede',
     'agent-request-cancel',
     'agent-request-deny',
+  ]
+
+  $agent_request_diagnostic_commands = [
+    'agent-request-doctor',
+    'agent-request-tts-cadence-evaluate',
   ]
 
   $agent_request_worktree_cleanup_commands = [
@@ -106,7 +112,7 @@ class nest::app::hermes::service {
     'agent-request-archive-completed',
   ]
 
-  $agent_request_command_wrappers = $agent_request_review_commands + $agent_request_worktree_cleanup_commands + $agent_request_archive_commands
+  $agent_request_command_wrappers = $agent_request_review_commands + $agent_request_diagnostic_commands + $agent_request_worktree_cleanup_commands + $agent_request_archive_commands
 
   $agent_request_command_wrappers.each |String $agent_request_command| {
     file { "${install_dir}/bin/${agent_request_command}":
