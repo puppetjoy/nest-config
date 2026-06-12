@@ -393,7 +393,7 @@ nest::app::hermes::instances:
       container_persistent: true
     environment:
       HERMES_DOCKER_BINARY: '/usr/bin/podman'
-    gitlab_enabled: false
+    gitlab_enabled: true
     honcho_workspace: 'hermes'
     honcho_user_peer: 'joy'
     honcho_ai_peer: 'beryl'
