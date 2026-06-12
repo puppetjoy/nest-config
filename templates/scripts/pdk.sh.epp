@@ -7,14 +7,53 @@
 # supports all of the Nest platforms.
 
 # See: https://gitlab.joyfullee.me/nest/tools/pdk
-# See: https://gitlab.joyfullee.me/nest/conifg/-/blob/main/manifests/tool/pdk.pp
+# See: https://gitlab.joyfullee.me/nest/config/-/blob/main/manifests/tool/pdk.pp
 #
 
 if [[ -r /etc/profile.d/puppetcore.sh ]]; then
     . /etc/profile.d/puppetcore.sh
 fi
 
-exec podman run --rm -it -e TERM \
+podman_tty_args=()
+if [[ -t 0 && -t 1 ]]; then
+    podman_tty_args=(-it)
+fi
+
+cidfile=$(mktemp "${TMPDIR:-/tmp}/nest-pdk.XXXXXX.cid")
+cleanup() {
+    local status=$?
+    local cid
+
+    trap - EXIT INT TERM
+    if [[ -s "$cidfile" ]]; then
+        cid=$(<"$cidfile")
+        if [[ -n "$cid" ]]; then
+            podman rm -f "$cid" >/dev/null 2>&1 || true
+        fi
+    fi
+    rm -f "$cidfile"
+    exit "$status"
+}
+
+forward_signal() {
+    local signal="$1"
+    local cid
+
+    if [[ -s "$cidfile" ]]; then
+        cid=$(<"$cidfile")
+        if [[ -n "$cid" ]]; then
+            podman kill --signal "$signal" "$cid" >/dev/null 2>&1 || true
+        fi
+    fi
+}
+
+trap cleanup EXIT
+trap 'forward_signal INT; exit 130' INT
+trap 'forward_signal TERM; exit 143' TERM
+
+podman run --rm --cidfile "$cidfile" "${podman_tty_args[@]}" -e TERM \
+    --label nest-tool-wrapper=pdk \
+    --label nest-tool-wrapper-lifecycle=short-lived \
     -v "${PWD}:/module" \
     -v /etc/eyaml:/etc/eyaml:ro \
     -v /etc/gemrc:/etc/gemrc:ro \
@@ -23,5 +62,6 @@ exec podman run --rm -it -e TERM \
     -e PUPPET_FORGE_TOKEN \
     nest/tools/pdk \
     pdk "$@"
+exit $?
 
 # vim: filetype=bash

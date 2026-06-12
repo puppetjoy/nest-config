@@ -25,6 +25,38 @@ if [[ -t 0 && -t 1 ]]; then
     podman_tty_args=(-it)
 fi
 
+cidfile=$(mktemp "${TMPDIR:-/tmp}/nest-bolt.XXXXXX.cid")
+cleanup() {
+    local status=$?
+    local cid
+
+    trap - EXIT INT TERM
+    if [[ -s "$cidfile" ]]; then
+        cid=$(<"$cidfile")
+        if [[ -n "$cid" ]]; then
+            podman rm -f "$cid" >/dev/null 2>&1 || true
+        fi
+    fi
+    rm -f "$cidfile"
+    exit "$status"
+}
+
+forward_signal() {
+    local signal="$1"
+    local cid
+
+    if [[ -s "$cidfile" ]]; then
+        cid=$(<"$cidfile")
+        if [[ -n "$cid" ]]; then
+            podman kill --signal "$signal" "$cid" >/dev/null 2>&1 || true
+        fi
+    fi
+}
+
+trap cleanup EXIT
+trap 'forward_signal INT; exit 130' INT
+trap 'forward_signal TERM; exit 143' TERM
+
 PODMAN_SOCK='/run/podman/podman.sock'
 podman_sock_args=()
 if [[ -S "$PODMAN_SOCK" ]]; then
@@ -111,7 +143,9 @@ if [[ -d /nest/home/kubeconfigs ]]; then
     add_kubeconfig_mount /nest/home/kubeconfigs rw
 fi
 
-exec podman run --rm "${podman_tty_args[@]}" -e TERM \
+podman run --rm --cidfile "$cidfile" "${podman_tty_args[@]}" -e TERM \
+    --label nest-tool-wrapper=bolt \
+    --label nest-tool-wrapper-lifecycle=short-lived \
     --net=host --dns=127.0.0.53 \
     -w "/modules/${name}" \
     -v "${PWD}:/modules/${name}" \
@@ -129,5 +163,6 @@ exec podman run --rm "${podman_tty_args[@]}" -e TERM \
     "${podman_sock_args[@]}" \
     nest/tools/bolt \
     bolt "$@"
+exit $?
 
 # vim: filetype=bash
