@@ -376,15 +376,15 @@ nest::app::hermes::instances:
       llama-qwen:
         name: 'llama-qwen'
         api: 'https://llama-qwen.eyrie/v1'
-        default_model: 'qwen'
+        default_model: 'qwen-3.6'
         models:
-          qwen: {}
+          qwen-3.6: {}
         discover_models: true
     model_provider: 'custom:llama-qwen'
-    model_name: 'qwen'
+    model_name: 'qwen-3.6'
     model_base_url: 'https://llama-qwen.eyrie/v1'
     auxiliary_provider: 'custom:llama-qwen'
-    auxiliary_mini_model: 'qwen'
+    auxiliary_mini_model: 'qwen-3.6'
     terminal:
       backend: 'docker'
       docker_image: 'registry.eyrie/nest/stage1/server:latest'
