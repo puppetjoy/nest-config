@@ -4,6 +4,7 @@ class nest::app::hermes::config {
   $tavily_api_key                   = $nest::app::hermes::tavily_api_key
   $telegram_bot_token               = $nest::app::hermes::telegram_bot_token
   $voice_tools_openai_key           = $nest::app::hermes::voice_tools_openai_key
+  $codex_oauth_pool_json            = $nest::app::hermes::codex_oauth_pool_json
   $telegram_allowed                 = $nest::app::hermes::telegram_allowed
   $telegram_home                    = $nest::app::hermes::telegram_home
   $telegram_bot_username            = $nest::app::hermes::telegram_bot_username
@@ -33,6 +34,8 @@ class nest::app::hermes::config {
   $hermes_home_dir      = "/home/${nest::user}/.hermes"
   $profiles_dir         = "${hermes_home_dir}/profiles"
   $codex_auth_slots_dir = "${hermes_home_dir}/codex-auth"
+  $codex_auth_pool_path = "${hermes_home_dir}/openai-codex-pool.json"
+  $codex_auth_manager_path = "${nest::app::hermes::install_dir}/bin/hermes-manage-codex-pool"
 
   file { $hermes_config_dir:
     ensure => directory,
@@ -63,6 +66,47 @@ class nest::app::hermes::config {
     owner   => $nest::user,
     group   => $nest::user,
     require => File[$hermes_home_dir],
+  }
+
+  if $codex_oauth_pool_json != undef {
+    file { $codex_auth_pool_path:
+      ensure    => file,
+      mode      => '0600',
+      owner     => $nest::user,
+      group     => $nest::user,
+      content   => $codex_oauth_pool_json,
+      show_diff => false,
+      require   => File[$hermes_home_dir],
+    }
+
+    $codex_auth_profiles = $instances.map |String[1] $instance_name, Hash $instance_config| {
+      pick($instance_config['profile'], $instance_name)
+    }
+
+    if $codex_auth_profiles.length > 0 {
+      $codex_auth_profile_args = $codex_auth_profiles.join(' ')
+
+      exec { 'manage_hermes_codex_auth_pool':
+        command     => "${codex_auth_manager_path} apply --home /home/${nest::user} --pool-file ${codex_auth_pool_path} ${codex_auth_profile_args}",
+        unless      => "${codex_auth_manager_path} check --home /home/${nest::user} --pool-file ${codex_auth_pool_path} ${codex_auth_profile_args}",
+        user        => $nest::user,
+        environment => ["HOME=/home/${nest::user}"],
+        logoutput   => 'on_failure',
+        require     => [
+          File[$hermes_home_dir],
+          File[$profiles_dir],
+          File[$codex_auth_pool_path],
+          File[$codex_auth_manager_path],
+        ],
+      }
+    }
+  } else {
+    file { $codex_auth_pool_path:
+      ensure  => absent,
+      owner   => $nest::user,
+      group   => $nest::user,
+      require => File[$hermes_home_dir],
+    }
   }
 
   $instances.each |String[1] $instance_name, Hash $instance_config| {

@@ -82,6 +82,15 @@ class nest::app::hermes::service {
     require => File["${install_dir}/bin"],
   }
 
+  file { "${install_dir}/bin/hermes-manage-codex-pool":
+    ensure  => file,
+    mode    => '0755',
+    owner   => 'root',
+    group   => 'root',
+    source  => 'puppet:///modules/nest/app/hermes/manage-codex-pool.py',
+    require => File["${install_dir}/bin"],
+  }
+
   $agent_request_review_commands = [
     'agent-request-approve',
     'agent-request-propose',
