@@ -530,6 +530,14 @@ define nest::lib::hermes (
     default => "${skin_content}${skin_banner_hero_yaml}",
   }
   $has_custom_skin = $skin_name != undef and $effective_skin_content != undef
+  $credential_pool_strategy_config = $model_provider ? {
+    'openai-codex' => {
+      'credential_pool_strategies' => {
+        'openai-codex' => 'fill_first',
+      },
+    },
+    default         => {},
+  }
 
   $managed_config = {
     'toolsets'         => $effective_toolsets,
@@ -537,9 +545,6 @@ define nest::lib::hermes (
       'provider' => $model_provider,
       'default'  => $model_name,
       'base_url' => $model_base_url,
-    },
-    'credential_pool_strategies' => {
-      'openai-codex' => 'fill_first',
     },
     'web'              => {
       'backend'        => 'tavily',
@@ -612,7 +617,7 @@ define nest::lib::hermes (
         'portal_url' => $dashboard_oauth_portal_url_value,
       },
     } + $dashboard_theme_config + $dashboard_profile_switcher_config,
-  } + $providers_config + $terminal_config + $image_gen_config + $plugins_config
+  } + $credential_pool_strategy_config + $providers_config + $terminal_config + $image_gen_config + $plugins_config
 
   $env_content = [$gitlab_env_lines, $tavily_env_lines, $telegram_env_lines, $voice_tools_openai_env_lines, $agent_request_env_lines, $ssh_env_lines, $kubeconfig_env_lines].flatten.join("\n")
 
