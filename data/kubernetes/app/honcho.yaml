@@ -4,7 +4,7 @@ service_name: "%{nest::kubernetes::service}"
 
 cert_issuer: eyrie-ca
 cert_issuer_kind: ClusterIssuer
-honcho_image: registry.eyrie/nest/forks/honcho:honcho-v3-0-8-nest-dream-tool-length-retry
+honcho_image: registry.eyrie/nest/forks/honcho:honcho-v3-0-8-nest-dream-controlled-length
 honcho_database: honcho
 honcho_user: honcho
 ingress_class: contour-compute
