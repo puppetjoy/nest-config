@@ -727,6 +727,7 @@ resources:
           containers:
             - name: limiter
               image: "%{lookup('honcho_image')}"
+              imagePullPolicy: Always
               command:
                 - /app/.venv/bin/python
                 - /opt/honcho-qwen-limiter/limiter.py
@@ -917,6 +918,7 @@ resources:
           containers:
             - name: api
               image: "%{lookup('honcho_image')}"
+              imagePullPolicy: Always
               command: ['sh', 'docker/entrypoint.sh']
               env: *honcho_env
               ports:
@@ -969,6 +971,7 @@ resources:
           containers:
             - name: deriver
               image: "%{lookup('honcho_image')}"
+              imagePullPolicy: Always
               command: ['/app/.venv/bin/python', '-m', 'src.deriver']
               env: *honcho_env
 
