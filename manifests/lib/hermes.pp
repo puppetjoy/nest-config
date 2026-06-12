@@ -538,6 +538,9 @@ define nest::lib::hermes (
       'default'  => $model_name,
       'base_url' => $model_base_url,
     },
+    'credential_pool_strategies' => {
+      'openai-codex' => 'fill_first',
+    },
     'web'              => {
       'backend'        => 'tavily',
       'search_backend' => 'tavily',
@@ -776,7 +779,6 @@ define nest::lib::hermes (
       subscribe   => [
         Exec['install_hermes_agent'],
         Exec['install_hermes_agent_request_broker'],
-        Exec['share_hermes_codex_auth'],
         File[$hermes_env_path],
         File["${profile_dir}/systemd.env"],
         $kubeconfig_subscribe,
@@ -819,7 +821,6 @@ define nest::lib::hermes (
       user        => $user,
       subscribe   => [
         Exec['install_hermes_agent'],
-        Exec['share_hermes_codex_auth'],
         File["${profile_dir}/systemd.env"],
         $kubeconfig_subscribe,
         File[$hermes_managed_config_path],
