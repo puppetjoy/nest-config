@@ -5,6 +5,20 @@ class nest::base::bootloader {
   include 'nest::base::console' # for nest::base::console::keymap
   include 'nest::base::fstab'   # for nest::base::fstab::hostname
 
+  $usbnet_stable_mac_cmdline = $nest::usbnet_stable_mac ? {
+    true    => $facts['machine_id'] ? {
+      String[1] => [
+        "g_ether.dev_addr=${nest::usbnet_stable_mac($facts['machine_id'], 'dev')}",
+        "g_ether.host_addr=${nest::usbnet_stable_mac($facts['machine_id'], 'host')}",
+      ],
+      default   => $facts['is_container'] ? {
+        true    => [],
+        default => fail('nest::usbnet_stable_mac requires the machine_id fact outside container/build contexts'),
+      },
+    },
+    default => [],
+  }
+
   $kernel_cmdline = [
     $nest::zfs ? {
       false   => "root=PARTLABEL=${nest::base::fstab::hostname}",
@@ -47,6 +61,8 @@ class nest::base::bootloader {
     'delayacct',
 
     $nest::kernel_cmdline,
+
+    $usbnet_stable_mac_cmdline,
 
     'init=/lib/systemd/systemd',
   ].flatten.join(' ').strip

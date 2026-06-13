@@ -8,6 +8,7 @@ nest::fscache: false
 nest::journal: volatile
 nest::puppet: false
 nest::uboot_defconfig: 'radxa-zero_defconfig'
+nest::usbnet_stable_mac: true
 nest::wifi: true
 
 nest::kernel_cmdline:

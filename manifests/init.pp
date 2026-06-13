@@ -58,6 +58,7 @@ class nest (
   Optional[String]                  $uboot_tag           = undef,
   Optional[String]                  $uroot_tag           = undef,
   Optional[Integer]                 $uroot_delay         = undef,
+  Boolean                           $usbnet_stable_mac   = false,
   Array[String]                     $use                 = [],
   Enum['tcp', 'udp']                $vpn_transport       = udp,
   Boolean                           $wifi                = false,
