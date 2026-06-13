@@ -18,6 +18,7 @@ define nest::lib::hermes (
   String[1]            $model_provider           = 'openai-codex',
   String[1]            $model_name               = 'gpt-5.5',
   String[1]            $model_base_url           = 'https://chatgpt.com/backend-api/codex',
+  Any                  $openrouter_api_key       = undef,
   Hash[String[1], Any] $providers                = {},
   String[1]            $auxiliary_provider       = 'openai-codex',
   String[1]            $auxiliary_mini_model     = 'gpt-5.4-mini',
@@ -320,6 +321,14 @@ define nest::lib::hermes (
     },
   }
 
+  $openrouter_env_lines = $openrouter_api_key ? {
+    undef   => [],
+    default => $openrouter_api_key =~ Sensitive[String[1]] ? {
+      true    => ["OPENROUTER_API_KEY=${openrouter_api_key.unwrap}"],
+      default => ["OPENROUTER_API_KEY=${openrouter_api_key}"],
+    },
+  }
+
   $voice_tools_openai_env_lines = $voice_tools_openai_key ? {
     undef   => [],
     default => $voice_tools_openai_key =~ Sensitive[String[1]] ? {
@@ -422,6 +431,7 @@ define nest::lib::hermes (
       default => ["SSH_AUTH_SOCK=${ssh_auth_sock}"],
     },
     $telegram_env_lines,
+    $openrouter_env_lines,
     $voice_tools_openai_env_lines,
     $agent_request_env_lines,
     $ssh_env_lines,
@@ -633,7 +643,7 @@ define nest::lib::hermes (
     } + $dashboard_theme_config + $dashboard_profile_switcher_config,
   } + $credential_pool_strategy_config + $providers_config + $terminal_config + $image_gen_config + $plugins_config
 
-  $env_content = [$gitlab_env_lines, $tavily_env_lines, $telegram_env_lines, $voice_tools_openai_env_lines, $agent_request_env_lines, $ssh_env_lines, $kubeconfig_env_lines].flatten.join("\n")
+  $env_content = [$gitlab_env_lines, $tavily_env_lines, $telegram_env_lines, $openrouter_env_lines, $voice_tools_openai_env_lines, $agent_request_env_lines, $ssh_env_lines, $kubeconfig_env_lines].flatten.join("\n")
 
   if $kubeconfig_content != undef {
     $effective_kubeconfig_content = $kubeconfig_content =~ Sensitive ? {

@@ -3,6 +3,7 @@ class nest::app::hermes::config {
   $gitlab_token                     = $nest::app::hermes::gitlab_token
   $tavily_api_key                   = $nest::app::hermes::tavily_api_key
   $telegram_bot_token               = $nest::app::hermes::telegram_bot_token
+  $openrouter_api_key               = $nest::app::hermes::openrouter_api_key
   $voice_tools_openai_key           = $nest::app::hermes::voice_tools_openai_key
   $codex_oauth_pool_json            = $nest::app::hermes::codex_oauth_pool_json
   $telegram_allowed                 = $nest::app::hermes::telegram_allowed
@@ -150,6 +151,10 @@ class nest::app::hermes::config {
     $instance_model_provider    = pick($config['model_provider'], $model_provider)
     $instance_model_name        = pick($config['model_name'], $model_name)
     $instance_model_base_url    = pick($config['model_base_url'], $model_base_url)
+    $instance_openrouter_key    = $config['openrouter_api_key'] ? {
+      undef   => $openrouter_api_key,
+      default => $config['openrouter_api_key'],
+    }
     $instance_providers         = pick($config['providers'], $providers)
     $instance_aux_provider      = pick($config['auxiliary_provider'], $auxiliary_provider)
     $instance_aux_model         = pick($config['auxiliary_mini_model'], $auxiliary_mini_model)
@@ -255,6 +260,7 @@ class nest::app::hermes::config {
       model_provider             => $instance_model_provider,
       model_name                 => $instance_model_name,
       model_base_url             => $instance_model_base_url,
+      openrouter_api_key         => $instance_openrouter_key,
       providers                  => $instance_providers,
       auxiliary_provider         => $instance_aux_provider,
       auxiliary_mini_model       => $instance_aux_model,

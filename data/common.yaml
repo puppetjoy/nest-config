@@ -14,6 +14,8 @@ lookup_options:
     convert_to: 'Sensitive'
   nest::app::hermes::telegram_bot_token:
     convert_to: 'Sensitive'
+  nest::app::hermes::openrouter_api_key:
+    convert_to: 'Sensitive'
   nest::app::hermes::voice_tools_openai_key:
     convert_to: 'Sensitive'
   nest::app::hermes::codex_oauth_pool_json:
