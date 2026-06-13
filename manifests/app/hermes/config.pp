@@ -229,6 +229,7 @@ class nest::app::hermes::config {
     $instance_tts_openai_voice         = pick($config['tts_openai_voice'], 'alloy')
     $instance_tts_openai_base_url      = pick($config['tts_openai_base_url'], 'https://api.openai.com/v1')
     $instance_ssh_private_key   = $config['ssh_private_key']
+    $instance_ssh_config        = $config['ssh_config_content']
     $instance_kubeconfig_path   = $config['kubeconfig_path']
     $instance_kubeconfig        = $config['kubeconfig_content']
     $instance_extra_packages    = pick($config['extra_packages'], [])
@@ -313,6 +314,7 @@ class nest::app::hermes::config {
       tts_openai_voice           => $instance_tts_openai_voice,
       tts_openai_base_url        => $instance_tts_openai_base_url,
       ssh_private_key            => $instance_ssh_private_key,
+      ssh_config_content         => $instance_ssh_config,
       kubeconfig_path            => $instance_kubeconfig_path,
       kubeconfig_content         => $instance_kubeconfig,
       extra_packages             => $instance_extra_packages,

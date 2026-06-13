@@ -79,6 +79,7 @@ define nest::lib::hermes (
   String[1]            $tts_openai_voice         = 'alloy',
   String[1]            $tts_openai_base_url      = 'https://api.openai.com/v1',
   Any                  $ssh_private_key          = undef,
+  Optional[String[1]]  $ssh_config_content       = undef,
   Optional[String[1]]  $kubeconfig_path          = undef,
   Any                  $kubeconfig_content       = undef,
   Array[String[1]]     $extra_packages           = [],
@@ -220,18 +221,20 @@ define nest::lib::hermes (
     }
   }
 
-  if $ssh_private_key != undef {
-    $effective_ssh_private_key = $ssh_private_key =~ Sensitive ? {
-      true    => $ssh_private_key,
-      default => Sensitive($ssh_private_key),
-    }
-
+  if $ssh_private_key != undef or $ssh_config_content != undef {
     file { $ssh_dir:
       ensure  => directory,
       mode    => '0700',
       owner   => $user,
       group   => $user,
       require => File[$profile_dir],
+    }
+  }
+
+  if $ssh_private_key != undef {
+    $effective_ssh_private_key = $ssh_private_key =~ Sensitive ? {
+      true    => $ssh_private_key,
+      default => Sensitive($ssh_private_key),
     }
 
     file { $ssh_private_key_path:
@@ -242,6 +245,17 @@ define nest::lib::hermes (
       content   => $effective_ssh_private_key,
       show_diff => false,
       require   => File[$ssh_dir],
+    }
+  }
+
+  if $ssh_config_content != undef {
+    file { "${ssh_dir}/config":
+      ensure  => file,
+      mode    => '0600',
+      owner   => $user,
+      group   => $user,
+      content => $ssh_config_content,
+      require => File[$ssh_dir],
     }
   }
 

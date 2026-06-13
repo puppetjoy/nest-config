@@ -391,8 +391,28 @@ nest::app::hermes::instances:
       container_persistent: true
       docker_volumes:
         - '/home/joy/.hermes/profiles/beryl/.ssh:/home/joy/.hermes/profiles/beryl/.ssh:ro'
+        - '/home/joy/.hermes/profiles/beryl/.ssh/config:/root/.ssh/config:ro'
       docker_extra_args:
         - '--add-host=owl:10.88.0.1'
+        - '--add-host=owl.nest:10.88.0.1'
+        - '--add-host=owl.nest.:10.88.0.1'
+    ssh_config_content: |
+      Host owl
+          HostName owl.nest
+          User joy
+          IdentityFile /home/joy/.hermes/profiles/beryl/.ssh/id_ed25519
+          IdentitiesOnly yes
+
+      Host gitlab.joyfullee.me
+          HostName ssh.gitlab.eyrie
+          User git
+          IdentityFile /home/joy/.hermes/profiles/beryl/.ssh/id_ed25519
+          IdentitiesOnly yes
+
+      Host ssh.gitlab.eyrie gitlab.eyrie
+          User git
+          IdentityFile /home/joy/.hermes/profiles/beryl/.ssh/id_ed25519
+          IdentitiesOnly yes
     environment:
       HERMES_DOCKER_BINARY: '/usr/bin/podman'
     gitlab_enabled: true
