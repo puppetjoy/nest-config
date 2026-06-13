@@ -5,6 +5,7 @@
 # @param container Build container name
 # @param cpu Build for this CPU architecture
 # @param tool Build this tool
+# @param tag Image tag to publish/use on refresh; defaults to cpu
 # @param build Build the image
 # @param deploy Deploy the image
 # @param emerge_default_opts Override default emerge options (e.g. --jobs=4)
@@ -23,6 +24,7 @@ plan nest::build::tool (
   String            $container,
   String            $cpu,
   String            $tool,
+  Optional[String]  $tag                   = undef,
   Boolean           $build                 = true,
   Boolean           $deploy                = false,
   Optional[String]  $emerge_default_opts   = undef,
@@ -38,6 +40,7 @@ plan nest::build::tool (
   Optional[String]  $registry_password     = lookup('nest::build::registry_password', default_value => undef),
   String            $registry_password_var = 'NEST_REGISTRY_PASSWORD',
 ) {
+  $image_tag = pick($tag, $cpu)
   $repos_volume = "${container}-repos" # cached between builds
   $target = Target.new(name => $container, uri => "podman://${container}")
   $extra_volume_args = $extra_volumes.map |$volume| { "--volume=${volume}" }.join(' ')
@@ -61,7 +64,7 @@ plan nest::build::tool (
 
   if $init {
     if $refresh {
-      $from_image = "${registry}/nest/tools/${tool}:${cpu}"
+      $from_image = "${registry}/nest/tools/${tool}:${image_tag}"
     } else {
       $from_image = "nest/stage1/server:${cpu}"
     }
@@ -105,7 +108,7 @@ plan nest::build::tool (
 
   if $deploy {
     $commit_changes = (['CMD=/bin/zsh'] + $image_changes).map |$change| { "--change ${change.shellquote}" }.join(' ')
-    $image = "${registry}/nest/tools/${tool}:${cpu}"
+    $image = "${registry}/nest/tools/${tool}:${image_tag}"
     run_command("podman commit ${commit_changes} ${container} ${image}", 'localhost', 'Commit build container')
 
     unless $registry == 'localhost' {

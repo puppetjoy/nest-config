@@ -385,7 +385,7 @@ nest::app::hermes::instances:
     auxiliary_mini_model: 'qwen-3.6'
     terminal:
       backend: 'docker'
-      docker_image: 'registry.eyrie/nest/stage1/server:latest'
+      docker_image: 'registry.gitlab.joyfullee.me/nest/tools/agent:latest'
       docker_persist_across_processes: true
       docker_run_as_host_user: false
       container_persistent: true
