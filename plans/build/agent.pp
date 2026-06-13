@@ -55,7 +55,7 @@ plan nest::build::agent (
     # the image grows agent-specific packages; that pass syncs Portage and can be
     # much heavier than this v1 framework needs.
     run_command("podman start ${container}", 'localhost', 'Start build container')
-    run_command('/bin/zsh -lc "print nest-agent-terminal-smoke"', $target, 'Smoke test terminal shell in agent image')
+    run_command("podman exec ${container} /bin/zsh -lc 'print nest-agent-terminal-smoke'", 'localhost', 'Smoke test terminal shell in agent image')
     run_command("podman stop ${container}", 'localhost', 'Stop build container')
   }
 
