@@ -67,6 +67,7 @@ stages:
     CPU: 'sifive-u74'
 
 'Build agent tool zen5':
+  image: '${CI_REGISTRY_IMAGE}/${CI_COMMIT_REF_SLUG}:haswell'
   stage: 'Build'
   tags: ['amd64']
   variables:
