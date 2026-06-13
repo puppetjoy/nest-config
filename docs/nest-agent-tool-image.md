@@ -14,7 +14,9 @@ Build it for the current Nest x86_64 workstation/server target with:
 ./bin/build agent zen5 deploy=true registry=registry.gitlab.joyfullee.me
 ```
 
-GitLab CI has a `Build agent tool zen5` job for default-branch pipelines when `BUILD=agent` is set. The job calls the same Bolt plan and publishes `latest` to the GitLab registry only; there is no Eyrie registry mirror for this initial version.
+The public project at <https://gitlab.joyfullee.me/nest/tools/agent> owns the default-branch GitLab pipeline for this image, matching the other `nest/tools/*` projects. Its `gitlab-ci.yml` runs the source-managed `nest::build::agent` plan from this `nest/config` repository through the published config builder image, then pushes `latest` to the GitLab registry only. There is no Eyrie registry mirror for this initial version.
+
+The build recipe remains in `nest/config` because it is Puppet/Bolt source for Nest's shared tool-image framework; the `nest/tools/agent` project is the discoverable source/pipeline entry point for the registry namespace.
 
 ## Runtime contents
 

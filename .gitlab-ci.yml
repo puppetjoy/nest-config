@@ -66,19 +66,6 @@ stages:
   variables:
     CPU: 'sifive-u74'
 
-'Build agent tool zen5':
-  image: '${CI_REGISTRY_IMAGE}/${CI_COMMIT_REF_SLUG}:haswell'
-  stage: 'Build'
-  tags: ['amd64']
-  variables:
-    CPU: 'zen5'
-  script:
-    - './bin/build agent $CPU deploy=true registry=$CI_REGISTRY registry_username=$AGENT_REGISTRY_USERNAME registry_password_var=AGENT_REGISTRY_PASSWORD'
-  rules:
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $BUILD == "agent"'
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $BUILD'
-      when: never
-
 'Deploy environment':
   stage: 'Deploy'
   tags: ['r10k']
