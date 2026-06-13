@@ -18,7 +18,10 @@ honcho_llama_qwen_limiter_service: llama-qwen-honcho
 honcho_llama_qwen_base_url: "http://%{lookup('honcho_llama_qwen_limiter_service')}/v1"
 honcho_llama_qwen_upstream: llama-qwen
 honcho_llama_qwen_max_concurrent: '2'
-honcho_llama_qwen_queue_timeout_seconds: '30'
+# Absorb short Honcho bursts without increasing GPU concurrency. 60s stays well
+# below the OpenAI-compatible client/upstream timeouts while reducing 503 churn
+# from 30s queue expirations during dream/tool-loop bursts.
+honcho_llama_qwen_queue_timeout_seconds: '60'
 representation_batch_max_tokens: '1024'
 representation_subthreshold_ttl: '7 days'
 representation_subthreshold_expiry_schedule: '17 */6 * * *'
