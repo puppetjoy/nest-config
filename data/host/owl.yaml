@@ -387,8 +387,12 @@ nest::app::hermes::instances:
       backend: 'docker'
       docker_image: 'registry.eyrie/nest/stage1/server:latest'
       docker_persist_across_processes: true
-      docker_run_as_host_user: true
+      docker_run_as_host_user: false
       container_persistent: true
+      docker_volumes:
+        - '/home/joy/.hermes/profiles/beryl/.ssh:/home/joy/.hermes/profiles/beryl/.ssh:ro'
+      docker_extra_args:
+        - '--add-host=owl:10.88.0.1'
     environment:
       HERMES_DOCKER_BINARY: '/usr/bin/podman'
     gitlab_enabled: true
