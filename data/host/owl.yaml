@@ -393,6 +393,10 @@ nest::app::hermes::instances:
         - '/home/joy/.hermes/profiles/beryl/.ssh:/home/joy/.hermes/profiles/beryl/.ssh:ro'
         - '/home/joy/.hermes/profiles/beryl/.ssh/config:/root/.ssh/config:ro'
       docker_extra_args:
+        # Host networking gives Beryl the owl/Eyrie routes needed for ssh.gitlab.eyrie.
+        - '--network=host'
+        # Keep owl aliases pinned to the Podman bridge gateway so Beryl's
+        # dotfiles authorized_keys from="10.88.0.1" entry still permits SSH to owl.
         - '--add-host=owl:10.88.0.1'
         - '--add-host=owl.nest:10.88.0.1'
         - '--add-host=owl.nest.:10.88.0.1'
