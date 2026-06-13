@@ -291,7 +291,7 @@ nest::app::hermes::instances:
     tts_openai_voice: 'nova'
     tts_openai_base_url: 'https://api.openai.com/v1'
     model_provider: 'openrouter'
-    model_name: 'anthropic/claude-opus-4.8'
+    model_name: 'anthropic/claude-sonnet-4.6'
     model_base_url: 'https://openrouter.ai/api/v1'
     auxiliary_provider: 'openrouter'
     auxiliary_mini_model: 'anthropic/claude-sonnet-4.6'
