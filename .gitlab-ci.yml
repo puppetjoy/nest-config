@@ -73,7 +73,7 @@ stages:
   variables:
     CPU: 'zen5'
   script:
-    - './bin/build agent $CPU deploy=true registry=$CI_REGISTRY registry_username=$CI_REGISTRY_USER registry_password_var=CI_REGISTRY_PASSWORD'
+    - './bin/build agent $CPU deploy=true registry=$CI_REGISTRY registry_username=$AGENT_REGISTRY_USERNAME registry_password_var=AGENT_REGISTRY_PASSWORD'
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $BUILD == "agent"'
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $BUILD'
