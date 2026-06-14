@@ -158,6 +158,7 @@ class nest::app::hermes::service {
         [Service]
         Type=oneshot
         EnvironmentFile=-${hermes_home_dir}/profiles/${gitlab_mr_note_poller_profile}/systemd.env
+        Environment=HERMES_HOME=${hermes_home_dir}
         Environment=AGENT_REQUEST_KANBAN_BOARD=${nest::app::hermes::agent_request_kanban_board}
         Environment=PYTHONPATH=${pythonpath}
         Environment=SSL_CERT_FILE=${ca_bundle_file}
