@@ -337,8 +337,19 @@ define nest::lib::hermes (
     },
   }
 
+  $agent_request_gitlab_token_env_lines = $gitlab_token ? {
+    undef   => [],
+    default => $gitlab_enabled ? {
+      true    => $gitlab_token =~ Sensitive[String[1]] ? {
+        true    => ["AGENT_REQUEST_GITLAB_TOKEN=${gitlab_token.unwrap}"],
+        default => ["AGENT_REQUEST_GITLAB_TOKEN=${gitlab_token}"],
+      },
+      default => [],
+    },
+  }
   $agent_request_env_lines = [
     "AGENT_REQUEST_KANBAN_BOARD=${agent_request_kanban_board}",
+    $agent_request_gitlab_token_env_lines,
     $voice_auto_tts ? {
       true    => ['AGENT_REQUEST_TELEGRAM_VOICE_NOTIFY=true'],
       default => [],
