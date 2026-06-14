@@ -103,6 +103,7 @@ class nest::app::hermes::service {
 
   $agent_request_diagnostic_commands = [
     'agent-request-doctor',
+    'agent-request-reconcile-gitlab-mr-note',
     'agent-request-tts-cadence-evaluate',
   ]
 
