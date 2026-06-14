@@ -422,6 +422,12 @@ define nest::lib::hermes (
     default => [],
   }
   $extra_env_lines = $environment.map |String[1] $key, String[1] $value| { "${key}=${value}" }
+  $tls_trust_env_lines = [
+    "SSL_CERT_FILE=${ca_bundle_file}",
+    "REQUESTS_CA_BUNDLE=${ca_bundle_file}",
+    "CURL_CA_BUNDLE=${ca_bundle_file}",
+    'SSL_CERT_DIR=/etc/ssl/certs',
+  ]
   $systemd_env_lines = [
     "HERMES_DASHBOARD_BIND_HOST=${dashboard_bind_host}",
     "HERMES_DASHBOARD_PORT=${dashboard_port}",
@@ -438,10 +444,7 @@ define nest::lib::hermes (
     $git_env_lines,
     $kubeconfig_env_lines,
     $extra_env_lines,
-    "SSL_CERT_FILE=${ca_bundle_file}",
-    "REQUESTS_CA_BUNDLE=${ca_bundle_file}",
-    "CURL_CA_BUNDLE=${ca_bundle_file}",
-    'SSL_CERT_DIR=/etc/ssl/certs',
+    $tls_trust_env_lines,
     '',
   ].flatten
 
@@ -643,7 +646,7 @@ define nest::lib::hermes (
     } + $dashboard_theme_config + $dashboard_profile_switcher_config,
   } + $credential_pool_strategy_config + $providers_config + $terminal_config + $image_gen_config + $plugins_config
 
-  $env_content = [$gitlab_env_lines, $tavily_env_lines, $telegram_env_lines, $openrouter_env_lines, $voice_tools_openai_env_lines, $agent_request_env_lines, $ssh_env_lines, $kubeconfig_env_lines].flatten.join("\n")
+  $env_content = [$gitlab_env_lines, $tavily_env_lines, $telegram_env_lines, $openrouter_env_lines, $voice_tools_openai_env_lines, $agent_request_env_lines, $ssh_env_lines, $kubeconfig_env_lines, $tls_trust_env_lines].flatten.join("\n")
 
   if $kubeconfig_content != undef {
     $effective_kubeconfig_content = $kubeconfig_content =~ Sensitive ? {
