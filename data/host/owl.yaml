@@ -16,6 +16,8 @@ nest::text_scaling_factor: 1.5
 nest::app::hermes::git_ref: 'hermes/0.16.0-nest'
 nest::app::hermes::git_commit: '2abd9cc31f9021ed3230eeaf8cf77a10082955e6'
 nest::app::hermes::agent_request_kanban_board: 'agent-requests'
+nest::app::hermes::gitlab_mr_note_poller_enabled: true
+nest::app::hermes::gitlab_mr_note_poller_profile: 'talon'
 
 nest::kernel_cmdline:
   # Max VRAM allocation (112 GiB)

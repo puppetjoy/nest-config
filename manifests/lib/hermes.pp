@@ -436,6 +436,7 @@ define nest::lib::hermes (
       undef   => [],
       default => ["SSH_AUTH_SOCK=${ssh_auth_sock}"],
     },
+    $gitlab_env_lines,
     $telegram_env_lines,
     $openrouter_env_lines,
     $voice_tools_openai_env_lines,
