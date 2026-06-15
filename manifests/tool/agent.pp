@@ -4,6 +4,7 @@
 # need to exercise normal GitLab MR workflows from container-backed terminals.
 class nest::tool::agent {
   nest::lib::package { 'dev-util/gitlab-cli':
-    ensure => installed,
+    ensure   => installed,
+    unstable => true,
   }
 }

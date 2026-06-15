@@ -39,7 +39,7 @@ plan nest::build::agent (
     cpu                   => $cpu,
     tool                  => 'agent',
     tag                   => 'latest',
-    build                 => false,
+    build                 => $build,
     deploy                => false,
     emerge_default_opts   => $emerge_default_opts,
     id                    => $id,
@@ -50,10 +50,8 @@ plan nest::build::agent (
   })
 
   if $build {
-    # The initial generic agent image is intentionally a thin wrapper around
-    # nest/stage1/server. Avoid the standard tool-image configuration pass until
-    # the image grows agent-specific packages; that pass syncs Portage and can be
-    # much heavier than this v1 framework needs.
+    # Keep a fast runtime smoke after the standard tool-image configuration pass
+    # so agent-specific packages such as glab are installed before publishing.
     run_command("podman start ${container}", 'localhost', 'Start build container')
     run_command("podman exec ${container} /bin/zsh -lc 'print nest-agent-terminal-smoke'", 'localhost', 'Smoke test terminal shell in agent image')
     run_command("podman stop ${container}", 'localhost', 'Stop build container')
