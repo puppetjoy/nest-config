@@ -12,6 +12,7 @@ class nest::app::hermes (
   String[1]                      $gitlab_mr_note_poller_interval= '1min',
   String[1]                      $gitlab_url                  = 'https://gitlab.joyfullee.me',
   Optional[Sensitive[String[1]]] $gitlab_token                = undef,
+  Optional[Sensitive[String[1]]] $agent_request_gitlab_joy_token= undef,
   Optional[Sensitive[String[1]]] $tavily_api_key              = undef,
   Optional[Sensitive[String[1]]] $telegram_bot_token          = undef,
   Optional[Sensitive[String[1]]] $openrouter_api_key          = undef,

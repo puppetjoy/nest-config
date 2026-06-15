@@ -1,6 +1,7 @@
 class nest::app::hermes::config {
   $gitlab_url                       = $nest::app::hermes::gitlab_url
   $gitlab_token                     = $nest::app::hermes::gitlab_token
+  $agent_request_gitlab_joy_token   = $nest::app::hermes::agent_request_gitlab_joy_token
   $tavily_api_key                   = $nest::app::hermes::tavily_api_key
   $telegram_bot_token               = $nest::app::hermes::telegram_bot_token
   $openrouter_api_key               = $nest::app::hermes::openrouter_api_key
@@ -249,6 +250,7 @@ class nest::app::hermes::config {
       user                       => $nest::user,
       gitlab_url                 => $gitlab_url,
       gitlab_token               => $instance_gitlab_token,
+      gitlab_joy_token           => $agent_request_gitlab_joy_token,
       gitlab_enabled             => $instance_gitlab_enabled,
       tavily_api_key             => $instance_tavily_api_key,
       telegram_bot_token         => $instance_telegram_token,

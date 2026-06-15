@@ -7,6 +7,7 @@ define nest::lib::hermes (
   String[1]            $user                     = 'joy',
   String[1]            $gitlab_url               = 'https://gitlab.joyfullee.me',
   Any                  $gitlab_token             = undef,
+  Any                  $gitlab_joy_token         = undef,
   Boolean              $gitlab_enabled           = false,
   Any                  $tavily_api_key           = undef,
   Any                  $telegram_bot_token       = undef,
@@ -401,9 +402,17 @@ define nest::lib::hermes (
       default => [],
     },
   }
+  $agent_request_gitlab_joy_token_env_lines = $gitlab_joy_token ? {
+    undef   => [],
+    default => $gitlab_joy_token =~ Sensitive[String[1]] ? {
+      true    => ["AGENT_REQUEST_GITLAB_JOY_TOKEN=${gitlab_joy_token.unwrap}"],
+      default => ["AGENT_REQUEST_GITLAB_JOY_TOKEN=${gitlab_joy_token}"],
+    },
+  }
   $agent_request_env_lines = [
     "AGENT_REQUEST_KANBAN_BOARD=${agent_request_kanban_board}",
     $agent_request_gitlab_token_env_lines,
+    $agent_request_gitlab_joy_token_env_lines,
     $voice_auto_tts ? {
       true    => ['AGENT_REQUEST_TELEGRAM_VOICE_NOTIFY=true'],
       default => [],
