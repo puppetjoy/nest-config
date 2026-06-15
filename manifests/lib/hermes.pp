@@ -118,6 +118,7 @@ define nest::lib::hermes (
     default => $soul_content,
   }
   $agent_directory_freshness_notes  = "Puppet-managed ${display_name} lifecycle refresh"
+  $gitlab_host                      = $gitlab_url.regsubst('^https?://([^/]+).*$', '\1')
   $default_toolsets                  = [
     'agent_directory',
     'agent_requests',
@@ -295,8 +296,8 @@ define nest::lib::hermes (
     undef   => [],
     default => $gitlab_enabled ? {
       true    => $gitlab_token =~ Sensitive[String[1]] ? {
-        true    => ["GITLAB_URL=${gitlab_url}", "GITLAB_TOKEN=${gitlab_token.unwrap}"],
-        default => ["GITLAB_URL=${gitlab_url}", "GITLAB_TOKEN=${gitlab_token}"],
+        true    => ["GITLAB_URL=${gitlab_url}", "GITLAB_HOST=${gitlab_host}", "GITLAB_TOKEN=${gitlab_token.unwrap}", "GITLAB_PRIVATE_TOKEN=${gitlab_token.unwrap}"],
+        default => ["GITLAB_URL=${gitlab_url}", "GITLAB_HOST=${gitlab_host}", "GITLAB_TOKEN=${gitlab_token}", "GITLAB_PRIVATE_TOKEN=${gitlab_token}"],
       },
       default => [],
     },
@@ -341,8 +342,8 @@ define nest::lib::hermes (
     undef   => [],
     default => $gitlab_enabled ? {
       true    => $gitlab_token =~ Sensitive[String[1]] ? {
-        true    => ["AGENT_REQUEST_GITLAB_TOKEN=${gitlab_token.unwrap}"],
-        default => ["AGENT_REQUEST_GITLAB_TOKEN=${gitlab_token}"],
+        true    => ["AGENT_REQUEST_GITLAB_URL=${gitlab_url}", "AGENT_REQUEST_GITLAB_TOKEN=${gitlab_token.unwrap}"],
+        default => ["AGENT_REQUEST_GITLAB_URL=${gitlab_url}", "AGENT_REQUEST_GITLAB_TOKEN=${gitlab_token}"],
       },
       default => [],
     },

@@ -20,9 +20,11 @@ The build recipe remains in `nest/config` because it is Puppet/Bolt source for N
 
 ## Runtime contents
 
-The v1 image is intentionally a thin wrapper around `nest/stage1/server`. This creates a stable `nest/tools/agent` image name and `nest::tool::agent` extension point for Beryl and future Hermes profiles without baking in profile-specific data or prematurely choosing a large package set.
+The image is a shared Hermes terminal-runtime wrapper around `nest/stage1/server`. It creates a stable `nest/tools/agent` image name and `nest::tool::agent` extension point for Beryl and future Hermes profiles.
 
 It does not bake in profile data, secrets, kubeconfigs, tokens, SSH keys, browser profiles, or other profile-specific Hermes state.
+
+It does include the official GitLab CLI package, `dev-util/gitlab-cli`, which installs `glab`. Agent-specific GitLab tokens still come from each Hermes profile's Puppet/private eyaml secret path and are injected at runtime, not baked into the image.
 
 ## Smoke test
 
@@ -31,6 +33,16 @@ The build plan starts the built container and verifies basic terminal command ex
 ```sh
 /bin/zsh -lc "print nest-agent-terminal-smoke"
 ```
+
+After rebuilding and deploying the image, verify Beryl's actual persistent terminal runtime with non-secret checks like:
+
+```sh
+command -v glab
+glab auth status --hostname gitlab.joyfullee.me
+curl --fail --silent --show-error --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" "${GITLAB_URL}/api/v4/user" | jq '{username, id}'
+```
+
+The `/user` response must identify Beryl, and token values must not be printed in logs, comments, commits, or handoffs.
 
 This is intentionally a terminal-runtime smoke test. Hermes browser tools are host-side Hermes tools, so Beryl does not need this container image in order to receive `browser_*` capabilities.
 
