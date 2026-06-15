@@ -24,7 +24,9 @@ The image is a shared Hermes terminal-runtime wrapper around `nest/stage1/server
 
 It does not bake in profile data, secrets, kubeconfigs, tokens, SSH keys, browser profiles, or other profile-specific Hermes state.
 
-It does include the official GitLab CLI package, `dev-util/gitlab-cli`, which installs `glab`. Agent-specific GitLab tokens still come from each Hermes profile's Puppet/private eyaml secret path and are injected at runtime, not baked into the image.
+It does include the official GitLab CLI package, `dev-util/gitlab-cli`, which installs `glab`, via the shared `nest::tool::gitlab_cli` class. The host-side Hermes install also contains that class so Talon, Star, and other non-container Hermes profiles have `glab` in `/usr/bin` without relying on the agent image. Agent-specific GitLab tokens still come from each Hermes profile's Puppet/private eyaml secret path and are injected at runtime, not baked into the image.
+
+On Gentoo/Nest hosts the package is currently source-managed as `dev-util/gitlab-cli` with `unstable => true`, matching the overlay/package-manager constraint for the current upstream GitLab CLI ebuild.
 
 ## Smoke test
 
@@ -32,6 +34,7 @@ The build plan starts the built container and verifies basic terminal command ex
 
 ```sh
 /bin/zsh -lc "print nest-agent-terminal-smoke"
+glab --version
 ```
 
 After rebuilding and deploying the image, verify Beryl's actual persistent terminal runtime with non-secret checks like:

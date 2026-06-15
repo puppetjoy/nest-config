@@ -66,11 +66,13 @@ class nest::app::hermes (
 ) {
   case $facts['os']['family'] {
     'Gentoo': {
+      contain nest::tool::gitlab_cli
       contain nest::app::hermes::install
       contain nest::app::hermes::service
       contain nest::app::hermes::config
 
-      Class['nest::app::hermes::install']
+      Class['nest::tool::gitlab_cli']
+      -> Class['nest::app::hermes::install']
       -> Class['nest::app::hermes::service']
       -> Class['nest::app::hermes::config']
     }

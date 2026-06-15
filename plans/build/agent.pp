@@ -54,6 +54,7 @@ plan nest::build::agent (
     # so agent-specific packages such as glab are installed before publishing.
     run_command("podman start ${container}", 'localhost', 'Start build container')
     run_command("podman exec ${container} /bin/zsh -lc 'print nest-agent-terminal-smoke'", 'localhost', 'Smoke test terminal shell in agent image')
+    run_command("podman exec ${container} /bin/zsh -lc 'glab --version'", 'localhost', 'Verify glab in agent image')
     run_command("podman stop ${container}", 'localhost', 'Stop build container')
   }
 
