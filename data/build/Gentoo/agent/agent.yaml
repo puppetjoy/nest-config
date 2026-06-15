@@ -1,3 +1,7 @@
 ---
 nest::classes:
   - 'nest::tool::agent'
+
+nest::package_keywords:
+  # Official GitLab CLI (`glab`) is still ~amd64 in Gentoo.
+  dev-util/gitlab-cli: {}
