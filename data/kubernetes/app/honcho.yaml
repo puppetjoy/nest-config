@@ -336,11 +336,11 @@ resources:
                 path: '/root/.ssh/id_ed25519_eyrie'
                 type: File
 
-  representation-subthreshold-expiry-dry-run:
+  representation-subthreshold-expiry:
     apiVersion: batch/v1
     kind: CronJob
     metadata:
-      name: "%{nest::kubernetes::service}-representation-subthreshold-expiry-dry-run"
+      name: "%{nest::kubernetes::service}-representation-subthreshold-expiry"
       namespace: "%{nest::kubernetes::namespace}"
       labels:
         app: "%{nest::kubernetes::service}"
@@ -364,15 +364,15 @@ resources:
               affinity: *affinity
               tolerations: *tolerations
               containers:
-                - name: dry-run
+                - name: expire
                   image: "%{lookup('postgres_image')}"
                   imagePullPolicy: IfNotPresent
                   command:
                     - /bin/sh
                     - -ceu
                     - |-
-                      echo "honcho representation subthreshold expiry dry-run"
-                      echo "threshold=${REPRESENTATION_BATCH_MAX_TOKENS} ttl=${SUBTHRESHOLD_REPRESENTATION_TTL} mode=dry-run"
+                      echo "honcho representation subthreshold expiry"
+                      echo "threshold=${REPRESENTATION_BATCH_MAX_TOKENS} ttl=${SUBTHRESHOLD_REPRESENTATION_TTL} mode=mark-processed reason=expired_subthreshold_representation"
                       psql --no-psqlrc --set=ON_ERROR_STOP=1 \
                         --set=threshold="${REPRESENTATION_BATCH_MAX_TOKENS}" \
                         --set=ttl="${SUBTHRESHOLD_REPRESENTATION_TTL}" <<'SQL'
@@ -411,7 +411,7 @@ resources:
                         coalesce(max(now() - oldest_pending_at), interval '0 seconds') AS oldest_candidate_age,
                         coalesce(round(avg(total_tokens)::numeric, 1), 0) AS avg_tokens
                       FROM candidates;
-                      \echo oldest candidate samples: work_unit_key is md5-hashed; no message content is selected
+                      \echo oldest candidate samples before expiry: work_unit_key is md5-hashed; no message content is selected
                       WITH grouped AS (
                         SELECT
                           q.work_unit_key,
@@ -446,6 +446,83 @@ resources:
                       FROM candidates
                       ORDER BY oldest_pending_at ASC
                       LIMIT 20;
+                      \echo marking expired subthreshold representation rows processed=true; no message content is selected
+                      WITH grouped AS (
+                        SELECT
+                          q.work_unit_key,
+                          count(*) AS row_count,
+                          coalesce(sum(m.token_count), 0) AS total_tokens,
+                          min(q.created_at) AS oldest_pending_at
+                        FROM queue q
+                        LEFT JOIN messages m ON m.id = q.message_id
+                        WHERE q.processed = false
+                          AND q.task_type = 'representation'
+                          AND q.work_unit_key IS NOT NULL
+                          AND NOT EXISTS (
+                            SELECT 1
+                            FROM active_queue_sessions a
+                            WHERE a.work_unit_key = q.work_unit_key
+                          )
+                        GROUP BY q.work_unit_key
+                      ), candidates AS (
+                        SELECT *
+                        FROM grouped
+                        WHERE total_tokens < :threshold
+                          AND oldest_pending_at < now() - (:'ttl')::interval
+                      ), expired AS (
+                        UPDATE queue q
+                        SET
+                          processed = true,
+                          error = 'expired_subthreshold_representation'
+                        FROM candidates c
+                        WHERE q.work_unit_key = c.work_unit_key
+                          AND q.processed = false
+                          AND q.task_type = 'representation'
+                          AND q.work_unit_key IS NOT NULL
+                          AND NOT EXISTS (
+                            SELECT 1
+                            FROM active_queue_sessions a
+                            WHERE a.work_unit_key = q.work_unit_key
+                          )
+                        RETURNING q.work_unit_key, q.id, q.created_at
+                      )
+                      SELECT
+                        count(DISTINCT work_unit_key) AS expired_work_units,
+                        count(*) AS expired_queue_rows,
+                        coalesce(min(created_at), now()) AS oldest_expired_at,
+                        coalesce(max(created_at), now()) AS newest_expired_at,
+                        'expired_subthreshold_representation' AS reason
+                      FROM expired;
+                      \echo remaining candidate summary after expiry
+                      WITH grouped AS (
+                        SELECT
+                          q.work_unit_key,
+                          count(*) AS row_count,
+                          coalesce(sum(m.token_count), 0) AS total_tokens,
+                          min(q.created_at) AS oldest_pending_at,
+                          max(q.created_at) AS newest_pending_at
+                        FROM queue q
+                        LEFT JOIN messages m ON m.id = q.message_id
+                        WHERE q.processed = false
+                          AND q.task_type = 'representation'
+                          AND q.work_unit_key IS NOT NULL
+                          AND NOT EXISTS (
+                            SELECT 1
+                            FROM active_queue_sessions a
+                            WHERE a.work_unit_key = q.work_unit_key
+                          )
+                        GROUP BY q.work_unit_key
+                      ), candidates AS (
+                        SELECT *
+                        FROM grouped
+                        WHERE total_tokens < :threshold
+                          AND oldest_pending_at < now() - (:'ttl')::interval
+                      )
+                      SELECT
+                        count(*) AS remaining_candidate_work_units,
+                        coalesce(sum(row_count), 0) AS remaining_candidate_queue_rows,
+                        coalesce(min(oldest_pending_at), now()) AS oldest_remaining_candidate_at
+                      FROM candidates;
                       SQL
                   env:
                     - name: PGHOST
