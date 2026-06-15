@@ -42,10 +42,10 @@ After rebuilding and deploying the image, verify Beryl's actual persistent termi
 ```sh
 command -v glab
 glab auth status --hostname gitlab.joyfullee.me
-curl --fail --silent --show-error --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" "${GITLAB_URL}/api/v4/user" | jq '{username, id}'
+glab api user --hostname gitlab.joyfullee.me | jq '{username, id}'
 ```
 
-The `/user` response must identify Beryl, and token values must not be printed in logs, comments, commits, or handoffs.
+The `/user` response must identify Beryl through the profile-local `glab` config, and token values must not be printed in logs, comments, commits, or handoffs.
 
 This is intentionally a terminal-runtime smoke test. Hermes browser tools are host-side Hermes tools, so Beryl does not need this container image in order to receive `browser_*` capabilities.
 

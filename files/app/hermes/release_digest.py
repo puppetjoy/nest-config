@@ -293,8 +293,8 @@ def gitlab_version_from_feed(title: str) -> str:
 
 
 def gitlab_current_version() -> str:
-    url = os.environ.get("GITLAB_URL")
-    token = os.environ.get("GITLAB_TOKEN")
+    url = os.environ.get("RELEASE_DIGEST_GITLAB_URL") or os.environ.get("GITLAB_URL")
+    token = os.environ.get("RELEASE_DIGEST_GITLAB_TOKEN")
     if not url or not token:
         return "unknown"
     data = fetch_json(f"{url.rstrip('/')}/api/v4/version", headers={"PRIVATE-TOKEN": token})

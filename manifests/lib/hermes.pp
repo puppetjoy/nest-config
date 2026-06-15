@@ -340,9 +340,17 @@ define nest::lib::hermes (
   $gitlab_env_lines = $gitlab_token ? {
     undef   => [],
     default => $gitlab_enabled ? {
+      true    => ["GITLAB_URL=${gitlab_url}", "GITLAB_HOST=${gitlab_host}", "GLAB_CONFIG_DIR=${glab_config_dir}"],
+      default => [],
+    },
+  }
+
+  $release_digest_gitlab_token_env_lines = $gitlab_token ? {
+    undef   => [],
+    default => ($gitlab_enabled and $release_digest_enabled) ? {
       true    => $gitlab_token =~ Sensitive[String[1]] ? {
-        true    => ["GITLAB_URL=${gitlab_url}", "GITLAB_HOST=${gitlab_host}", "GLAB_CONFIG_DIR=${glab_config_dir}", "GITLAB_TOKEN=${gitlab_token.unwrap}", "GITLAB_PRIVATE_TOKEN=${gitlab_token.unwrap}"],
-        default => ["GITLAB_URL=${gitlab_url}", "GITLAB_HOST=${gitlab_host}", "GLAB_CONFIG_DIR=${glab_config_dir}", "GITLAB_TOKEN=${gitlab_token}", "GITLAB_PRIVATE_TOKEN=${gitlab_token}"],
+        true    => ["RELEASE_DIGEST_GITLAB_URL=${gitlab_url}", "RELEASE_DIGEST_GITLAB_TOKEN=${gitlab_token.unwrap}"],
+        default => ["RELEASE_DIGEST_GITLAB_URL=${gitlab_url}", "RELEASE_DIGEST_GITLAB_TOKEN=${gitlab_token}"],
       },
       default => [],
     },
@@ -494,6 +502,7 @@ define nest::lib::hermes (
       default => ["SSH_AUTH_SOCK=${ssh_auth_sock}"],
     },
     $gitlab_env_lines,
+    $release_digest_gitlab_token_env_lines,
     $telegram_env_lines,
     $openrouter_env_lines,
     $voice_tools_openai_env_lines,
@@ -704,7 +713,7 @@ define nest::lib::hermes (
     } + $dashboard_theme_config + $dashboard_profile_switcher_config,
   } + $credential_pool_strategy_config + $providers_config + $terminal_config + $image_gen_config + $plugins_config
 
-  $env_content = [$gitlab_env_lines, $tavily_env_lines, $telegram_env_lines, $openrouter_env_lines, $voice_tools_openai_env_lines, $agent_request_env_lines, $ssh_env_lines, $kubeconfig_env_lines, $tls_trust_env_lines].flatten.join("\n")
+  $env_content = [$gitlab_env_lines, $release_digest_gitlab_token_env_lines, $tavily_env_lines, $telegram_env_lines, $openrouter_env_lines, $voice_tools_openai_env_lines, $agent_request_env_lines, $ssh_env_lines, $kubeconfig_env_lines, $tls_trust_env_lines].flatten.join("\n")
 
   if $kubeconfig_content != undef {
     $effective_kubeconfig_content = $kubeconfig_content =~ Sensitive ? {
