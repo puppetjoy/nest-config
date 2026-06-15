@@ -93,6 +93,8 @@ define nest::lib::hermes (
   $profile_dir                      = "${profiles_dir}/${profile}"
   $ssh_dir                          = "${profile_dir}/.ssh"
   $ssh_private_key_path             = "${ssh_dir}/id_ed25519"
+  $glab_config_dir                  = "${profile_dir}/glab"
+  $glab_config_path                 = "${glab_config_dir}/config.yml"
   $hermes_env_path                  = "${profile_dir}/.env"
   $hermes_config_path               = "${profile_dir}/config.yaml"
   $hermes_managed_config_path       = "${profile_dir}/managed-config.yaml"
@@ -261,6 +263,49 @@ define nest::lib::hermes (
     }
   }
 
+  if $gitlab_enabled and $gitlab_token != undef {
+    $glab_config_token = $gitlab_token =~ Sensitive[String[1]] ? {
+      true    => $gitlab_token.unwrap,
+      default => $gitlab_token,
+    }
+
+    file { $glab_config_dir:
+      ensure  => directory,
+      mode    => '0700',
+      owner   => $user,
+      group   => $user,
+      require => File[$profile_dir],
+    }
+
+    file { $glab_config_path:
+      ensure    => file,
+      mode      => '0600',
+      owner     => $user,
+      group     => $user,
+      content   => Sensitive(@("YAML")),
+        git_protocol: ssh
+        editor: null
+        browser: null
+        glamour_style: dark
+        check_update: true
+        display_hyperlinks: false
+        host: ${gitlab_host}
+        no_prompt: true
+        telemetry: true
+        hosts:
+          ${gitlab_host}:
+            token: ${glab_config_token}
+        | YAML
+      show_diff => false,
+      require   => File[$glab_config_dir],
+    }
+  }
+
+  $glab_config_subscribe = ($gitlab_enabled and $gitlab_token != undef) ? {
+    true    => [File[$glab_config_path]],
+    default => [],
+  }
+
   if $google_workspace_enabled {
     file { "${profile_dir}/skills":
       ensure  => directory,
@@ -296,8 +341,8 @@ define nest::lib::hermes (
     undef   => [],
     default => $gitlab_enabled ? {
       true    => $gitlab_token =~ Sensitive[String[1]] ? {
-        true    => ["GITLAB_URL=${gitlab_url}", "GITLAB_HOST=${gitlab_host}", "GITLAB_TOKEN=${gitlab_token.unwrap}", "GITLAB_PRIVATE_TOKEN=${gitlab_token.unwrap}"],
-        default => ["GITLAB_URL=${gitlab_url}", "GITLAB_HOST=${gitlab_host}", "GITLAB_TOKEN=${gitlab_token}", "GITLAB_PRIVATE_TOKEN=${gitlab_token}"],
+        true    => ["GITLAB_URL=${gitlab_url}", "GITLAB_HOST=${gitlab_host}", "GLAB_CONFIG_DIR=${glab_config_dir}", "GITLAB_TOKEN=${gitlab_token.unwrap}", "GITLAB_PRIVATE_TOKEN=${gitlab_token.unwrap}"],
+        default => ["GITLAB_URL=${gitlab_url}", "GITLAB_HOST=${gitlab_host}", "GLAB_CONFIG_DIR=${glab_config_dir}", "GITLAB_TOKEN=${gitlab_token}", "GITLAB_PRIVATE_TOKEN=${gitlab_token}"],
       },
       default => [],
     },
@@ -826,6 +871,7 @@ define nest::lib::hermes (
         Exec['install_hermes_agent_request_broker'],
         File[$hermes_env_path],
         File["${profile_dir}/systemd.env"],
+        $glab_config_subscribe,
         $kubeconfig_subscribe,
         File[$hermes_managed_config_path],
         File[$hermes_honcho_config_path],
