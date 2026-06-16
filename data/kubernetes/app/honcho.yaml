@@ -89,10 +89,13 @@ representation_subthreshold_expiry_job_ttl: 21600
   # two allowed llama-qwen slots for long 1000+ token responses.  The model,
   # endpoint, and 2-of-4 slot topology stay unchanged; these caps only apply
   # downward pressure to generated output length, input context, dialectic
-  # prefetch/history volume, and common-path tool loops.  The staged thinking
-  # experiment below re-enables Qwen thinking only for offline dream synthesis;
-  # hot derivation, summary, and minimal/low/medium/high/max dialectic paths stay
-  # no-thinking until eval evidence justifies broadening the intervention.
+  # prefetch/history volume, and common-path tool loops.  Recurrent limiter 503s
+  # have come from bounded shedding while two Honcho generative calls were active,
+  # not from Kubernetes/upstream outage, so prefer salience/input/tool-pressure
+  # reductions before raising concurrency.  The staged thinking experiment below
+  # re-enables Qwen thinking only for offline dream synthesis; hot derivation,
+  # summary, and minimal/low/medium/high/max dialectic paths stay no-thinking
+  # until eval evidence justifies broadening the intervention.
   - name: HONCHO_THINKING_INTERVENTION_ID
     value: 'qwen-thinking-dream-synthesis-v1'
   - name: HONCHO_THINKING_INTERVENTION_PATHS
@@ -116,19 +119,19 @@ representation_subthreshold_expiry_job_ttl: 21600
   - name: DERIVER_MODEL_CONFIG__MAX_OUTPUT_TOKENS
     value: '512'
   - name: SUMMARY_MAX_TOKENS_SHORT
-    value: '512'
+    value: '768'
   - name: SUMMARY_MAX_TOKENS_LONG
     value: '1536'
   - name: DIALECTIC_MAX_INPUT_TOKENS
-    value: '10000'
+    value: '8000'
   - name: DIALECTIC_HISTORY_TOKEN_LIMIT
-    value: '2048'
+    value: '1536'
   - name: DIALECTIC_SESSION_HISTORY_MAX_TOKENS
     value: '1024'
   - name: DIALECTIC_PREFETCH_OBSERVATIONS_MINIMAL
     value: '4'
   - name: DIALECTIC_PREFETCH_OBSERVATIONS_DEFAULT
-    value: '12'
+    value: '8'
   - name: DIALECTIC_MAX_OUTPUT_TOKENS
     value: '1024'
   - name: DIALECTIC_LEVELS__minimal__MAX_OUTPUT_TOKENS
@@ -148,9 +151,9 @@ representation_subthreshold_expiry_job_ttl: 21600
   - name: DIALECTIC_LEVELS__low__TOOL_CHOICE
     value: 'none'
   - name: DIALECTIC_LEVELS__high__MAX_TOOL_ITERATIONS
-    value: '3'
+    value: '2'
   - name: DIALECTIC_LEVELS__max__MAX_TOOL_ITERATIONS
-    value: '4'
+    value: '3'
   - name: DREAM_DEDUCTION_MODEL_CONFIG__MAX_OUTPUT_TOKENS
     value: '2048'
   - name: DREAM_INDUCTION_MODEL_CONFIG__MAX_OUTPUT_TOKENS
@@ -195,7 +198,7 @@ representation_subthreshold_expiry_job_ttl: 21600
   - name: SUMMARY_MODEL_CONFIG__OVERRIDES__PROVIDER_PARAMS__CHAT_TEMPLATE_KWARGS__ENABLE_THINKING
     value: 'false'
   - name: SUMMARY_MODEL_CONFIG__OVERRIDES__PROVIDER_PARAMS__LENGTH_RETRY_MAX_TOKENS
-    value: '256'
+    value: '384'
   - name: DIALECTIC_LEVELS__minimal__MODEL_CONFIG__TRANSPORT
     value: 'openai'
   - name: DIALECTIC_LEVELS__minimal__MODEL_CONFIG__MODEL

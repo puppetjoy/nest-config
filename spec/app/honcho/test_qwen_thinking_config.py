@@ -29,6 +29,7 @@ ENABLE_THINKING_EXPECTATIONS = {
 
 MAX_OUTPUT_EXPECTATIONS = {
     "LLM_DEFAULT_MAX_TOKENS": 1024,
+    "SUMMARY_MAX_TOKENS_SHORT": 768,
     "DIALECTIC_LEVELS__minimal__MAX_OUTPUT_TOKENS": 250,
     "DIALECTIC_LEVELS__low__MAX_OUTPUT_TOKENS": 512,
     "DIALECTIC_LEVELS__medium__MAX_OUTPUT_TOKENS": 768,
@@ -36,6 +37,20 @@ MAX_OUTPUT_EXPECTATIONS = {
     "DIALECTIC_LEVELS__max__MAX_OUTPUT_TOKENS": 1536,
     "DREAM_DEDUCTION_MODEL_CONFIG__MAX_OUTPUT_TOKENS": 2048,
     "DREAM_INDUCTION_MODEL_CONFIG__MAX_OUTPUT_TOKENS": 2048,
+}
+
+PRESSURE_BUDGET_EXPECTATIONS = {
+    "honcho_llama_qwen_max_concurrent": 2,
+    "honcho_llama_qwen_queue_timeout_seconds": 60,
+    "DIALECTIC_MAX_INPUT_TOKENS": 8000,
+    "DIALECTIC_HISTORY_TOKEN_LIMIT": 1536,
+    "DIALECTIC_SESSION_HISTORY_MAX_TOKENS": 1024,
+    "DIALECTIC_PREFETCH_OBSERVATIONS_MINIMAL": 4,
+    "DIALECTIC_PREFETCH_OBSERVATIONS_DEFAULT": 8,
+    "DIALECTIC_LEVELS__high__MAX_TOOL_ITERATIONS": 2,
+    "DIALECTIC_LEVELS__max__MAX_TOOL_ITERATIONS": 3,
+    "SUMMARY_MAX_TOKENS_SHORT": 768,
+    "SUMMARY_MODEL_CONFIG__OVERRIDES__PROVIDER_PARAMS__LENGTH_RETRY_MAX_TOKENS": 384,
 }
 
 
@@ -49,6 +64,20 @@ def env_entries() -> dict[str, str]:
         elif current_name and line.startswith("value: "):
             entries[current_name] = line.removeprefix("value: ").strip('"\'')
             current_name = None
+    return entries
+
+
+def config_entries() -> dict[str, str]:
+    entries = env_entries()
+    for raw_line in HONCHO_YAML.read_text(encoding="utf-8").splitlines():
+        if raw_line.startswith(" ") or raw_line.startswith("-"):
+            continue
+        if ":" not in raw_line:
+            continue
+        name, raw_value = raw_line.split(":", 1)
+        value = raw_value.strip()
+        if value:
+            entries[name] = value.strip('"\'')
     return entries
 
 
@@ -101,6 +130,21 @@ def test_thinking_enabled_dream_paths_have_targeted_larger_output_budget() -> No
     assert max_outputs["DIALECTIC_LEVELS__high__MAX_OUTPUT_TOKENS"] == max_outputs["LLM_DEFAULT_MAX_TOKENS"]
 
 
+def test_local_qwen_pressure_budget_reduces_common_dialectic_bursts_without_more_concurrency() -> None:
+    entries = config_entries()
+    pressure_budget = {
+        name: int(entries[name])
+        for name in PRESSURE_BUDGET_EXPECTATIONS
+    }
+
+    assert pressure_budget == PRESSURE_BUDGET_EXPECTATIONS
+    assert pressure_budget["honcho_llama_qwen_max_concurrent"] == 2
+    assert pressure_budget["DIALECTIC_PREFETCH_OBSERVATIONS_DEFAULT"] > pressure_budget["DIALECTIC_PREFETCH_OBSERVATIONS_MINIMAL"]
+    assert pressure_budget["DIALECTIC_LEVELS__high__MAX_TOOL_ITERATIONS"] < 3
+    assert pressure_budget["DIALECTIC_LEVELS__max__MAX_TOOL_ITERATIONS"] < 4
+    assert pressure_budget["SUMMARY_MODEL_CONFIG__OVERRIDES__PROVIDER_PARAMS__LENGTH_RETRY_MAX_TOKENS"] < pressure_budget["SUMMARY_MAX_TOKENS_SHORT"]
+
+
 def test_enable_thinking_values_serialize_as_json_booleans() -> None:
     entries = env_entries()
 
@@ -121,4 +165,5 @@ if __name__ == "__main__":
     test_qwen_thinking_only_enabled_for_dream_synthesis_paths()
     test_intervention_metadata_is_available_to_eval_tooling()
     test_thinking_enabled_dream_paths_have_targeted_larger_output_budget()
+    test_local_qwen_pressure_budget_reduces_common_dialectic_bursts_without_more_concurrency()
     test_enable_thinking_values_serialize_as_json_booleans()
