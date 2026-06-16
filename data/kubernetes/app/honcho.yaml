@@ -23,7 +23,11 @@ honcho_llama_qwen_max_concurrent: '2'
 # from 30s queue expirations during dream/tool-loop bursts.
 honcho_llama_qwen_queue_timeout_seconds: '60'
 representation_batch_max_tokens: '1024'
-representation_subthreshold_ttl: '7 days'
+# Keep the 1024-token quality gate for processable representation batches, but
+# do not let low-context work units sit near a week and drag down freshness/noise
+# evals. The expiry CronJob marks stale subthreshold rows processed with an audit
+# reason instead of flushing them through the deriver or deleting them directly.
+representation_subthreshold_ttl: '3 days'
 representation_subthreshold_expiry_schedule: '17 */6 * * *'
 representation_subthreshold_expiry_job_ttl: 21600
 
@@ -523,6 +527,34 @@ resources:
                         coalesce(sum(row_count), 0) AS remaining_candidate_queue_rows,
                         coalesce(min(oldest_pending_at), now()) AS oldest_remaining_candidate_at
                       FROM candidates;
+                      \echo inactive representation tail summary after expiry; aggregate-only age/token buckets for eval freshness triage
+                      WITH grouped AS (
+                        SELECT
+                          q.work_unit_key,
+                          count(*) AS row_count,
+                          coalesce(sum(m.token_count), 0) AS total_tokens,
+                          min(q.created_at) AS oldest_pending_at
+                        FROM queue q
+                        LEFT JOIN messages m ON m.id = q.message_id
+                        WHERE q.processed = false
+                          AND q.task_type = 'representation'
+                          AND q.work_unit_key IS NOT NULL
+                          AND NOT EXISTS (
+                            SELECT 1
+                            FROM active_queue_sessions a
+                            WHERE a.work_unit_key = q.work_unit_key
+                          )
+                        GROUP BY q.work_unit_key
+                      )
+                      SELECT
+                        count(*) AS pending_work_units,
+                        coalesce(sum(row_count), 0) AS pending_queue_rows,
+                        coalesce(sum(row_count) FILTER (WHERE oldest_pending_at >= now() - interval '1 day'), 0) AS rows_younger_than_1d,
+                        coalesce(sum(row_count) FILTER (WHERE oldest_pending_at < now() - interval '1 day' AND oldest_pending_at >= now() - interval '3 days'), 0) AS rows_1d_to_3d,
+                        coalesce(sum(row_count) FILTER (WHERE oldest_pending_at < now() - interval '3 days'), 0) AS rows_older_than_3d,
+                        coalesce(sum(row_count) FILTER (WHERE total_tokens < :threshold), 0) AS subthreshold_rows,
+                        coalesce(max(now() - oldest_pending_at), interval '0 seconds') AS oldest_pending_age
+                      FROM grouped;
                       SQL
                   env:
                     - name: PGHOST
