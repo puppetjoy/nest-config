@@ -88,7 +88,7 @@ stages:
     - 'podman manifest add "$LOCAL_IMAGE" "${CI_REGISTRY}/${IMAGE}:haswell"'
     - 'podman manifest add "$LOCAL_IMAGE" "${CI_REGISTRY}/${IMAGE}:cortex-a53"'
     - 'podman manifest add "$LOCAL_IMAGE" "${CI_REGISTRY}/${IMAGE}:sifive-u74"'
-    - 'podman manifest push --all "$LOCAL_IMAGE" "${CI_REGISTRY}/${IMAGE}"'
-    - 'podman manifest push --all "$LOCAL_IMAGE" "registry.eyrie/${IMAGE}"'
+    - 'podman manifest push --all "$LOCAL_IMAGE" "${CI_REGISTRY}/${IMAGE}:latest"'
+    - 'podman manifest push --all "$LOCAL_IMAGE" "registry.eyrie/${IMAGE}:latest"'
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'

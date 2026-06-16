@@ -7,6 +7,7 @@ backup_job_ttl: 21600 # 6h; keep last two backup jobs in history
 plan_base: "nest::eyrie::%{nest::kubernetes::app}"
 registry: 'registry.eyrie'
 config_registry: "%{lookup('registry')}"
+config_image: "%{lookup('config_registry')}/nest/config/main:latest"
 
 resources:
   nest_registry_auths:
@@ -36,7 +37,7 @@ resources:
             spec:
               containers:
                 - name: nest
-                  image: "%{lookup('config_registry')}/nest/config/main"
+                  image: "%{lookup('config_image')}"
                   imagePullPolicy: Always
                   command:
                     - bolt
@@ -180,7 +181,7 @@ patches:
           path: '/spec/template/spec/initContainers/-'
           value:
             name: nest-init
-            image: "%{lookup('config_registry')}/nest/config/main"
+            image: "%{lookup('config_image')}"
             imagePullPolicy: Always
             command:
               - bolt

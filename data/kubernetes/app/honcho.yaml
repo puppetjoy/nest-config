@@ -294,7 +294,7 @@ resources:
             - name: "%{nest::kubernetes::service}-registry-auths"
           containers:
             - name: nest
-              image: "%{lookup('config_registry')}/nest/config/main"
+              image: "%{lookup('config_image')}"
               imagePullPolicy: Always
               command:
                 - bolt
