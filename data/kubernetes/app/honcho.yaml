@@ -98,7 +98,7 @@ representation_subthreshold_expiry_job_ttl: 21600
   - name: HONCHO_THINKING_INTERVENTION_PATHS
     value: 'dream_deduction,dream_induction'
   - name: HONCHO_THINKING_INTERVENTION_EVAL_NOTE
-    value: 'Compare recall/relevance/useful-observation movement against length-finish, IncompleteLLMOutputError, tool-loop, limiter, queue-latency, and token-budget regressions; do not treat thinking-token cost as automatically bad.'
+    value: 'Compare dream_success, budget_efficiency, recall/relevance, useful-observation yield, length/incomplete counts, tool-loop warnings, token shape, queue latency, and limiter 503/timeouts. Low limiter pressure plus reasoning-heavy finish_reason=length can justify dream max_tokens or prompt-budget tuning; high limiter pressure should prefer prompt/downsampling/fail-fast changes. Do not treat thinking-token cost as automatically bad or missing evidence as healthy.'
   - name: LLM_DEFAULT_MAX_TOKENS
     value: '1024'
   - name: LLM_MAX_TOOL_OUTPUT_CHARS
@@ -152,17 +152,16 @@ representation_subthreshold_expiry_job_ttl: 21600
   - name: DIALECTIC_LEVELS__max__MAX_TOOL_ITERATIONS
     value: '4'
   - name: DREAM_DEDUCTION_MODEL_CONFIG__MAX_OUTPUT_TOKENS
-    value: '1024'
+    value: '2048'
   - name: DREAM_INDUCTION_MODEL_CONFIG__MAX_OUTPUT_TOKENS
-    value: '1024'
+    value: '2048'
 
-  # Dream cycles were still producing large prompts and length-finished local
-  # Qwen calls after no-thinking/output-cap tuning.  Keep truncation detection
-  # intact and reduce dream context/tool pressure instead of raising caps or
-  # limiter concurrency: shorter tool/message previews, shorter history, fewer
-  # tool iterations, fewer high-surprisal hint observations, and smaller bounded
-  # final generations make each failed cycle cheaper while still rejecting
-  # partial outputs instead of recording them as durable dream progress.
+  # Dream cycles previously needed small final generations because thinking was
+  # disabled on local Qwen.  With thinking intentionally reenabled for offline
+  # dream synthesis, reasoning tokens can consume the 1024-token cap before any
+  # final content is emitted.  Give only the thinking-enabled dream specialists
+  # a larger explicit budget; keep hot paths, limiter concurrency, and
+  # length-finished partial-output rejection unchanged.
   - name: DREAM_MAX_INPUT_TOKENS
     value: '6000'
   - name: DREAM_MAX_TOOL_ITERATIONS

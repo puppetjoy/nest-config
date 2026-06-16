@@ -27,6 +27,17 @@ ENABLE_THINKING_EXPECTATIONS = {
     "DREAM_INDUCTION_MODEL_CONFIG__OVERRIDES__PROVIDER_PARAMS__CHAT_TEMPLATE_KWARGS__ENABLE_THINKING": True,
 }
 
+MAX_OUTPUT_EXPECTATIONS = {
+    "LLM_DEFAULT_MAX_TOKENS": 1024,
+    "DIALECTIC_LEVELS__minimal__MAX_OUTPUT_TOKENS": 250,
+    "DIALECTIC_LEVELS__low__MAX_OUTPUT_TOKENS": 512,
+    "DIALECTIC_LEVELS__medium__MAX_OUTPUT_TOKENS": 768,
+    "DIALECTIC_LEVELS__high__MAX_OUTPUT_TOKENS": 1024,
+    "DIALECTIC_LEVELS__max__MAX_OUTPUT_TOKENS": 1536,
+    "DREAM_DEDUCTION_MODEL_CONFIG__MAX_OUTPUT_TOKENS": 2048,
+    "DREAM_INDUCTION_MODEL_CONFIG__MAX_OUTPUT_TOKENS": 2048,
+}
+
 
 def env_entries() -> dict[str, str]:
     entries: dict[str, str] = {}
@@ -63,11 +74,31 @@ def test_qwen_thinking_only_enabled_for_dream_synthesis_paths() -> None:
 
 def test_intervention_metadata_is_available_to_eval_tooling() -> None:
     entries = env_entries()
+    note = entries["HONCHO_THINKING_INTERVENTION_EVAL_NOTE"]
 
     assert entries["HONCHO_THINKING_INTERVENTION_ID"] == "qwen-thinking-dream-synthesis-v1"
     assert entries["HONCHO_THINKING_INTERVENTION_PATHS"] == "dream_deduction,dream_induction"
-    assert "recall/relevance" in entries["HONCHO_THINKING_INTERVENTION_EVAL_NOTE"]
-    assert "limiter" in entries["HONCHO_THINKING_INTERVENTION_EVAL_NOTE"]
+    assert "recall/relevance" in note
+    assert "dream_success" in note
+    assert "budget_efficiency" in note
+    assert "finish_reason=length" in note
+    assert "max_tokens" in note
+    assert "limiter 503/timeouts" in note
+    assert "missing evidence as healthy" in note
+
+
+def test_thinking_enabled_dream_paths_have_targeted_larger_output_budget() -> None:
+    entries = env_entries()
+    max_outputs = {
+        name: int(entries[name])
+        for name in MAX_OUTPUT_EXPECTATIONS
+    }
+
+    assert max_outputs == MAX_OUTPUT_EXPECTATIONS
+    assert max_outputs["DREAM_DEDUCTION_MODEL_CONFIG__MAX_OUTPUT_TOKENS"] > max_outputs["LLM_DEFAULT_MAX_TOKENS"]
+    assert max_outputs["DREAM_INDUCTION_MODEL_CONFIG__MAX_OUTPUT_TOKENS"] > max_outputs["LLM_DEFAULT_MAX_TOKENS"]
+    assert max_outputs["DIALECTIC_LEVELS__low__MAX_OUTPUT_TOKENS"] < max_outputs["LLM_DEFAULT_MAX_TOKENS"]
+    assert max_outputs["DIALECTIC_LEVELS__high__MAX_OUTPUT_TOKENS"] == max_outputs["LLM_DEFAULT_MAX_TOKENS"]
 
 
 def test_enable_thinking_values_serialize_as_json_booleans() -> None:
@@ -89,4 +120,5 @@ def test_enable_thinking_values_serialize_as_json_booleans() -> None:
 if __name__ == "__main__":
     test_qwen_thinking_only_enabled_for_dream_synthesis_paths()
     test_intervention_metadata_is_available_to_eval_tooling()
+    test_thinking_enabled_dream_paths_have_targeted_larger_output_budget()
     test_enable_thinking_values_serialize_as_json_booleans()

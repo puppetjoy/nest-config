@@ -8,13 +8,14 @@ This repo intentionally keeps Honcho's local-Qwen thinking disabled on hot paths
 - active paths: dream deduction and dream induction specialists
 - no-thinking paths: routine deriver representation batches, summaries, and all dialectic levels (`minimal`, `low`, `medium`, `high`, and `max`)
 - limiter topology: unchanged; Honcho still reaches Qwen through the two-request `llama-qwen-honcho` limiter
+- output budget: dream deduction/induction get an explicit `MAX_OUTPUT_TOKENS=2048` while thinking is enabled, so reasoning tokens do not consume the whole former 1024-token cap before final content
 - output safety: unchanged; length-finished partial output remains rejected instead of being recorded as durable memory
 
 The Kubernetes env values are strings because container environment variables are strings. The maintained Honcho fork normalizes known OpenAI-compatible `chat_template_kwargs.enable_thinking` provider params at the OpenAI request boundary so outgoing JSON carries booleans (`true`/`false`), not string values (`"true"`/`"false"`).
 
 ## Hourly eval awareness
 
-The hourly self-improvement/eval loop should tag rows and notes with the intervention id when this config is deployed. New thinking-token cost is not automatically bad; compare quality movement against budget and reliability.
+The hourly self-improvement/eval loop should tag rows and notes with the intervention id when this config is deployed. New thinking-token cost is not automatically bad; compare quality movement against budget and reliability. When limiter pressure is low and a reasoning-heavy dream specialist hits `finish_reason='length'` with little or no final content, classify that as token-budget/prompt-budget evidence and consider a targeted max-output increase or salience downsampling. When limiter 503/timeouts or queue latency are high, prefer prompt/downsampling/fail-fast retry work over broader token or concurrency expansion. Missing or unparseable evidence must be recorded as missing/degraded, not as a healthy zero-count window.
 
 Track content-safe aggregate changes in these classes:
 
