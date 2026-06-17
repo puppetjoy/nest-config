@@ -40,8 +40,8 @@ commit.
   - `manifests/app/hermes/install.pp`
   - `files/app/hermes/*.patch`
   - `data/host/owl.yaml`, which pins `nest::app::hermes::git_ref` to
-    `hermes/0.16.0-nest` and now pins `nest::app::hermes::git_commit` to
-    `4a8829c9fd05d5f02ec21a76868f93812d65eab2`
+    `hermes/0.16.0-nest`; owl intentionally does not pin
+    `nest::app::hermes::git_commit`, so Puppet follows the managed tag ref
 - Hermes Agent fork:
   - `origin/hermes/0.16.0-nest` and `origin/joy/nest-0.16.0-patch-stack` both
     resolved to `7050182dd` in the task worktree at audit time and now resolve

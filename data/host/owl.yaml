@@ -14,7 +14,6 @@ nest::dvorak: true
 nest::text_scaling_factor: 1.5
 
 nest::app::hermes::git_ref: 'hermes/0.16.0-nest'
-nest::app::hermes::git_commit: '3bfc6a55ab9a6781a5375eaec6743b4ba1936f9b'
 nest::app::hermes::agent_request_kanban_board: 'agent-requests'
 nest::app::hermes::gitlab_mr_note_poller_enabled: true
 nest::app::hermes::gitlab_mr_note_poller_profile: 'talon'
