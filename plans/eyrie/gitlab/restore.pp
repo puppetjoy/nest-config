@@ -9,12 +9,12 @@
 # @param home_page_url Post-restore GitLab home page URL
 # @param restore Safety gate
 plan nest::eyrie::gitlab::restore (
-  TargetSpec       $targets      = 'eyrie-workstations',
-  String           $namespace    = 'test',
-  String           $service      = 'gitlab',
-  Optional[String] $service_name = undef, # unused
-  String           $home_page_url= "https://${service}-${namespace}.eyrie/explore",
-  Boolean          $restore      = false,
+  TargetSpec       $targets       = 'eyrie-workstations',
+  String           $namespace     = 'test',
+  String           $service       = 'gitlab',
+  Optional[String] $service_name  = undef, # unused
+  String           $home_page_url = "https://${service}-${namespace}.eyrie/explore",
+  Boolean          $restore       = false,
 ) {
   if $restore {
     $kubectl_scale_down_cmd = [

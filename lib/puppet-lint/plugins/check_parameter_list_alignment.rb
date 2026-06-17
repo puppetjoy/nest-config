@@ -3,15 +3,16 @@
 PuppetLint.new_check(:parameter_list_alignment) do
   DECLARATION_START = %r{^\s*(class|define|plan)\b.*\(\s*(?:#.*)?$}
   DECLARATION_END = %r{^\s*\)\s*(?:inherits\s+\S+\s*)?\{}
-  DEFAULTED_PARAMETER = %r{\$[A-Za-z_][A-Za-z0-9_]*.*\s=\s}
+  DEFAULTED_PARAMETER = %r{\$[A-Za-z_][A-Za-z0-9_]*.*=\s}
   PARAMETER_VARIABLE = %r{\$[A-Za-z_][A-Za-z0-9_]*}
-  DEFAULT_EQUALS = %r{\s=\s}
+  DEFAULT_EQUALS = %r{=\s}
 
   def check
     parameter_lists.each do |parameter_list|
       parameter_groups(parameter_list).each do |parameter_group|
         defaulted_lines = parameter_group.select { |entry| entry[:text].match?(DEFAULTED_PARAMETER) }
         check_variable_alignment(defaulted_lines)
+        check_default_padding(defaulted_lines)
         check_default_alignment(defaulted_lines)
       end
     end
@@ -82,13 +83,13 @@ PuppetLint.new_check(:parameter_list_alignment) do
   end
 
   def check_default_alignment(defaulted_lines)
-    columns = defaulted_lines.map { |entry| entry[:text].index(DEFAULT_EQUALS) + 2 }
+    columns = defaulted_lines.map { |entry| entry[:text].index(DEFAULT_EQUALS) }
     return if columns.length < 2
 
-    expected_column = dominant_column(columns)
+    expected_column = [dominant_column(columns), widest_parameter_end(defaulted_lines) + 1].max
 
     defaulted_lines.each do |entry|
-      actual_column = entry[:text].index(DEFAULT_EQUALS) + 2
+      actual_column = entry[:text].index(DEFAULT_EQUALS)
       next if actual_column == expected_column
 
       notify(
@@ -100,6 +101,31 @@ PuppetLint.new_check(:parameter_list_alignment) do
         },
       )
     end
+  end
+
+  def check_default_padding(defaulted_lines)
+    defaulted_lines.each do |entry|
+      parameter = entry[:text].match(PARAMETER_VARIABLE)
+      next unless parameter
+
+      actual_column = entry[:text].index(DEFAULT_EQUALS)
+      next if actual_column > parameter.end(0)
+
+      notify(
+        :warning,
+        {
+          message: 'parameter default equals sign should be padded after the parameter name',
+          line: entry[:line],
+          column: actual_column + 1,
+        },
+      )
+    end
+  end
+
+  def widest_parameter_end(defaulted_lines)
+    defaulted_lines
+      .filter_map { |entry| entry[:text].match(PARAMETER_VARIABLE)&.end(0) }
+      .max
   end
 
   def dominant_column(columns)
