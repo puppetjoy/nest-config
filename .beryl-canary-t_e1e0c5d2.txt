@@ -1,0 +1,4 @@
+Beryl canary marker — t_e1e0c5d2
+Verify GitLab-native review request invokes Talon oversight
+Created: 2026-06-17
+Branch: talon/t_e1e0c5d2-run-beryl-canary-with-gitlab-native-talon-review
