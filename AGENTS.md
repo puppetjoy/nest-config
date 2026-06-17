@@ -68,9 +68,17 @@
 
 ## Commit & Pull Request Guidelines
 - Follow observed commit style: `<scope>: <imperative summary>`.
-- For larger commits and new features, include a commit message body describing intent and key changes.
-- Never construct multiline commit messages with quoted `-m` strings.
-- For any multiline commit message (including `--amend`), use a single-quoted heredoc or file and pass it with `git commit -F <file>`.
+- For larger commits and new features, include a commit message body
+  describing intent and key changes.
+- Hard-wrap commit message body lines at about 72 characters with
+  physical line breaks; do not rely on viewer soft-wrap to hide long
+  run-on paragraphs.
+- Never construct multiline commit messages by stacking quoted `-m`
+  arguments.
+- For any multiline commit message (including `--amend`), write the
+  complete message to a file or single-quoted heredoc with the intended
+  physical line breaks, then pass it with `git commit -F <file>` or an
+  equivalent command.
 - Do not use literal `\n` escapes in commit messages.
 - Do not use unescaped backticks in shell-quoted commit message text.
 - Keep commits scoped; include related test updates.
