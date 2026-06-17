@@ -19,6 +19,14 @@ plan nest::eyrie::gitlab::restore (
   Boolean          $restore           = false,
 ) {
   if $restore {
+    $kubectl_scale_up_cmd = [
+      'kubectl', 'scale', 'deployments', '-n', $namespace,
+      "${service}-prometheus-server",
+      "${service}-sidekiq-all-in-1-v2",
+      "${service}-webservice-default",
+      '--replicas=1',
+    ].flatten.shellquote
+
     $kubectl_scale_down_cmd = [
       'kubectl', 'scale', 'deployments', '-n', $namespace,
       "${service}-prometheus-server",
@@ -59,7 +67,15 @@ plan nest::eyrie::gitlab::restore (
       '--timeout=5m',
     ].flatten.shellquote
 
+
     run_command($kubectl_wait_toolbox_cmd, 'localhost', "Wait for ${service}-toolbox")
+
+    $kubectl_wait_toolbox_exec_cmd = [
+      'sh', '-c',
+      "for i in $(seq 1 60); do kubectl exec -n ${namespace} deploy/${service}-toolbox -- sh -lc true && exit 0; sleep 5; done; exit 1",
+    ].flatten.shellquote
+
+    run_command($kubectl_wait_toolbox_exec_cmd, 'localhost', "Wait for ${service}-toolbox exec")
 
     $backup_bucket_config = nest::kubernetes::bucket_config("${service}-backups", $backups_namespace)
     if !$backup_bucket_config {
@@ -77,7 +93,13 @@ plan nest::eyrie::gitlab::restore (
         "s3cmd --no-ssl --access_key=${backup_bucket_config['AWS_ACCESS_KEY_ID']} --secret_key=${backup_bucket_config['AWS_SECRET_ACCESS_KEY']} --host=${backup_bucket_config['BUCKET_HOST']} --host-bucket='%(bucket)s.${backup_bucket_config['BUCKET_HOST']}' ls s3://${backup_bucket_config['BUCKET_NAME']}/ | python3 -c 'import sys; backups = [line.split()[-1].rsplit(\"/\", 1)[-1].removesuffix(\"_gitlab_backup.tar\") for line in sys.stdin if line.rstrip().endswith(\"_gitlab_backup.tar\")]; print(backups[-1] if backups else \"\", end=\"\"); sys.exit(0 if backups else 1)'",
       ].flatten.shellquote
 
-      $restore_timestamp = run_command($latest_backup_cmd, 'localhost', "Find latest ${service} backup").first.value['stdout'].chomp
+      $latest_backup_result = run_command($latest_backup_cmd, 'localhost', "Find latest ${service} backup", _catch_errors => true)
+      if !$latest_backup_result.ok {
+        run_command($kubectl_scale_up_cmd, 'localhost', "Start ${service}")
+        fail("Could not find latest ${service} backup; deployments were scaled back up")
+      }
+
+      $restore_timestamp = $latest_backup_result.first.value['stdout'].chomp
     }
 
     $backup_utility_cmd = [
@@ -101,14 +123,6 @@ plan nest::eyrie::gitlab::restore (
     ].flatten.shellquote
 
     $home_page_result = run_command($home_page_url_cmd, 'localhost', "Set ${service} home_page_url", _catch_errors => true)
-
-    $kubectl_scale_up_cmd = [
-      'kubectl', 'scale', 'deployments', '-n', $namespace,
-      "${service}-prometheus-server",
-      "${service}-sidekiq-all-in-1-v2",
-      "${service}-webservice-default",
-      '--replicas=1',
-    ].flatten.shellquote
 
     run_command($kubectl_scale_up_cmd, 'localhost', "Start ${service}")
 
