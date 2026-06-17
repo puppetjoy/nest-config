@@ -153,6 +153,8 @@ nest::app::hermes::instances:
         todo: '☑️'
         gitlab: '🦊'
     gitlab_enabled: true
+    gitlab_additional_hosts:
+      - 'gitlab-test.eyrie'
     image_gen_provider: 'openai-codex'
     image_gen_model: 'gpt-image-2-medium'
     honcho_workspace: 'hermes'
@@ -427,6 +429,8 @@ nest::app::hermes::instances:
     environment:
       HERMES_DOCKER_BINARY: '/usr/bin/podman'
     gitlab_enabled: true
+    gitlab_additional_hosts:
+      - 'gitlab-test.eyrie'
     honcho_workspace: 'hermes'
     honcho_user_peer: 'joy'
     honcho_ai_peer: 'beryl'

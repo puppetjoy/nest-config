@@ -6,6 +6,7 @@ define nest::lib::hermes (
   Stdlib::Absolutepath $ca_bundle_file             = '/etc/ssl/certs/ca-certificates.crt',
   String[1]            $user                       = 'joy',
   String[1]            $gitlab_url                 = 'https://gitlab.joyfullee.me',
+  Array[String[1]]     $gitlab_additional_hosts    = [],
   Any                  $gitlab_token               = undef,
   Any                  $gitlab_joy_token           = undef,
   Boolean              $gitlab_enabled             = false,
@@ -269,6 +270,10 @@ define nest::lib::hermes (
       true    => $gitlab_token.unwrap,
       default => $gitlab_token,
     }
+    $glab_config_hosts = [$gitlab_host] + $gitlab_additional_hosts
+    $glab_config_host_entries = $glab_config_hosts.map |$host| {
+      "  ${host}:\n    token: ${glab_config_token}"
+    }.join("\n")
 
     file { $glab_config_dir:
       ensure  => directory,
@@ -294,8 +299,7 @@ define nest::lib::hermes (
         no_prompt: true
         telemetry: true
         hosts:
-          ${gitlab_host}:
-            token: ${glab_config_token}
+        ${glab_config_host_entries}
         | YAML
       show_diff => false,
       require   => File[$glab_config_dir],
