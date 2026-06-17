@@ -22,7 +22,7 @@ class nest::service::gitlab (
 
       $artifacts_bucket_config   = nest::kubernetes::bucket_config("${nest::kubernetes::service}-artifacts")
       $backups_bucket_config     = nest::kubernetes::bucket_config("${nest::kubernetes::service}-backups", $backups_namespace)
-      $backups_tmp_bucket_config = nest::kubernetes::bucket_config("${nest::kubernetes::service}-backups-tmp", $backups_namespace)
+      $backups_tmp_bucket_config = nest::kubernetes::bucket_config("${nest::kubernetes::service}-backups-tmp")
       $lfs_bucket_config         = nest::kubernetes::bucket_config("${nest::kubernetes::service}-lfs")
       $packages_bucket_config    = nest::kubernetes::bucket_config("${nest::kubernetes::service}-packages")
       $registry_bucket_config    = nest::kubernetes::bucket_config("${nest::kubernetes::service}-registry")

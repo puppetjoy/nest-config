@@ -57,7 +57,7 @@ resources:
       owner: registry
       databaseReclaimPolicy: retain
   # gitlab-test restores from the production backup bucket directly, so do not
-  # keep separate backup ObjectBucketClaims in the storage-constrained test Ceph
-  # namespace.
+  # keep a separate durable backup ObjectBucketClaim in the storage-constrained
+  # test Ceph namespace. Keep the tmp bucket: the GitLab restore utility uses it
+  # as scratch space while restoring object-storage payloads such as uploads.
   backups-bucket: {}
-  backups-tmp-bucket: {}
