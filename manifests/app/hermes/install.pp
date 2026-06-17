@@ -62,6 +62,16 @@ class nest::app::hermes::install {
     ],
   }
 
+  exec { 'reattach_hermes_source_ref':
+    command => "/bin/sh -c 'set -e; /usr/sbin/git -C ${source_dir} fetch origin; if /usr/sbin/git -C ${source_dir} rev-parse --verify --quiet origin/${git_ref}^{commit} >/dev/null; then /usr/sbin/git -C ${source_dir} checkout -B ${git_ref} origin/${git_ref}; else /usr/sbin/git -C ${source_dir} checkout ${git_ref}; fi'",
+    onlyif  => "/bin/sh -c 'test -d ${source_dir}/.git && ! /usr/sbin/git -C ${source_dir} symbolic-ref --quiet HEAD >/dev/null'",
+    require => [
+      File[$install_dir],
+      Class['nest::base::git'],
+      Exec['set_hermes_source_remote'],
+    ],
+  }
+
   vcsrepo { $source_dir:
     ensure   => latest,
     provider => git,
@@ -71,6 +81,7 @@ class nest::app::hermes::install {
       File[$install_dir],
       Class['nest::base::git'],
       Exec['set_hermes_source_remote'],
+      Exec['reattach_hermes_source_ref'],
     ],
   }
 
