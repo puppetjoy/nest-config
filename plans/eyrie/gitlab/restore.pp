@@ -77,6 +77,26 @@ plan nest::eyrie::gitlab::restore (
 
     run_command($kubectl_wait_toolbox_exec_cmd, 'localhost', "Wait for ${service}-toolbox exec")
 
+    $kubectl_clean_toolbox_backups_cmd = [
+      'kubectl', 'exec', '-n', $namespace,
+      "deploy/${service}-toolbox",
+      '--',
+      'sh', '-lc',
+      'rm -rf /srv/gitlab/tmp/backups/*',
+    ].flatten.shellquote
+
+    run_command($kubectl_clean_toolbox_backups_cmd, 'localhost', "Clean ${service}-toolbox restore workspace")
+
+    $kubectl_clean_repositories_cmd = [
+      'kubectl', 'exec', '-n', $namespace,
+      "statefulset/${service}-gitaly",
+      '--',
+      'sh', '-lc',
+      'find /home/git/repositories -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +',
+    ].flatten.shellquote
+
+    run_command($kubectl_clean_repositories_cmd, 'localhost', "Clean ${service} repositories before restore")
+
     $backup_bucket_config = nest::kubernetes::bucket_config("${service}-backups", $backups_namespace)
     if !$backup_bucket_config {
       fail("Could not find ${service}-backups bucket config in namespace ${backups_namespace}")
@@ -114,6 +134,11 @@ plan nest::eyrie::gitlab::restore (
 
     $restore_result = run_command($backup_utility_cmd, 'localhost', "${service} backup-utility restore", _catch_errors => true)
 
+    run_command($kubectl_scale_up_cmd, 'localhost', "Start ${service}")
+    if !$restore_result.ok {
+      fail("${service} backup-utility restore failed; deployments were scaled back up")
+    }
+
     $home_page_url_cmd = [
       'kubectl', 'exec', '-n', $namespace,
       "deploy/${service}-toolbox",
@@ -123,12 +148,6 @@ plan nest::eyrie::gitlab::restore (
     ].flatten.shellquote
 
     $home_page_result = run_command($home_page_url_cmd, 'localhost', "Set ${service} home_page_url", _catch_errors => true)
-
-    run_command($kubectl_scale_up_cmd, 'localhost', "Start ${service}")
-
-    if !$restore_result.ok {
-      fail("${service} backup-utility restore failed; deployments were scaled back up")
-    }
 
     if !$home_page_result.ok {
       fail("${service} home_page_url update failed; deployments were scaled back up")
