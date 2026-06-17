@@ -123,6 +123,7 @@ class nest::app::hermes::config {
     $display_name            = pick($config['display_name'], $instance_name)
     $instance_profile_icon   = $config['profile_icon']
     $instance_gitlab_enabled = pick($config['gitlab_enabled'], false)
+    $instance_gitlab_hosts   = pick($config['gitlab_additional_hosts'], [])
     $instance_gitlab_token   = $instance_gitlab_enabled ? {
       true    => $config['gitlab_token'] ? {
         undef   => $gitlab_token,
@@ -249,6 +250,7 @@ class nest::app::hermes::config {
       ca_bundle_file             => $ca_bundle_file,
       user                       => $nest::user,
       gitlab_url                 => $gitlab_url,
+      gitlab_additional_hosts    => $instance_gitlab_hosts,
       gitlab_token               => $instance_gitlab_token,
       gitlab_joy_token           => $agent_request_gitlab_joy_token,
       gitlab_enabled             => $instance_gitlab_enabled,
