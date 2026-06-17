@@ -9,12 +9,14 @@
 # @param home_page_url Post-restore GitLab home page URL
 # @param restore Safety gate
 plan nest::eyrie::gitlab::restore (
-  TargetSpec       $targets       = 'eyrie-workstations',
-  String           $namespace     = 'test',
-  String           $service       = 'gitlab',
-  Optional[String] $service_name  = undef, # unused
-  String           $home_page_url = "https://${service}-${namespace}.eyrie/explore",
-  Boolean          $restore       = false,
+  TargetSpec       $targets           = 'eyrie-workstations',
+  String           $namespace         = 'test',
+  String           $service           = 'gitlab',
+  Optional[String] $service_name      = undef, # unused
+  String           $home_page_url     = "https://${service}-${namespace}.eyrie/explore",
+  String           $backups_namespace = 'default',
+  Optional[String] $backup_timestamp  = undef,
+  Boolean          $restore           = false,
 ) {
   if $restore {
     $kubectl_scale_down_cmd = [
@@ -59,6 +61,25 @@ plan nest::eyrie::gitlab::restore (
 
     run_command($kubectl_wait_toolbox_cmd, 'localhost', "Wait for ${service}-toolbox")
 
+    $backup_bucket_config = nest::kubernetes::bucket_config("${service}-backups", $backups_namespace)
+    if !$backup_bucket_config {
+      fail("Could not find ${service}-backups bucket config in namespace ${backups_namespace}")
+    }
+
+    if $backup_timestamp {
+      $restore_timestamp = $backup_timestamp
+    } else {
+      $latest_backup_cmd = [
+        'kubectl', 'exec', '-n', $namespace,
+        "deploy/${service}-toolbox",
+        '--',
+        'sh', '-lc',
+        "s3cmd --no-ssl --access_key=${backup_bucket_config['AWS_ACCESS_KEY_ID']} --secret_key=${backup_bucket_config['AWS_SECRET_ACCESS_KEY']} --host=${backup_bucket_config['BUCKET_HOST']} --host-bucket='%(bucket)s.${backup_bucket_config['BUCKET_HOST']}' ls s3://${backup_bucket_config['BUCKET_NAME']}/ | python3 -c 'import sys; backups = [line.split()[-1].rsplit(\"/\", 1)[-1].removesuffix(\"_gitlab_backup.tar\") for line in sys.stdin if line.rstrip().endswith(\"_gitlab_backup.tar\")]; print(backups[-1] if backups else \"\", end=\"\"); sys.exit(0 if backups else 1)'",
+      ].flatten.shellquote
+
+      $restore_timestamp = run_command($latest_backup_cmd, 'localhost', "Find latest ${service} backup").first.value['stdout'].chomp
+    }
+
     $backup_utility_cmd = [
       'kubectl', 'exec', '-n', $namespace,
       "deploy/${service}-toolbox",
@@ -66,7 +87,7 @@ plan nest::eyrie::gitlab::restore (
       'backup-utility',
       '--restore',
       '--skip-restore-prompt',
-      '-t', 'latest',
+      '-t', $restore_timestamp,
     ].flatten.shellquote
 
     $restore_result = run_command($backup_utility_cmd, 'localhost', "${service} backup-utility restore", _catch_errors => true)
