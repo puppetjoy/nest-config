@@ -1,6 +1,7 @@
 class nest::service::gitlab (
   Optional[String]    $external_name          = undef,
   Optional[String]    $registry_external_name = undef,
+  String              $backups_namespace      = $nest::kubernetes::namespace,
   Boolean             $https                  = false,
   String              $image                  = 'gitlab/gitlab-ce',
   Stdlib::Port        $ssh_port               = 22,
@@ -20,8 +21,8 @@ class nest::service::gitlab (
       $bucket_user = nest::kubernetes::bucket_user(lookup('ceph_object_store'), $nest::kubernetes::service, lookup('ceph_namespace'))
 
       $artifacts_bucket_config   = nest::kubernetes::bucket_config("${nest::kubernetes::service}-artifacts")
-      $backups_bucket_config     = nest::kubernetes::bucket_config("${nest::kubernetes::service}-backups")
-      $backups_tmp_bucket_config = nest::kubernetes::bucket_config("${nest::kubernetes::service}-backups-tmp")
+      $backups_bucket_config     = nest::kubernetes::bucket_config("${nest::kubernetes::service}-backups", $backups_namespace)
+      $backups_tmp_bucket_config = nest::kubernetes::bucket_config("${nest::kubernetes::service}-backups-tmp", $backups_namespace)
       $lfs_bucket_config         = nest::kubernetes::bucket_config("${nest::kubernetes::service}-lfs")
       $packages_bucket_config    = nest::kubernetes::bucket_config("${nest::kubernetes::service}-packages")
       $registry_bucket_config    = nest::kubernetes::bucket_config("${nest::kubernetes::service}-registry")
@@ -35,10 +36,10 @@ class nest::service::gitlab (
       # example: https://docs.gitlab.com/charts/advanced/external-object-storage/#backups-storage-example
       $backups_config = @("S3CFG")
         [default]
-        access_key = ${bucket_user['AccessKey']}
-        secret_key = ${bucket_user['SecretKey']}
-        host_base = ${host_base}
-        host_bucket = %(bucket)s.${host_base}
+        access_key = ${backups_bucket_config['AWS_ACCESS_KEY_ID']}
+        secret_key = ${backups_bucket_config['AWS_SECRET_ACCESS_KEY']}
+        host_base = ${backups_bucket_config['BUCKET_HOST']}
+        host_bucket = %(bucket)s.${backups_bucket_config['BUCKET_HOST']}
         use_https = False
         | S3CFG
 

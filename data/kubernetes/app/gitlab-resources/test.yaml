@@ -56,3 +56,8 @@ resources:
       name: registry
       owner: registry
       databaseReclaimPolicy: retain
+  # gitlab-test restores from the production backup bucket directly, so do not
+  # keep separate backup ObjectBucketClaims in the storage-constrained test Ceph
+  # namespace.
+  backups-bucket: {}
+  backups-tmp-bucket: {}

@@ -6,18 +6,17 @@
 # @param namespace Kubernetes namespace
 # @param service Kubernetes service
 # @param service_name Unused
+# @param home_page_url Post-restore GitLab home page URL
 # @param restore Safety gate
 plan nest::eyrie::gitlab::restore (
   TargetSpec       $targets      = 'eyrie-workstations',
   String           $namespace    = 'test',
   String           $service      = 'gitlab',
   Optional[String] $service_name = undef, # unused
+  String           $home_page_url= "https://${service}-${namespace}.eyrie/explore",
   Boolean          $restore      = false,
 ) {
   if $restore {
-    $restore_target = get_targets($targets)[0]
-    $bucket_config = nest::kubernetes::bucket_config("${service}-backups", $namespace)
-
     $kubectl_scale_down_cmd = [
       'kubectl', 'scale', 'deployments', '-n', $namespace,
       "${service}-prometheus-server",
@@ -52,22 +51,13 @@ plan nest::eyrie::gitlab::restore (
 
     run_command($kubectl_scale_up_toolbox_cmd, 'localhost', "Start ${service}-toolbox")
 
-    $put_cmd = [
-      's3cmd',
-      'put',
-      '--follow-symlinks',
-      '--no-ssl',
-      "--access_key=${bucket_config['AWS_ACCESS_KEY_ID']}",
-      "--secret_key=${bucket_config['AWS_SECRET_ACCESS_KEY']}",
-      "--host=${bucket_config['BUCKET_HOST']}",
-      "--host-bucket=%(bucket)s.${bucket_config['BUCKET_HOST']}",
-      "/nest/backup/${service}/latest_gitlab_backup.tar",
-      "s3://${bucket_config['BUCKET_NAME']}/",
+    $kubectl_wait_toolbox_cmd = [
+      'kubectl', 'rollout', 'status', 'deployment', '-n', $namespace,
+      "${service}-toolbox",
+      '--timeout=5m',
     ].flatten.shellquote
 
-    run_command($put_cmd, $restore_target, 's3cmd put', {
-      '_run_as' => 'root',
-    })
+    run_command($kubectl_wait_toolbox_cmd, 'localhost', "Wait for ${service}-toolbox")
 
     $backup_utility_cmd = [
       'kubectl', 'exec', '-n', $namespace,
@@ -79,7 +69,17 @@ plan nest::eyrie::gitlab::restore (
       '-t', 'latest',
     ].flatten.shellquote
 
-    run_command($backup_utility_cmd, 'localhost', "${service} backup-utility restore")
+    $restore_result = run_command($backup_utility_cmd, 'localhost', "${service} backup-utility restore", _catch_errors => true)
+
+    $home_page_url_cmd = [
+      'kubectl', 'exec', '-n', $namespace,
+      "deploy/${service}-toolbox",
+      '--',
+      'gitlab-rails', 'runner',
+      "ApplicationSetting.current.update!(home_page_url: '${home_page_url}')",
+    ].flatten.shellquote
+
+    $home_page_result = run_command($home_page_url_cmd, 'localhost', "Set ${service} home_page_url", _catch_errors => true)
 
     $kubectl_scale_up_cmd = [
       'kubectl', 'scale', 'deployments', '-n', $namespace,
@@ -90,5 +90,13 @@ plan nest::eyrie::gitlab::restore (
     ].flatten.shellquote
 
     run_command($kubectl_scale_up_cmd, 'localhost', "Start ${service}")
+
+    if !$restore_result.ok {
+      fail("${service} backup-utility restore failed; deployments were scaled back up")
+    }
+
+    if !$home_page_result.ok {
+      fail("${service} home_page_url update failed; deployments were scaled back up")
+    }
   }
 }
