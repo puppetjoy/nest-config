@@ -390,6 +390,9 @@ nest::app::hermes::instances:
     model_provider: 'custom:llama-qwen'
     model_name: 'qwen-3.6'
     model_base_url: 'https://llama-qwen.eyrie/v1'
+    # Cap local-Qwen worker generations so thinking tokens cannot run until the
+    # 262K slot fills when a request omits max_tokens/max_completion_tokens.
+    model_max_tokens: 4096
     auxiliary_provider: 'custom:llama-qwen'
     auxiliary_mini_model: 'qwen-3.6'
     terminal:

@@ -20,6 +20,7 @@ define nest::lib::hermes (
   String[1]            $model_provider             = 'openai-codex',
   String[1]            $model_name                 = 'gpt-5.5',
   String[1]            $model_base_url             = 'https://chatgpt.com/backend-api/codex',
+  Optional[Integer[1]] $model_max_tokens           = undef,
   Any                  $openrouter_api_key         = undef,
   Hash[String[1], Any] $providers                  = {},
   String[1]            $auxiliary_provider         = 'openai-codex',
@@ -645,6 +646,10 @@ define nest::lib::hermes (
     },
     default         => {},
   }
+  $model_max_tokens_config = $model_max_tokens ? {
+    undef   => {},
+    default => { 'max_tokens' => $model_max_tokens },
+  }
 
   $managed_config = {
     'toolsets'         => $effective_toolsets,
@@ -652,7 +657,7 @@ define nest::lib::hermes (
       'provider' => $model_provider,
       'default'  => $model_name,
       'base_url' => $model_base_url,
-    },
+    } + $model_max_tokens_config,
     'web'              => {
       'backend'        => 'tavily',
       'search_backend' => 'tavily',

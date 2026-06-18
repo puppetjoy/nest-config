@@ -1,0 +1,58 @@
+#!/usr/bin/env python3
+"""Static checks for local Qwen runaway-generation caps."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import yaml
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+LLAMA_APP = REPO_ROOT / "data/kubernetes/app/llama-server.yaml"
+LLAMA_SERVICE = REPO_ROOT / "data/kubernetes/service/llama-qwen.yaml"
+OWL_DATA = REPO_ROOT / "data/host/owl.yaml"
+HERMES_LIB = REPO_ROOT / "manifests/lib/hermes.pp"
+HERMES_CONFIG = REPO_ROOT / "manifests/app/hermes/config.pp"
+
+EXPECTED_BERYL_MODEL_MAX_TOKENS = 4096
+EXPECTED_REASONING_BUDGET = "2048"
+
+
+def load_yaml(path: Path) -> dict:
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def test_llama_qwen_server_args_include_bounded_reasoning_budget() -> None:
+    app_text = LLAMA_APP.read_text(encoding="utf-8")
+    service_config = load_yaml(LLAMA_SERVICE)
+
+    assert service_config["reasoning_budget"] == EXPECTED_REASONING_BUDGET
+    assert int(service_config["reasoning_budget"]) < 10537
+    assert "--reasoning-budget" in app_text
+    assert '"%{lookup(\'reasoning_budget\')}"' in app_text
+
+
+def test_beryl_local_qwen_model_has_output_cap() -> None:
+    host_config = load_yaml(OWL_DATA)
+    beryl = host_config["nest::app::hermes::instances"]["beryl"]
+
+    assert beryl["model_provider"] == "custom:llama-qwen"
+    assert beryl["model_name"] == "qwen-3.6"
+    assert beryl["model_max_tokens"] == EXPECTED_BERYL_MODEL_MAX_TOKENS
+
+
+def test_puppet_renders_model_max_tokens_into_managed_config() -> None:
+    lib_text = HERMES_LIB.read_text(encoding="utf-8")
+    config_text = HERMES_CONFIG.read_text(encoding="utf-8")
+
+    assert "Optional[Integer[1]] $model_max_tokens" in lib_text
+    assert "'max_tokens' => $model_max_tokens" in lib_text
+    assert "} + $model_max_tokens_config" in lib_text
+    assert "$instance_model_max_tokens  = $config['model_max_tokens']" in config_text
+    assert "model_max_tokens           => $instance_model_max_tokens" in config_text
+
+
+if __name__ == "__main__":
+    test_llama_qwen_server_args_include_bounded_reasoning_budget()
+    test_beryl_local_qwen_model_has_output_cap()
+    test_puppet_renders_model_max_tokens_into_managed_config()
