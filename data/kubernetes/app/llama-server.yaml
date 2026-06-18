@@ -22,6 +22,9 @@ mmproj_file: mmproj-F16.gguf
 mmproj_path: /cache/models/Qwen3.6-35B-A3B-mmproj-F16.gguf
 mmproj_url: https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF/resolve/main/mmproj-F16.gguf
 image_max_tokens: '4096'
+# Server-side guardrail: llama.cpp defaults reasoning_budget to INT_MAX when a
+# Qwen request asks for thinking without a smaller budget.
+reasoning_budget: '2048'
 min_p: '0.0'
 ctx_size: '524288'
 parallel_requests: '4'
@@ -128,6 +131,8 @@ resources:
                 - "%{lookup('mmproj_path')}"
                 - --image-max-tokens
                 - "%{lookup('image_max_tokens')}"
+                - --reasoning-budget
+                - "%{lookup('reasoning_budget')}"
                 - --min-p
                 - "%{lookup('min_p')}"
               envFrom:
