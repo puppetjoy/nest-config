@@ -1,14 +1,17 @@
 ---
 # Canonical local generative model for Hermes private/local work and all Honcho
 # dialectic levels.  This keeps the 35B-A3B sole-model shape while promoting
-# the resident service from Qwen3.6 Q5 to Qwen3.6 Q8_0.
-model_repo: unsloth/Qwen3.6-35B-A3B-GGUF
-model_file: Qwen3.6-35B-A3B-Q8_0.gguf
-model_path: /cache/models/Qwen3.6-35B-A3B-Q8_0.gguf
-model_url: https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF/resolve/main/Qwen3.6-35B-A3B-Q8_0.gguf
+# the resident service from Qwen3.6 Q8_0 to the measured faster MTP Q8_0 path.
+model_repo: unsloth/Qwen3.6-35B-A3B-MTP-GGUF
+model_file: Qwen3.6-35B-A3B-MTP-Q8_0.gguf
+model_path: /cache/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf
+# The MTP repository publishes the Q8_0 artifact without an MTP prefix; keep the
+# cache filename explicit so pod args and live verification distinguish it from
+# the non-MTP rollback artifact.
+model_url: https://huggingface.co/unsloth/Qwen3.6-35B-A3B-MTP-GGUF/resolve/main/Qwen3.6-35B-A3B-Q8_0.gguf
 mmproj_file: mmproj-F16.gguf
 mmproj_path: /cache/models/Qwen3.6-35B-A3B-mmproj-F16.gguf
-mmproj_url: https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF/resolve/main/mmproj-F16.gguf
+mmproj_url: https://huggingface.co/unsloth/Qwen3.6-35B-A3B-MTP-GGUF/resolve/main/mmproj-F16.gguf
 image_max_tokens: '4096'
 # Server-side guardrail: llama.cpp defaults reasoning_budget to INT_MAX when a
 # Qwen request asks for thinking without a smaller budget.
@@ -16,9 +19,11 @@ reasoning_budget: '2048'
 min_p: '0.0'
 ctx_size: '1048576'
 parallel_requests: '4'
+spec_type: draft-mtp
+spec_draft_n_max: '2'
 cpu_request: '8'
 cpu_limit: '16'
 memory_request: 32Gi
 memory_limit: 112Gi
-# Keep room for the Qwen3.6 Q5 quant plus current Qwen3.5 rollback artifacts.
+# Keep room for the Qwen3.6 Q8_0 MTP quant plus rollback artifacts.
 cache_size: 240Gi

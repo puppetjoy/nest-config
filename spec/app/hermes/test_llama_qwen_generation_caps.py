@@ -16,6 +16,11 @@ HERMES_CONFIG = REPO_ROOT / "manifests/app/hermes/config.pp"
 
 EXPECTED_BERYL_MODEL_MAX_TOKENS = 4096
 EXPECTED_REASONING_BUDGET = "2048"
+EXPECTED_LLAMA_QWEN_MODEL_REPO = "unsloth/Qwen3.6-35B-A3B-MTP-GGUF"
+EXPECTED_LLAMA_QWEN_MODEL_FILE = "Qwen3.6-35B-A3B-MTP-Q8_0.gguf"
+EXPECTED_LLAMA_QWEN_MODEL_PATH = "/cache/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf"
+EXPECTED_LLAMA_QWEN_SPEC_TYPE = "draft-mtp"
+EXPECTED_LLAMA_QWEN_SPEC_DRAFT_N_MAX = "2"
 
 
 def load_yaml(path: Path) -> dict:
@@ -30,6 +35,25 @@ def test_llama_qwen_server_args_include_bounded_reasoning_budget() -> None:
     assert int(service_config["reasoning_budget"]) < 10537
     assert "--reasoning-budget" in app_text
     assert '"%{lookup(\'reasoning_budget\')}"' in app_text
+
+
+def test_llama_qwen_uses_mtp_q8_with_mmproj_and_four_slots() -> None:
+    app_text = LLAMA_APP.read_text(encoding="utf-8")
+    service_config = load_yaml(LLAMA_SERVICE)
+
+    assert service_config["model_repo"] == EXPECTED_LLAMA_QWEN_MODEL_REPO
+    assert service_config["model_file"] == EXPECTED_LLAMA_QWEN_MODEL_FILE
+    assert service_config["model_path"] == EXPECTED_LLAMA_QWEN_MODEL_PATH
+    assert service_config["mmproj_path"] == "/cache/models/Qwen3.6-35B-A3B-mmproj-F16.gguf"
+    assert service_config["parallel_requests"] == "4"
+    assert int(service_config["ctx_size"]) // int(service_config["parallel_requests"]) == 262144
+    assert service_config["spec_type"] == EXPECTED_LLAMA_QWEN_SPEC_TYPE
+    assert service_config["spec_draft_n_max"] == EXPECTED_LLAMA_QWEN_SPEC_DRAFT_N_MAX
+    assert "--mmproj" in app_text
+    assert "--spec-type" in app_text
+    assert '"%{lookup(\'spec_type\')}"' in app_text
+    assert "--spec-draft-n-max" in app_text
+    assert '"%{lookup(\'spec_draft_n_max\')}"' in app_text
 
 
 def test_beryl_local_qwen_model_has_output_cap() -> None:
@@ -54,5 +78,6 @@ def test_puppet_renders_model_max_tokens_into_managed_config() -> None:
 
 if __name__ == "__main__":
     test_llama_qwen_server_args_include_bounded_reasoning_budget()
+    test_llama_qwen_uses_mtp_q8_with_mmproj_and_four_slots()
     test_beryl_local_qwen_model_has_output_cap()
     test_puppet_renders_model_max_tokens_into_managed_config()

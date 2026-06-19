@@ -7,20 +7,20 @@ cert_issuer: eyrie-ca
 cert_issuer_kind: ClusterIssuer
 ingress_class: contour-compute
 
-# Canonical local generative model service.  The 35B-A3B MoE replaces the
-# previous resident 122B lane and removes the split-lane topology.  Keep the
-# cache PVC large enough for the existing llama-qwen claim during transition;
-# stale 122B cache contents can be cleaned after the rollout is accepted.
-cache_size: 160Gi
+# Canonical local generative model service.  The 35B-A3B MoE resident service
+# uses the measured faster Q8_0 MTP path while preserving the four-slot,
+# vision-enabled topology.  Service overlays may keep a larger cache PVC for
+# existing rollback artifacts.
+cache_size: 240Gi
 storage_class: owl-crypt
 image: registry.gitlab.joyfullee.me/nest/tools/llama.cpp:zen5
-model_repo: unsloth/Qwen3.6-35B-A3B-GGUF
-model_file: Qwen3.6-35B-A3B-UD-Q4_K_M.gguf
-model_path: /cache/models/Qwen3.6-35B-A3B-UD-Q4_K_M.gguf
-model_url: https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF/resolve/main/Qwen3.6-35B-A3B-UD-Q4_K_M.gguf
+model_repo: unsloth/Qwen3.6-35B-A3B-MTP-GGUF
+model_file: Qwen3.6-35B-A3B-MTP-Q8_0.gguf
+model_path: /cache/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf
+model_url: https://huggingface.co/unsloth/Qwen3.6-35B-A3B-MTP-GGUF/resolve/main/Qwen3.6-35B-A3B-Q8_0.gguf
 mmproj_file: mmproj-F16.gguf
 mmproj_path: /cache/models/Qwen3.6-35B-A3B-mmproj-F16.gguf
-mmproj_url: https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF/resolve/main/mmproj-F16.gguf
+mmproj_url: https://huggingface.co/unsloth/Qwen3.6-35B-A3B-MTP-GGUF/resolve/main/mmproj-F16.gguf
 image_max_tokens: '4096'
 # Server-side guardrail: llama.cpp defaults reasoning_budget to INT_MAX when a
 # Qwen request asks for thinking without a smaller budget.
@@ -28,6 +28,8 @@ reasoning_budget: '2048'
 min_p: '0.0'
 ctx_size: '524288'
 parallel_requests: '4'
+spec_type: draft-mtp
+spec_draft_n_max: '2'
 cpu_request: '8'
 cpu_limit: '16'
 memory_request: 32Gi
@@ -135,6 +137,10 @@ resources:
                 - "%{lookup('reasoning_budget')}"
                 - --min-p
                 - "%{lookup('min_p')}"
+                - --spec-type
+                - "%{lookup('spec_type')}"
+                - --spec-draft-n-max
+                - "%{lookup('spec_draft_n_max')}"
               envFrom:
                 - secretRef:
                     name: "%{nest::kubernetes::service}"
