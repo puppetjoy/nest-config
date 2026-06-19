@@ -234,6 +234,40 @@ class nest::app::hermes::service {
     }
   }
 
+  file { "${systemd_user_dir}/hermes-agent-request-bridge-loop.service":
+    ensure  => file,
+    mode    => '0644',
+    owner   => $nest::user,
+    group   => $nest::user,
+    source  => "file://${broker_source_dir}/systemd/user/hermes-agent-request-bridge-loop.service",
+    require => [
+      File[$systemd_user_dir],
+      Exec['install_hermes_agent_request_broker'],
+    ],
+    notify  => Systemd::Daemon_reload['hermes-systemd-user-daemon-reload'],
+  }
+
+  file { "${systemd_user_dir}/hermes-agent-request-bridge-loop.timer":
+    ensure  => file,
+    mode    => '0644',
+    owner   => $nest::user,
+    group   => $nest::user,
+    source  => "file://${broker_source_dir}/systemd/user/hermes-agent-request-bridge-loop.timer",
+    require => File["${systemd_user_dir}/hermes-agent-request-bridge-loop.service"],
+    notify  => Systemd::Daemon_reload['hermes-systemd-user-daemon-reload'],
+  }
+
+  systemd::user_service { 'hermes-agent-request-bridge-loop':
+    ensure  => running,
+    enable  => true,
+    unit    => 'hermes-agent-request-bridge-loop.timer',
+    user    => $nest::user,
+    require => [
+      Loginctl_user[$nest::user],
+      File["${systemd_user_dir}/hermes-agent-request-bridge-loop.timer"],
+    ],
+  }
+
   systemd::manage_unit { 'hermes-gateway@.service':
     ensure        => present,
     path          => $systemd_user_dir,
