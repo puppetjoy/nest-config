@@ -427,6 +427,12 @@ nest::app::hermes::instances:
           IdentityFile /home/joy/.hermes/profiles/beryl/.ssh/id_ed25519
           IdentitiesOnly yes
 
+      Host gitlab-test.eyrie
+          HostName ssh.gitlab-test.eyrie
+          User git
+          IdentityFile /home/joy/.hermes/profiles/beryl/.ssh/id_ed25519
+          IdentitiesOnly yes
+
       Host ssh.gitlab.eyrie gitlab.eyrie
           User git
           IdentityFile /home/joy/.hermes/profiles/beryl/.ssh/id_ed25519
