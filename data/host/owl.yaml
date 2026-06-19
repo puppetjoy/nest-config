@@ -23,6 +23,8 @@ nest::kernel_cmdline:
   # https://knowledgebase.frame.work/changing-memory-allocation-amd-ryzen-ai-max-300-series-By1LG5Yrll
   - 'ttm.pages_limit=29360128'
   - 'ttm.page_pool_size=29360128'
+  # Strix Halo llama-qwen Vulkan throughput improved with IOMMU disabled.
+  - 'amd_iommu=off'
 
 nest::service::power::profile: 'performance'
 
