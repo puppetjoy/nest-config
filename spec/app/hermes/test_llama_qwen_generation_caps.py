@@ -17,8 +17,8 @@ HERMES_CONFIG = REPO_ROOT / "manifests/app/hermes/config.pp"
 EXPECTED_BERYL_MODEL_MAX_TOKENS = 4096
 EXPECTED_REASONING_BUDGET = "2048"
 EXPECTED_LLAMA_QWEN_MODEL_REPO = "unsloth/Qwen3.6-35B-A3B-MTP-GGUF"
-EXPECTED_LLAMA_QWEN_MODEL_FILE = "Qwen3.6-35B-A3B-MTP-Q8_0.gguf"
-EXPECTED_LLAMA_QWEN_MODEL_PATH = "/cache/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf"
+EXPECTED_LLAMA_QWEN_MODEL_FILE = "Qwen3.6-35B-A3B-MTP-UD-Q8_K_XL.gguf"
+EXPECTED_LLAMA_QWEN_MODEL_PATH = "/cache/models/Qwen3.6-35B-A3B-MTP-UD-Q8_K_XL.gguf"
 EXPECTED_LLAMA_QWEN_SPEC_TYPE = "draft-mtp"
 EXPECTED_LLAMA_QWEN_SPEC_DRAFT_N_MAX = "2"
 
@@ -37,7 +37,7 @@ def test_llama_qwen_server_args_include_bounded_reasoning_budget() -> None:
     assert '"%{lookup(\'reasoning_budget\')}"' in app_text
 
 
-def test_llama_qwen_uses_mtp_q8_with_mmproj_and_four_slots() -> None:
+def test_llama_qwen_uses_mtp_ud_q8_k_xl_with_mmproj_and_four_slots() -> None:
     app_text = LLAMA_APP.read_text(encoding="utf-8")
     service_config = load_yaml(LLAMA_SERVICE)
 
@@ -78,6 +78,6 @@ def test_puppet_renders_model_max_tokens_into_managed_config() -> None:
 
 if __name__ == "__main__":
     test_llama_qwen_server_args_include_bounded_reasoning_budget()
-    test_llama_qwen_uses_mtp_q8_with_mmproj_and_four_slots()
+    test_llama_qwen_uses_mtp_ud_q8_k_xl_with_mmproj_and_four_slots()
     test_beryl_local_qwen_model_has_output_cap()
     test_puppet_renders_model_max_tokens_into_managed_config()

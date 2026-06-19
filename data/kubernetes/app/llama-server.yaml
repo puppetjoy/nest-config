@@ -8,16 +8,16 @@ cert_issuer_kind: ClusterIssuer
 ingress_class: contour-compute
 
 # Canonical local generative model service.  The 35B-A3B MoE resident service
-# uses the measured faster Q8_0 MTP path while preserving the four-slot,
-# vision-enabled topology.  The larger cache keeps current rollback and
-# benchmark artifacts while staging the MTP Q8_0 model.
+# uses Joy's requested Strix Halo-oriented UD-Q8_K_XL MTP quant while preserving
+# the four-slot, vision-enabled topology.  The larger cache keeps current
+# rollback and benchmark artifacts while staging the MTP model.
 cache_size: 320Gi
 storage_class: owl-crypt
 image: registry.gitlab.joyfullee.me/nest/tools/llama.cpp:zen5
 model_repo: unsloth/Qwen3.6-35B-A3B-MTP-GGUF
-model_file: Qwen3.6-35B-A3B-MTP-Q8_0.gguf
-model_path: /cache/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf
-model_url: https://huggingface.co/unsloth/Qwen3.6-35B-A3B-MTP-GGUF/resolve/main/Qwen3.6-35B-A3B-Q8_0.gguf
+model_file: Qwen3.6-35B-A3B-MTP-UD-Q8_K_XL.gguf
+model_path: /cache/models/Qwen3.6-35B-A3B-MTP-UD-Q8_K_XL.gguf
+model_url: https://huggingface.co/unsloth/Qwen3.6-35B-A3B-MTP-GGUF/resolve/main/Qwen3.6-35B-A3B-UD-Q8_K_XL.gguf
 mmproj_file: mmproj-F16.gguf
 mmproj_path: /cache/models/Qwen3.6-35B-A3B-mmproj-F16.gguf
 mmproj_url: https://huggingface.co/unsloth/Qwen3.6-35B-A3B-MTP-GGUF/resolve/main/mmproj-F16.gguf
