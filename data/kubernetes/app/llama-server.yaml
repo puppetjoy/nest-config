@@ -9,9 +9,9 @@ ingress_class: contour-compute
 
 # Canonical local generative model service.  The 35B-A3B MoE resident service
 # uses the measured faster Q8_0 MTP path while preserving the four-slot,
-# vision-enabled topology.  Service overlays may keep a larger cache PVC for
-# existing rollback artifacts.
-cache_size: 240Gi
+# vision-enabled topology.  The larger cache keeps current rollback and
+# benchmark artifacts while staging the MTP Q8_0 model.
+cache_size: 320Gi
 storage_class: owl-crypt
 image: registry.gitlab.joyfullee.me/nest/tools/llama.cpp:zen5
 model_repo: unsloth/Qwen3.6-35B-A3B-MTP-GGUF
