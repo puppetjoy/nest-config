@@ -11,6 +11,7 @@ class nest::app::hermes::config {
   $telegram_home                    = $nest::app::hermes::telegram_home
   $telegram_bot_username            = $nest::app::hermes::telegram_bot_username
   $telegram_bot_id                  = $nest::app::hermes::telegram_bot_id
+  $telegram_rich_messages           = $nest::app::hermes::telegram_rich_messages
   $model_provider                   = $nest::app::hermes::model_provider
   $model_name                       = $nest::app::hermes::model_name
   $model_base_url                   = $nest::app::hermes::model_base_url
@@ -150,6 +151,7 @@ class nest::app::hermes::config {
       undef   => $telegram_bot_id,
       default => $config['telegram_bot_id'],
     }
+    $instance_telegram_rich_messages = pick($config['telegram_rich_messages'], $telegram_rich_messages)
     $instance_model_provider    = pick($config['model_provider'], $model_provider)
     $instance_model_name        = pick($config['model_name'], $model_name)
     $instance_model_base_url    = pick($config['model_base_url'], $model_base_url)
@@ -262,6 +264,7 @@ class nest::app::hermes::config {
       telegram_home              => $instance_telegram_home,
       telegram_bot_username      => $instance_telegram_bot_username,
       telegram_bot_id            => $instance_telegram_bot_id,
+      telegram_rich_messages     => $instance_telegram_rich_messages,
       model_provider             => $instance_model_provider,
       model_name                 => $instance_model_name,
       model_base_url             => $instance_model_base_url,

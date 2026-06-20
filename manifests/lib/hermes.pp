@@ -17,6 +17,7 @@ define nest::lib::hermes (
   String[1]            $telegram_home              = '8756212310',
   Optional[String[1]]  $telegram_bot_username      = undef,
   Optional[String[1]]  $telegram_bot_id            = undef,
+  Boolean              $telegram_rich_messages     = false,
   String[1]            $model_provider             = 'openai-codex',
   String[1]            $model_name                 = 'gpt-5.5',
   String[1]            $model_base_url             = 'https://chatgpt.com/backend-api/codex',
@@ -585,6 +586,15 @@ define nest::lib::hermes (
     default => { 'expected_bot_id' => $telegram_bot_id },
   }
   $telegram_config = $telegram_bot_username_config + $telegram_bot_id_config
+  $telegram_gateway_config = {
+    'platforms' => {
+      'telegram' => {
+        'extra' => {
+          'rich_messages' => $telegram_rich_messages,
+        },
+      },
+    },
+  }
   $stt_voice_speech_condition_arg = $stt_voice_speech_prev_text ? {
     true    => '--condition-on-previous-text',
     default => '',
@@ -696,6 +706,7 @@ define nest::lib::hermes (
       },
     },
     'platform_toolsets' => $platform_toolsets,
+    'gateway'          => $telegram_gateway_config,
     'telegram'          => $telegram_config,
     'display'           => {
       'tool_progress'         => 'all',
