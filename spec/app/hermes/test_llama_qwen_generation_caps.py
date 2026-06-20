@@ -21,6 +21,7 @@ EXPECTED_LLAMA_QWEN_MODEL_FILE = "Qwen3.6-35B-A3B-MTP-UD-Q8_K_XL.gguf"
 EXPECTED_LLAMA_QWEN_MODEL_PATH = "/cache/models/Qwen3.6-35B-A3B-MTP-UD-Q8_K_XL.gguf"
 EXPECTED_LLAMA_QWEN_SPEC_TYPE = "draft-mtp"
 EXPECTED_LLAMA_QWEN_SPEC_DRAFT_N_MAX = "2"
+EXPECTED_LLAMA_QWEN_BACKEND = "vulkan"
 
 
 def load_yaml(path: Path) -> dict:
@@ -56,6 +57,24 @@ def test_llama_qwen_uses_mtp_ud_q8_k_xl_with_mmproj_and_four_slots() -> None:
     assert '"%{lookup(\'spec_draft_n_max\')}"' in app_text
 
 
+def test_llama_qwen_backend_selection_defaults_to_vulkan_with_observability() -> None:
+    app = load_yaml(LLAMA_APP)
+    service_config = load_yaml(LLAMA_SERVICE)
+    app_text = LLAMA_APP.read_text(encoding="utf-8")
+    pod_template = app["resources"]["deployment"]["spec"]["template"]
+    container = pod_template["spec"]["containers"][0]
+
+    assert app["llama_cpp_backend"] == EXPECTED_LLAMA_QWEN_BACKEND
+    assert service_config["llama_cpp_backend"] == EXPECTED_LLAMA_QWEN_BACKEND
+    assert pod_template["metadata"]["labels"]["llama.cpp/backend"] == "%{lookup('llama_cpp_backend')}"
+    assert pod_template["metadata"]["annotations"]["llama.cpp/backend"] == "%{lookup('llama_cpp_backend')}"
+    assert "llama-server-${backend}" in app_text
+    assert "unsupported llama.cpp backend" in app_text
+    env = {entry["name"]: entry["value"] for entry in container["env"]}
+    assert env["LLAMA_CPP_BACKEND"] == "%{lookup('llama_cpp_backend')}"
+    assert env["LLAMA_CPP_IMAGE"] == "%{lookup('image')}"
+
+
 def test_beryl_local_qwen_model_has_output_cap() -> None:
     host_config = load_yaml(OWL_DATA)
     beryl = host_config["nest::app::hermes::instances"]["beryl"]
@@ -79,5 +98,6 @@ def test_puppet_renders_model_max_tokens_into_managed_config() -> None:
 if __name__ == "__main__":
     test_llama_qwen_server_args_include_bounded_reasoning_budget()
     test_llama_qwen_uses_mtp_ud_q8_k_xl_with_mmproj_and_four_slots()
+    test_llama_qwen_backend_selection_defaults_to_vulkan_with_observability()
     test_beryl_local_qwen_model_has_output_cap()
     test_puppet_renders_model_max_tokens_into_managed_config()

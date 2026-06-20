@@ -14,6 +14,7 @@ ingress_class: contour-compute
 cache_size: 320Gi
 storage_class: owl-crypt
 image: registry.gitlab.joyfullee.me/nest/tools/llama.cpp:zen5
+llama_cpp_backend: vulkan
 model_repo: unsloth/Qwen3.6-35B-A3B-MTP-GGUF
 model_file: Qwen3.6-35B-A3B-MTP-UD-Q8_K_XL.gguf
 model_path: /cache/models/Qwen3.6-35B-A3B-MTP-UD-Q8_K_XL.gguf
@@ -81,6 +82,10 @@ resources:
         metadata:
           labels:
             app: "%{nest::kubernetes::service}"
+            llama.cpp/backend: "%{lookup('llama_cpp_backend')}"
+          annotations:
+            llama.cpp/backend: "%{lookup('llama_cpp_backend')}"
+            llama.cpp/image: "%{lookup('image')}"
         spec:
           nodeSelector:
             kubernetes.io/hostname: owl
@@ -121,7 +126,24 @@ resources:
             - name: llama-server
               image: "%{lookup('image')}"
               imagePullPolicy: IfNotPresent
-              command: ['llama-server', '--host', '0.0.0.0']
+              command:
+                - sh
+                - -ceu
+                - |-
+                  backend="${LLAMA_CPP_BACKEND:-%{lookup('llama_cpp_backend')}}"
+                  case "$backend" in
+                    vulkan|rocm) ;;
+                    *) echo "unsupported llama.cpp backend: $backend" >&2; exit 64 ;;
+                  esac
+                  server="/usr/local/bin/llama-server-${backend}"
+                  if [ ! -x "$server" ]; then
+                    echo "missing llama.cpp backend binary: $server" >&2
+                    ls -l /usr/local/bin/llama-server* >&2 || true
+                    exit 66
+                  fi
+                  echo "llama.cpp backend=${backend} server=${server} image=%{lookup('image')} service=%{nest::kubernetes::service}"
+                  exec "$server" --host 0.0.0.0 "$@"
+                - llama-server
               args:
                 - --model
                 - "%{lookup('model_path')}"
@@ -141,6 +163,13 @@ resources:
                 - "%{lookup('spec_type')}"
                 - --spec-draft-n-max
                 - "%{lookup('spec_draft_n_max')}"
+              env:
+                - name: LLAMA_CPP_BACKEND
+                  value: "%{lookup('llama_cpp_backend')}"
+                - name: LLAMA_CPP_IMAGE
+                  value: "%{lookup('image')}"
+                - name: LLAMA_CPP_SERVICE
+                  value: "%{nest::kubernetes::service}"
               envFrom:
                 - secretRef:
                     name: "%{nest::kubernetes::service}"

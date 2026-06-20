@@ -6,4 +6,9 @@ nest::classes:
 # previous b7595 Kestrel tool image.  b9592 is the current upstream release at
 # rollout time and contains both qwen35 and qwen35moe model support.
 nest::tool::llamacpp::revision: 'b9592'
+# Zen5 is Joy's Strix Halo/llama-qwen comparison target. Keep Vulkan as the
+# default `llama-server` while also building a ROCm/HIP variant for deliberate
+# backend selection from KubeCM.
+nest::tool::llamacpp::build_rocm: true
+nest::tool::llamacpp::rocm_amdgpu_targets: ['gfx1151']
 nest::use: ['vulkan']
