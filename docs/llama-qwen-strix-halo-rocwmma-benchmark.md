@@ -69,21 +69,49 @@ four-slot long-context shape for a baseline sanity check.
 | --- | --- | --- | ---: | ---: | ---: | --- |
 | resident-vulkan-current-shape | Vulkan | ctx 1,048,576 / parallel 4 | 983.71 tok/s | 63.54 tok/s | 72.05 GB -> 72.06 GB | current resident topology |
 | vulkan-small-fa-nommap | Vulkan | ctx 32,768 / parallel 1 | 1020.00 tok/s | 67.54 tok/s | 47.33 GB -> 47.49 GB | best result in this run |
-| rocm-small-fa-nommap | stock ROCm | ctx 32,768 / parallel 1 | 165.83 tok/s | 30.01 tok/s | 6.13 GB -> 6.13 GB | stable but much slower |
-| rocm-rocwmma-small-fa-nommap | ROCm + rocWMMA FATTN | ctx 32,768 / parallel 1 | 161.92 tok/s | 29.79 tok/s | 6.13 GB -> 6.13 GB | stable but no improvement |
+| rocm-small-fa-nommap | stock ROCm | ctx 32,768 / parallel 1 | 165.83 tok/s | 30.01 tok/s | 6.13 GB -> 6.13 GB | invalid as GPU benchmark; ROCm did not detect a GPU |
+| rocm-rocwmma-small-fa-nommap | ROCm + rocWMMA FATTN | ctx 32,768 / parallel 1 | 161.92 tok/s | 29.79 tok/s | 6.13 GB -> 6.13 GB | invalid as GPU benchmark; ROCm did not detect a GPU |
 
-Raw timing/result file from the run:
+Joy rejected the original ROCm/rocWMMA timings as valid GPU evidence because the
+ROCm server logs did not prove GPU detection/use. A follow-up rerun forced
+`--n-gpu-layers 999`, used the same small `--flash-attn on --no-mmap` shape, and
+briefly added an unconfined/seccomp ROCm test context. ROCm still did not see the
+GPU:
+
+- stock ROCm log: `ggml_cuda_init: failed to initialize ROCm: no ROCm-capable device is detected`
+- rocWMMA log: `ggml_cuda_init: failed to initialize ROCm: no ROCm-capable device is detected`
+- both logs warned `no usable GPU found, --gpu-layers option will be ignored`
+- both pods had `/dev/kfd` and `/dev/dri/renderD128`; a privileged/card1 live
+  probe also failed the same way
+- in-container `rocminfo` failed with `HSA_STATUS_ERROR_OUT_OF_RESOURCES`, while
+  host `rocminfo` on owl saw the `gfx1151` GPU
+- GTT stayed flat at about 5.70 GiB for both ROCm variants, unlike Vulkan's
+  tens-of-GiB model residency
+
+The rerun therefore confirms the ROCm/rocWMMA rows above are CPU-fallback timings,
+not meaningful ROCm GPU measurements:
+
+| Variant | Backend | Shape | Prompt eval avg | Token gen avg | GTT before -> after | Conclusion |
+| --- | --- | --- | ---: | ---: | ---: | --- |
+| rocm-small-fa-nommap-ngl999 | stock ROCm | ctx 32,768 / parallel 1 / `--n-gpu-layers 999` | 165.08 tok/s | 27.31 tok/s | 5.70 GB -> 5.70 GB | invalid CPU fallback |
+| rocm-rocwmma-small-fa-nommap-ngl999 | ROCm + rocWMMA FATTN | ctx 32,768 / parallel 1 / `--n-gpu-layers 999` | 168.49 tok/s | 27.44 tok/s | 5.70 GB -> 5.70 GB | invalid CPU fallback |
+
+Raw timing/result files:
 
 - `docs/llama-qwen-strix-halo-rocwmma-benchmark-results.json`
+- `docs/llama-qwen-strix-halo-rocwmma-benchmark-rerun-results.json`
 
 ## Recommendation
 
-Do not switch resident `llama-qwen` away from Vulkan. In this bounded Strix Halo
-canary, the rocWMMA-enabled ROCm flash-attention binary was stable, but it was
-slightly slower than stock ROCm and roughly six times slower than Vulkan for
-prompt processing on the tested 3.9k-token small shape. Token generation was also
-less than half the Vulkan rate.
+Do not switch resident `llama-qwen` away from Vulkan. The Vulkan rows are still
+valid baseline evidence, but this task did not produce a valid ROCm or rocWMMA GPU
+benchmark: current Kubernetes/container ROCm runtime initialization fails even
+when the binaries, rocWMMA headers/package, `/dev/kfd`, and `/dev/dri/renderD128`
+are present.
 
-The rocWMMA variant is still useful to keep as an experimental binary in the
-tool image for future upstream comparisons, but it does not explain kyuz0-style
-prompt-processing gains for this Nest/Portage ROCm 7.2 + llama.cpp b9592 build.
+The source-managed rocWMMA binary is useful to keep as an experimental artifact,
+but the next step is to fix ROCm GPU detection inside the Kubernetes/container
+runtime before drawing any Strix Halo performance conclusion. Until a ROCm pod
+shows `rocminfo`/llama.cpp detecting `gfx1151` and GTT/model residency comparable
+to Vulkan, ROCm/rocWMMA timing rows should be treated as CPU-fallback diagnostics
+only.
