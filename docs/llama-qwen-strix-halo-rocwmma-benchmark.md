@@ -74,7 +74,7 @@ four-slot long-context shape for a baseline sanity check.
 
 Raw timing/result file from the run:
 
-- `/home/joy/projects/.worktrees/nest-config/t_99275f2d/rocwmma-benchmark-results.json`
+- `docs/llama-qwen-strix-halo-rocwmma-benchmark-results.json`
 
 ## Recommendation
 
