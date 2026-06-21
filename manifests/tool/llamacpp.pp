@@ -28,7 +28,7 @@ class nest::tool::llamacpp (
     default => [],
   }
   $rocm_packages = $build_rocm_real ? {
-    true    => ['dev-util/hip', 'dev-util/hipcc', 'dev-util/rocminfo'],
+    true    => ['dev-util/hip', 'dev-util/hipcc', 'dev-util/rocminfo', 'sci-libs/hipBLAS'],
     default => [],
   }
 

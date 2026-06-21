@@ -40,3 +40,7 @@ nest::package_keywords:
   llvm-runtimes/compiler-rt: {}
   llvm-runtimes/compiler-rt-sanitizers: {}
   llvm-runtimes/openmp: {}
+  sci-libs/hipBLAS: {}
+  sci-libs/hipBLAS-common: {}
+  sci-libs/hipBLASLt: {}
+  sci-libs/rocBLAS: {}
