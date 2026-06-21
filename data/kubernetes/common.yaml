@@ -35,6 +35,8 @@ resources:
           ttlSecondsAfterFinished: "%{alias('backup_job_ttl')}"
           template:
             spec:
+              affinity: "%{alias('affinity')}"
+              tolerations: "%{alias('tolerations')}"
               containers:
                 - name: nest
                   image: "%{lookup('config_image')}"

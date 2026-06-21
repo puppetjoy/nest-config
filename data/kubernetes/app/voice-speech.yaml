@@ -271,6 +271,8 @@ resources:
                 app: "%{nest::kubernetes::service}-roundtrip-monitor"
                 component: roundtrip-monitor
             spec:
+              affinity: "%{alias('affinity')}"
+              tolerations: "%{alias('tolerations')}"
               restartPolicy: Never
               serviceAccountName: "%{nest::kubernetes::service}-roundtrip-monitor"
               containers:

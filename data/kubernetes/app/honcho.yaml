@@ -291,6 +291,8 @@ resources:
       ttlSecondsAfterFinished: 21600
       template:
         spec:
+          affinity: *affinity
+          tolerations: *tolerations
           restartPolicy: Never
           imagePullSecrets:
             - name: "%{nest::kubernetes::service}-registry-auths"

@@ -206,6 +206,8 @@ resources:
           activeDeadlineSeconds: 900
           template:
             spec:
+              affinity: *affinity
+              tolerations: *tolerations
               restartPolicy: Never
               containers:
                 - name: smoke-test
