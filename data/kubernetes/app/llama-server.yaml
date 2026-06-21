@@ -136,6 +136,9 @@ resources:
                     vulkan|rocm|rocm-rocwmma) ;;
                     *) echo "unsupported llama.cpp backend: $backend" >&2; exit 64 ;;
                   esac
+                  if [ -z "${HSA_OVERRIDE_GFX_VERSION:-}" ]; then
+                    unset HSA_OVERRIDE_GFX_VERSION
+                  fi
                   server="/usr/local/bin/llama-server-${backend}"
                   if [ ! -x "$server" ]; then
                     echo "missing llama.cpp backend binary: $server" >&2
