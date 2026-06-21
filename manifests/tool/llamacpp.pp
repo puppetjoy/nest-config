@@ -23,7 +23,6 @@ class nest::tool::llamacpp (
         '-DLLAMA_OPENSSL=ON',
       ].join(' '),
       'cmake --build build-rocm --target llama-server',
-      'install -Dm0755 build-rocm/bin/llama-server /usr/local/bin/llama-server-rocm',
     ],
     default => [],
   }
@@ -71,9 +70,29 @@ class nest::tool::llamacpp (
         '-DLLAMA_OPENSSL=ON',
       ].join(' '),
       'cmake --build build-vulkan --target llama-server',
-      'install -Dm0755 build-vulkan/bin/llama-server /usr/local/bin/llama-server-vulkan',
-      'ln -sf llama-server-vulkan /usr/local/bin/llama-server',
     ] + $rocm_commands,
     require => Class['nest::base::gpu'],
+  }
+
+  file { '/usr/local/bin/llama-server-vulkan':
+    ensure  => file,
+    source  => '/usr/src/llama.cpp/build-vulkan/bin/llama-server',
+    mode    => '0755',
+    require => Nest::Lib::Build['llama.cpp'],
+  }
+
+  file { '/usr/local/bin/llama-server':
+    ensure  => link,
+    target  => 'llama-server-vulkan',
+    require => File['/usr/local/bin/llama-server-vulkan'],
+  }
+
+  if $build_rocm_real {
+    file { '/usr/local/bin/llama-server-rocm':
+      ensure  => file,
+      source  => '/usr/src/llama.cpp/build-rocm/bin/llama-server',
+      mode    => '0755',
+      require => Nest::Lib::Build['llama.cpp'],
+    }
   }
 }
