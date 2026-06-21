@@ -19,6 +19,7 @@ app_args: >-
   --user-data-dir=/home/kasm-user/.config/secure-browser
   --remote-debugging-address=0.0.0.0
   --remote-debugging-port=9222
+vnc_options: '-disableBasicAuth'
 storage_class: owl-crypt
 profile_storage_size: 12Gi
 bitwarden_extension_id: nngceckbapebfimnlniiiahkandclblb
@@ -86,7 +87,7 @@ resources:
         3. Recreate managed resources: bolt plan run nest::eyrie::ai::deploy_secure_browser
         This app intentionally replaces the old separate OAuth and shopping browser deployments. OAuth and shopping are uses of the same browser process, profile PVC, Bitwarden extension install, and Chrome DevTools endpoint.
         Hermes tools must claim and reuse an explicit CDP page target for their use (for example owner=oauth or owner=shopping) and must not default to the first visible tab. Agents may open additional tabs through their own owner mapping, but one owner must not drive another owner's mapped tab unless the operator intentionally resets the mapping.
-        The ingress relies on Eyrie-private network boundaries and does not set the old VNC_PW/HTTP Basic Auth front door. Joy handles Bitwarden unlock, credential entry, passkeys, 2FA, CAPTCHA, checkout, account, address, and payment prompts directly in the browser UI. Tools must not expose raw CDP endpoints, cookies, local storage, request headers, downloads, vault contents, callback codes, tokens, screenshots of secret pages, or credential material.
+        The ingress relies on Eyrie-private network boundaries and starts KasmVNC with Basic Auth disabled. A dummy VNC_PW remains set only because KasmVNC requires a password file before it will start, even when -disableBasicAuth is active. Joy handles Bitwarden unlock, credential entry, passkeys, 2FA, CAPTCHA, checkout, account, address, and payment prompts directly in the browser UI. Tools must not expose raw CDP endpoints, cookies, local storage, request headers, downloads, vault contents, callback codes, tokens, screenshots of secret pages, or credential material.
 
   profile-storage:
     apiVersion: v1
@@ -159,6 +160,10 @@ resources:
             - name: kasm-chrome
               image: "%{lookup('image')}"
               env:
+                - name: VNC_PW
+                  value: unused
+                - name: VNCOPTIONS
+                  value: "%{lookup('vnc_options')}"
                 - name: LAUNCH_URL
                   value: "%{lookup('launch_url')}"
                 - name: KASM_RESTRICTED_FILE_CHOOSER
