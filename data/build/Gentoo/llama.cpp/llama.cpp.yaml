@@ -12,3 +12,31 @@ nest::tool::llamacpp::revision: 'b9592'
 nest::tool::llamacpp::build_rocm: true
 nest::tool::llamacpp::rocm_amdgpu_targets: ['gfx1151']
 nest::use: ['vulkan']
+
+nest::package_keywords:
+  # ROCm/HIP 7.2 stack for the zen5 Strix Halo ROCm llama.cpp build.
+  dev-build/rocm-cmake: {}
+  dev-libs/rocm-comgr: {}
+  dev-libs/rocm-core: {}
+  dev-libs/rocm-device-libs: {}
+  dev-libs/rocr-runtime: {}
+  dev-libs/roct-thunk-interface: {}
+  dev-util/hip: {}
+  dev-util/hipcc: {}
+  dev-util/rocminfo: {}
+  llvm-core/clang: {}
+  llvm-core/clang-common: {}
+  llvm-core/clang-linker-config: {}
+  llvm-core/clang-toolchain-symlinks: {}
+  llvm-core/lld: {}
+  llvm-core/lld-toolchain-symlinks: {}
+  llvm-core/llvm: {}
+  llvm-core/llvm-toolchain-symlinks: {}
+  llvm-core/llvmgold: {}
+  llvm-runtimes/clang-rtlib-config: {}
+  llvm-runtimes/clang-runtime: {}
+  llvm-runtimes/clang-stdlib-config: {}
+  llvm-runtimes/clang-unwindlib-config: {}
+  llvm-runtimes/compiler-rt: {}
+  llvm-runtimes/compiler-rt-sanitizers: {}
+  llvm-runtimes/openmp: {}
