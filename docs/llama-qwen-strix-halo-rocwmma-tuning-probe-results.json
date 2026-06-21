@@ -1,0 +1,315 @@
+{
+  "started_at": "2026-06-21T09:25:29.224167+00:00",
+  "purpose": "Tune/probe ROCm and rocWMMA llama-bench shapes after poor server long-context results",
+  "original_replicas": {
+    "llama-qwen": 1
+  },
+  "quiet_replicas": {
+    "honcho-deriver": 1,
+    "honcho-embeddings": 1,
+    "llama-qwen-honcho": 1
+  },
+  "probes": [
+    {
+      "name": "stock-rocm-pp16384-hsa1100-fa",
+      "cmd": [
+        "/usr/local/bin/llama-bench-rocm",
+        "-m",
+        "/cache/models/Qwen3.6-35B-A3B-MTP-UD-Q8_K_XL.gguf",
+        "-p",
+        "16384",
+        "-n",
+        "0",
+        "-ngl",
+        "999",
+        "-fa",
+        "1",
+        "-b",
+        "2048",
+        "-ub",
+        "512",
+        "-r",
+        "1"
+      ],
+      "env": {
+        "HSA_OVERRIDE_GFX_VERSION": "11.0.0"
+      },
+      "returncode": 0,
+      "stdout": "| model                          |       size |     params | backend    | ngl |  fa |            test |                  t/s |\n| ------------------------------ | ---------: | ---------: | ---------- | --: | --: | --------------: | -------------------: |\n| qwen35moe 35B.A3B Q8_0         |  36.40 GiB |    35.51 B | ROCm       | 999 |   1 |         pp16384 |        737.20 \u00b1 0.00 |\n\nbuild: ac4cddeb0 (9592)\n",
+      "stderr": "ggml_cuda_init: found 1 ROCm devices (Total VRAM: 114688 MiB):\n  Device 0: Radeon 8060S Graphics, gfx1100 (0x1100), VMM: no, Wave Size: 32, VRAM: 114688 MiB\n",
+      "rows": [
+        {
+          "model": "qwen35moe 35B.A3B Q8_0",
+          "size": "36.40 GiB",
+          "params": "35.51 B",
+          "backend": "ROCm",
+          "ngl": "999",
+          "fa": "1",
+          "test": "pp16384",
+          "t/s": "737.20 \u00b1 0.00"
+        }
+      ],
+      "mem_before": "\n\n============================ ROCm System Management Interface ============================\n================================== Memory Usage (Bytes) ==================================\nGPU[0]\t\t: VRAM Total Memory (B): 536870912\nGPU[0]\t\t: VRAM Total Used Memory (B): 159211520\nGPU[0]\t\t: VIS_VRAM Total Memory (B): 536870912\nGPU[0]\t\t: VIS_VRAM Total Used Memory (B): 159211520\nGPU[0]\t\t: GTT Total Memory (B): 120259084288\nGPU[0]\t\t: GTT Total Used Memory (B): 6125473792\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n",
+      "mem_after": "\n\n============================ ROCm System Management Interface ============================\n================================== Memory Usage (Bytes) ==================================\nGPU[0]\t\t: VRAM Total Memory (B): 536870912\nGPU[0]\t\t: VRAM Total Used Memory (B): 159211520\nGPU[0]\t\t: VIS_VRAM Total Memory (B): 536870912\nGPU[0]\t\t: VIS_VRAM Total Used Memory (B): 159211520\nGPU[0]\t\t: GTT Total Memory (B): 120259084288\nGPU[0]\t\t: GTT Total Used Memory (B): 6125473792\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+    },
+    {
+      "name": "stock-rocm-pp32768-hsa1100-fa",
+      "cmd": [
+        "/usr/local/bin/llama-bench-rocm",
+        "-m",
+        "/cache/models/Qwen3.6-35B-A3B-MTP-UD-Q8_K_XL.gguf",
+        "-p",
+        "32768",
+        "-n",
+        "0",
+        "-ngl",
+        "999",
+        "-fa",
+        "1",
+        "-b",
+        "2048",
+        "-ub",
+        "512",
+        "-r",
+        "1"
+      ],
+      "env": {
+        "HSA_OVERRIDE_GFX_VERSION": "11.0.0"
+      },
+      "returncode": 0,
+      "stdout": "| model                          |       size |     params | backend    | ngl |  fa |            test |                  t/s |\n| ------------------------------ | ---------: | ---------: | ---------- | --: | --: | --------------: | -------------------: |\n| qwen35moe 35B.A3B Q8_0         |  36.40 GiB |    35.51 B | ROCm       | 999 |   1 |         pp32768 |        646.00 \u00b1 0.00 |\n\nbuild: ac4cddeb0 (9592)\n",
+      "stderr": "ggml_cuda_init: found 1 ROCm devices (Total VRAM: 114688 MiB):\n  Device 0: Radeon 8060S Graphics, gfx1100 (0x1100), VMM: no, Wave Size: 32, VRAM: 114688 MiB\n",
+      "rows": [
+        {
+          "model": "qwen35moe 35B.A3B Q8_0",
+          "size": "36.40 GiB",
+          "params": "35.51 B",
+          "backend": "ROCm",
+          "ngl": "999",
+          "fa": "1",
+          "test": "pp32768",
+          "t/s": "646.00 \u00b1 0.00"
+        }
+      ],
+      "mem_before": "\n\n============================ ROCm System Management Interface ============================\n================================== Memory Usage (Bytes) ==================================\nGPU[0]\t\t: VRAM Total Memory (B): 536870912\nGPU[0]\t\t: VRAM Total Used Memory (B): 159211520\nGPU[0]\t\t: VIS_VRAM Total Memory (B): 536870912\nGPU[0]\t\t: VIS_VRAM Total Used Memory (B): 159211520\nGPU[0]\t\t: GTT Total Memory (B): 120259084288\nGPU[0]\t\t: GTT Total Used Memory (B): 6125473792\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n",
+      "mem_after": "\n\n============================ ROCm System Management Interface ============================\n================================== Memory Usage (Bytes) ==================================\nGPU[0]\t\t: VRAM Total Memory (B): 536870912\nGPU[0]\t\t: VRAM Total Used Memory (B): 159211520\nGPU[0]\t\t: VIS_VRAM Total Memory (B): 536870912\nGPU[0]\t\t: VIS_VRAM Total Used Memory (B): 159211520\nGPU[0]\t\t: GTT Total Memory (B): 120259084288\nGPU[0]\t\t: GTT Total Used Memory (B): 6125473792\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+    },
+    {
+      "name": "rocwmma-pp8192-hsa1100-ub1024",
+      "cmd": [
+        "/usr/local/bin/llama-bench-rocm-rocwmma",
+        "-m",
+        "/cache/models/Qwen3.6-35B-A3B-MTP-UD-Q8_K_XL.gguf",
+        "-p",
+        "8192",
+        "-n",
+        "0",
+        "-ngl",
+        "999",
+        "-fa",
+        "1",
+        "-b",
+        "2048",
+        "-ub",
+        "1024",
+        "-r",
+        "1"
+      ],
+      "env": {
+        "HSA_OVERRIDE_GFX_VERSION": "11.0.0"
+      },
+      "returncode": 0,
+      "stdout": "| model                          |       size |     params | backend    | ngl | n_ubatch |  fa |            test |                  t/s |\n| ------------------------------ | ---------: | ---------: | ---------- | --: | -------: | --: | --------------: | -------------------: |\n| qwen35moe 35B.A3B Q8_0         |  36.40 GiB |    35.51 B | ROCm       | 999 |     1024 |   1 |          pp8192 |        589.81 \u00b1 0.00 |\n\nbuild: ac4cddeb0 (9592)\n",
+      "stderr": "ggml_cuda_init: found 1 ROCm devices (Total VRAM: 114688 MiB):\n  Device 0: Radeon 8060S Graphics, gfx1100 (0x1100), VMM: no, Wave Size: 32, VRAM: 114688 MiB\n",
+      "rows": [
+        {
+          "model": "qwen35moe 35B.A3B Q8_0",
+          "size": "36.40 GiB",
+          "params": "35.51 B",
+          "backend": "ROCm",
+          "ngl": "999",
+          "n_ubatch": "1024",
+          "fa": "1",
+          "test": "pp8192",
+          "t/s": "589.81 \u00b1 0.00"
+        }
+      ],
+      "mem_before": "\n\n============================ ROCm System Management Interface ============================\n================================== Memory Usage (Bytes) ==================================\nGPU[0]\t\t: VRAM Total Memory (B): 536870912\nGPU[0]\t\t: VRAM Total Used Memory (B): 159211520\nGPU[0]\t\t: VIS_VRAM Total Memory (B): 536870912\nGPU[0]\t\t: VIS_VRAM Total Used Memory (B): 159211520\nGPU[0]\t\t: GTT Total Memory (B): 120259084288\nGPU[0]\t\t: GTT Total Used Memory (B): 6125473792\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n",
+      "mem_after": "\n\n============================ ROCm System Management Interface ============================\n================================== Memory Usage (Bytes) ==================================\nGPU[0]\t\t: VRAM Total Memory (B): 536870912\nGPU[0]\t\t: VRAM Total Used Memory (B): 159211520\nGPU[0]\t\t: VIS_VRAM Total Memory (B): 536870912\nGPU[0]\t\t: VIS_VRAM Total Used Memory (B): 159211520\nGPU[0]\t\t: GTT Total Memory (B): 120259084288\nGPU[0]\t\t: GTT Total Used Memory (B): 6125473792\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+    },
+    {
+      "name": "rocwmma-pp8192-hsa1100-ub2048",
+      "cmd": [
+        "/usr/local/bin/llama-bench-rocm-rocwmma",
+        "-m",
+        "/cache/models/Qwen3.6-35B-A3B-MTP-UD-Q8_K_XL.gguf",
+        "-p",
+        "8192",
+        "-n",
+        "0",
+        "-ngl",
+        "999",
+        "-fa",
+        "1",
+        "-b",
+        "2048",
+        "-ub",
+        "2048",
+        "-r",
+        "1"
+      ],
+      "env": {
+        "HSA_OVERRIDE_GFX_VERSION": "11.0.0"
+      },
+      "returncode": 0,
+      "stdout": "| model                          |       size |     params | backend    | ngl | n_ubatch |  fa |            test |                  t/s |\n| ------------------------------ | ---------: | ---------: | ---------- | --: | -------: | --: | --------------: | -------------------: |\n| qwen35moe 35B.A3B Q8_0         |  36.40 GiB |    35.51 B | ROCm       | 999 |     2048 |   1 |          pp8192 |        629.86 \u00b1 0.00 |\n\nbuild: ac4cddeb0 (9592)\n",
+      "stderr": "ggml_cuda_init: found 1 ROCm devices (Total VRAM: 114688 MiB):\n  Device 0: Radeon 8060S Graphics, gfx1100 (0x1100), VMM: no, Wave Size: 32, VRAM: 114688 MiB\n",
+      "rows": [
+        {
+          "model": "qwen35moe 35B.A3B Q8_0",
+          "size": "36.40 GiB",
+          "params": "35.51 B",
+          "backend": "ROCm",
+          "ngl": "999",
+          "n_ubatch": "2048",
+          "fa": "1",
+          "test": "pp8192",
+          "t/s": "629.86 \u00b1 0.00"
+        }
+      ],
+      "mem_before": "\n\n============================ ROCm System Management Interface ============================\n================================== Memory Usage (Bytes) ==================================\nGPU[0]\t\t: VRAM Total Memory (B): 536870912\nGPU[0]\t\t: VRAM Total Used Memory (B): 159211520\nGPU[0]\t\t: VIS_VRAM Total Memory (B): 536870912\nGPU[0]\t\t: VIS_VRAM Total Used Memory (B): 159211520\nGPU[0]\t\t: GTT Total Memory (B): 120259084288\nGPU[0]\t\t: GTT Total Used Memory (B): 6125473792\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n",
+      "mem_after": "\n\n============================ ROCm System Management Interface ============================\n================================== Memory Usage (Bytes) ==================================\nGPU[0]\t\t: VRAM Total Memory (B): 536870912\nGPU[0]\t\t: VRAM Total Used Memory (B): 159211520\nGPU[0]\t\t: VIS_VRAM Total Memory (B): 536870912\nGPU[0]\t\t: VIS_VRAM Total Used Memory (B): 159211520\nGPU[0]\t\t: GTT Total Memory (B): 120259084288\nGPU[0]\t\t: GTT Total Used Memory (B): 6125473792\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+    },
+    {
+      "name": "rocwmma-pp8192-hsa1100-b4096ub1024",
+      "cmd": [
+        "/usr/local/bin/llama-bench-rocm-rocwmma",
+        "-m",
+        "/cache/models/Qwen3.6-35B-A3B-MTP-UD-Q8_K_XL.gguf",
+        "-p",
+        "8192",
+        "-n",
+        "0",
+        "-ngl",
+        "999",
+        "-fa",
+        "1",
+        "-b",
+        "4096",
+        "-ub",
+        "1024",
+        "-r",
+        "1"
+      ],
+      "env": {
+        "HSA_OVERRIDE_GFX_VERSION": "11.0.0"
+      },
+      "returncode": 0,
+      "stdout": "| model                          |       size |     params | backend    | ngl | n_batch | n_ubatch |  fa |            test |                  t/s |\n| ------------------------------ | ---------: | ---------: | ---------- | --: | ------: | -------: | --: | --------------: | -------------------: |\n| qwen35moe 35B.A3B Q8_0         |  36.40 GiB |    35.51 B | ROCm       | 999 |    4096 |     1024 |   1 |          pp8192 |        586.56 \u00b1 0.00 |\n\nbuild: ac4cddeb0 (9592)\n",
+      "stderr": "ggml_cuda_init: found 1 ROCm devices (Total VRAM: 114688 MiB):\n  Device 0: Radeon 8060S Graphics, gfx1100 (0x1100), VMM: no, Wave Size: 32, VRAM: 114688 MiB\n",
+      "rows": [
+        {
+          "model": "qwen35moe 35B.A3B Q8_0",
+          "size": "36.40 GiB",
+          "params": "35.51 B",
+          "backend": "ROCm",
+          "ngl": "999",
+          "n_batch": "4096",
+          "n_ubatch": "1024",
+          "fa": "1",
+          "test": "pp8192",
+          "t/s": "586.56 \u00b1 0.00"
+        }
+      ],
+      "mem_before": "\n\n============================ ROCm System Management Interface ============================\n================================== Memory Usage (Bytes) ==================================\nGPU[0]\t\t: VRAM Total Memory (B): 536870912\nGPU[0]\t\t: VRAM Total Used Memory (B): 159211520\nGPU[0]\t\t: VIS_VRAM Total Memory (B): 536870912\nGPU[0]\t\t: VIS_VRAM Total Used Memory (B): 159211520\nGPU[0]\t\t: GTT Total Memory (B): 120259084288\nGPU[0]\t\t: GTT Total Used Memory (B): 6125473792\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n",
+      "mem_after": "\n\n============================ ROCm System Management Interface ============================\n================================== Memory Usage (Bytes) ==================================\nGPU[0]\t\t: VRAM Total Memory (B): 536870912\nGPU[0]\t\t: VRAM Total Used Memory (B): 159211520\nGPU[0]\t\t: VIS_VRAM Total Memory (B): 536870912\nGPU[0]\t\t: VIS_VRAM Total Used Memory (B): 159211520\nGPU[0]\t\t: GTT Total Memory (B): 120259084288\nGPU[0]\t\t: GTT Total Used Memory (B): 6125473792\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+    },
+    {
+      "name": "rocwmma-pp8192-hsa1100-fa0",
+      "cmd": [
+        "/usr/local/bin/llama-bench-rocm-rocwmma",
+        "-m",
+        "/cache/models/Qwen3.6-35B-A3B-MTP-UD-Q8_K_XL.gguf",
+        "-p",
+        "8192",
+        "-n",
+        "0",
+        "-ngl",
+        "999",
+        "-fa",
+        "0",
+        "-b",
+        "2048",
+        "-ub",
+        "512",
+        "-r",
+        "1"
+      ],
+      "env": {
+        "HSA_OVERRIDE_GFX_VERSION": "11.0.0"
+      },
+      "returncode": 0,
+      "stdout": "| model                          |       size |     params | backend    | ngl |  fa |            test |                  t/s |\n| ------------------------------ | ---------: | ---------: | ---------- | --: | --: | --------------: | -------------------: |\n| qwen35moe 35B.A3B Q8_0         |  36.40 GiB |    35.51 B | ROCm       | 999 |   0 |          pp8192 |        752.93 \u00b1 0.00 |\n\nbuild: ac4cddeb0 (9592)\n",
+      "stderr": "ggml_cuda_init: found 1 ROCm devices (Total VRAM: 114688 MiB):\n  Device 0: Radeon 8060S Graphics, gfx1100 (0x1100), VMM: no, Wave Size: 32, VRAM: 114688 MiB\n",
+      "rows": [
+        {
+          "model": "qwen35moe 35B.A3B Q8_0",
+          "size": "36.40 GiB",
+          "params": "35.51 B",
+          "backend": "ROCm",
+          "ngl": "999",
+          "fa": "0",
+          "test": "pp8192",
+          "t/s": "752.93 \u00b1 0.00"
+        }
+      ],
+      "mem_before": "\n\n============================ ROCm System Management Interface ============================\n================================== Memory Usage (Bytes) ==================================\nGPU[0]\t\t: VRAM Total Memory (B): 536870912\nGPU[0]\t\t: VRAM Total Used Memory (B): 159211520\nGPU[0]\t\t: VIS_VRAM Total Memory (B): 536870912\nGPU[0]\t\t: VIS_VRAM Total Used Memory (B): 159211520\nGPU[0]\t\t: GTT Total Memory (B): 120259084288\nGPU[0]\t\t: GTT Total Used Memory (B): 6125473792\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n",
+      "mem_after": "\n\n============================ ROCm System Management Interface ============================\n================================== Memory Usage (Bytes) ==================================\nGPU[0]\t\t: VRAM Total Memory (B): 536870912\nGPU[0]\t\t: VRAM Total Used Memory (B): 159211520\nGPU[0]\t\t: VIS_VRAM Total Memory (B): 536870912\nGPU[0]\t\t: VIS_VRAM Total Used Memory (B): 159211520\nGPU[0]\t\t: GTT Total Memory (B): 120259084288\nGPU[0]\t\t: GTT Total Used Memory (B): 6125473792\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+    },
+    {
+      "name": "stock-rocm-pp8192-hsa1100-fa0",
+      "cmd": [
+        "/usr/local/bin/llama-bench-rocm",
+        "-m",
+        "/cache/models/Qwen3.6-35B-A3B-MTP-UD-Q8_K_XL.gguf",
+        "-p",
+        "8192",
+        "-n",
+        "0",
+        "-ngl",
+        "999",
+        "-fa",
+        "0",
+        "-b",
+        "2048",
+        "-ub",
+        "512",
+        "-r",
+        "1"
+      ],
+      "env": {
+        "HSA_OVERRIDE_GFX_VERSION": "11.0.0"
+      },
+      "returncode": 0,
+      "stdout": "| model                          |       size |     params | backend    | ngl |  fa |            test |                  t/s |\n| ------------------------------ | ---------: | ---------: | ---------- | --: | --: | --------------: | -------------------: |\n| qwen35moe 35B.A3B Q8_0         |  36.40 GiB |    35.51 B | ROCm       | 999 |   0 |          pp8192 |        754.21 \u00b1 0.00 |\n\nbuild: ac4cddeb0 (9592)\n",
+      "stderr": "ggml_cuda_init: found 1 ROCm devices (Total VRAM: 114688 MiB):\n  Device 0: Radeon 8060S Graphics, gfx1100 (0x1100), VMM: no, Wave Size: 32, VRAM: 114688 MiB\n",
+      "rows": [
+        {
+          "model": "qwen35moe 35B.A3B Q8_0",
+          "size": "36.40 GiB",
+          "params": "35.51 B",
+          "backend": "ROCm",
+          "ngl": "999",
+          "fa": "0",
+          "test": "pp8192",
+          "t/s": "754.21 \u00b1 0.00"
+        }
+      ],
+      "mem_before": "\n\n============================ ROCm System Management Interface ============================\n================================== Memory Usage (Bytes) ==================================\nGPU[0]\t\t: VRAM Total Memory (B): 536870912\nGPU[0]\t\t: VRAM Total Used Memory (B): 159211520\nGPU[0]\t\t: VIS_VRAM Total Memory (B): 536870912\nGPU[0]\t\t: VIS_VRAM Total Used Memory (B): 159211520\nGPU[0]\t\t: GTT Total Memory (B): 120259084288\nGPU[0]\t\t: GTT Total Used Memory (B): 6125473792\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n",
+      "mem_after": "\n\n============================ ROCm System Management Interface ============================\n================================== Memory Usage (Bytes) ==================================\nGPU[0]\t\t: VRAM Total Memory (B): 536870912\nGPU[0]\t\t: VRAM Total Used Memory (B): 159211520\nGPU[0]\t\t: VIS_VRAM Total Memory (B): 536870912\nGPU[0]\t\t: VIS_VRAM Total Used Memory (B): 159211520\nGPU[0]\t\t: GTT Total Memory (B): 120259084288\nGPU[0]\t\t: GTT Total Used Memory (B): 6125473792\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+    }
+  ],
+  "errors": [],
+  "llama_bench_help_contains_mmap": true,
+  "completed_at": "2026-06-21T09:30:50.900877+00:00"
+}

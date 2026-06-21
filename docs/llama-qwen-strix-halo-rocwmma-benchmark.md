@@ -9,7 +9,8 @@ Projector: `Qwen3.6-35B-A3B-mmproj-F16.gguf`
 
 ## Build artifact
 
-The zen5 tool image now preserves separate binaries for deliberate comparison:
+The benchmarked zen5 tool image preserved separate binaries for deliberate
+comparison during the experiment:
 
 - `/usr/local/bin/llama-server-vulkan`
 - `/usr/local/bin/llama-server-rocm`
@@ -18,6 +19,8 @@ The zen5 tool image now preserves separate binaries for deliberate comparison:
 
 The default `/usr/local/bin/llama-server` symlink remains Vulkan. The Kubernetes
 `llama-qwen` resident service remains configured for `llama_cpp_backend: vulkan`.
+After review, Joy chose to drop the rocWMMA build path and keep only the Vulkan
+and stock ROCm backends for future comparison.
 
 The rebuilt root-owned image was checked before benchmarking:
 
@@ -118,11 +121,125 @@ Raw timing/result files:
 - `docs/llama-qwen-strix-halo-rocwmma-benchmark-rerun-results.json`
 - `docs/llama-qwen-strix-halo-rocwmma-gpu-rerun-results.json`
 
+## Long-context follow-up
+
+Joy asked whether rocWMMA flash-attention fares better at longer context sizes,
+where it might plausibly pull ahead of Vulkan. I ran a bounded follow-up with
+Honcho/self-improvement traffic quieted again, `--ctx-size 131072`, one slot,
+`--flash-attn on`, `--no-mmap`, `--batch-size 2048`, `--ubatch-size 512`, and
+64 predicted tokens per row. The ROCm rocWMMA run used
+`HSA_OVERRIDE_GFX_VERSION=11.0.0` and `--n-gpu-layers 999`; logs again proved
+`ROCm0 : Radeon 8060S Graphics` and `rocminfo` enumerated the HSA agents.
+
+| Variant | Actual prompt tokens | Prompt eval | Token gen | GTT before -> after | Notes |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Vulkan | 8,206 | 902.03 tok/s | 53.12 tok/s | 46.61 GiB -> 46.76 GiB | ctx 131k / parallel 1 |
+| Vulkan | 16,367 | 886.49 tok/s | 66.39 tok/s | 46.76 GiB -> 46.76 GiB | ctx 131k / parallel 1 |
+| Vulkan | 32,744 | 787.44 tok/s | 52.93 tok/s | 46.76 GiB -> 46.76 GiB | ctx 131k / parallel 1 |
+| ROCm + rocWMMA FATTN | 8,206 | 456.01 tok/s | 38.77 tok/s | 46.14 GiB -> 46.51 GiB | ctx 131k / parallel 1 / `--n-gpu-layers 999` |
+| ROCm + rocWMMA FATTN | 16,367 | 336.44 tok/s | 29.71 tok/s | 46.51 GiB -> 46.51 GiB | ctx 131k / parallel 1 / `--n-gpu-layers 999` |
+| ROCm + rocWMMA FATTN | 32,744 | 216.17 tok/s | 16.32 tok/s | 46.51 GiB -> 46.51 GiB | ctx 131k / parallel 1 / `--n-gpu-layers 999` |
+
+This follow-up did not find the expected long-context win. rocWMMA prompt eval
+fell farther behind Vulkan as the prompt grew: about 51% of Vulkan at ~8k tokens,
+38% at ~16k, and 27% at ~32k. Token generation also trailed Vulkan in all three
+rows. GTT stayed flat after load for both backends, so this run did not reproduce
+the earlier stock-ROCm host-memory growth concern, but it also did not provide a
+performance reason to move resident `llama-qwen` off Vulkan.
+
+Raw follow-up file:
+
+- `docs/llama-qwen-strix-halo-rocwmma-long-context-results.json`
+
+## Improvement probe
+
+Joy then asked whether something else was wrong, because the ROCm/rocWMMA deficit
+is counter to public Strix Halo ROCm/flash-attention narratives. I ran a second
+bounded probe in a temporary isolated benchmark pod using the same zen5 image,
+PVC, and model, with the resident `llama-qwen` service and Honcho background
+consumers scaled down only for the benchmark window and restored afterward.
+
+The probe separates direct `llama-bench` behavior from the prior server canary:
+
+| Variant | Test | Result | Notes |
+| --- | ---: | ---: | --- |
+| Vulkan | pp8192 | 1027.77 tok/s | direct `llama-bench`, flash-attn on |
+| stock ROCm | pp8192 | 776.26 tok/s | `HSA_OVERRIDE_GFX_VERSION=11.0.0`, flash-attn on |
+| ROCm + rocWMMA FATTN | pp8192 | 499.55 tok/s | `HSA_OVERRIDE_GFX_VERSION=11.0.0`, flash-attn on |
+| ROCm + rocWMMA FATTN | pp8192 | fail | unset HSA sees `gfx1151` but rocBLAS lacks a gfx1151 Tensile library |
+| Vulkan | pp16384 | 968.56 tok/s | direct `llama-bench`, flash-attn on |
+| stock ROCm | pp16384 | 737.20 tok/s | direct `llama-bench`, flash-attn on |
+| ROCm + rocWMMA FATTN | pp16384 | 358.94 tok/s | direct `llama-bench`, flash-attn on |
+| stock ROCm | pp32768 | 646.00 tok/s | direct `llama-bench`, flash-attn on |
+| ROCm + rocWMMA FATTN | pp512 / tg128 | 754.03 / 39.94 tok/s | direct `llama-bench`, flash-attn on |
+| Vulkan | pp512 / tg128 | 1101.60 / 48.29 tok/s | direct `llama-bench`, flash-attn on |
+
+The main improvement is diagnostic rather than deployable: direct `llama-bench`
+stock ROCm is substantially better than the server rocWMMA long-context rows, so
+part of the frightening result was the server/MTP/long-prompt shape. However,
+that did not uncover a ROCm win: direct Vulkan still beat stock ROCm at every
+probed prompt length, and stock ROCm beat the rocWMMA flash-attention build.
+
+I also tried tuning the rocWMMA flash-attention microbatch shape:
+
+| Variant | Test | Result | Notes |
+| --- | ---: | ---: | --- |
+| ROCm + rocWMMA FATTN | pp8192 | 589.81 tok/s | `--ubatch-size 1024` |
+| ROCm + rocWMMA FATTN | pp8192 | 629.86 tok/s | `--ubatch-size 2048`, best rocWMMA FATTN row |
+| ROCm + rocWMMA FATTN | pp8192 | 586.56 tok/s | `--batch-size 4096 --ubatch-size 1024` |
+| ROCm rocWMMA binary, FA off | pp8192 | 752.93 tok/s | disabling flash-attn removes the rocWMMA FATTN path |
+| stock ROCm, FA off | pp8192 | 754.21 tok/s | essentially the same as the rocWMMA binary with FA off |
+
+So yes, the rocWMMA result can be improved from about 500 to about 630 tok/s at
+pp8192 by increasing `--ubatch-size`, and disabling flash-attention reaches about
+753 tok/s. But disabling flash-attention is not a rocWMMA FATTN win, and the best
+rocWMMA FATTN row still trails both stock ROCm and Vulkan. The unset-HSA probe
+also confirms why the canaries need either a real `HSA_OVERRIDE_GFX_VERSION` such
+as `11.0.0` or a future ROCm stack with native `gfx1151` Tensile coverage.
+
+Raw probe files:
+
+- `docs/llama-qwen-strix-halo-rocwmma-improvement-probe-results.json`
+- `docs/llama-qwen-strix-halo-rocwmma-tuning-probe-results.json`
+
+## `ROCBLAS_USE_HIPBLASLT=1` follow-up
+
+Joy asked to try `ROCBLAS_USE_HIPBLASLT=1` based on the Strix Halo wiki tuning
+note. I reran the direct `llama-bench` probe in an isolated temporary pod with
+`HSA_OVERRIDE_GFX_VERSION=11.0.0`, `ROCBLAS_USE_HIPBLASLT=1`, flash-attention on,
+and the same UD-Q8_K_XL model/PVC. The probe confirmed GPU use through
+`rocminfo` (`gfx1100` / Radeon 8060S) and llama.cpp ROCm device logs.
+
+| Variant | Test | Result | Notes |
+| --- | ---: | ---: | --- |
+| stock ROCm + hipBLASLt | pp8192 | 794.24 tok/s | slightly above prior stock ROCm 776.26 tok/s |
+| stock ROCm + hipBLASLt | pp16384 | 721.86 tok/s | slightly below prior stock ROCm 737.20 tok/s |
+| stock ROCm + hipBLASLt | pp32768 | 647.79 tok/s | effectively unchanged from prior stock ROCm 646.00 tok/s |
+| ROCm + rocWMMA FATTN + hipBLASLt | pp8192 | 509.34 tok/s | essentially unchanged from prior rocWMMA 499.55 tok/s |
+| ROCm + rocWMMA FATTN + hipBLASLt | pp8192 | 617.25 tok/s | `--ubatch-size 2048`, still below prior best 629.86 tok/s |
+| ROCm + rocWMMA FATTN + hipBLASLt | pp16384 | 360.61 tok/s | essentially unchanged from prior rocWMMA 358.94 tok/s |
+| ROCm + rocWMMA FATTN + hipBLASLt | pp16384 | 403.78 tok/s | `--ubatch-size 2048`, still far below stock ROCm |
+| stock ROCm + hipBLASLt | pp512 / tg128 | 859.56 / 41.21 tok/s | token generation still below Vulkan's prior 48.29 tok/s |
+| ROCm + rocWMMA FATTN + hipBLASLt | pp512 / tg128 | 796.44 / 41.02 tok/s | still below stock ROCm on prompt eval |
+
+`ROCBLAS_USE_HIPBLASLT=1` did not rescue the rocWMMA flash-attention path. It may
+help or hurt individual stock ROCm prompt rows by a few percent, but the longer
+rows are effectively unchanged and the rocWMMA FATTN rows remain below stock ROCm
+and Vulkan. The pp512/tg128 token-generation row improved versus the previous
+stock ROCm row, but still trails the Vulkan row and does not change the resident
+backend recommendation.
+
+Raw hipBLASLt probe file:
+
+- `docs/llama-qwen-strix-halo-rocwmma-hipblaslt-results.json`
+
 ## Recommendation
 
-Do not switch resident `llama-qwen` away from Vulkan. Keep the new stock ROCm and
-rocWMMA binaries in the tool image as explicit experimental artifacts, but Vulkan
-remains the faster and safer resident backend for this Qwen3.6 UD-Q8_K_XL MTP
-server shape. If ROCm is revisited, use a non-empty `HSA_OVERRIDE_GFX_VERSION` for
-the ROCm canary or leave the variable truly unset; do not set it to an empty
-string.
+Do not switch resident `llama-qwen` away from Vulkan. Keep Vulkan as the resident
+backend and keep only the stock ROCm backend alongside it for deliberate future
+comparison; drop the rocWMMA build path because every bounded rocWMMA FATTN probe
+trailed stock ROCm and Vulkan. If ROCm is revisited, use a non-empty
+`HSA_OVERRIDE_GFX_VERSION` for the ROCm canary until the ROCm/Tensile stack has
+native `gfx1151` coverage; do not set it to an empty string.
+`ROCBLAS_USE_HIPBLASLT=1` can stay on the candidate list as a small stock-ROCm
+tuning knob, but it did not make rocWMMA flash-attention competitive in this run.

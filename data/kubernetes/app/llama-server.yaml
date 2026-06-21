@@ -133,7 +133,7 @@ resources:
                 - |-
                   backend="${LLAMA_CPP_BACKEND:-%{lookup('llama_cpp_backend')}}"
                   case "$backend" in
-                    vulkan|rocm|rocm-rocwmma) ;;
+                    vulkan|rocm) ;;
                     *) echo "unsupported llama.cpp backend: $backend" >&2; exit 64 ;;
                   esac
                   if [ -z "${HSA_OVERRIDE_GFX_VERSION:-}" ]; then

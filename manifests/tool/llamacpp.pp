@@ -1,11 +1,9 @@
 class nest::tool::llamacpp (
   String        $revision             = 'master',
   Boolean       $build_rocm           = ($facts.dig('profile', 'cpu') == 'zen5'),
-  Boolean       $build_rocm_rocwmma   = false,
   Array[String] $rocm_amdgpu_targets  = ['gfx1151'],
 ) {
   $build_rocm_real = $build_rocm and ($facts.dig('profile', 'cpu') == 'zen5')
-  $build_rocm_rocwmma_real = $build_rocm_real and $build_rocm_rocwmma
   $rocm_targets = ['llama-server', 'llama-bench']
   $rocm_commands = $build_rocm_real ? {
     true    => [
@@ -30,29 +28,6 @@ class nest::tool::llamacpp (
     ],
     default => [],
   }
-  $rocm_rocwmma_commands = $build_rocm_rocwmma_real ? {
-    true    => [
-      ['cmake -S . -B build-rocm-rocwmma -G Ninja',
-        '-DCMAKE_BUILD_TYPE=Release',
-        '-DCMAKE_INSTALL_PREFIX=/usr/local',
-        '-DCMAKE_INSTALL_RPATH=/usr/local/lib64',
-        '-DCMAKE_BUILD_WITH_INSTALL_RPATH=ON',
-        '-DBUILD_SHARED_LIBS=OFF',
-        '-DGGML_RVV=OFF',
-        '-DGGML_RV_ZFH=OFF',
-        '-DGGML_RV_ZVFH=OFF',
-        '-DGGML_RV_ZICBOP=OFF',
-        '-DGGML_RV_ZIHINTPAUSE=OFF',
-        '-DGGML_VULKAN=OFF',
-        '-DGGML_HIP=ON',
-        '-DGGML_HIP_ROCWMMA_FATTN=ON',
-        "'-DAMDGPU_TARGETS=${rocm_amdgpu_targets.join(';')}'",
-        '-DLLAMA_OPENSSL=ON',
-      ].join(' '),
-      "cmake --build build-rocm-rocwmma --target ${rocm_targets.join(' ')}",
-    ],
-    default => [],
-  }
   $rocm_packages = $build_rocm_real ? {
     true    => ['dev-util/hip', 'dev-util/hipcc', 'dev-util/rocminfo', 'sci-libs/hipBLAS', 'sci-libs/hipBLAS-common'],
     default => [],
@@ -70,13 +45,6 @@ class nest::tool::llamacpp (
   ] + $rocm_packages:
     ensure => installed,
     before => Nest::Lib::Build['llama.cpp'],
-  }
-
-  if $build_rocm_rocwmma_real {
-    nest::lib::package { 'sci-libs/rocWMMA':
-      ensure => installed,
-      before => Nest::Lib::Build['llama.cpp'],
-    }
   }
 
   nest::lib::src_repo { '/usr/src/llama.cpp':
@@ -104,7 +72,7 @@ class nest::tool::llamacpp (
         '-DLLAMA_OPENSSL=ON',
       ].join(' '),
       'cmake --build build-vulkan --target llama-server llama-bench',
-    ] + $rocm_commands + $rocm_rocwmma_commands,
+    ] + $rocm_commands,
     require => Class['nest::base::gpu'],
   }
 
@@ -144,22 +112,6 @@ class nest::tool::llamacpp (
     }
   }
 
-  if $build_rocm_rocwmma_real {
-    file { '/usr/local/bin/llama-server-rocm-rocwmma':
-      ensure  => file,
-      source  => '/usr/src/llama.cpp/build-rocm-rocwmma/bin/llama-server',
-      mode    => '0755',
-      require => Nest::Lib::Build['llama.cpp'],
-    }
-
-    file { '/usr/local/bin/llama-bench-rocm-rocwmma':
-      ensure  => file,
-      source  => '/usr/src/llama.cpp/build-rocm-rocwmma/bin/llama-bench',
-      mode    => '0755',
-      require => Nest::Lib::Build['llama.cpp'],
-    }
-  }
-
   file { '/usr/src/llama.cpp/build-vulkan':
     ensure  => absent,
     force   => true,
@@ -178,18 +130,6 @@ class nest::tool::llamacpp (
       require => [
         File['/usr/local/bin/llama-server-rocm'],
         File['/usr/local/bin/llama-bench-rocm'],
-      ],
-    }
-  }
-
-  if $build_rocm_rocwmma_real {
-    file { '/usr/src/llama.cpp/build-rocm-rocwmma':
-      ensure  => absent,
-      force   => true,
-      recurse => true,
-      require => [
-        File['/usr/local/bin/llama-server-rocm-rocwmma'],
-        File['/usr/local/bin/llama-bench-rocm-rocwmma'],
       ],
     }
   }

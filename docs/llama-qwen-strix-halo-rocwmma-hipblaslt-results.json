@@ -1,0 +1,600 @@
+{
+  "started_at": "2026-06-21T16:39:24.855685+00:00",
+  "purpose": "Test ROCBLAS_USE_HIPBLASLT=1 for Strix Halo ROCm/rocWMMA llama.cpp",
+  "pod": "llama-hipblaslt-bench",
+  "image": "registry.gitlab.joyfullee.me/nest/tools/llama.cpp:zen5",
+  "original_replicas": {
+    "llama-qwen": 1,
+    "honcho-deriver": 1,
+    "honcho-embeddings": 1,
+    "llama-qwen-honcho": 1
+  },
+  "rocminfo": {
+    "cmd": [
+      "kubectl",
+      "-n",
+      "ai",
+      "exec",
+      "llama-hipblaslt-bench",
+      "--",
+      "sh",
+      "-ceu",
+      "HSA_OVERRIDE_GFX_VERSION=11.0.0 /opt/rocm/bin/rocminfo | grep -E 'Name:|Marketing Name|gfx|Agent' | head -80 || true"
+    ],
+    "returncode": 0,
+    "stdout": "",
+    "stderr": "sh: line 1: /opt/rocm/bin/rocminfo: No such file or directory\n"
+  },
+  "probes": [
+    {
+      "name": "stock-rocm-pp8192-hipblaslt1-fa-ub512",
+      "cmd": [
+        "/usr/local/bin/llama-bench-rocm",
+        "-m",
+        "/cache/models/Qwen3.6-35B-A3B-MTP-UD-Q8_K_XL.gguf",
+        "-p",
+        "8192",
+        "-n",
+        "0",
+        "-ngl",
+        "999",
+        "-fa",
+        "1",
+        "-b",
+        "2048",
+        "-ub",
+        "512",
+        "-r",
+        "1"
+      ],
+      "env": {
+        "HSA_OVERRIDE_GFX_VERSION": "11.0.0",
+        "ROCBLAS_USE_HIPBLASLT": "1"
+      },
+      "returncode": 0,
+      "stdout": "| model                          |       size |     params | backend    | ngl |  fa |            test |                  t/s |\n| ------------------------------ | ---------: | ---------: | ---------- | --: | --: | --------------: | -------------------: |\n| qwen35moe 35B.A3B Q8_0         |  36.40 GiB |    35.51 B | ROCm       | 999 |   1 |          pp8192 |        794.24 \u00b1 0.00 |\n\nbuild: ac4cddeb0 (9592)\n",
+      "stderr": "ggml_cuda_init: found 1 ROCm devices (Total VRAM: 114688 MiB):\n  Device 0: Radeon 8060S Graphics, gfx1100 (0x1100), VMM: no, Wave Size: 32, VRAM: 114688 MiB\n",
+      "rows": [
+        {
+          "model": "qwen35moe 35B.A3B Q8_0",
+          "size": "36.40 GiB",
+          "params": "35.51 B",
+          "backend": "ROCm",
+          "ngl": "999",
+          "fa": "1",
+          "test": "pp8192",
+          "t/s": "794.24 \u00b1 0.00"
+        }
+      ],
+      "mem_before": "\n\n============================ ROCm System Management Interface ============================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 29\nGPU[0]\t\t: Memory Activity: N/A\nGPU[0]\t\t: Not supported on the given system\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n",
+      "mem_after": "\n\n============================ ROCm System Management Interface ============================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 29\nGPU[0]\t\t: Memory Activity: N/A\nGPU[0]\t\t: Not supported on the given system\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+    },
+    {
+      "name": "stock-rocm-pp16384-hipblaslt1-fa-ub512",
+      "cmd": [
+        "/usr/local/bin/llama-bench-rocm",
+        "-m",
+        "/cache/models/Qwen3.6-35B-A3B-MTP-UD-Q8_K_XL.gguf",
+        "-p",
+        "16384",
+        "-n",
+        "0",
+        "-ngl",
+        "999",
+        "-fa",
+        "1",
+        "-b",
+        "2048",
+        "-ub",
+        "512",
+        "-r",
+        "1"
+      ],
+      "env": {
+        "HSA_OVERRIDE_GFX_VERSION": "11.0.0",
+        "ROCBLAS_USE_HIPBLASLT": "1"
+      },
+      "returncode": 0,
+      "stdout": "| model                          |       size |     params | backend    | ngl |  fa |            test |                  t/s |\n| ------------------------------ | ---------: | ---------: | ---------- | --: | --: | --------------: | -------------------: |\n| qwen35moe 35B.A3B Q8_0         |  36.40 GiB |    35.51 B | ROCm       | 999 |   1 |         pp16384 |        721.86 \u00b1 0.00 |\n\nbuild: ac4cddeb0 (9592)\n",
+      "stderr": "ggml_cuda_init: found 1 ROCm devices (Total VRAM: 114688 MiB):\n  Device 0: Radeon 8060S Graphics, gfx1100 (0x1100), VMM: no, Wave Size: 32, VRAM: 114688 MiB\n",
+      "rows": [
+        {
+          "model": "qwen35moe 35B.A3B Q8_0",
+          "size": "36.40 GiB",
+          "params": "35.51 B",
+          "backend": "ROCm",
+          "ngl": "999",
+          "fa": "1",
+          "test": "pp16384",
+          "t/s": "721.86 \u00b1 0.00"
+        }
+      ],
+      "mem_before": "\n\n============================ ROCm System Management Interface ============================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 29\nGPU[0]\t\t: Memory Activity: N/A\nGPU[0]\t\t: Not supported on the given system\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n",
+      "mem_after": "\n\n============================ ROCm System Management Interface ============================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 29\nGPU[0]\t\t: Memory Activity: N/A\nGPU[0]\t\t: Not supported on the given system\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+    },
+    {
+      "name": "stock-rocm-pp32768-hipblaslt1-fa-ub512",
+      "cmd": [
+        "/usr/local/bin/llama-bench-rocm",
+        "-m",
+        "/cache/models/Qwen3.6-35B-A3B-MTP-UD-Q8_K_XL.gguf",
+        "-p",
+        "32768",
+        "-n",
+        "0",
+        "-ngl",
+        "999",
+        "-fa",
+        "1",
+        "-b",
+        "2048",
+        "-ub",
+        "512",
+        "-r",
+        "1"
+      ],
+      "env": {
+        "HSA_OVERRIDE_GFX_VERSION": "11.0.0",
+        "ROCBLAS_USE_HIPBLASLT": "1"
+      },
+      "returncode": 0,
+      "stdout": "| model                          |       size |     params | backend    | ngl |  fa |            test |                  t/s |\n| ------------------------------ | ---------: | ---------: | ---------- | --: | --: | --------------: | -------------------: |\n| qwen35moe 35B.A3B Q8_0         |  36.40 GiB |    35.51 B | ROCm       | 999 |   1 |         pp32768 |        647.79 \u00b1 0.00 |\n\nbuild: ac4cddeb0 (9592)\n",
+      "stderr": "ggml_cuda_init: found 1 ROCm devices (Total VRAM: 114688 MiB):\n  Device 0: Radeon 8060S Graphics, gfx1100 (0x1100), VMM: no, Wave Size: 32, VRAM: 114688 MiB\n",
+      "rows": [
+        {
+          "model": "qwen35moe 35B.A3B Q8_0",
+          "size": "36.40 GiB",
+          "params": "35.51 B",
+          "backend": "ROCm",
+          "ngl": "999",
+          "fa": "1",
+          "test": "pp32768",
+          "t/s": "647.79 \u00b1 0.00"
+        }
+      ],
+      "mem_before": "\n\n============================ ROCm System Management Interface ============================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 29\nGPU[0]\t\t: Memory Activity: N/A\nGPU[0]\t\t: Not supported on the given system\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n",
+      "mem_after": "\n\n============================ ROCm System Management Interface ============================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 29\nGPU[0]\t\t: Memory Activity: N/A\nGPU[0]\t\t: Not supported on the given system\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+    },
+    {
+      "name": "rocwmma-pp8192-hipblaslt1-fa-ub512",
+      "cmd": [
+        "/usr/local/bin/llama-bench-rocm-rocwmma",
+        "-m",
+        "/cache/models/Qwen3.6-35B-A3B-MTP-UD-Q8_K_XL.gguf",
+        "-p",
+        "8192",
+        "-n",
+        "0",
+        "-ngl",
+        "999",
+        "-fa",
+        "1",
+        "-b",
+        "2048",
+        "-ub",
+        "512",
+        "-r",
+        "1"
+      ],
+      "env": {
+        "HSA_OVERRIDE_GFX_VERSION": "11.0.0",
+        "ROCBLAS_USE_HIPBLASLT": "1"
+      },
+      "returncode": 0,
+      "stdout": "| model                          |       size |     params | backend    | ngl |  fa |            test |                  t/s |\n| ------------------------------ | ---------: | ---------: | ---------- | --: | --: | --------------: | -------------------: |\n| qwen35moe 35B.A3B Q8_0         |  36.40 GiB |    35.51 B | ROCm       | 999 |   1 |          pp8192 |        509.34 \u00b1 0.00 |\n\nbuild: ac4cddeb0 (9592)\n",
+      "stderr": "ggml_cuda_init: found 1 ROCm devices (Total VRAM: 114688 MiB):\n  Device 0: Radeon 8060S Graphics, gfx1100 (0x1100), VMM: no, Wave Size: 32, VRAM: 114688 MiB\n",
+      "rows": [
+        {
+          "model": "qwen35moe 35B.A3B Q8_0",
+          "size": "36.40 GiB",
+          "params": "35.51 B",
+          "backend": "ROCm",
+          "ngl": "999",
+          "fa": "1",
+          "test": "pp8192",
+          "t/s": "509.34 \u00b1 0.00"
+        }
+      ],
+      "mem_before": "\n\n============================ ROCm System Management Interface ============================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 29\nGPU[0]\t\t: Memory Activity: N/A\nGPU[0]\t\t: Not supported on the given system\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n",
+      "mem_after": "\n\n============================ ROCm System Management Interface ============================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 29\nGPU[0]\t\t: Memory Activity: N/A\nGPU[0]\t\t: Not supported on the given system\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+    },
+    {
+      "name": "rocwmma-pp8192-hipblaslt1-fa-ub2048",
+      "cmd": [
+        "/usr/local/bin/llama-bench-rocm-rocwmma",
+        "-m",
+        "/cache/models/Qwen3.6-35B-A3B-MTP-UD-Q8_K_XL.gguf",
+        "-p",
+        "8192",
+        "-n",
+        "0",
+        "-ngl",
+        "999",
+        "-fa",
+        "1",
+        "-b",
+        "2048",
+        "-ub",
+        "2048",
+        "-r",
+        "1"
+      ],
+      "env": {
+        "HSA_OVERRIDE_GFX_VERSION": "11.0.0",
+        "ROCBLAS_USE_HIPBLASLT": "1"
+      },
+      "returncode": 0,
+      "stdout": "| model                          |       size |     params | backend    | ngl | n_ubatch |  fa |            test |                  t/s |\n| ------------------------------ | ---------: | ---------: | ---------- | --: | -------: | --: | --------------: | -------------------: |\n| qwen35moe 35B.A3B Q8_0         |  36.40 GiB |    35.51 B | ROCm       | 999 |     2048 |   1 |          pp8192 |        617.25 \u00b1 0.00 |\n\nbuild: ac4cddeb0 (9592)\n",
+      "stderr": "ggml_cuda_init: found 1 ROCm devices (Total VRAM: 114688 MiB):\n  Device 0: Radeon 8060S Graphics, gfx1100 (0x1100), VMM: no, Wave Size: 32, VRAM: 114688 MiB\n",
+      "rows": [
+        {
+          "model": "qwen35moe 35B.A3B Q8_0",
+          "size": "36.40 GiB",
+          "params": "35.51 B",
+          "backend": "ROCm",
+          "ngl": "999",
+          "n_ubatch": "2048",
+          "fa": "1",
+          "test": "pp8192",
+          "t/s": "617.25 \u00b1 0.00"
+        }
+      ],
+      "mem_before": "\n\n============================ ROCm System Management Interface ============================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 29\nGPU[0]\t\t: Memory Activity: N/A\nGPU[0]\t\t: Not supported on the given system\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n",
+      "mem_after": "\n\n============================ ROCm System Management Interface ============================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 29\nGPU[0]\t\t: Memory Activity: N/A\nGPU[0]\t\t: Not supported on the given system\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+    },
+    {
+      "name": "rocwmma-pp16384-hipblaslt1-fa-ub512",
+      "cmd": [
+        "/usr/local/bin/llama-bench-rocm-rocwmma",
+        "-m",
+        "/cache/models/Qwen3.6-35B-A3B-MTP-UD-Q8_K_XL.gguf",
+        "-p",
+        "16384",
+        "-n",
+        "0",
+        "-ngl",
+        "999",
+        "-fa",
+        "1",
+        "-b",
+        "2048",
+        "-ub",
+        "512",
+        "-r",
+        "1"
+      ],
+      "env": {
+        "HSA_OVERRIDE_GFX_VERSION": "11.0.0",
+        "ROCBLAS_USE_HIPBLASLT": "1"
+      },
+      "returncode": 0,
+      "stdout": "| model                          |       size |     params | backend    | ngl |  fa |            test |                  t/s |\n| ------------------------------ | ---------: | ---------: | ---------- | --: | --: | --------------: | -------------------: |\n| qwen35moe 35B.A3B Q8_0         |  36.40 GiB |    35.51 B | ROCm       | 999 |   1 |         pp16384 |        360.61 \u00b1 0.00 |\n\nbuild: ac4cddeb0 (9592)\n",
+      "stderr": "ggml_cuda_init: found 1 ROCm devices (Total VRAM: 114688 MiB):\n  Device 0: Radeon 8060S Graphics, gfx1100 (0x1100), VMM: no, Wave Size: 32, VRAM: 114688 MiB\n",
+      "rows": [
+        {
+          "model": "qwen35moe 35B.A3B Q8_0",
+          "size": "36.40 GiB",
+          "params": "35.51 B",
+          "backend": "ROCm",
+          "ngl": "999",
+          "fa": "1",
+          "test": "pp16384",
+          "t/s": "360.61 \u00b1 0.00"
+        }
+      ],
+      "mem_before": "\n\n============================ ROCm System Management Interface ============================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 29\nGPU[0]\t\t: Memory Activity: N/A\nGPU[0]\t\t: Not supported on the given system\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n",
+      "mem_after": "\n\n============================ ROCm System Management Interface ============================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 29\nGPU[0]\t\t: Memory Activity: N/A\nGPU[0]\t\t: Not supported on the given system\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+    },
+    {
+      "name": "rocwmma-pp16384-hipblaslt1-fa-ub2048",
+      "cmd": [
+        "/usr/local/bin/llama-bench-rocm-rocwmma",
+        "-m",
+        "/cache/models/Qwen3.6-35B-A3B-MTP-UD-Q8_K_XL.gguf",
+        "-p",
+        "16384",
+        "-n",
+        "0",
+        "-ngl",
+        "999",
+        "-fa",
+        "1",
+        "-b",
+        "2048",
+        "-ub",
+        "2048",
+        "-r",
+        "1"
+      ],
+      "env": {
+        "HSA_OVERRIDE_GFX_VERSION": "11.0.0",
+        "ROCBLAS_USE_HIPBLASLT": "1"
+      },
+      "returncode": 0,
+      "stdout": "| model                          |       size |     params | backend    | ngl | n_ubatch |  fa |            test |                  t/s |\n| ------------------------------ | ---------: | ---------: | ---------- | --: | -------: | --: | --------------: | -------------------: |\n| qwen35moe 35B.A3B Q8_0         |  36.40 GiB |    35.51 B | ROCm       | 999 |     2048 |   1 |         pp16384 |        403.78 \u00b1 0.00 |\n\nbuild: ac4cddeb0 (9592)\n",
+      "stderr": "ggml_cuda_init: found 1 ROCm devices (Total VRAM: 114688 MiB):\n  Device 0: Radeon 8060S Graphics, gfx1100 (0x1100), VMM: no, Wave Size: 32, VRAM: 114688 MiB\n",
+      "rows": [
+        {
+          "model": "qwen35moe 35B.A3B Q8_0",
+          "size": "36.40 GiB",
+          "params": "35.51 B",
+          "backend": "ROCm",
+          "ngl": "999",
+          "n_ubatch": "2048",
+          "fa": "1",
+          "test": "pp16384",
+          "t/s": "403.78 \u00b1 0.00"
+        }
+      ],
+      "mem_before": "\n\n============================ ROCm System Management Interface ============================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 29\nGPU[0]\t\t: Memory Activity: N/A\nGPU[0]\t\t: Not supported on the given system\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n",
+      "mem_after": "\n\n============================ ROCm System Management Interface ============================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 29\nGPU[0]\t\t: Memory Activity: N/A\nGPU[0]\t\t: Not supported on the given system\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+    },
+    {
+      "name": "stock-rocm-pp512-tg128-hipblaslt1-fa-ub512",
+      "cmd": [
+        "/usr/local/bin/llama-bench-rocm",
+        "-m",
+        "/cache/models/Qwen3.6-35B-A3B-MTP-UD-Q8_K_XL.gguf",
+        "-p",
+        "512",
+        "-n",
+        "128",
+        "-ngl",
+        "999",
+        "-fa",
+        "1",
+        "-b",
+        "2048",
+        "-ub",
+        "512",
+        "-r",
+        "1"
+      ],
+      "env": {
+        "HSA_OVERRIDE_GFX_VERSION": "11.0.0",
+        "ROCBLAS_USE_HIPBLASLT": "1"
+      },
+      "returncode": 0,
+      "stdout": "| model                          |       size |     params | backend    | ngl |  fa |            test |                  t/s |\n| ------------------------------ | ---------: | ---------: | ---------- | --: | --: | --------------: | -------------------: |\n| qwen35moe 35B.A3B Q8_0         |  36.40 GiB |    35.51 B | ROCm       | 999 |   1 |           pp512 |        859.56 \u00b1 0.00 |\n| qwen35moe 35B.A3B Q8_0         |  36.40 GiB |    35.51 B | ROCm       | 999 |   1 |           tg128 |         41.21 \u00b1 0.00 |\n\nbuild: ac4cddeb0 (9592)\n",
+      "stderr": "ggml_cuda_init: found 1 ROCm devices (Total VRAM: 114688 MiB):\n  Device 0: Radeon 8060S Graphics, gfx1100 (0x1100), VMM: no, Wave Size: 32, VRAM: 114688 MiB\n",
+      "rows": [
+        {
+          "model": "qwen35moe 35B.A3B Q8_0",
+          "size": "36.40 GiB",
+          "params": "35.51 B",
+          "backend": "ROCm",
+          "ngl": "999",
+          "fa": "1",
+          "test": "pp512",
+          "t/s": "859.56 \u00b1 0.00"
+        },
+        {
+          "model": "qwen35moe 35B.A3B Q8_0",
+          "size": "36.40 GiB",
+          "params": "35.51 B",
+          "backend": "ROCm",
+          "ngl": "999",
+          "fa": "1",
+          "test": "tg128",
+          "t/s": "41.21 \u00b1 0.00"
+        }
+      ],
+      "mem_before": "\n\n============================ ROCm System Management Interface ============================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 29\nGPU[0]\t\t: Memory Activity: N/A\nGPU[0]\t\t: Not supported on the given system\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n",
+      "mem_after": "\n\n============================ ROCm System Management Interface ============================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 29\nGPU[0]\t\t: Memory Activity: N/A\nGPU[0]\t\t: Not supported on the given system\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+    },
+    {
+      "name": "rocwmma-pp512-tg128-hipblaslt1-fa-ub512",
+      "cmd": [
+        "/usr/local/bin/llama-bench-rocm-rocwmma",
+        "-m",
+        "/cache/models/Qwen3.6-35B-A3B-MTP-UD-Q8_K_XL.gguf",
+        "-p",
+        "512",
+        "-n",
+        "128",
+        "-ngl",
+        "999",
+        "-fa",
+        "1",
+        "-b",
+        "2048",
+        "-ub",
+        "512",
+        "-r",
+        "1"
+      ],
+      "env": {
+        "HSA_OVERRIDE_GFX_VERSION": "11.0.0",
+        "ROCBLAS_USE_HIPBLASLT": "1"
+      },
+      "returncode": 0,
+      "stdout": "| model                          |       size |     params | backend    | ngl |  fa |            test |                  t/s |\n| ------------------------------ | ---------: | ---------: | ---------- | --: | --: | --------------: | -------------------: |\n| qwen35moe 35B.A3B Q8_0         |  36.40 GiB |    35.51 B | ROCm       | 999 |   1 |           pp512 |        796.44 \u00b1 0.00 |\n| qwen35moe 35B.A3B Q8_0         |  36.40 GiB |    35.51 B | ROCm       | 999 |   1 |           tg128 |         41.02 \u00b1 0.00 |\n\nbuild: ac4cddeb0 (9592)\n",
+      "stderr": "ggml_cuda_init: found 1 ROCm devices (Total VRAM: 114688 MiB):\n  Device 0: Radeon 8060S Graphics, gfx1100 (0x1100), VMM: no, Wave Size: 32, VRAM: 114688 MiB\n",
+      "rows": [
+        {
+          "model": "qwen35moe 35B.A3B Q8_0",
+          "size": "36.40 GiB",
+          "params": "35.51 B",
+          "backend": "ROCm",
+          "ngl": "999",
+          "fa": "1",
+          "test": "pp512",
+          "t/s": "796.44 \u00b1 0.00"
+        },
+        {
+          "model": "qwen35moe 35B.A3B Q8_0",
+          "size": "36.40 GiB",
+          "params": "35.51 B",
+          "backend": "ROCm",
+          "ngl": "999",
+          "fa": "1",
+          "test": "tg128",
+          "t/s": "41.02 \u00b1 0.00"
+        }
+      ],
+      "mem_before": "\n\n============================ ROCm System Management Interface ============================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 29\nGPU[0]\t\t: Memory Activity: N/A\nGPU[0]\t\t: Not supported on the given system\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n",
+      "mem_after": "\n\n============================ ROCm System Management Interface ============================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 29\nGPU[0]\t\t: Memory Activity: N/A\nGPU[0]\t\t: Not supported on the given system\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+    }
+  ],
+  "resume_started_at": "2026-06-21T16:45:38.954382+00:00",
+  "device_probe": {
+    "cmd": [
+      "kubectl",
+      "-n",
+      "ai",
+      "exec",
+      "llama-hipblaslt-bench",
+      "--",
+      "sh",
+      "-ceu",
+      "(command -v rocminfo || true); HSA_OVERRIDE_GFX_VERSION=11.0.0 rocminfo | grep -E 'Name:|Marketing Name|gfx|Agent' | head -80 || true"
+    ],
+    "returncode": 0,
+    "stdout": "/usr/sbin/rocminfo\nHSA Agents               \nAgent 1                  \n  Name:                    AMD RYZEN AI MAX+ 395 w/ Radeon 8060S\n  Marketing Name:          AMD RYZEN AI MAX+ 395 w/ Radeon 8060S\n  Vendor Name:             CPU                                \nAgent 2                  \n  Name:                    gfx1100                            \n  Marketing Name:          Radeon 8060S Graphics              \n  Vendor Name:             AMD                                \n      Name:                    amdgcn-amd-amdhsa--gfx1100         \n      Name:                    amdgcn-amd-amdhsa--gfx11-generic   \n",
+    "stderr": ""
+  },
+  "finished_at": "2026-06-21T16:50:27.647789+00:00",
+  "cleanup_started_at": "2026-06-21T16:50:27.648155+00:00",
+  "pod_delete": {
+    "cmd": [
+      "kubectl",
+      "-n",
+      "ai",
+      "delete",
+      "pod",
+      "llama-hipblaslt-bench",
+      "--ignore-not-found=true",
+      "--wait=true"
+    ],
+    "returncode": 0,
+    "stdout": "pod \"llama-hipblaslt-bench\" deleted from ai namespace\n",
+    "stderr": ""
+  },
+  "restore": {
+    "llama-qwen": {
+      "target_replicas": 1,
+      "scale": {
+        "cmd": [
+          "kubectl",
+          "-n",
+          "ai",
+          "scale",
+          "deploy",
+          "llama-qwen",
+          "--replicas=1"
+        ],
+        "returncode": 0,
+        "stdout": "deployment.apps/llama-qwen scaled\n",
+        "stderr": ""
+      },
+      "rollout": {
+        "cmd": [
+          "kubectl",
+          "-n",
+          "ai",
+          "rollout",
+          "status",
+          "deploy/llama-qwen",
+          "--timeout=900s"
+        ],
+        "returncode": 0,
+        "stdout": "Waiting for deployment \"llama-qwen\" rollout to finish: 0 out of 1 new replicas have been updated...\nWaiting for deployment \"llama-qwen\" rollout to finish: 0 of 1 updated replicas are available...\ndeployment \"llama-qwen\" successfully rolled out\n",
+        "stderr": ""
+      }
+    },
+    "honcho-deriver": {
+      "target_replicas": 1,
+      "scale": {
+        "cmd": [
+          "kubectl",
+          "-n",
+          "ai",
+          "scale",
+          "deploy",
+          "honcho-deriver",
+          "--replicas=1"
+        ],
+        "returncode": 0,
+        "stdout": "deployment.apps/honcho-deriver scaled\n",
+        "stderr": ""
+      },
+      "rollout": {
+        "cmd": [
+          "kubectl",
+          "-n",
+          "ai",
+          "rollout",
+          "status",
+          "deploy/honcho-deriver",
+          "--timeout=900s"
+        ],
+        "returncode": 0,
+        "stdout": "deployment \"honcho-deriver\" successfully rolled out\n",
+        "stderr": ""
+      }
+    },
+    "honcho-embeddings": {
+      "target_replicas": 1,
+      "scale": {
+        "cmd": [
+          "kubectl",
+          "-n",
+          "ai",
+          "scale",
+          "deploy",
+          "honcho-embeddings",
+          "--replicas=1"
+        ],
+        "returncode": 0,
+        "stdout": "deployment.apps/honcho-embeddings scaled\n",
+        "stderr": ""
+      },
+      "rollout": {
+        "cmd": [
+          "kubectl",
+          "-n",
+          "ai",
+          "rollout",
+          "status",
+          "deploy/honcho-embeddings",
+          "--timeout=900s"
+        ],
+        "returncode": 0,
+        "stdout": "deployment \"honcho-embeddings\" successfully rolled out\n",
+        "stderr": ""
+      }
+    },
+    "llama-qwen-honcho": {
+      "target_replicas": 1,
+      "scale": {
+        "cmd": [
+          "kubectl",
+          "-n",
+          "ai",
+          "scale",
+          "deploy",
+          "llama-qwen-honcho",
+          "--replicas=1"
+        ],
+        "returncode": 0,
+        "stdout": "deployment.apps/llama-qwen-honcho scaled\n",
+        "stderr": ""
+      },
+      "rollout": {
+        "cmd": [
+          "kubectl",
+          "-n",
+          "ai",
+          "rollout",
+          "status",
+          "deploy/llama-qwen-honcho",
+          "--timeout=900s"
+        ],
+        "returncode": 0,
+        "stdout": "deployment \"llama-qwen-honcho\" successfully rolled out\n",
+        "stderr": ""
+      }
+    }
+  },
+  "cleanup_finished_at": "2026-06-21T16:51:13.989887+00:00"
+}
