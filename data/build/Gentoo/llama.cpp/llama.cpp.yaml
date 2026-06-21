@@ -24,6 +24,7 @@ nest::package_keywords:
   dev-util/hip: {}
   dev-util/hipcc: {}
   dev-util/rocminfo: {}
+  dev-util/rocm-smi: {}
   dev-util/Tensile: {}
   llvm-core/clang: {}
   llvm-core/clang-common: {}
