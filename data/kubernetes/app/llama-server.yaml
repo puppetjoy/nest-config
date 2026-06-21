@@ -15,6 +15,7 @@ cache_size: 320Gi
 storage_class: owl-crypt
 image: registry.gitlab.joyfullee.me/nest/tools/llama.cpp:zen5
 llama_cpp_backend: vulkan
+llama_cpp_hsa_override_gfx_version: ''
 model_repo: unsloth/Qwen3.6-35B-A3B-MTP-GGUF
 model_file: Qwen3.6-35B-A3B-MTP-UD-Q8_K_XL.gguf
 model_path: /cache/models/Qwen3.6-35B-A3B-MTP-UD-Q8_K_XL.gguf
@@ -170,6 +171,8 @@ resources:
                   value: "%{lookup('image')}"
                 - name: LLAMA_CPP_SERVICE
                   value: "%{nest::kubernetes::service}"
+                - name: HSA_OVERRIDE_GFX_VERSION
+                  value: "%{lookup('llama_cpp_hsa_override_gfx_version')}"
               envFrom:
                 - secretRef:
                     name: "%{nest::kubernetes::service}"
