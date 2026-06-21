@@ -1,0 +1,3 @@
+---
+# Keep control1's journal volatile while its eMMC-backed data pool is failing.
+nest::journal: volatile
