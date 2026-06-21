@@ -6,4 +6,4 @@ values:
   signupsAllowed: false
   smtp:
     fromName: Bitwarden
-    from: bitwarden@vault.thesatelliteoflove.net
+    from: bitwarden@joyfullee.me
