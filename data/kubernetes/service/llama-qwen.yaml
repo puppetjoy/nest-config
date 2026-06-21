@@ -9,8 +9,8 @@ model_path: /cache/models/Qwen3.6-35B-A3B-MTP-UD-Q8_K_XL.gguf
 # keep the cache filename explicit so pod args and live verification distinguish
 # it from the non-MTP rollback artifact.
 model_url: https://huggingface.co/unsloth/Qwen3.6-35B-A3B-MTP-GGUF/resolve/main/Qwen3.6-35B-A3B-UD-Q8_K_XL.gguf
-llama_cpp_backend: rocm
-llama_cpp_hsa_override_gfx_version: '11.0.0'
+llama_cpp_backend: vulkan
+llama_cpp_hsa_override_gfx_version: ''
 mmproj_file: mmproj-F16.gguf
 mmproj_path: /cache/models/Qwen3.6-35B-A3B-mmproj-F16.gguf
 mmproj_url: https://huggingface.co/unsloth/Qwen3.6-35B-A3B-MTP-GGUF/resolve/main/mmproj-F16.gguf
