@@ -1,25 +1,26 @@
 ---
 include:
-  - 'nest::service::kasm_shopping_browser'
+  - 'nest::service::secure_browser'
 
-plan_base: 'nest::eyrie::ai::shopping_browser'
-service_name: shopping
+plan_base: 'nest::eyrie::ai::secure_browser'
+service_name: secure-browser
 
 cert_issuer: eyrie-ca
 cert_issuer_kind: ClusterIssuer
 ingress_class: contour-compute
 node_role: compute
 image: docker.io/kasmweb/chrome:1.18.0
-launch_url: https://www.amazon.com/
+launch_url: about:blank
 app_args: >-
   --start-maximized
   --disable-gpu
   --disable-features=UseChromeOSDirectVideoDecoder
-  --user-data-dir=/home/kasm-user/.config/star-shopping-chrome
+  --no-first-run
+  --user-data-dir=/home/kasm-user/.config/secure-browser
   --remote-debugging-address=0.0.0.0
   --remote-debugging-port=9222
 storage_class: owl-crypt
-profile_storage_size: 8Gi
+profile_storage_size: 12Gi
 bitwarden_extension_id: nngceckbapebfimnlniiiahkandclblb
 bitwarden_update_url: https://clients2.google.com/service/update2/crx
 
@@ -61,16 +62,6 @@ resources:
       dnsNames:
         - "%{nest::kubernetes::fqdn}"
 
-  secrets:
-    apiVersion: v1
-    kind: Secret
-    metadata:
-      name: "%{nest::kubernetes::service}-secrets"
-      namespace: "%{nest::kubernetes::namespace}"
-    type: Opaque
-    data:
-      VNC_PW: "%{nest::service::kasm_shopping_browser::vnc_password_base64}"
-
   browser-policy:
     apiVersion: v1
     kind: ConfigMap
@@ -89,13 +80,13 @@ resources:
       namespace: "%{nest::kubernetes::namespace}"
     data:
       README.txt: |-
-        Reset/revoke procedure for the Shopping Browser profile:
+        Reset/revoke procedure for the shared Secure Browser profile:
         1. Stop the live session: kubectl -n %{nest::kubernetes::namespace} scale deployment/%{nest::kubernetes::service} --replicas=0
-        2. Wipe profile state: kubectl -n %{nest::kubernetes::namespace} delete pvc %{nest::kubernetes::service}-profile
-        3. Recreate the managed resources: bolt plan run nest::eyrie::ai::deploy_shopping_browser
-        4. Rotate the KasmVNC UI password by updating the private eyaml key nest::service::kasm_shopping_browser::vnc_password and redeploying.
-        This milestone intentionally exposes only the authenticated Kasm UI. Do not expose CDP, raw VNC, cookies, local storage, vault contents, or credential material directly to Star.
-        The Puppet-managed Hermes shopping_browser bridge may reach Chrome CDP via kubectl port-forward and present a bounded browser-like tool surface for Star: navigation, visible page inspection, safe page queries, careful clicks/types, shopping-browser-scoped screenshot artifacts, and approval-audited add-to-cart clicks within Joy's explicit task scope. Old narrow Amazon inspection helpers are not part of Star's active tool surface. The bridge must continue to keep raw CDP endpoints, cookies, local storage, request headers, downloads, vault contents, and credential material out of model-visible results.
+        2. Wipe shared profile state: kubectl -n %{nest::kubernetes::namespace} delete pvc %{nest::kubernetes::service}-profile
+        3. Recreate managed resources: bolt plan run nest::eyrie::ai::deploy_secure_browser
+        This app intentionally replaces the old separate OAuth and shopping browser deployments. OAuth and shopping are uses of the same browser process, profile PVC, Bitwarden extension install, and Chrome DevTools endpoint.
+        Hermes tools must claim and reuse an explicit CDP page target for their use (for example owner=oauth or owner=shopping) and must not default to the first visible tab. Agents may open additional tabs through their own owner mapping, but one owner must not drive another owner's mapped tab unless the operator intentionally resets the mapping.
+        The ingress relies on Eyrie-private network boundaries and does not set the old VNC_PW/HTTP Basic Auth front door. Joy handles Bitwarden unlock, credential entry, passkeys, 2FA, CAPTCHA, checkout, account, address, and payment prompts directly in the browser UI. Tools must not expose raw CDP endpoints, cookies, local storage, request headers, downloads, vault contents, callback codes, tokens, screenshots of secret pages, or credential material.
 
   profile-storage:
     apiVersion: v1
@@ -145,22 +136,22 @@ resources:
           securityContext:
             fsGroup: 1000
           initContainers:
-            - name: seed-debug-profile
+            - name: seed-secure-profile
               image: "%{lookup('image')}"
               command:
                 - /bin/sh
                 - -ec
                 - >-
-                  if [ ! -e /home/kasm-user/.config/star-shopping-chrome ] && [ -d /home/kasm-user/.config/google-chrome ]; then
+                  if [ ! -e /home/kasm-user/.config/secure-browser ] && [ -d /home/kasm-user/.config/google-chrome ]; then
                     mkdir -p /home/kasm-user/.config;
-                    cp -a /home/kasm-user/.config/google-chrome /home/kasm-user/.config/star-shopping-chrome;
+                    cp -a /home/kasm-user/.config/google-chrome /home/kasm-user/.config/secure-browser;
                   else
-                    mkdir -p /home/kasm-user/.config/star-shopping-chrome;
+                    mkdir -p /home/kasm-user/.config/secure-browser;
                   fi;
                   rm -f \
-                    /home/kasm-user/.config/star-shopping-chrome/SingletonCookie \
-                    /home/kasm-user/.config/star-shopping-chrome/SingletonLock \
-                    /home/kasm-user/.config/star-shopping-chrome/SingletonSocket
+                    /home/kasm-user/.config/secure-browser/SingletonCookie \
+                    /home/kasm-user/.config/secure-browser/SingletonLock \
+                    /home/kasm-user/.config/secure-browser/SingletonSocket
               volumeMounts:
                 - name: profile
                   mountPath: /home/kasm-user
@@ -168,11 +159,6 @@ resources:
             - name: kasm-chrome
               image: "%{lookup('image')}"
               env:
-                - name: VNC_PW
-                  valueFrom:
-                    secretKeyRef:
-                      name: "%{nest::kubernetes::service}-secrets"
-                      key: VNC_PW
                 - name: LAUNCH_URL
                   value: "%{lookup('launch_url')}"
                 - name: KASM_RESTRICTED_FILE_CHOOSER
@@ -192,7 +178,7 @@ resources:
                     - >-
                       fmt='%'; fmt="${fmt}{http_code}";
                       code=$(curl -ks -o /dev/null -w "${fmt}" https://127.0.0.1:6901/ || true);
-                      test "${code}" = 401
+                      test "${code}" -ge 200 -a "${code}" -lt 400
                 periodSeconds: 5
                 timeoutSeconds: 2
               livenessProbe:

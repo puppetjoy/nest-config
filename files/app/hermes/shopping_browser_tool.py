@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import base64
 import contextlib
+import fcntl
 import hashlib
 import json
 import os
@@ -33,8 +34,10 @@ from tools.registry import registry
 
 TOOLSET = "shopping_browser"
 NAMESPACE = os.environ.get("SHOPPING_BROWSER_NAMESPACE", "ai")
-WORKLOAD = os.environ.get("SHOPPING_BROWSER_WORKLOAD", "deployment/shopping")
+WORKLOAD = os.environ.get("SHOPPING_BROWSER_WORKLOAD", "deployment/secure-browser")
 REMOTE_DEBUG_PORT = int(os.environ.get("SHOPPING_BROWSER_CDP_PORT", "9222"))
+BROWSER_OWNER = os.environ.get("SHOPPING_BROWSER_OWNER", "shopping")
+OWNERSHIP_STATE_PATH = os.environ.get("SECURE_BROWSER_OWNERSHIP_STATE", os.path.expanduser("~/.hermes/secure-browser-tabs.json"))
 BROWSER_DISPLAY = os.environ.get("SHOPPING_BROWSER_DISPLAY", ":1")
 XWD_TIMEOUT_SECONDS = float(os.environ.get("SHOPPING_BROWSER_XWD_TIMEOUT_SECONDS", "15"))
 MAX_RESULT_CHARS = 16000
@@ -2048,6 +2051,13 @@ def _page_targets_from_http(port: int) -> list[dict[str, str]]:
     return pages
 
 
+def _page_info_for_id(port: int, target_id: str) -> dict[str, str]:
+    for page in _page_targets_from_http(port):
+        if page.get("id") == target_id:
+            return page
+    return {"id": target_id, "url": "about:blank", "title": ""}
+
+
 def _target_page_info(port: int) -> dict[str, str]:
     pages = _page_targets_from_http(port)
     return pages[0] if pages else {"id": "", "url": "about:blank", "title": ""}
@@ -2317,23 +2327,77 @@ def _browser_ws_url(port: int) -> str:
     return url
 
 
-def _first_page_target(browser: CdpSession) -> str:
-    # Chrome's browser-level Target.getTargets order is not the same as the
-    # visible /json/list order and can return stale Amazon page targets before
-    # the active Kasm tab.  Prefer the HTTP target list when we have a forwarded
-    # port so broad operations act on the same page screenshot/status reports.
+def _current_page_ids(browser: CdpSession) -> set[str]:
+    ids: set[str] = set()
     if browser.port is not None:
         with contextlib.suppress(Exception):
-            for target in _page_targets_from_http(browser.port):
-                if target.get("id"):
-                    return str(target["id"])
+            ids.update(str(target["id"]) for target in _page_targets_from_http(browser.port) if target.get("id"))
+    with contextlib.suppress(Exception):
+        targets = browser.call("Target.getTargets").get("targetInfos") or []
+        ids.update(str(target["targetId"]) for target in targets if target.get("type") == "page" and target.get("targetId"))
+    return ids
 
-    targets = browser.call("Target.getTargets").get("targetInfos") or []
-    for target in targets:
-        if target.get("type") == "page":
-            return str(target["targetId"])
-    created = browser.call("Target.createTarget", {"url": "about:blank"})
-    return str(created["targetId"])
+
+def _load_owner_state(handle: Any) -> dict[str, Any]:
+    handle.seek(0)
+    raw = handle.read()
+    if not raw.strip():
+        return {"owners": {}}
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return {"owners": {}}
+    if not isinstance(data, dict):
+        return {"owners": {}}
+    owners = data.get("owners")
+    if not isinstance(owners, dict):
+        data["owners"] = {}
+    return data
+
+
+def _store_owner_state(handle: Any, state: dict[str, Any]) -> None:
+    handle.seek(0)
+    handle.truncate()
+    json.dump(state, handle, ensure_ascii=False, sort_keys=True)
+    handle.write("\n")
+    handle.flush()
+    os.fsync(handle.fileno())
+
+
+def _claim_owner_target(browser: CdpSession, create: bool = False) -> str:
+    os.makedirs(os.path.dirname(OWNERSHIP_STATE_PATH) or ".", exist_ok=True)
+    with open(OWNERSHIP_STATE_PATH, "a+", encoding="utf-8") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            state = _load_owner_state(handle)
+            owners = state.setdefault("owners", {})
+            live_ids = _current_page_ids(browser)
+            existing = str(owners.get(BROWSER_OWNER, {}).get("target_id") or "")
+            if existing and existing in live_ids and not create:
+                return existing
+            target_id = str(browser.call("Target.createTarget", {"url": "about:blank"})["targetId"])
+            owners[BROWSER_OWNER] = {
+                "target_id": target_id,
+                "toolset": TOOLSET,
+                "workload": WORKLOAD,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+            _store_owner_state(handle, state)
+            return target_id
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
+def _first_page_target(browser: CdpSession) -> str:
+    return _claim_owner_target(browser, create=False)
+
+
+def _owned_page_info(browser: CdpSession) -> dict[str, str]:
+    target_id = _first_page_target(browser)
+    if browser.port is not None:
+        with contextlib.suppress(Exception):
+            return _page_info_for_id(browser.port, target_id)
+    return {"id": target_id, "url": "about:blank", "title": ""}
 
 
 def _attach(browser: CdpSession, target_id: str) -> str:
@@ -2379,12 +2443,13 @@ def _navigate(url: str, new_page: bool) -> dict[str, Any]:
     safe_url = _safe_browser_url(url)
 
     def run(browser: CdpSession) -> dict[str, Any]:
-        target_id = str(browser.call("Target.createTarget", {"url": "about:blank"})["targetId"]) if new_page else _first_page_target(browser)
+        target_id = _claim_owner_target(browser, create=True) if new_page else _first_page_target(browser)
         session_id = _attach(browser, target_id)
         _navigate_and_wait(browser, session_id, safe_url)
         result = {
             "operation": "navigate",
             "status": "ok",
+            "secure_browser_owner": BROWSER_OWNER,
             "url": _sanitize_url(str(_evaluate(browser, session_id, "location.href") or safe_url)),
             "page_title": str(_evaluate(browser, session_id, "document.title") or ""),
         }
@@ -2423,7 +2488,7 @@ def _query(expression: str) -> dict[str, Any]:
     wrapped = f"(() => {{ const value = ({safe_expression}); return value; }})()"
 
     def run(browser: CdpSession) -> dict[str, Any]:
-        page_info = _target_page_info(browser.port) if browser.port is not None else {}
+        page_info = _owned_page_info(browser)
         target_id = page_info.get("id") or _first_page_target(browser)
         session_id = _attach(browser, str(target_id))
         url = str(_evaluate(browser, session_id, "location.href") or page_info.get("url") or "")
@@ -2437,14 +2502,14 @@ def _query(expression: str) -> dict[str, Any]:
         payload = json.dumps(value, ensure_ascii=False, sort_keys=True)
         if len(payload) > MAX_QUERY_RESULT_CHARS:
             value = payload[:MAX_QUERY_RESULT_CHARS] + "… [truncated]"
-        return {"operation": "query", "status": "ok", "value": value}
+        return {"operation": "query", "status": "ok", "secure_browser_owner": BROWSER_OWNER, "value": value}
 
     return _with_browser(run)
 
 
 def _screenshot(full_page: bool = False) -> dict[str, Any]:
     def run(browser: CdpSession) -> dict[str, Any]:
-        page_info = _target_page_info(browser.port) if browser.port is not None else {}
+        page_info = _owned_page_info(browser)
         url = str(page_info.get("url") or "")
         title = str(page_info.get("title") or "")
         policy = _screenshot_policy(url, title)
@@ -2554,7 +2619,7 @@ def _owner_checkout_review(send_to_telegram: bool = True, retain_local: bool = F
     _telegram_owner_destination()
 
     def run(browser: CdpSession) -> dict[str, Any]:
-        page_info = _target_page_info(browser.port) if browser.port is not None else {}
+        page_info = _owned_page_info(browser)
         url = str(page_info.get("url") or "")
         title = str(page_info.get("title") or "")
         parsed = urlparse(url)
@@ -2690,7 +2755,7 @@ def _visual_evidence(full_page: bool, include_full_page: bool, crops: list[Any])
         raise ValueError(f"at most {MAX_VISUAL_CROPS} crops may be requested at once")
 
     def run(browser: CdpSession) -> dict[str, Any]:
-        page_info = _target_page_info(browser.port) if browser.port is not None else {}
+        page_info = _owned_page_info(browser)
         url = str(page_info.get("url") or "")
         title = str(page_info.get("title") or "")
         policy = _screenshot_policy(url, title)
@@ -2983,12 +3048,14 @@ def _current_page_summary() -> dict[str, Any]:
         if re.search(r"checkout|buy|payselect|ship|spc|review|ordering", " ".join([url, title]), re.IGNORECASE):
             result = _checkout_summary_from_browser(browser, session_id)
             result["operation"] = "checkout_prep_current_page_summary"
+            result["secure_browser_owner"] = BROWSER_OWNER
             result["summary_note"] = "Checkout-prep pages return isolated sanitized fields instead of generic current-page summary blobs. Final purchase controls are confined to blocked_metadata."
             return result
         result = _evaluate(browser, session_id, SUMMARY_EXTRACT_JS) or {}
         if url:
             result["url"] = _sanitize_url(url)
         result["operation"] = "current_page_summary"
+        result["secure_browser_owner"] = BROWSER_OWNER
         return result
 
     return _with_browser(run)
@@ -3001,6 +3068,8 @@ def shopping_browser_status_tool(args: dict[str, Any], **_kw: Any) -> str:
         "workload": WORKLOAD,
         "kubectl_available": shutil.which("kubectl") is not None,
         "remote_debug_port": REMOTE_DEBUG_PORT,
+        "secure_browser_owner": BROWSER_OWNER,
+        "ownership_state_path": OWNERSHIP_STATE_PATH,
         "browser_operations": ["navigate", "page_snapshot", "query", "click", "type", "screenshot", "visual_evidence", "current_page_summary", "owner_checkout_review"],
         "supervised_checkout_prep": {
             "status": "available",

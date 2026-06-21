@@ -140,6 +140,7 @@ define nest::lib::hermes (
     'kanban',
     'memory',
     'messaging',
+    'oauth_browser',
     'session_search',
     'shopping_browser',
     'skills',

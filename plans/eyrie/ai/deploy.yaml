@@ -37,13 +37,8 @@ parameters:
     type: Boolean
     default: true
 
-  shopping_browser:
-    description: 'Deploy Kasm Shopping Browser'
-    type: Boolean
-    default: true
-
-  oauth_browser:
-    description: 'Deploy Kasm OAuth Browser'
+  secure_browser:
+    description: 'Deploy shared Secure Browser'
     type: Boolean
     default: true
 
@@ -91,15 +86,10 @@ steps:
     parameters:
       deploy: $deploy and $beryl
 
-  - description: 'Deploy Kasm Shopping Browser'
-    plan: nest::eyrie::ai::deploy_shopping_browser
+  - description: 'Deploy shared Secure Browser'
+    plan: nest::eyrie::ai::deploy_secure_browser
     parameters:
-      deploy: $deploy and $shopping_browser
-
-  - description: 'Deploy Kasm OAuth Browser'
-    plan: nest::eyrie::ai::deploy_oauth_browser
-    parameters:
-      deploy: $deploy and $oauth_browser
+      deploy: $deploy and $secure_browser
 
   - description: 'Deploy local ROCm speech API'
     plan: nest::eyrie::ai::deploy_voice_speech

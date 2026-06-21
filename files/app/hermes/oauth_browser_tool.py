@@ -14,6 +14,7 @@ codes, vault contents, credentials, or token material.
 from __future__ import annotations
 
 import contextlib
+import fcntl
 import hashlib
 import json
 import os
@@ -32,9 +33,11 @@ from tools.registry import registry
 
 TOOLSET = "oauth_browser"
 NAMESPACE = os.environ.get("OAUTH_BROWSER_NAMESPACE", "ai")
-WORKLOAD = os.environ.get("OAUTH_BROWSER_WORKLOAD", "deployment/oauth-browser")
+WORKLOAD = os.environ.get("OAUTH_BROWSER_WORKLOAD", "deployment/secure-browser")
 REMOTE_DEBUG_PORT = int(os.environ.get("OAUTH_BROWSER_CDP_PORT", "9222"))
-PUBLIC_URL = os.environ.get("OAUTH_BROWSER_PUBLIC_URL", "https://oauth-browser.eyrie/")
+PUBLIC_URL = os.environ.get("OAUTH_BROWSER_PUBLIC_URL", "https://secure-browser.eyrie/")
+BROWSER_OWNER = os.environ.get("OAUTH_BROWSER_OWNER", "oauth")
+OWNERSHIP_STATE_PATH = os.environ.get("SECURE_BROWSER_OWNERSHIP_STATE", os.path.expanduser("~/.hermes/secure-browser-tabs.json"))
 AUDIT_LOG = os.environ.get("OAUTH_BROWSER_AUDIT_LOG", os.path.expanduser("~/.hermes/profiles/talon/oauth-browser-audit.log"))
 MAX_RESULT_CHARS = 12000
 MAX_TITLE_CHARS = 180
@@ -205,17 +208,69 @@ def _page_targets_from_http(port: int) -> list[dict[str, Any]]:
     return [item for item in data if item.get("type") == "page"]
 
 
-def _first_page_target(browser: CdpSession) -> str:
+def _current_page_ids(browser: CdpSession) -> set[str]:
+    ids: set[str] = set()
     if browser.port is not None:
         with contextlib.suppress(Exception):
-            for target in _page_targets_from_http(browser.port):
-                if target.get("id"):
-                    return str(target["id"])
-    targets = browser.call("Target.getTargets").get("targetInfos") or []
-    for target in targets:
-        if target.get("type") == "page":
-            return str(target["targetId"])
-    return str(browser.call("Target.createTarget", {"url": "about:blank"})["targetId"])
+            ids.update(str(target["id"]) for target in _page_targets_from_http(browser.port) if target.get("id"))
+    with contextlib.suppress(Exception):
+        targets = browser.call("Target.getTargets").get("targetInfos") or []
+        ids.update(str(target["targetId"]) for target in targets if target.get("type") == "page" and target.get("targetId"))
+    return ids
+
+
+def _load_owner_state(handle: Any) -> dict[str, Any]:
+    handle.seek(0)
+    raw = handle.read()
+    if not raw.strip():
+        return {"owners": {}}
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return {"owners": {}}
+    if not isinstance(data, dict):
+        return {"owners": {}}
+    owners = data.get("owners")
+    if not isinstance(owners, dict):
+        data["owners"] = {}
+    return data
+
+
+def _store_owner_state(handle: Any, state: dict[str, Any]) -> None:
+    handle.seek(0)
+    handle.truncate()
+    json.dump(state, handle, ensure_ascii=False, sort_keys=True)
+    handle.write("\n")
+    handle.flush()
+    os.fsync(handle.fileno())
+
+
+def _claim_owner_target(browser: CdpSession, create: bool = False) -> str:
+    os.makedirs(os.path.dirname(OWNERSHIP_STATE_PATH) or ".", exist_ok=True)
+    with open(OWNERSHIP_STATE_PATH, "a+", encoding="utf-8") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            state = _load_owner_state(handle)
+            owners = state.setdefault("owners", {})
+            live_ids = _current_page_ids(browser)
+            existing = str(owners.get(BROWSER_OWNER, {}).get("target_id") or "")
+            if existing and existing in live_ids and not create:
+                return existing
+            target_id = str(browser.call("Target.createTarget", {"url": "about:blank"})["targetId"])
+            owners[BROWSER_OWNER] = {
+                "target_id": target_id,
+                "toolset": TOOLSET,
+                "workload": WORKLOAD,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+            _store_owner_state(handle, state)
+            return target_id
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
+def _first_page_target(browser: CdpSession) -> str:
+    return _claim_owner_target(browser, create=False)
 
 
 def _attach(browser: CdpSession, target_id: str) -> str:
@@ -260,7 +315,7 @@ def _navigate(url: str, new_page: bool = False) -> dict[str, Any]:
     safe_url = _safe_navigation_url(url)
 
     def run(browser: CdpSession) -> dict[str, Any]:
-        target_id = str(browser.call("Target.createTarget", {"url": "about:blank"})["targetId"]) if new_page else _first_page_target(browser)
+        target_id = _claim_owner_target(browser, create=True) if new_page else _first_page_target(browser)
         session_id = _attach(browser, target_id)
         browser.call("Page.navigate", {"url": safe_url}, session_id=session_id)
         deadline = time.time() + PAGE_LOAD_TIMEOUT_SECONDS
@@ -271,7 +326,7 @@ def _navigate(url: str, new_page: bool = False) -> dict[str, Any]:
                 break
             time.sleep(0.25)
         summary = _page_summary(browser, session_id)
-        result = {"operation": "navigate", "status": "ok", "public_browser_url": PUBLIC_URL, **summary}
+        result = {"operation": "navigate", "status": "ok", "public_browser_url": PUBLIC_URL, "secure_browser_owner": BROWSER_OWNER, **summary}
         _audit("navigate", {"url": result["url"], "origin": result["origin"], "path": result["path"], "new_page": new_page})
         return result
 
@@ -286,6 +341,7 @@ def _current_page_summary() -> dict[str, Any]:
         summary.update({
             "operation": "current_page_summary",
             "public_browser_url": PUBLIC_URL,
+            "secure_browser_owner": BROWSER_OWNER,
             "policy": "Redacted page metadata only. Joy handles login/2FA/CAPTCHA/consent in the Kasm UI; Talon must not request or expose token values, callback codes, cookies, storage, raw DOM, screenshots of secret pages, or credentials.",
         })
         return summary
@@ -299,6 +355,8 @@ def _readiness_status() -> dict[str, Any]:
         "namespace": NAMESPACE,
         "workload": WORKLOAD,
         "remote_debug_port": REMOTE_DEBUG_PORT,
+        "secure_browser_owner": BROWSER_OWNER,
+        "ownership_state_path": OWNERSHIP_STATE_PATH,
         "public_browser_url": PUBLIC_URL,
         "available": _check_oauth_browser(),
         "boundary": "OAuth browser tools provide navigation and redacted page metadata only; Joy performs credential entry and approvals through Kasm.",
@@ -382,11 +440,11 @@ def oauth_browser_login_prompt_tool(args: dict[str, Any], **_kw: Any) -> str:
         except Exception as err:
             navigate_result = {"operation": "navigate", "status": "error", "error": str(err)[:800]}
     prompt = (
-        f"Please open {PUBLIC_URL} and complete the {flow_label} login/consent flow in the shared OAuth browser. "
+        f"Please open {PUBLIC_URL} and use the {BROWSER_OWNER} tab/session to complete the {flow_label} login/consent flow in the shared secure browser. "
         "Use Bitwarden/passkeys/2FA/CAPTCHA directly in the browser UI. Do not paste codes, tokens, callback URLs, cookies, or credentials into chat. "
         "When the browser shows the OAuth flow is complete, tell Talon only which label to capture next (primary or secondary)."
     )
-    result = {"operation": "login_prompt", "status": "ready", "public_browser_url": PUBLIC_URL, "prompt_for_joy": prompt, "navigation": navigate_result}
+    result = {"operation": "login_prompt", "status": "ready", "public_browser_url": PUBLIC_URL, "secure_browser_owner": BROWSER_OWNER, "prompt_for_joy": prompt, "navigation": navigate_result}
     _audit("login_prompt", {"flow_label": flow_label, "navigated": bool(url), "navigation_status": (navigate_result or {}).get("status")})
     return _json(result)
 

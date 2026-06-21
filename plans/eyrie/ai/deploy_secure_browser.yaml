@@ -1,5 +1,5 @@
 ---
-description: 'Deploy Kasm Shopping Browser'
+description: 'Deploy shared Secure Browser'
 
 parameters:
   deploy:
@@ -13,11 +13,11 @@ parameters:
     default: ''
 
 steps:
-  - description: 'Deploy Kasm Shopping Browser'
+  - description: 'Deploy shared Secure Browser'
     plan: 'nest::kubernetes::deploy'
     parameters:
-      service: 'shopping'
-      app: 'kasm-shopping-browser'
+      service: 'secure-browser'
+      app: 'secure-browser'
       namespace: 'ai'
       init: false
       deploy: $deploy
