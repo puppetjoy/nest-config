@@ -85,6 +85,11 @@ patches:
           namespace: "%{nest::kubernetes::namespace}"
           labels:
             'joyfullee.me/nest': 'stage1'
+        spec:
+          # Vaultwarden itself can still be healthy while the Nest sidecar is
+          # temporarily unavailable. Keep the Service routable so Contour does
+          # not return "no healthy upstream" for the password-vault UI.
+          publishNotReadyAddresses: true
 
   30-nest:
     patch:
