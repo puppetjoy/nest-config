@@ -19,9 +19,16 @@ honcho_llama_qwen_base_url: "http://%{lookup('honcho_llama_qwen_limiter_service'
 honcho_llama_qwen_upstream: llama-qwen
 honcho_llama_qwen_max_concurrent: '2'
 # Absorb short Honcho bursts without increasing GPU concurrency. 60s stays well
-# below the OpenAI-compatible client/upstream timeouts while reducing 503 churn
-# from 30s queue expirations during dream/tool-loop bursts.
+# below the OpenAI-compatible client/upstream timeouts while reducing queue expiry
+# and upstream-restart 503 churn during dream/tool-loop bursts.
 honcho_llama_qwen_queue_timeout_seconds: '60'
+# Do not raise Honcho's limiter concurrency first.  When the shared llama-qwen
+# service briefly returns 503 because its slots are busy or the pod is restarting,
+# retry inside the Honcho limiter with bounded jittered backoff so Honcho clients
+# do not immediately fan retry traffic back into the same recovering backend.
+honcho_llama_qwen_upstream_503_retry_attempts: '5'
+honcho_llama_qwen_upstream_503_retry_base_delay_seconds: '1.0'
+honcho_llama_qwen_upstream_503_retry_max_delay_seconds: '8.0'
 representation_batch_max_tokens: '1024'
 # Keep the 1024-token quality gate for processable representation batches, but
 # do not let low-context work units sit near a week and drag down freshness/noise
@@ -593,8 +600,10 @@ resources:
         import http.client
         import json
         import os
+        import random
         import sys
         import threading
+        import time
         from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
         MAX_CONCURRENT = int(os.environ.get('MAX_CONCURRENT', '2'))
@@ -602,6 +611,9 @@ resources:
         UPSTREAM_HOST = os.environ.get('UPSTREAM_HOST', 'llama-qwen')
         UPSTREAM_PORT = int(os.environ.get('UPSTREAM_PORT', '80'))
         UPSTREAM_TIMEOUT_SECONDS = float(os.environ.get('UPSTREAM_TIMEOUT_SECONDS', '600'))
+        UPSTREAM_503_RETRY_ATTEMPTS = int(os.environ.get('UPSTREAM_503_RETRY_ATTEMPTS', '0'))
+        UPSTREAM_503_RETRY_BASE_DELAY_SECONDS = float(os.environ.get('UPSTREAM_503_RETRY_BASE_DELAY_SECONDS', '1.0'))
+        UPSTREAM_503_RETRY_MAX_DELAY_SECONDS = float(os.environ.get('UPSTREAM_503_RETRY_MAX_DELAY_SECONDS', '8.0'))
 
         semaphore = threading.BoundedSemaphore(MAX_CONCURRENT)
         active_lock = threading.Lock()
@@ -792,12 +804,30 @@ resources:
                     }
                     headers['Host'] = UPSTREAM_HOST
 
-                    conn = http.client.HTTPConnection(UPSTREAM_HOST, UPSTREAM_PORT, timeout=UPSTREAM_TIMEOUT_SECONDS)
-                    conn.request(self.command, self.path, body=request_body, headers=headers)
-                    response = conn.getresponse()
-                    response_body = response.read()
+                    attempts = 0
+                    max_attempts = 1 + max(0, UPSTREAM_503_RETRY_ATTEMPTS)
+                    response = None
+                    response_body = b''
+                    while attempts < max_attempts:
+                        attempts += 1
+                        if conn is not None:
+                            conn.close()
+                        conn = http.client.HTTPConnection(UPSTREAM_HOST, UPSTREAM_PORT, timeout=UPSTREAM_TIMEOUT_SECONDS)
+                        conn.request(self.command, self.path, body=request_body, headers=headers)
+                        response = conn.getresponse()
+                        response_body = response.read()
+                        if response.status != 503 or attempts >= max_attempts:
+                            break
+                        delay = min(
+                            UPSTREAM_503_RETRY_MAX_DELAY_SECONDS,
+                            UPSTREAM_503_RETRY_BASE_DELAY_SECONDS * (2 ** (attempts - 1)),
+                        )
+                        jitter = random.uniform(0, max(delay * 0.25, 0.0))
+                        sleep_seconds = delay + jitter
+                        log(f'upstream_503_retry method={self.command} path={self.path} attempt={attempts}/{max_attempts} sleep_seconds={sleep_seconds:.3f}')
+                        time.sleep(sleep_seconds)
                     if self.command == 'POST' and self.path.startswith('/v1/chat/completions'):
-                        log(f'response_summary path={self.path} status={response.status} {summarize_chat_response(response_body)}')
+                        log(f'response_summary path={self.path} status={response.status} upstream_attempts={attempts} {summarize_chat_response(response_body)}')
 
                     self.send_response(response.status, response.reason)
                     sent_response = True
@@ -869,6 +899,12 @@ resources:
                   value: "%{lookup('honcho_llama_qwen_upstream')}"
                 - name: UPSTREAM_PORT
                   value: '80'
+                - name: UPSTREAM_503_RETRY_ATTEMPTS
+                  value: "%{alias('honcho_llama_qwen_upstream_503_retry_attempts')}"
+                - name: UPSTREAM_503_RETRY_BASE_DELAY_SECONDS
+                  value: "%{alias('honcho_llama_qwen_upstream_503_retry_base_delay_seconds')}"
+                - name: UPSTREAM_503_RETRY_MAX_DELAY_SECONDS
+                  value: "%{alias('honcho_llama_qwen_upstream_503_retry_max_delay_seconds')}"
               ports:
                 - name: http
                   containerPort: 8000
