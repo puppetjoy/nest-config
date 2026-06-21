@@ -1,0 +1,38 @@
+---
+description: 'Deploy private SearXNG for Hermes web research experiments'
+
+parameters:
+  namespace:
+    description: 'Kubernetes namespace'
+    type: String
+    default: 'ai'
+
+  deploy:
+    description: 'Run or skip the deployment'
+    type: Boolean
+    default: true
+
+  init:
+    description: 'Deploy initial revision'
+    type: Boolean
+    default: false
+
+  render_to:
+    description: 'Just render the template'
+    type: String
+    default: ''
+
+steps:
+  - description: 'Deploy SearXNG'
+    plan: nest::kubernetes::deploy
+    parameters:
+      namespace: $namespace
+      service: 'searxng'
+      app: 'searxng'
+      chart: 'searxng/searxng'
+      repo_url: 'https://techpipe-io.github.io/searxng-helm-chart'
+      version: '0.1.6'
+      deploy: $deploy
+      init: $init
+      wait: $init
+      render_to: $render_to

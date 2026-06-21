@@ -1,0 +1,387 @@
+---
+# Self-hosted Firecrawl API for Hermes web_search/web_extract backend trials.
+# This keeps Tavily as the production Hermes backend until a later cutover task.
+service_name: "%{nest::kubernetes::service}"
+cert_issuer: eyrie-ca
+cert_issuer_kind: ClusterIssuer
+ingress_class: contour-compute
+node_role: compute
+searxng_endpoint: http://searxng:8080
+firecrawl_api_url: http://firecrawl-api:3002
+storage_class: owl-crypt
+nuq_postgres_storage_size: 12Gi
+smoke_test_image: "%{lookup('config_registry')}/nest/stage1/server"
+
+.affinity: &affinity
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+          - key: "node-role.kubernetes.io/%{lookup('node_role')}"
+            operator: Exists
+
+.tolerations: &tolerations
+  - key: "node-role.kubernetes.io/%{lookup('node_role')}"
+    operator: Exists
+    effect: NoSchedule
+
+resources:
+  backup: {}
+  restore: {}
+  registry_auths: {}
+
+  certs:
+    apiVersion: cert-manager.io/v1
+    kind: Certificate
+    metadata:
+      name: "%{nest::kubernetes::service}-certs"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      secretName: "%{nest::kubernetes::service}-certs"
+      issuerRef:
+        name: "%{lookup('cert_issuer')}"
+        kind: "%{lookup('cert_issuer_kind')}"
+      dnsNames:
+        - "%{nest::kubernetes::fqdn}"
+
+  ingress:
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: "%{nest::kubernetes::service}"
+      namespace: "%{nest::kubernetes::namespace}"
+      annotations:
+        projectcontour.io/response-timeout: 300s
+    spec:
+      ingressClassName: "%{lookup('ingress_class')}"
+      rules:
+        - host: "%{nest::kubernetes::fqdn}"
+          http:
+            paths:
+              - path: /
+                pathType: Prefix
+                backend:
+                  service:
+                    name: "%{nest::kubernetes::service}-api"
+                    port:
+                      number: 3002
+      tls:
+        - secretName: "%{nest::kubernetes::service}-certs"
+          hosts:
+            - "%{nest::kubernetes::fqdn}"
+
+  smoke-test-script:
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: "%{nest::kubernetes::service}-smoke-test"
+      namespace: "%{nest::kubernetes::namespace}"
+    data:
+      smoke_test.py: |-
+        import json
+        import os
+        import sys
+        import time
+        import urllib.error
+        import urllib.request
+
+        ENDPOINT = os.environ.get('FIRECRAWL_ENDPOINT', 'http://firecrawl-api:3002').rstrip('/')
+        SEARCH_QUERY = os.environ.get('SEARCH_QUERY', 'Hermes Agent Nous Research')
+        SCRAPE_URL = os.environ.get('SCRAPE_URL', 'https://example.com/')
+        PDF_URL = os.environ.get('PDF_URL', 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf')
+        NEGATIVE_URL = os.environ.get('NEGATIVE_URL', 'http://127.0.0.1:9/')
+
+        def fail(message, **details):
+            print(json.dumps({'ok': False, 'error': message, **details}, sort_keys=True), file=sys.stderr)
+            raise SystemExit(1)
+
+        def request(method, path, payload=None, timeout=180, allow_http_error=False):
+            data = None if payload is None else json.dumps(payload).encode('utf-8')
+            headers = {'Accept': 'application/json'}
+            if data is not None:
+                headers['Content-Type'] = 'application/json'
+            req = urllib.request.Request(f'{ENDPOINT}{path}', data=data, headers=headers, method=method)
+            start = time.monotonic()
+            try:
+                with urllib.request.urlopen(req, timeout=timeout) as resp:
+                    body = resp.read().decode('utf-8', 'replace')
+                    status = resp.status
+            except urllib.error.HTTPError as exc:
+                body = exc.read().decode('utf-8', 'replace')
+                status = exc.code
+                if not allow_http_error:
+                    fail('unexpected http error', path=path, status=status, body=body[:1000])
+            elapsed = round(time.monotonic() - start, 3)
+            try:
+                parsed = json.loads(body) if body else {}
+            except json.JSONDecodeError:
+                parsed = {'raw': body}
+            return status, parsed, elapsed
+
+        def assert_success(label, status, data):
+            if status >= 400 or data.get('success') is False:
+                fail(f'{label} failed', status=status, response=data)
+
+        def get_nested(data, *keys):
+            value = data
+            for key in keys:
+                if not isinstance(value, dict):
+                    return None
+                value = value.get(key)
+            return value
+
+        health_status, health, health_elapsed = request('GET', '/v0/health/readiness', timeout=30)
+        if health_status >= 400:
+            fail('readiness failed', status=health_status, response=health)
+
+        search_status, search, search_elapsed = request('POST', '/v1/search', {
+            'query': SEARCH_QUERY,
+            'limit': 3,
+            'scrapeOptions': {'formats': ['markdown'], 'onlyMainContent': True},
+        })
+        assert_success('search', search_status, search)
+        search_data = search.get('data') or []
+        if not isinstance(search_data, list) or not search_data:
+            fail('search returned no results', response=search)
+
+        scrape_status, scrape, scrape_elapsed = request('POST', '/v1/scrape', {
+            'url': SCRAPE_URL,
+            'formats': ['markdown'],
+            'onlyMainContent': True,
+            'timeout': 20000,
+        })
+        assert_success('scrape', scrape_status, scrape)
+        markdown = get_nested(scrape, 'data', 'markdown') or scrape.get('markdown') or ''
+        if 'Example Domain' not in markdown:
+            fail('scrape markdown missing expected text', markdown=markdown[:500], response=scrape)
+
+        pdf_status, pdf, pdf_elapsed = request('POST', '/v1/scrape', {
+            'url': PDF_URL,
+            'formats': ['markdown'],
+            'timeout': 30000,
+        }, timeout=240)
+        assert_success('pdf scrape', pdf_status, pdf)
+        pdf_markdown = get_nested(pdf, 'data', 'markdown') or pdf.get('markdown') or ''
+        if 'Dummy PDF' not in pdf_markdown and 'dummy' not in pdf_markdown.lower():
+            fail('pdf markdown missing expected text', markdown=pdf_markdown[:500], response=pdf)
+
+        negative_status, negative, negative_elapsed = request('POST', '/v1/scrape', {
+            'url': NEGATIVE_URL,
+            'formats': ['markdown'],
+            'timeout': 3000,
+        }, timeout=60, allow_http_error=True)
+        if negative_status < 400 and negative.get('success') is not False:
+            fail('negative fetch unexpectedly succeeded', status=negative_status, response=negative)
+
+        print(json.dumps({
+            'ok': True,
+            'endpoint': ENDPOINT,
+            'health_seconds': health_elapsed,
+            'search_seconds': search_elapsed,
+            'search_results': len(search_data),
+            'scrape_seconds': scrape_elapsed,
+            'pdf_seconds': pdf_elapsed,
+            'negative_seconds': negative_elapsed,
+            'negative_status': negative_status,
+        }, sort_keys=True))
+
+  smoke-test:
+    apiVersion: batch/v1
+    kind: CronJob
+    metadata:
+      name: "%{nest::kubernetes::service}-smoke-test"
+      namespace: "%{nest::kubernetes::namespace}"
+      labels:
+        app: "%{nest::kubernetes::service}"
+        component: smoke-test
+    spec:
+      # Manual validation hook: run with
+      # kubectl -n %{nest::kubernetes::namespace} create job --from=cronjob/%{nest::kubernetes::service}-smoke-test %{nest::kubernetes::service}-smoke-test-$(date +%s)
+      suspend: true
+      schedule: '17 4 31 2 *'
+      concurrencyPolicy: Forbid
+      jobTemplate:
+        spec:
+          ttlSecondsAfterFinished: 86400
+          activeDeadlineSeconds: 900
+          template:
+            spec:
+              restartPolicy: Never
+              containers:
+                - name: smoke-test
+                  image: "%{lookup('smoke_test_image')}"
+                  imagePullPolicy: IfNotPresent
+                  command: ['python3', '/scripts/smoke_test.py']
+                  env:
+                    - name: FIRECRAWL_ENDPOINT
+                      value: "%{lookup('firecrawl_api_url')}"
+                  volumeMounts:
+                    - name: smoke-test-script
+                      mountPath: /scripts
+                      readOnly: true
+              volumes:
+                - name: smoke-test-script
+                  configMap:
+                    name: "%{nest::kubernetes::service}-smoke-test"
+
+patches:
+  10-compute-scheduling:
+    patch:
+      - op: add
+        path: '/spec/template/spec/affinity'
+        value: *affinity
+      - op: add
+        path: '/spec/template/spec/tolerations'
+        value: *tolerations
+    target:
+      group: apps
+      version: v1
+      kind: Deployment
+      labelSelector: app
+
+values:
+  fullnameOverride: "%{nest::kubernetes::service}"
+  replicaCount: 1
+  resources:
+    enabled: true
+  image:
+    # Eyrie compute is x86_64; official GHCR images avoid the current
+    # winkkgmbh helper-image tag gaps while keeping this validation source-led.
+    repository: ghcr.io/firecrawl/firecrawl
+    tag: 'latest'
+    pullPolicy: Always
+    dockerSecretEnabled: false
+  playwright:
+    repository: ghcr.io/firecrawl/playwright-service
+    tag: 'latest'
+    pullPolicy: Always
+    replicaCount: 1
+  api:
+    replicaCount: 1
+    resources:
+      requests:
+        cpu: '1'
+        memory: 3Gi
+      limits:
+        cpu: '2'
+        memory: 6Gi
+  worker:
+    replicaCount: 1
+    resources:
+      requests:
+        cpu: 500m
+        memory: 2Gi
+      limits:
+        cpu: '1'
+        memory: 4Gi
+  extractWorker:
+    enabled: true
+    replicaCount: 1
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: '1'
+        memory: 3Gi
+  nuqWorker:
+    replicaCount: 1
+    port: 3006
+    resources:
+      requests:
+        cpu: 500m
+        memory: 2Gi
+      limits:
+        cpu: '1'
+        memory: 4Gi
+  nuqPrefetchWorker:
+    enabled: false
+    replicaCount: 1
+    resources:
+      requests:
+        cpu: 250m
+        memory: 1Gi
+      limits:
+        cpu: 500m
+        memory: 2Gi
+  nuqPostgres:
+    replicaCount: 1
+    image:
+      repository: ghcr.io/firecrawl/nuq-postgres
+      tag: 'latest'
+      pullPolicy: Always
+    auth:
+      username: firecrawl
+      password: firecrawl
+      database: firecrawl
+    persistence:
+      enabled: true
+      size: "%{lookup('nuq_postgres_storage_size')}"
+      storageClass: "%{lookup('storage_class')}"
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+  rabbitmq:
+    enabled: true
+    image: docker.io/library/rabbitmq:3-management
+    replicaCount: 1
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+  redis:
+    image: docker.io/library/redis:alpine
+    replicaCount: 1
+  service:
+    api:
+      type: ClusterIP
+      port: 3002
+    playwright:
+      type: ClusterIP
+      port: 3000
+    redis:
+      type: ClusterIP
+      port: 6379
+    rabbitmq:
+      type: ClusterIP
+      port: 5672
+      managementPort: 15672
+  config:
+    NUM_WORKERS_PER_QUEUE: '4'
+    NUQ_WORKER_COUNT: '1'
+    USE_DB_AUTHENTICATION: 'false'
+    IS_KUBERNETES: 'true'
+    ENV: production
+    LOGGING_LEVEL: INFO
+    REDIS_URL: redis://firecrawl-redis:6379
+    REDIS_RATE_LIMIT_URL: redis://firecrawl-redis:6379
+    PLAYWRIGHT_MICROSERVICE_URL: http://firecrawl-playwright:3000/scrape
+    NUQ_DATABASE_URL: postgresql://firecrawl:firecrawl@firecrawl-nuq-postgres:5432/firecrawl
+    NUQ_DATABASE_URL_LISTEN: postgresql://firecrawl:firecrawl@firecrawl-nuq-postgres:5432/firecrawl
+    NUQ_RABBITMQ_URL: amqp://firecrawl-rabbitmq:5672
+    FIRECRAWL_APP_SCHEME: http
+    FIRECRAWL_APP_HOST: firecrawl-api
+    FIRECRAWL_APP_PORT: '3002'
+    SEARXNG_ENDPOINT: "%{lookup('searxng_endpoint')}"
+    SEARXNG_ENGINES: ''
+    SEARXNG_CATEGORIES: ''
+    extra:
+      MAX_CPU: '0.8'
+      MAX_RAM: '0.8'
+      ALLOW_LOCAL_WEBHOOKS: 'false'
+  playwrightConfig:
+    PORT: '3000'
+    BLOCK_MEDIA: 'true'
+    MAX_CONCURRENT_PAGES: '4'
+  secret:
+    # No hosted AI/parser credentials are configured for this validation stack.
+    # BULL_AUTH_KEY only protects the private queue admin surface if it is enabled.
+    BULL_AUTH_KEY: 'eyrie-private-firecrawl'
+  imagePullSecrets: []

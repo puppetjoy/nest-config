@@ -1,0 +1,109 @@
+---
+# Private SearXNG metasearch backend for Firecrawl/Hermes experiments.
+# Exposed only on Eyrie-private ingress; Firecrawl uses the in-cluster service.
+service_name: "%{nest::kubernetes::service}"
+cert_issuer: eyrie-ca
+cert_issuer_kind: ClusterIssuer
+ingress_class: contour-compute
+node_role: compute
+storage_class: owl-crypt
+cache_storage_size: 4Gi
+valkey_storage_size: 1Gi
+
+.affinity: &affinity
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+          - key: "node-role.kubernetes.io/%{lookup('node_role')}"
+            operator: Exists
+
+.tolerations: &tolerations
+  - key: "node-role.kubernetes.io/%{lookup('node_role')}"
+    operator: Exists
+    effect: NoSchedule
+
+resources:
+  backup: {}
+  restore: {}
+  registry_auths: {}
+
+values:
+  fullnameOverride: "%{nest::kubernetes::service}"
+  commonLabels:
+    app.kubernetes.io/part-of: hermes-web-research
+  image:
+    repository: docker.io/searxng/searxng
+  replicaCount: 1
+  affinity: *affinity
+  tolerations: *tolerations
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: '1'
+      memory: 1Gi
+  ingress:
+    enabled: true
+    className: "%{lookup('ingress_class')}"
+    annotations:
+      projectcontour.io/response-timeout: 60s
+      cert-manager.io/cluster-issuer: "%{lookup('cert_issuer')}"
+    hosts:
+      - host: "%{nest::kubernetes::fqdn}"
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: "%{nest::kubernetes::service}-certs"
+        hosts:
+          - "%{nest::kubernetes::fqdn}"
+  config:
+    useDefaultSettings: true
+    settings:
+      general:
+        instance_name: Eyrie SearXNG
+        debug: false
+        enable_metrics: true
+      server:
+        base_url: "https://%{nest::kubernetes::fqdn}/"
+        limiter: false
+        public_instance: false
+        image_proxy: true
+        method: GET
+      search:
+        safe_search: 0
+        autocomplete: ''
+        formats:
+          - html
+          - json
+      engines:
+        - name: wikidata
+          disabled: true
+        - name: ahmia
+          disabled: true
+  persistence:
+    config:
+      enabled: false
+    cache:
+      enabled: true
+      size: "%{lookup('cache_storage_size')}"
+      storageClass: "%{lookup('storage_class')}"
+  testConnection:
+    image:
+      repository: docker.io/library/busybox
+  valkey:
+    enabled: true
+    persistence:
+      enabled: true
+      size: "%{lookup('valkey_storage_size')}"
+      storageClass: "%{lookup('storage_class')}"
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        memory: 256Mi
+    affinity: *affinity
+    tolerations: *tolerations

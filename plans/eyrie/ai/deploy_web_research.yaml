@@ -1,0 +1,45 @@
+---
+description: 'Deploy private Firecrawl + SearXNG web research stack'
+
+parameters:
+  namespace:
+    description: 'Kubernetes namespace'
+    type: String
+    default: 'ai'
+
+  deploy:
+    description: 'Run or skip the deployment'
+    type: Boolean
+    default: true
+
+  init:
+    description: 'Deploy initial revision'
+    type: Boolean
+    default: false
+
+  searxng_render_to:
+    description: 'Render SearXNG manifest to this file instead of applying it'
+    type: String
+    default: ''
+
+  firecrawl_render_to:
+    description: 'Render Firecrawl manifest to this file instead of applying it'
+    type: String
+    default: ''
+
+steps:
+  - description: 'Deploy SearXNG first so Firecrawl search has an upstream'
+    plan: nest::eyrie::ai::deploy_searxng
+    parameters:
+      namespace: $namespace
+      deploy: $deploy
+      init: $init
+      render_to: $searxng_render_to
+
+  - description: 'Deploy Firecrawl API/workers wired to SearXNG'
+    plan: nest::eyrie::ai::deploy_firecrawl
+    parameters:
+      namespace: $namespace
+      deploy: $deploy
+      init: $init
+      render_to: $firecrawl_render_to
