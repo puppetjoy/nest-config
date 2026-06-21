@@ -68,6 +68,7 @@ def test_llama_qwen_backend_selection_defaults_to_vulkan_with_observability() ->
     assert service_config["llama_cpp_backend"] == EXPECTED_LLAMA_QWEN_BACKEND
     assert pod_template["metadata"]["labels"]["llama.cpp/backend"] == "%{lookup('llama_cpp_backend')}"
     assert pod_template["metadata"]["annotations"]["llama.cpp/backend"] == "%{lookup('llama_cpp_backend')}"
+    assert container["imagePullPolicy"] == "Always"
     assert "llama-server-${backend}" in app_text
     assert "unsupported llama.cpp backend" in app_text
     env = {entry["name"]: entry["value"] for entry in container["env"]}

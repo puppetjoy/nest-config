@@ -125,7 +125,7 @@ resources:
           containers:
             - name: llama-server
               image: "%{lookup('image')}"
-              imagePullPolicy: IfNotPresent
+              imagePullPolicy: Always
               command:
                 - sh
                 - -ceu
