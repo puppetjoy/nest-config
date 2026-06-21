@@ -40,7 +40,14 @@ plan nest::build::tool (
   Optional[String]  $registry_password     = lookup('nest::build::registry_password', default_value => undef),
   String            $registry_password_var = 'NEST_REGISTRY_PASSWORD',
 ) {
-  $image_tag = pick($tag, $cpu)
+  if ($emerge_default_opts and $emerge_default_opts =~ /\$/) or ($makeopts and $makeopts =~ /\$/) {
+    fail('Build options must be passed already-expanded; literal shell substitutions such as $(nproc) are written to make.conf and break Portage')
+  }
+
+  $image_tag = $tag ? {
+    undef   => $cpu,
+    default => $tag,
+  }
   $repos_volume = "${container}-repos" # cached between builds
   $target = Target.new(name => $container, uri => "podman://${container}")
   $extra_volume_args = $extra_volumes.map |$volume| { "--volume=${volume}" }.join(' ')

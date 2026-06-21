@@ -133,7 +133,7 @@ resources:
                 - |-
                   backend="${LLAMA_CPP_BACKEND:-%{lookup('llama_cpp_backend')}}"
                   case "$backend" in
-                    vulkan|rocm) ;;
+                    vulkan|rocm|rocm-rocwmma) ;;
                     *) echo "unsupported llama.cpp backend: $backend" >&2; exit 64 ;;
                   esac
                   server="/usr/local/bin/llama-server-${backend}"
