@@ -82,7 +82,7 @@ class nest::service::pipewire {
     ->
     file_line { 'pipewire-default-clock-rate':
       path  => '/etc/pipewire/pipewire.conf',
-      line  => '    default.clock.rate           = 44100',
+      line  => '    default.clock.rate           = 48000',
       match => '^\s*#?default\.clock\.rate\s*=',
     }
   }
