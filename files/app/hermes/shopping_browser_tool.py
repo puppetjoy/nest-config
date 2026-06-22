@@ -130,20 +130,56 @@ FINAL_PURCHASE_CLICK_JS = r"""
     const rect = node.getBoundingClientRect();
     return style && style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0;
   };
-  const controls = Array.from(document.querySelectorAll('button, input[type="submit"], input[type="button"], [role="button"], a'))
+  const enabled = (node) => !node.disabled && node.getAttribute('aria-disabled') !== 'true';
+  const normalizeLabel = (label) => clean(label).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const actionPath = (node) => {
+    const explicitAction = node.getAttribute('formaction');
+    const form = node.form || node.closest?.('form');
+    const action = explicitAction || form?.getAttribute?.('action') || form?.action || '';
+    if (!action) return '';
+    try {
+      return new URL(action, location.href).pathname.replace(/\/+$/, '');
+    } catch (_err) {
+      return String(action).split(/[?#]/)[0].replace(/\/+$/, '');
+    }
+  };
+  const rawControls = Array.from(document.querySelectorAll('button, input[type="submit"], input[type="button"], [role="button"], a'))
     .map((node) => {
       const label = clean(node.innerText || node.value || node.getAttribute('aria-label') || node.textContent || '');
-      return {node, label};
+      const normalizedLabel = normalizeLabel(label);
+      return {node, label, normalizedLabel};
     })
-    .filter(({node, label}) => label && finalRe.test(label) && visible(node) && !node.disabled && node.getAttribute('aria-disabled') !== 'true');
+    .filter(({node, label}) => label && finalRe.test(label) && visible(node) && enabled(node));
+  const controls = rawControls
+    .filter((control) => !rawControls.some((other) => control.node !== other.node && control.node.contains(other.node) && control.normalizedLabel === other.normalizedLabel))
+    .map((control) => {
+      const rect = control.node.getBoundingClientRect();
+      const tag = String(control.node.tagName || '').toLowerCase();
+      const type = clean(control.node.getAttribute('type') || control.node.type || '').toLowerCase();
+      const formMethod = clean(control.node.getAttribute('formmethod') || control.node.form?.method || '').toLowerCase();
+      const effectKey = [control.normalizedLabel, tag, type, formMethod, actionPath(control.node)].join('|');
+      return {...control, rect, effectKey};
+    });
   if (controls.length < 1) {
     return {clicked: false, reason: 'No visible enabled final purchase control matched.'};
   }
-  if (controls.length > 1) {
-    return {clicked: false, reason: `Multiple visible final purchase controls matched (${controls.length}); refusing ambiguous final purchase.`};
+  const effectKeys = Array.from(new Set(controls.map((control) => control.effectKey)));
+  if (effectKeys.length > 1) {
+    const groups = effectKeys.slice(0, 4).map((key) => {
+      const group = controls.filter((control) => control.effectKey === key);
+      const label = group[0]?.label || 'final purchase control';
+      return `${label.slice(0, 80)} x${group.length}`;
+    }).join('; ');
+    return {clicked: false, reason: `Multiple distinct final purchase controls matched (${controls.length}: ${groups}); refusing ambiguous final purchase.`};
   }
+  controls.sort((left, right) => {
+    const leftInViewport = left.rect.top >= 0 && left.rect.left >= 0 && left.rect.bottom <= window.innerHeight && left.rect.right <= window.innerWidth;
+    const rightInViewport = right.rect.top >= 0 && right.rect.left >= 0 && right.rect.bottom <= window.innerHeight && right.rect.right <= window.innerWidth;
+    if (leftInViewport !== rightInViewport) return leftInViewport ? -1 : 1;
+    return (left.rect.top - right.rect.top) || (left.rect.left - right.rect.left);
+  });
   const control = controls[0];
-  const rect = control.node.getBoundingClientRect();
+  const rect = control.rect;
   control.node.click();
   return {
     clicked: true,
