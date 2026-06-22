@@ -34,4 +34,15 @@ class nest::host::osprey {
     command     => '/usr/sbin/udevadm trigger --subsystem-match=input --action=change',
     refreshonly => true,
   }
+
+  # This is host-specific suspend/resume tuning for osprey's NVIDIA dGPU.
+  # Keep it out of the shared GPU path until S0ix is proven safe for all
+  # NVIDIA systems in the nest.
+  file_line { 'nvidia.conf-enable-s0ix-power-management':
+    path  => '/etc/modprobe.d/nvidia.conf',
+    line  => "  NVreg_EnableS0ixPowerManagement=1 \\",
+    match => '^\\s*NVreg_EnableS0ixPowerManagement=',
+    after => '^options nvidia \\$',
+  }
+  ~> Class['nest::base::dracut']
 }
