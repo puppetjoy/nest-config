@@ -1303,6 +1303,17 @@ def _agent_request_board() -> str:
     return raw or "agent-requests"
 
 
+def _request_id_from_submit_result(submit_result: dict[str, Any]) -> str:
+    request_obj = submit_result.get("request")
+    request = request_obj if isinstance(request_obj, dict) else {}
+    return str(
+        submit_result.get("request_id")
+        or request.get("request_id")
+        or request.get("id")
+        or ""
+    ).strip()
+
+
 def _submit_final_purchase_approval_request(summary: dict[str, Any], material_summary_binding: str, owner_visual_evidence_binding: str, owner_review_id: str, note: str) -> dict[str, Any]:
     try:
         from tools.agent_request_tool import agent_request_submit_tool, agent_request_propose_tool
@@ -1338,9 +1349,9 @@ def _submit_final_purchase_approval_request(summary: dict[str, Any], material_su
     submit_result = json.loads(agent_request_submit_tool(submit_payload))
     if submit_result.get("error"):
         raise RuntimeError(str(submit_result.get("error")))
-    request_id = str(submit_result.get("request_id") or (submit_result.get("request") or {}).get("request_id") or "")
+    request_id = _request_id_from_submit_result(submit_result)
     if not request_id:
-        raise RuntimeError("Agent Request submission did not return a request_id")
+        raise RuntimeError("Agent Request submission did not return a request_id or request.id")
 
     proposal_text = "\n".join([
         "Approve exactly one final Amazon Place Order action for the current Star shopping-browser checkout.",
