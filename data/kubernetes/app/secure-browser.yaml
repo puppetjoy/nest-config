@@ -230,9 +230,29 @@ resources:
                       daemon_threads = True
 
                   class Handler(socketserver.BaseRequestHandler):
+                      def _request_head(self):
+                          data = b''
+                          while b'\r\n\r\n' not in data:
+                              chunk = self.request.recv(65536)
+                              if not chunk:
+                                  return b''
+                              data += chunk
+                          head, rest = data.split(b'\r\n\r\n', 1)
+                          lines = head.split(b'\r\n')
+                          fixed = []
+                          for line in lines:
+                              if line.lower().startswith(b'host:'):
+                                  line = b'Host: 127.0.0.1:9222'
+                              fixed.append(line)
+                          return b'\r\n'.join(fixed) + b'\r\n\r\n' + rest
+
                       def handle(self):
+                          first = self._request_head()
+                          if not first:
+                              return
                           upstream = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                           upstream.connect(('127.0.0.1', 9222))
+                          upstream.sendall(first)
                           sockets = (self.request, upstream)
                           while True:
                               readable, _, _ = select.select(sockets, (), ())
