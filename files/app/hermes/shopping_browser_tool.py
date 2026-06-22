@@ -49,6 +49,7 @@ MAX_TYPE_CHARS = 2000
 SCREENSHOT_DIR = os.environ.get("SHOPPING_BROWSER_SCREENSHOT_DIR", os.path.expanduser("~/.hermes/profiles/star/shopping-browser-screenshots"))
 OWNER_CHECKOUT_REVIEW_DIR = os.environ.get("SHOPPING_BROWSER_OWNER_REVIEW_DIR", os.path.expanduser("~/.hermes/profiles/star/shopping-browser-owner-checkout-reviews"))
 AUDIT_LOG = os.environ.get("SHOPPING_BROWSER_AUDIT_LOG", os.path.expanduser("~/.hermes/profiles/star/shopping-browser-audit.log"))
+FINAL_PURCHASE_STATE_PATH = os.environ.get("SHOPPING_BROWSER_FINAL_PURCHASE_STATE", os.path.expanduser("~/.hermes/profiles/star/shopping-browser-final-purchase-approvals.json"))
 MAX_PRODUCT_IMAGES = 6
 DEFAULT_MAX_REVIEWS = 5
 MAX_REVIEWS = 10
@@ -118,6 +119,41 @@ CHECKOUTISH_PAGE_RE = re.compile(r"checkout|buy|payselect|ship|spc|review|orderi
 CHECKOUT_QUERY_PAGE_RE = re.compile(r"checkout|payselect|spc|ordering|place[-\s]?order|review\s+your\s+order|order\s+review|/gp/buy|/buy|shipping\s+(address|option|speed|method)|delivery\s+(option|date|window)", re.IGNORECASE)
 SAFE_CHECKOUT_SENSITIVE_LABEL_RE = re.compile(r"shipping\s+(speed|option|method)|delivery\s+(option|date|window)|gift(?!\s*card\s*(number|code))|gift\s+card\s+balance|use\s+a\s+gift\s+card|coupon|promo|promotion|claim\s+code|payment\s+(summary|method|option)|paying\s+with|quantity|qty|delete|remove|one[-\s]?time|subscribe|subscription|cart", re.IGNORECASE)
 MUTATING_QUERY_RE = re.compile(r"\b(click|submit|fetch|XMLHttpRequest|sendBeacon|localStorage|sessionStorage|indexedDB|cookie|setAttribute|removeAttribute|appendChild|removeChild|innerHTML\s*=|location\s*=|open\s*\()\b", re.IGNORECASE)
+
+
+FINAL_PURCHASE_CLICK_JS = r"""
+(() => {
+  const clean = (value) => (value || '').replace(/\s+/g, ' ').trim();
+  const finalRe = /\b(place\s+(?:your\s+)?order|buy\s+now|submit\s+order|complete\s+purchase|purchase\s+now|confirm\s+(?:purchase|order))\b/i;
+  const visible = (node) => {
+    const style = window.getComputedStyle(node);
+    const rect = node.getBoundingClientRect();
+    return style && style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0;
+  };
+  const controls = Array.from(document.querySelectorAll('button, input[type="submit"], input[type="button"], [role="button"], a'))
+    .map((node) => {
+      const label = clean(node.innerText || node.value || node.getAttribute('aria-label') || node.textContent || '');
+      return {node, label};
+    })
+    .filter(({node, label}) => label && finalRe.test(label) && visible(node) && !node.disabled && node.getAttribute('aria-disabled') !== 'true');
+  if (controls.length < 1) {
+    return {clicked: false, reason: 'No visible enabled final purchase control matched.'};
+  }
+  if (controls.length > 1) {
+    return {clicked: false, reason: `Multiple visible final purchase controls matched (${controls.length}); refusing ambiguous final purchase.`};
+  }
+  const control = controls[0];
+  const rect = control.node.getBoundingClientRect();
+  control.node.click();
+  return {
+    clicked: true,
+    control_label: control.label.slice(0, 120),
+    control_rect: {x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height)},
+    page_title_before_click: document.title || '',
+    url_before_click: location.href || ''
+  };
+})()
+"""
 
 PRODUCT_EXTRACT_JS = r"""
 (() => {
@@ -1210,6 +1246,250 @@ def _audit(operation: str, details: dict[str, Any]) -> None:
         pass
 
 
+
+
+def _final_purchase_state_lock():
+    os.makedirs(os.path.dirname(FINAL_PURCHASE_STATE_PATH) or ".", mode=0o700, exist_ok=True)
+    handle = open(FINAL_PURCHASE_STATE_PATH, "a+", encoding="utf-8")
+    os.chmod(FINAL_PURCHASE_STATE_PATH, 0o600)
+    fcntl.flock(handle, fcntl.LOCK_EX)
+    return handle
+
+
+def _load_final_purchase_state(handle: Any) -> dict[str, Any]:
+    handle.seek(0)
+    raw = handle.read()
+    if not raw.strip():
+        return {"tokens": {}}
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return {"tokens": {}}
+    if not isinstance(data, dict):
+        return {"tokens": {}}
+    if not isinstance(data.get("tokens"), dict):
+        data["tokens"] = {}
+    return data
+
+
+def _store_final_purchase_state(handle: Any, state: dict[str, Any]) -> None:
+    handle.seek(0)
+    handle.truncate()
+    json.dump(state, handle, ensure_ascii=False, sort_keys=True)
+    handle.write("\n")
+    handle.flush()
+    os.fsync(handle.fileno())
+
+
+def _approval_token_key(request_id: str, approval_id: str, material_summary_binding: str, owner_visual_evidence_binding: str) -> str:
+    material = {
+        "request_id": request_id,
+        "approval_id": approval_id,
+        "material_summary_binding": material_summary_binding,
+        "owner_visual_evidence_binding": owner_visual_evidence_binding,
+    }
+    return hashlib.sha256(json.dumps(material, sort_keys=True).encode("utf-8")).hexdigest()
+
+
+def _assert_hex_binding(value: Any, field: str) -> str:
+    text = str(value or "").strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", text):
+        raise ValueError(f"{field} must be a 64-character sha256 hex binding")
+    return text
+
+
+def _agent_request_board() -> str:
+    raw = os.environ.get("AGENT_REQUEST_KANBAN_BOARD_OVERRIDE", "").strip() or os.environ.get("AGENT_REQUEST_KANBAN_BOARD", "").strip()
+    return raw or "agent-requests"
+
+
+def _submit_final_purchase_approval_request(summary: dict[str, Any], material_summary_binding: str, owner_visual_evidence_binding: str, owner_review_id: str, note: str) -> dict[str, Any]:
+    try:
+        from tools.agent_request_tool import agent_request_submit_tool, agent_request_propose_tool
+    except Exception as exc:  # pragma: no cover - depends on Hermes runtime wiring
+        raise RuntimeError(f"Agent Request tool bridge is unavailable: {exc}") from exc
+
+    facts = _minimal_owner_checkout_facts(summary)
+    facts_json = json.dumps(facts, ensure_ascii=False, sort_keys=True)
+    request_body = (
+        "Trusted final-purchase execution request for the Star shopping browser. "
+        "Do not perform shopping research or checkout-prep. After Joy approves the bound proposal, "
+        "execute exactly one final Place Order action through shopping_browser_execute_final_purchase, "
+        "and only if the live checkout material_summary_binding and owner_visual_evidence_binding still match."
+    )
+    context = "\n".join([
+        f"material_summary_binding: {material_summary_binding}",
+        f"owner_visual_evidence_binding: {owner_visual_evidence_binding}",
+        f"owner_review_id: {owner_review_id or 'not supplied'}",
+        f"url: {summary.get('url') or ''}",
+        f"page_title: {summary.get('page_title') or ''}",
+        f"minimal_order_facts_json: {facts_json}",
+        f"star_note: {str(note or '').strip()[:1000]}",
+    ])
+    submit_payload = {
+        "title": "🛒 Trusted final purchase approval for Star checkout",
+        "request": request_body,
+        "context": context,
+        "subject": "Joy approval to place the current Amazon order",
+        "target": "talon",
+        "urgency": "urgent",
+        "board": _agent_request_board(),
+    }
+    submit_result = json.loads(agent_request_submit_tool(submit_payload))
+    if submit_result.get("error"):
+        raise RuntimeError(str(submit_result.get("error")))
+    request_id = str(submit_result.get("request_id") or (submit_result.get("request") or {}).get("request_id") or "")
+    if not request_id:
+        raise RuntimeError("Agent Request submission did not return a request_id")
+
+    proposal_text = "\n".join([
+        "Approve exactly one final Amazon Place Order action for the current Star shopping-browser checkout.",
+        f"Bound material_summary_binding: {material_summary_binding}",
+        f"Bound owner_visual_evidence_binding: {owner_visual_evidence_binding}",
+        f"Owner checkout review id: {owner_review_id or 'not supplied'}",
+        f"Sanitized order facts: {facts_json}",
+        "The executor must re-read the live checkout page immediately before clicking and refuse if any material field changed, if sensitive verification/login/account prompts appear, if final purchase controls are ambiguous/missing, or if this approval was already used.",
+        "Approval does not grant ordinary Star final-click authority and does not authorize payment/address/account edits, subscriptions, add-ons, warranty/protection changes, login, passkeys, 2FA, CAPTCHA, or security prompts.",
+    ])
+    propose_result = json.loads(agent_request_propose_tool({
+        "request_id": request_id,
+        "summary": "approval-required: place current Amazon order exactly once if bound checkout summary still matches",
+        "proposal": proposal_text,
+        "subject": "Final Amazon Place Order for current Star checkout",
+        "response_to_requester": "If approved, Talon will execute the bound final purchase exactly once after revalidating the live checkout summary.",
+        "board": _agent_request_board(),
+    }))
+    if propose_result.get("error"):
+        raise RuntimeError(str(propose_result.get("error")))
+    return {"submit_result": submit_result, "proposal_result": propose_result, "request_id": request_id}
+
+
+def _current_agent_request_approval(request_id: str) -> dict[str, Any]:
+    try:
+        from agent_request_broker import kanban_backend
+    except Exception as exc:  # pragma: no cover - depends on Hermes runtime wiring
+        raise RuntimeError(f"Agent Request approval backend is unavailable: {exc}") from exc
+    with kanban_backend.scoped_board(_agent_request_board()):
+        conn = kanban_backend.connect()
+        try:
+            approval = kanban_backend.current_approval(conn, request_id)
+            proposal = kanban_backend.latest_proposal(conn, request_id)
+        finally:
+            conn.close()
+    if not proposal:
+        raise ValueError("approval_request_id has no current final-purchase proposal")
+    if not approval:
+        raise ValueError("approval_request_id is not approved through the trusted Agent Request path")
+    return approval
+
+
+def _request_final_purchase_approval(material_summary_binding: str, owner_visual_evidence_binding: str, owner_review_id: str = "", note: str = "") -> dict[str, Any]:
+    expected_binding = _assert_hex_binding(material_summary_binding, "material_summary_binding")
+    evidence_binding = _assert_hex_binding(owner_visual_evidence_binding, "owner_visual_evidence_binding")
+
+    def run(browser: CdpSession) -> dict[str, Any]:
+        target_id = _first_page_target(browser)
+        session_id = _attach(browser, target_id)
+        summary = _checkout_summary_from_browser(browser, session_id)
+        if not _is_amazon_checkoutish_page(str(summary.get("url") or ""), str(summary.get("page_title") or "")):
+            raise ValueError("final-purchase approval/execution is currently limited to Amazon checkout/order-review pages")
+        live_binding = str(summary.get("material_summary_binding") or "")
+        if live_binding != expected_binding:
+            raise ValueError("live checkout material_summary_binding does not match the requested approval binding")
+        if summary.get("human_takeover_required"):
+            raise ValueError("checkout page requires Joy takeover before final-purchase approval can be requested")
+        blocked_metadata = summary.get("blocked_metadata") if isinstance(summary.get("blocked_metadata"), dict) else {}
+        if not blocked_metadata.get("final_purchase_controls_present"):
+            raise ValueError("no final purchase control is visible on the bound checkout page")
+        ar_result = _submit_final_purchase_approval_request(summary, expected_binding, evidence_binding, owner_review_id, note)
+        _audit("final_purchase_approval_requested", {"request_id": ar_result["request_id"], "material_summary_binding": expected_binding, "owner_visual_evidence_binding": evidence_binding, "owner_review_id": owner_review_id})
+        return {
+            "operation": "request_final_purchase_approval",
+            "status": "approval_requested",
+            "request_id": ar_result["request_id"],
+            "material_summary_binding": expected_binding,
+            "owner_visual_evidence_binding": evidence_binding,
+            "owner_review_id": owner_review_id,
+            "minimal_order_facts": _minimal_owner_checkout_facts(summary),
+            "agent_request": ar_result["proposal_result"].get("request") or ar_result["submit_result"].get("request"),
+            "safety_boundary": "Joy approval is requested through the trusted Agent Request Telegram action path. Final purchase remains blocked until that exact proposal is approved, then shopping_browser_execute_final_purchase must revalidate the live material summary and consume the approval exactly once.",
+        }
+
+    return _with_browser(run)
+
+
+def _execute_final_purchase(approval_request_id: str, material_summary_binding: str, owner_visual_evidence_binding: str) -> dict[str, Any]:
+    request_id = str(approval_request_id or "").strip()
+    if not request_id.startswith("ar-"):
+        raise ValueError("approval_request_id must be an Agent Request id")
+    expected_binding = _assert_hex_binding(material_summary_binding, "material_summary_binding")
+    evidence_binding = _assert_hex_binding(owner_visual_evidence_binding, "owner_visual_evidence_binding")
+    approval = _current_agent_request_approval(request_id)
+    approval_id = str(approval.get("approval_id") or "")
+    token_key = _approval_token_key(request_id, approval_id, expected_binding, evidence_binding)
+
+    def run(browser: CdpSession) -> dict[str, Any]:
+        target_id = _first_page_target(browser)
+        session_id = _attach(browser, target_id)
+        summary = _checkout_summary_from_browser(browser, session_id)
+        if not _is_amazon_checkoutish_page(str(summary.get("url") or ""), str(summary.get("page_title") or "")):
+            raise ValueError("final-purchase approval/execution is currently limited to Amazon checkout/order-review pages")
+        live_binding = str(summary.get("material_summary_binding") or "")
+        if live_binding != expected_binding:
+            raise ValueError("live checkout material_summary_binding changed since approval; refusing final purchase")
+        if summary.get("human_takeover_required"):
+            raise ValueError("checkout page requires Joy takeover; refusing final purchase")
+        blocked_metadata = summary.get("blocked_metadata") if isinstance(summary.get("blocked_metadata"), dict) else {}
+        if not blocked_metadata.get("final_purchase_controls_present"):
+            raise ValueError("no final purchase control is visible on the approved checkout page")
+        with _final_purchase_state_lock() as handle:
+            state = _load_final_purchase_state(handle)
+            tokens = state.setdefault("tokens", {})
+            if token_key in tokens:
+                raise ValueError("this final-purchase approval token has already been consumed")
+            tokens[token_key] = {
+                "status": "executing",
+                "request_id": request_id,
+                "approval_id": approval_id,
+                "material_summary_binding": expected_binding,
+                "owner_visual_evidence_binding": evidence_binding,
+                "started_at": datetime.now(timezone.utc).isoformat(),
+            }
+            _store_final_purchase_state(handle, state)
+        click_result = _evaluate(browser, session_id, FINAL_PURCHASE_CLICK_JS) or {}
+        if not click_result.get("clicked"):
+            raise RuntimeError(str(click_result.get("reason") or "final purchase control was not clicked"))
+        time.sleep(2.0)
+        final_url = _sanitize_url(str(_evaluate(browser, session_id, "location.href") or ""))
+        final_title = _sanitize_checkout_text(str(_evaluate(browser, session_id, "document.title") or ""))
+        with _final_purchase_state_lock() as handle:
+            state = _load_final_purchase_state(handle)
+            tokens = state.setdefault("tokens", {})
+            tokens[token_key] = {
+                **tokens.get(token_key, {}),
+                "status": "clicked",
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "final_url": final_url,
+                "final_title": final_title,
+            }
+            _store_final_purchase_state(handle, state)
+        _audit("final_purchase_executed", {"request_id": request_id, "approval_id": approval_id, "material_summary_binding": expected_binding, "owner_visual_evidence_binding": evidence_binding, "final_url": final_url, "final_title": final_title})
+        return {
+            "operation": "execute_final_purchase",
+            "status": "clicked",
+            "request_id": request_id,
+            "approval_id": approval_id,
+            "material_summary_binding": expected_binding,
+            "owner_visual_evidence_binding": evidence_binding,
+            "final_url": final_url,
+            "final_page_title": final_title,
+            "control_label": _sanitize_checkout_text(str(click_result.get("control_label") or ""))[:120],
+            "exactly_once_token": token_key,
+            "safety_boundary": "Final purchase was executed only after a trusted Agent Request approval, live material-summary revalidation, and exactly-once token consumption. The result does not expose cookies, storage, raw DOM, order references, full payment/address details, or CDP handles.",
+        }
+
+    return _with_browser(run)
+
 def _safe_browser_url(value: str) -> str:
     candidate = str(value or "").strip()
     parsed = urlparse(candidate)
@@ -2269,13 +2549,22 @@ def _reject_unsafe_operation(operation: str) -> dict[str, Any]:
             "approval_required": True,
             "message": "Allowed only through shopping_browser_click with approved_effect='remove_from_cart', a human-readable reason/approval reference, and a visible Delete/Remove cart line-item control on an Amazon cart page.",
         }
-    if op == "place_order":
+    if op in ("request_final_purchase_approval", "final_purchase_approval"):
+        return {
+            "allowed": True,
+            "operation": op,
+            "approval_required": True,
+            "trusted_approval_required": True,
+            "boundary": "trusted_agent_request_telegram_approval",
+            "message": "Star may request a trusted Agent Request Telegram approval after owner-only checkout review. The request is bound to material_summary_binding and owner_visual_evidence_binding; final execution remains separate and approval-gated.",
+        }
+    if op in ("place_order", "execute_final_purchase"):
         return {
             "allowed": False,
             "operation": op,
             "approval_required": True,
             "trusted_approval_required": True,
-            "message": "Final purchase remains blocked from ordinary chat/tool execution. It requires a trusted Telegram approval action bound to the exact material checkout summary hash and must expire if item, quantity, seller, shipping, tax/total, delivery, address/payment label, subscription state, or other material fields change.",
+            "message": "Final purchase remains blocked from ordinary chat/tool execution. It requires a trusted Telegram approval action bound to the exact material checkout summary hash and owner visual evidence, then a trusted executor must revalidate the live checkout page and consume the approval exactly once.",
         }
     if op in UNSAFE_OPERATIONS:
         return {
@@ -3152,7 +3441,8 @@ def shopping_browser_status_tool(args: dict[str, Any], **_kw: Any) -> str:
         "approval_gated_operations": {
             "add_to_cart": "available only through the broad shopping_browser_click flow with approved_effect='add_to_cart' and a human-readable approval reference",
             "remove_from_cart": "available only through shopping_browser_click with approved_effect='remove_from_cart', a human-readable approval reference, and a visible Delete/Remove cart line-item control on an Amazon cart page",
-            "place_order": "blocked from ordinary tool use; requires a trusted Telegram action approval bound to the exact material_summary_binding from the current checkout review and expires on material changes",
+            "request_final_purchase_approval": "Star-callable after owner_checkout_review; creates a trusted Agent Request Telegram approval proposal bound to material_summary_binding and owner_visual_evidence_binding",
+            "place_order": "blocked from ordinary tool use; requires trusted Telegram approval plus shopping_browser_execute_final_purchase live revalidation and exactly-once token consumption",
             "owner_checkout_review": "available only as owner-only Telegram delivery of complete checkout visual evidence tied to the same material_summary_binding; it does not expose sensitive evidence to Star",
         },
         "removed_legacy_helpers": ["shopping_browser_inspect_product", "shopping_browser_inspect_reviews", "shopping_browser_inspect_cart", "shopping_browser_add_to_cart"],
@@ -3273,6 +3563,29 @@ def shopping_browser_owner_checkout_review_tool(args: dict[str, Any], **_kw: Any
         return _json(_owner_checkout_review(bool(args.get("send_to_telegram", True)), bool(args.get("retain_local", False))))
     except Exception as exc:
         return _json({"error": "OWNER_CHECKOUT_REVIEW_FAILED", "message": str(exc)[:1000], "operation": "owner_checkout_review"})
+
+
+def shopping_browser_request_final_purchase_approval_tool(args: dict[str, Any], **_kw: Any) -> str:
+    try:
+        return _json(_request_final_purchase_approval(
+            str(args.get("material_summary_binding") or ""),
+            str(args.get("owner_visual_evidence_binding") or ""),
+            str(args.get("owner_review_id") or ""),
+            str(args.get("note") or ""),
+        ))
+    except Exception as exc:
+        return _json({"error": "FINAL_PURCHASE_APPROVAL_REQUEST_FAILED", "message": str(exc)[:1000], "operation": "request_final_purchase_approval"})
+
+
+def shopping_browser_execute_final_purchase_tool(args: dict[str, Any], **_kw: Any) -> str:
+    try:
+        return _json(_execute_final_purchase(
+            str(args.get("approval_request_id") or ""),
+            str(args.get("material_summary_binding") or ""),
+            str(args.get("owner_visual_evidence_binding") or ""),
+        ))
+    except Exception as exc:
+        return _json({"error": "FINAL_PURCHASE_EXECUTION_FAILED", "message": str(exc)[:1000], "operation": "execute_final_purchase"})
 
 
 def shopping_browser_guardrail_check_tool(args: dict[str, Any], **_kw: Any) -> str:
@@ -3465,6 +3778,36 @@ OWNER_CHECKOUT_REVIEW_SCHEMA = {
     },
 }
 
+
+REQUEST_FINAL_PURCHASE_APPROVAL_SCHEMA = {
+    "name": "shopping_browser_request_final_purchase_approval",
+    "description": "Request Joy's trusted Telegram-native final purchase approval after owner-only checkout review. Re-reads the live checkout page, verifies material_summary_binding still matches, then creates an Agent Request proposal with actionable Telegram buttons. It does not click Place Order and does not expose raw checkout evidence, cookies, storage, CDP handles, or full payment/address details.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "material_summary_binding": {"type": "string", "description": "Current checkout material_summary_binding from shopping_browser_owner_checkout_review/current checkout summary"},
+            "owner_visual_evidence_binding": {"type": "string", "description": "Owner-only visual evidence binding returned by shopping_browser_owner_checkout_review"},
+            "owner_review_id": {"type": "string", "description": "Owner checkout review id returned by shopping_browser_owner_checkout_review"},
+            "note": {"type": "string", "description": "Optional concise Star note for Talon/Joy, without secrets"},
+        },
+        "required": ["material_summary_binding", "owner_visual_evidence_binding"],
+    },
+}
+
+EXECUTE_FINAL_PURCHASE_SCHEMA = {
+    "name": "shopping_browser_execute_final_purchase",
+    "description": "Trusted final purchase executor. Use only after Joy approved the bound Agent Request proposal. It verifies the current Agent Request approval, refuses reused approvals, re-reads the live checkout material summary, refuses if anything material changed or sensitive verification is visible, then clicks exactly one final purchase control. Not for ordinary Star browsing.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "approval_request_id": {"type": "string", "description": "Agent Request id whose proposal Joy approved through the trusted Telegram path"},
+            "material_summary_binding": {"type": "string", "description": "Approved material_summary_binding"},
+            "owner_visual_evidence_binding": {"type": "string", "description": "Approved owner_visual_evidence_binding"},
+        },
+        "required": ["approval_request_id", "material_summary_binding", "owner_visual_evidence_binding"],
+    },
+}
+
 GUARDRAIL_SCHEMA = {
     "name": "shopping_browser_guardrail_check",
     "description": "Check whether a shopping-browser operation is allowed. Ordinary trusted-assistant shopping/account research browsing is allowed with sanitized outputs. Checkout now means supervised checkout-prep only; final place_order remains blocked pending trusted Telegram approval bound to a material order-summary hash. Raw session, credential, payment/address edit, and secret operations are rejected.",
@@ -3575,6 +3918,26 @@ registry.register(
     check_fn=_check_shopping_browser,
     description=OWNER_CHECKOUT_REVIEW_SCHEMA["description"],
     emoji="🔐",
+    max_result_size_chars=MAX_RESULT_CHARS,
+)
+registry.register(
+    name=REQUEST_FINAL_PURCHASE_APPROVAL_SCHEMA["name"],
+    toolset=TOOLSET,
+    schema=REQUEST_FINAL_PURCHASE_APPROVAL_SCHEMA,
+    handler=shopping_browser_request_final_purchase_approval_tool,
+    check_fn=_check_shopping_browser,
+    description=REQUEST_FINAL_PURCHASE_APPROVAL_SCHEMA["description"],
+    emoji="✅",
+    max_result_size_chars=MAX_RESULT_CHARS,
+)
+registry.register(
+    name=EXECUTE_FINAL_PURCHASE_SCHEMA["name"],
+    toolset=TOOLSET,
+    schema=EXECUTE_FINAL_PURCHASE_SCHEMA,
+    handler=shopping_browser_execute_final_purchase_tool,
+    check_fn=_check_shopping_browser,
+    description=EXECUTE_FINAL_PURCHASE_SCHEMA["description"],
+    emoji="🛒",
     max_result_size_chars=MAX_RESULT_CHARS,
 )
 registry.register(
@@ -3805,6 +4168,14 @@ if __name__ == "__main__":
     except ValueError:
         pass
     assert json.loads(shopping_browser_visual_evidence_tool({"crops": "not-a-list"}))["error"] == "INVALID_CROPS"
+    assert _reject_unsafe_operation("request_final_purchase_approval")["trusted_approval_required"] is True
+    assert _reject_unsafe_operation("execute_final_purchase")["allowed"] is False
+    assert re.fullmatch(r"[0-9a-f]{64}", _approval_token_key("ar-20260101-000000-deadbe", "ap-test", "a" * 64, "b" * 64))
+    try:
+        _assert_hex_binding("not-a-binding", "material_summary_binding")
+        raise AssertionError("invalid binding should be blocked")
+    except ValueError:
+        pass
     disabled_owner_review = json.loads(shopping_browser_owner_checkout_review_tool({"send_to_telegram": False}))
     assert disabled_owner_review["error"] == "OWNER_CHECKOUT_REVIEW_FAILED"
     assert disabled_owner_review["operation"] == "owner_checkout_review"
