@@ -265,6 +265,13 @@ class nest::app::hermes::install {
     require     => Exec['install_hermes_agent'],
   }
 
+  exec { 'install_hermes_firecrawl_deps':
+    command     => "${venv_pip} install '${source_dir}[firecrawl]'",
+    unless      => "${venv_python} -c \"import firecrawl\"",
+    environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
+    require     => Exec['install_hermes_agent'],
+  }
+
   exec { 'install_hermes_pty_deps':
     command     => "${venv_pip} install '${source_dir}[pty]'",
     unless      => "${venv_python} -c \"import ptyprocess\"",

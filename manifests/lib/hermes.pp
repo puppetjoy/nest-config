@@ -10,7 +10,8 @@ define nest::lib::hermes (
   Any                  $gitlab_token               = undef,
   Any                  $gitlab_joy_token           = undef,
   Boolean              $gitlab_enabled             = false,
-  Any                  $tavily_api_key             = undef,
+  String[1]            $firecrawl_api_url          = 'https://firecrawl.eyrie',
+  String[1]            $searxng_url                = 'https://searxng.eyrie',
   Any                  $telegram_bot_token         = undef,
   Boolean              $telegram_enabled           = true,
   String[1]            $telegram_allowed           = '8756212310',
@@ -364,13 +365,16 @@ define nest::lib::hermes (
     },
   }
 
-  $tavily_env_lines = $tavily_api_key ? {
-    undef   => [],
-    default => $tavily_api_key =~ Sensitive[String[1]] ? {
-      true    => ["TAVILY_API_KEY=${tavily_api_key.unwrap}"],
-      default => ["TAVILY_API_KEY=${tavily_api_key}"],
+  $web_backend_env_lines = [
+    $firecrawl_api_url ? {
+      undef   => [],
+      default => ["FIRECRAWL_API_URL=${firecrawl_api_url}"],
     },
-  }
+    $searxng_url ? {
+      undef   => [],
+      default => ["SEARXNG_URL=${searxng_url}"],
+    },
+  ].flatten
 
   $telegram_env_lines = $telegram_bot_token ? {
     undef   => [],
@@ -670,8 +674,9 @@ define nest::lib::hermes (
       'base_url' => $model_base_url,
     } + $model_max_tokens_config,
     'web'              => {
-      'backend'        => 'tavily',
-      'search_backend' => 'tavily',
+      'backend'         => 'firecrawl',
+      'search_backend'  => 'searxng',
+      'extract_backend' => 'firecrawl',
     },
     'voice'            => {
       'auto_tts' => $voice_auto_tts,
@@ -743,7 +748,7 @@ define nest::lib::hermes (
     } + $dashboard_theme_config + $dashboard_profile_switcher_config,
   } + $credential_pool_strategy_config + $providers_config + $terminal_config + $image_gen_config + $plugins_config
 
-  $env_content = [$gitlab_env_lines, $release_digest_gitlab_token_env_lines, $tavily_env_lines, $telegram_env_lines, $openrouter_env_lines, $voice_tools_openai_env_lines, $agent_request_env_lines, $ssh_env_lines, $kubeconfig_env_lines, $tls_trust_env_lines].flatten.join("\n")
+  $env_content = [$gitlab_env_lines, $release_digest_gitlab_token_env_lines, $web_backend_env_lines, $telegram_env_lines, $openrouter_env_lines, $voice_tools_openai_env_lines, $agent_request_env_lines, $ssh_env_lines, $kubeconfig_env_lines, $tls_trust_env_lines].flatten.join("\n")
 
   if $kubeconfig_content != undef {
     $effective_kubeconfig_content = $kubeconfig_content =~ Sensitive ? {

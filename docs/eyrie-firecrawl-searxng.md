@@ -1,8 +1,9 @@
 # Eyrie Firecrawl + SearXNG validation stack
 
-This task adds a private Eyrie web-research stack for a later Hermes
-`web_search`/`web_extract` backend cutover. It does not switch any Hermes
-profile away from Tavily.
+This private Eyrie web-research stack backs Hermes `web_search` and
+`web_extract` without a Tavily dependency. SearXNG provides private
+metasearch and Firecrawl provides page/PDF extraction plus a SearXNG-backed
+search API for smoke testing.
 
 ## Components
 
@@ -114,16 +115,18 @@ curl --noproxy '*' --resolve firecrawl.eyrie:443:172.21.3.0 -ksS \
 The source adds `firecrawl.eyrie` and `searxng.eyrie` CNAMEs; normal hostname
 resolution still needs the source merge plus the usual Puppet/DNS follow-through.
 
-## Cutover recommendation
+## Hermes cutover
 
-Keep Tavily as the active Hermes backend until a separate backend-integration
-request lands and proves:
+Hermes profile configuration is managed by `nest::lib::hermes`:
 
-- Hermes can call the private Firecrawl API for both search and extract;
-- error/timeout handling maps cleanly into the existing `web_search` and
-  `web_extract` tool contracts;
-- representative HTML, PDF, unreachable-host, and timeout cases pass from the
-  same runtime profile that would use the backend;
-- no hosted Firecrawl/OpenAI/parser credential is required for Joy's normal web
-  research path, or the required secrets are source-managed through private
-  Hiera/eyaml.
+- `web.search_backend: searxng` with `SEARXNG_URL=https://searxng.eyrie` for
+  native `web_search`;
+- `web.extract_backend: firecrawl` with
+  `FIRECRAWL_API_URL=https://firecrawl.eyrie` for native `web_extract`;
+- shared `web.backend: firecrawl` as the fallback backend.
+
+The public Firecrawl/SearXNG endpoints are private Eyrie ingress names and do
+not require a Firecrawl API key. Roll back the cutover by reverting the Nest
+config commit that changed `nest::lib::hermes` from Tavily to the local
+Firecrawl/SearXNG backend, then reapplying Puppet to refresh the affected
+Hermes profile config and environment.

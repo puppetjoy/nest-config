@@ -2,7 +2,8 @@ class nest::app::hermes::config {
   $gitlab_url                       = $nest::app::hermes::gitlab_url
   $gitlab_token                     = $nest::app::hermes::gitlab_token
   $agent_request_gitlab_joy_token   = $nest::app::hermes::agent_request_gitlab_joy_token
-  $tavily_api_key                   = $nest::app::hermes::tavily_api_key
+  $firecrawl_api_url                = $nest::app::hermes::firecrawl_api_url
+  $searxng_url                      = $nest::app::hermes::searxng_url
   $telegram_bot_token               = $nest::app::hermes::telegram_bot_token
   $openrouter_api_key               = $nest::app::hermes::openrouter_api_key
   $voice_tools_openai_key           = $nest::app::hermes::voice_tools_openai_key
@@ -132,9 +133,13 @@ class nest::app::hermes::config {
       },
       default => undef,
     }
-    $instance_tavily_api_key    = $config['tavily_api_key'] ? {
-      undef   => $tavily_api_key,
-      default => $config['tavily_api_key'],
+    $instance_firecrawl_url     = $config['firecrawl_api_url'] ? {
+      undef   => $firecrawl_api_url,
+      default => $config['firecrawl_api_url'],
+    }
+    $instance_searxng_url       = $config['searxng_url'] ? {
+      undef   => $searxng_url,
+      default => $config['searxng_url'],
     }
     $instance_telegram_token    = $config['telegram_bot_token'] ? {
       undef   => $telegram_bot_token,
@@ -257,7 +262,8 @@ class nest::app::hermes::config {
       gitlab_token               => $instance_gitlab_token,
       gitlab_joy_token           => $agent_request_gitlab_joy_token,
       gitlab_enabled             => $instance_gitlab_enabled,
-      tavily_api_key             => $instance_tavily_api_key,
+      firecrawl_api_url          => $instance_firecrawl_url,
+      searxng_url                => $instance_searxng_url,
       telegram_bot_token         => $instance_telegram_token,
       telegram_enabled           => $instance_telegram_enabled,
       telegram_allowed           => $instance_telegram_allowed,

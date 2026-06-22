@@ -1,6 +1,7 @@
 ---
-# Self-hosted Firecrawl API for Hermes web_search/web_extract backend trials.
-# This keeps Tavily as the production Hermes backend until a later cutover task.
+# Self-hosted Firecrawl API for Hermes web_extract and SearXNG-backed search.
+# Production Hermes profiles point at this private stack through Puppet-managed
+# FIRECRAWL_API_URL/SEARXNG_URL settings.
 service_name: "%{nest::kubernetes::service}"
 cert_issuer: eyrie-ca
 cert_issuer_kind: ClusterIssuer
