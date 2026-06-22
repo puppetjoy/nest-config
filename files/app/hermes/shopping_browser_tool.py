@@ -36,6 +36,7 @@ TOOLSET = "shopping_browser"
 NAMESPACE = os.environ.get("SHOPPING_BROWSER_NAMESPACE", "ai")
 WORKLOAD = os.environ.get("SHOPPING_BROWSER_WORKLOAD", "deployment/secure-browser")
 REMOTE_DEBUG_PORT = int(os.environ.get("SHOPPING_BROWSER_CDP_PORT", "9222"))
+CDP_ENDPOINT_URL = os.environ.get("SHOPPING_BROWSER_CDP_URL", "").rstrip("/")
 BROWSER_OWNER = os.environ.get("SHOPPING_BROWSER_OWNER", "shopping")
 OWNERSHIP_STATE_PATH = os.environ.get("SECURE_BROWSER_OWNERSHIP_STATE", os.path.expanduser("~/.hermes/secure-browser-tabs.json"))
 BROWSER_DISPLAY = os.environ.get("SHOPPING_BROWSER_DISPLAY", ":1")
@@ -1783,7 +1784,7 @@ def _checkout_summary_from_browser(browser: CdpSession, session_id: str, max_con
     return _sanitize_checkout_summary(summary, safety, controls)
 
 def _check_shopping_browser() -> bool:
-    return shutil.which("kubectl") is not None
+    return bool(CDP_ENDPOINT_URL) or shutil.which("kubectl") is not None
 
 
 def _sanitize_url(value: str) -> str:
@@ -2035,8 +2036,8 @@ def _x11_screenshot() -> bytes:
     return convert.stdout
 
 
-def _page_targets_from_http(port: int) -> list[dict[str, str]]:
-    with urlopen(f"http://127.0.0.1:{port}/json/list", timeout=3) as response:
+def _page_targets_from_http(cdp_url: str) -> list[dict[str, str]]:
+    with urlopen(f"{cdp_url}/json/list", timeout=3) as response:
         targets = json.loads(response.read().decode("utf-8"))
     pages = []
     for target in targets:
@@ -2051,15 +2052,15 @@ def _page_targets_from_http(port: int) -> list[dict[str, str]]:
     return pages
 
 
-def _page_info_for_id(port: int, target_id: str) -> dict[str, str]:
-    for page in _page_targets_from_http(port):
+def _page_info_for_id(cdp_url: str, target_id: str) -> dict[str, str]:
+    for page in _page_targets_from_http(cdp_url):
         if page.get("id") == target_id:
             return page
     return {"id": target_id, "url": "about:blank", "title": ""}
 
 
-def _target_page_info(port: int) -> dict[str, str]:
-    pages = _page_targets_from_http(port)
+def _target_page_info(cdp_url: str) -> dict[str, str]:
+    pages = _page_targets_from_http(cdp_url)
     return pages[0] if pages else {"id": "", "url": "about:blank", "title": ""}
 
 
@@ -2248,12 +2249,17 @@ def _free_port() -> int:
         return int(sock.getsockname()[1])
 
 
-class PortForward:
+class CdpBridge:
     def __init__(self) -> None:
         self.local_port = _free_port()
         self.process: subprocess.Popen[str] | None = None
+        self.cdp_url = CDP_ENDPOINT_URL
 
-    def __enter__(self) -> int:
+    def __enter__(self) -> str:
+        if self.cdp_url:
+            self._wait_for_endpoint(self.cdp_url, "shopping browser CDP endpoint")
+            return self.cdp_url
+
         cmd = [
             "kubectl",
             "-n",
@@ -2267,19 +2273,26 @@ class PortForward:
         env = os.environ.copy()
         env.setdefault("HOME", "/home/joy")
         self.process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+        self.cdp_url = f"http://127.0.0.1:{self.local_port}"
+        self._wait_for_endpoint(self.cdp_url, "shopping browser CDP bridge")
+        return self.cdp_url
+
+    def _wait_for_endpoint(self, cdp_url: str, label: str) -> None:
         deadline = time.time() + PORT_FORWARD_TIMEOUT_SECONDS
-        version_url = f"http://127.0.0.1:{self.local_port}/json/version"
+        version_url = f"{cdp_url}/json/version"
+        last_error = ""
         while time.time() < deadline:
-            if self.process.poll() is not None:
+            if self.process and self.process.poll() is not None:
                 stderr = (self.process.stderr.read() if self.process.stderr else "").strip()
                 raise RuntimeError(f"kubectl port-forward failed: {stderr[:800]}")
             try:
                 with urlopen(version_url, timeout=1) as response:
                     json.loads(response.read().decode("utf-8"))
-                return self.local_port
-            except Exception:
+                return
+            except Exception as exc:
+                last_error = str(exc)[:300]
                 time.sleep(0.25)
-        raise RuntimeError("timed out waiting for shopping browser CDP bridge")
+        raise RuntimeError(f"timed out waiting for {label}: {last_error}")
 
     def __exit__(self, *_exc: object) -> None:
         if self.process and self.process.poll() is None:
@@ -2292,10 +2305,10 @@ class PortForward:
 
 
 class CdpSession:
-    def __init__(self, websocket_url: str, port: int | None = None) -> None:
+    def __init__(self, websocket_url: str, cdp_url: str | None = None) -> None:
         self.ws = websockets.sync.client.connect(websocket_url, open_timeout=5, close_timeout=2, max_size=CDP_MAX_MESSAGE_BYTES)
         self.next_id = 1
-        self.port = port
+        self.cdp_url = cdp_url
 
     def close(self) -> None:
         self.ws.close()
@@ -2318,20 +2331,23 @@ class CdpSession:
                 return data.get("result") or {}
 
 
-def _browser_ws_url(port: int) -> str:
-    with urlopen(f"http://127.0.0.1:{port}/json/version", timeout=3) as response:
+def _browser_ws_url(cdp_url: str) -> str:
+    with urlopen(f"{cdp_url}/json/version", timeout=3) as response:
         version = json.loads(response.read().decode("utf-8"))
     url = str(version.get("webSocketDebuggerUrl") or "")
     if not url:
         raise RuntimeError("shopping browser CDP endpoint did not report a browser websocket")
-    return url
+    endpoint = urlparse(cdp_url)
+    parsed = urlparse(url)
+    scheme = "wss" if endpoint.scheme == "https" else "ws"
+    return urlunparse((scheme, endpoint.netloc, parsed.path, "", parsed.query, parsed.fragment))
 
 
 def _current_page_ids(browser: CdpSession) -> set[str]:
     ids: set[str] = set()
-    if browser.port is not None:
+    if browser.cdp_url is not None:
         with contextlib.suppress(Exception):
-            ids.update(str(target["id"]) for target in _page_targets_from_http(browser.port) if target.get("id"))
+            ids.update(str(target["id"]) for target in _page_targets_from_http(browser.cdp_url) if target.get("id"))
     with contextlib.suppress(Exception):
         targets = browser.call("Target.getTargets").get("targetInfos") or []
         ids.update(str(target["targetId"]) for target in targets if target.get("type") == "page" and target.get("targetId"))
@@ -2394,9 +2410,9 @@ def _first_page_target(browser: CdpSession) -> str:
 
 def _owned_page_info(browser: CdpSession) -> dict[str, str]:
     target_id = _first_page_target(browser)
-    if browser.port is not None:
+    if browser.cdp_url is not None:
         with contextlib.suppress(Exception):
-            return _page_info_for_id(browser.port, target_id)
+            return _page_info_for_id(browser.cdp_url, target_id)
     return {"id": target_id, "url": "about:blank", "title": ""}
 
 
@@ -2430,8 +2446,8 @@ def _navigate_and_wait(browser: CdpSession, session_id: str, url: str) -> None:
 
 
 def _with_browser(fn: Any) -> dict[str, Any]:
-    with PortForward() as port:
-        browser = CdpSession(_browser_ws_url(port), port=port)
+    with CdpBridge() as cdp_url:
+        browser = CdpSession(_browser_ws_url(cdp_url), cdp_url=cdp_url)
         try:
             return fn(browser)
         finally:
@@ -2579,8 +2595,8 @@ def _screenshot(full_page: bool = False) -> dict[str, Any]:
         _audit("screenshot", {"url": result["url"], "page_title": title, "path": output_path, "full_page": result["full_page"], "capture_method": capture_method, "screenshot_mode": result["screenshot_mode"], "checkout_binding": result.get("material_summary_binding"), "redaction_rects_hash": (result.get("redaction") or {}).get("redaction_rects_hash")})
         return result
 
-    with PortForward() as port:
-        browser = CdpSession(_browser_ws_url(port), port=port)
+    with CdpBridge() as cdp_url:
+        browser = CdpSession(_browser_ws_url(cdp_url), cdp_url=cdp_url)
         try:
             return run(browser)
         finally:
@@ -3067,6 +3083,8 @@ def shopping_browser_status_tool(args: dict[str, Any], **_kw: Any) -> str:
         "namespace": NAMESPACE,
         "workload": WORKLOAD,
         "kubectl_available": shutil.which("kubectl") is not None,
+        "cdp_endpoint_configured": bool(CDP_ENDPOINT_URL),
+        "cdp_access_mode": "service_endpoint" if CDP_ENDPOINT_URL else "kubectl_port_forward",
         "remote_debug_port": REMOTE_DEBUG_PORT,
         "secure_browser_owner": BROWSER_OWNER,
         "ownership_state_path": OWNERSHIP_STATE_PATH,

@@ -123,6 +123,7 @@ nest::cnames:
   llama-qwen.eyrie: 'ingress-compute.eyrie'
   searxng.eyrie: 'ingress-compute.eyrie'
   secure-browser.eyrie: 'ingress-compute.eyrie'
+  secure-browser-cdp.eyrie: 'ingress-compute.eyrie'
   voice-speech.eyrie: 'ingress-compute.eyrie'
   llama-util.nest: 'kestrel.nest'
 

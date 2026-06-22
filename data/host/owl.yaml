@@ -281,6 +281,8 @@ nest::app::hermes::instances:
     dashboard_public_url: 'https://star.eyrie'
     dashboard_theme: 'rose'
     google_workspace_enabled: true
+    environment:
+      SHOPPING_BROWSER_CDP_URL: 'https://secure-browser-cdp.eyrie'
     voice_auto_tts: true
     stt_enabled: true
     stt_provider: 'voice-speech'

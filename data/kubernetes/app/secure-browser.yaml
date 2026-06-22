@@ -4,6 +4,7 @@ include:
 
 plan_base: 'nest::eyrie::ai::secure_browser'
 service_name: secure-browser
+cdp_fqdn: secure-browser-cdp.eyrie
 
 cert_issuer: eyrie-ca
 cert_issuer_kind: ClusterIssuer
@@ -62,6 +63,7 @@ resources:
         kind: "%{lookup('cert_issuer_kind')}"
       dnsNames:
         - "%{nest::kubernetes::fqdn}"
+        - "%{lookup('cdp_fqdn')}"
 
   browser-policy:
     apiVersion: v1
@@ -240,6 +242,9 @@ resources:
         - name: https
           port: 6901
           targetPort: 6901
+        - name: cdp
+          port: 9222
+          targetPort: 9222
 
   ingress:
     apiVersion: networking.k8s.io/v1
@@ -267,5 +272,31 @@ resources:
         - secretName: "%{nest::kubernetes::service}-certs"
           hosts:
             - "%{nest::kubernetes::fqdn}"
+
+  cdp-ingress:
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: "%{nest::kubernetes::service}-cdp"
+      namespace: "%{nest::kubernetes::namespace}"
+      annotations:
+        projectcontour.io/websocket-routes: /
+    spec:
+      ingressClassName: "%{lookup('ingress_class')}"
+      rules:
+        - host: "%{lookup('cdp_fqdn')}"
+          http:
+            paths:
+              - path: /
+                pathType: Prefix
+                backend:
+                  service:
+                    name: "%{nest::kubernetes::service}"
+                    port:
+                      number: 9222
+      tls:
+        - secretName: "%{nest::kubernetes::service}-certs"
+          hosts:
+            - "%{lookup('cdp_fqdn')}"
 
 values: {}
