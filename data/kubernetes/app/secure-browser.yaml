@@ -214,6 +214,43 @@ resources:
                   readOnly: true
                 - name: dshm
                   mountPath: /dev/shm
+            - name: cdp-proxy
+              image: registry.eyrie/nest/stage1/server:latest
+              command:
+                - python3
+                - -u
+                - -c
+                - |-
+                  import select
+                  import socket
+                  import socketserver
+
+                  class Proxy(socketserver.ThreadingTCPServer):
+                      allow_reuse_address = True
+                      daemon_threads = True
+
+                  class Handler(socketserver.BaseRequestHandler):
+                      def handle(self):
+                          upstream = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                          upstream.connect(('127.0.0.1', 9222))
+                          sockets = (self.request, upstream)
+                          while True:
+                              readable, _, _ = select.select(sockets, (), ())
+                              for source in readable:
+                                  data = source.recv(65536)
+                                  if not data:
+                                      return
+                                  (upstream if source is self.request else self.request).sendall(data)
+
+                  Proxy(('0.0.0.0', 9223), Handler).serve_forever()
+              ports:
+                - name: cdp-proxy
+                  containerPort: 9223
+              readinessProbe:
+                tcpSocket:
+                  port: 9223
+                periodSeconds: 5
+                timeoutSeconds: 2
           volumes:
             - name: profile
               persistentVolumeClaim:
@@ -244,7 +281,7 @@ resources:
           targetPort: 6901
         - name: cdp
           port: 9222
-          targetPort: 9222
+          targetPort: cdp-proxy
 
   ingress:
     apiVersion: networking.k8s.io/v1
