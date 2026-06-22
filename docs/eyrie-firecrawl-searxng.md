@@ -119,14 +119,16 @@ resolution still needs the source merge plus the usual Puppet/DNS follow-through
 
 Hermes profile configuration is managed by `nest::lib::hermes`:
 
-- `web.search_backend: searxng` with `SEARXNG_URL=https://searxng.eyrie` for
-  native `web_search`;
-- `web.extract_backend: firecrawl` with
-  `FIRECRAWL_API_URL=https://firecrawl.eyrie` for native `web_extract`;
-- shared `web.backend: firecrawl` as the fallback backend.
+- `web.search_backend: firecrawl` and `web.extract_backend: firecrawl` with
+  `FIRECRAWL_API_URL=https://firecrawl.eyrie` for native `web_search` and
+  `web_extract`;
+- `SEARXNG_URL=https://searxng.eyrie` remains available in the profile
+  environment while the private Firecrawl stack uses the in-cluster SearXNG
+  service as its upstream search dependency.
 
 The public Firecrawl/SearXNG endpoints are private Eyrie ingress names and do
 not require a Firecrawl API key. Roll back the cutover by reverting the Nest
 config commit that changed `nest::lib::hermes` from Tavily to the local
-Firecrawl/SearXNG backend, then reapplying Puppet to refresh the affected
+Firecrawl/SearXNG backend and the follow-up commit that set
+`web.search_backend: firecrawl`, then reapplying Puppet to refresh the affected
 Hermes profile config and environment.

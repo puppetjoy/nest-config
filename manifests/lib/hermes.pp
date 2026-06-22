@@ -675,7 +675,7 @@ define nest::lib::hermes (
     } + $model_max_tokens_config,
     'web'              => {
       'backend'         => 'firecrawl',
-      'search_backend'  => 'searxng',
+      'search_backend'  => 'firecrawl',
       'extract_backend' => 'firecrawl',
     },
     'voice'            => {
