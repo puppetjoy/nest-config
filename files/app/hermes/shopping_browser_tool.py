@@ -1269,6 +1269,8 @@ def _load_final_purchase_state(handle: Any) -> dict[str, Any]:
         return {"tokens": {}}
     if not isinstance(data.get("tokens"), dict):
         data["tokens"] = {}
+    if not isinstance(data.get("approval_requests"), dict):
+        data["approval_requests"] = {}
     return data
 
 
@@ -1287,6 +1289,15 @@ def _approval_token_key(request_id: str, approval_id: str, material_summary_bind
         "approval_id": approval_id,
         "material_summary_binding": material_summary_binding,
         "owner_visual_evidence_binding": owner_visual_evidence_binding,
+    }
+    return hashlib.sha256(json.dumps(material, sort_keys=True).encode("utf-8")).hexdigest()
+
+
+def _approval_request_binding_key(material_summary_binding: str, owner_visual_evidence_binding: str, owner_review_id: str) -> str:
+    material = {
+        "material_summary_binding": material_summary_binding,
+        "owner_visual_evidence_binding": owner_visual_evidence_binding,
+        "owner_review_id": owner_review_id or "",
     }
     return hashlib.sha256(json.dumps(material, sort_keys=True).encode("utf-8")).hexdigest()
 
@@ -1315,13 +1326,50 @@ def _request_id_from_submit_result(submit_result: dict[str, Any]) -> str:
 
 
 def _submit_final_purchase_approval_request(summary: dict[str, Any], material_summary_binding: str, owner_visual_evidence_binding: str, owner_review_id: str, note: str) -> dict[str, Any]:
+    facts = _minimal_owner_checkout_facts(summary)
+    facts_json = json.dumps(facts, ensure_ascii=False, sort_keys=True)
+    binding_key = _approval_request_binding_key(material_summary_binding, owner_visual_evidence_binding, owner_review_id)
+    now = datetime.now(timezone.utc).isoformat()
+    with _final_purchase_state_lock() as handle:
+        state = _load_final_purchase_state(handle)
+        approval_requests = state.setdefault("approval_requests", {})
+        existing = approval_requests.get(binding_key) if isinstance(approval_requests.get(binding_key), dict) else None
+        if existing and existing.get("status") in {"submitting", "approval_requested"}:
+            request_id = str(existing.get("request_id") or "").strip()
+            return {
+                "status": "approval_request_already_exists" if request_id else "approval_request_submission_in_progress",
+                "request_id": request_id,
+                "binding_key": binding_key,
+                "existing_request": existing,
+                "minimal_order_facts": facts,
+            }
+        approval_requests[binding_key] = {
+            "status": "submitting",
+            "request_id": "",
+            "material_summary_binding": material_summary_binding,
+            "owner_visual_evidence_binding": owner_visual_evidence_binding,
+            "owner_review_id": owner_review_id or "",
+            "minimal_order_facts": facts,
+            "started_at": now,
+            "updated_at": now,
+        }
+        _store_final_purchase_state(handle, state)
+
     try:
         from tools.agent_request_tool import agent_request_submit_tool, agent_request_propose_tool
     except Exception as exc:  # pragma: no cover - depends on Hermes runtime wiring
+        with _final_purchase_state_lock() as handle:
+            state = _load_final_purchase_state(handle)
+            approval_requests = state.setdefault("approval_requests", {})
+            approval_requests[binding_key] = {
+                **approval_requests.get(binding_key, {}),
+                "status": "submission_failed",
+                "error": f"Agent Request tool bridge is unavailable: {exc}",
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+            _store_final_purchase_state(handle, state)
         raise RuntimeError(f"Agent Request tool bridge is unavailable: {exc}") from exc
 
-    facts = _minimal_owner_checkout_facts(summary)
-    facts_json = json.dumps(facts, ensure_ascii=False, sort_keys=True)
     request_body = (
         "Trusted final-purchase execution request for the Star shopping browser. "
         "Do not perform shopping research or checkout-prep. After Joy approves the bound proposal, "
@@ -1346,33 +1394,63 @@ def _submit_final_purchase_approval_request(summary: dict[str, Any], material_su
         "urgency": "urgent",
         "board": _agent_request_board(),
     }
-    submit_result = json.loads(agent_request_submit_tool(submit_payload))
-    if submit_result.get("error"):
-        raise RuntimeError(str(submit_result.get("error")))
-    request_id = _request_id_from_submit_result(submit_result)
-    if not request_id:
-        raise RuntimeError("Agent Request submission did not return a request_id or request.id")
+    try:
+        submit_result = json.loads(agent_request_submit_tool(submit_payload))
+        if submit_result.get("error"):
+            raise RuntimeError(str(submit_result.get("error")))
+        request_id = _request_id_from_submit_result(submit_result)
+        if not request_id:
+            raise RuntimeError("Agent Request submission did not return a request_id or request.id")
 
-    proposal_text = "\n".join([
-        "Approve exactly one final Amazon Place Order action for the current Star shopping-browser checkout.",
-        f"Bound material_summary_binding: {material_summary_binding}",
-        f"Bound owner_visual_evidence_binding: {owner_visual_evidence_binding}",
-        f"Owner checkout review id: {owner_review_id or 'not supplied'}",
-        f"Sanitized order facts: {facts_json}",
-        "The executor must re-read the live checkout page immediately before clicking and refuse if any material field changed, if sensitive verification/login/account prompts appear, if final purchase controls are ambiguous/missing, or if this approval was already used.",
-        "Approval does not grant ordinary Star final-click authority and does not authorize payment/address/account edits, subscriptions, add-ons, warranty/protection changes, login, passkeys, 2FA, CAPTCHA, or security prompts.",
-    ])
-    propose_result = json.loads(agent_request_propose_tool({
+        proposal_text = "\n".join([
+            "Approve exactly one final Amazon Place Order action for the current Star shopping-browser checkout.",
+            f"Bound material_summary_binding: {material_summary_binding}",
+            f"Bound owner_visual_evidence_binding: {owner_visual_evidence_binding}",
+            f"Owner checkout review id: {owner_review_id or 'not supplied'}",
+            f"Sanitized order facts: {facts_json}",
+            "The executor must re-read the live checkout page immediately before clicking and refuse if any material field changed, if sensitive verification/login/account prompts appear, if final purchase controls are ambiguous/missing, or if this approval was already used.",
+            "Approval does not grant ordinary Star final-click authority and does not authorize payment/address/account edits, subscriptions, add-ons, warranty/protection changes, login, passkeys, 2FA, CAPTCHA, or security prompts.",
+        ])
+        propose_result = json.loads(agent_request_propose_tool({
+            "request_id": request_id,
+            "summary": "approval-required: place current Amazon order exactly once if bound checkout summary still matches",
+            "proposal": proposal_text,
+            "subject": "Final Amazon Place Order for current Star checkout",
+            "response_to_requester": "If approved, Talon will execute the bound final purchase exactly once after revalidating the live checkout summary.",
+            "board": _agent_request_board(),
+        }))
+        if propose_result.get("error"):
+            raise RuntimeError(str(propose_result.get("error")))
+    except Exception as exc:
+        with _final_purchase_state_lock() as handle:
+            state = _load_final_purchase_state(handle)
+            approval_requests = state.setdefault("approval_requests", {})
+            approval_requests[binding_key] = {
+                **approval_requests.get(binding_key, {}),
+                "status": "submission_failed",
+                "error": str(exc),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+            _store_final_purchase_state(handle, state)
+        raise
+
+    completed_at = datetime.now(timezone.utc).isoformat()
+    stored_request = {
+        "status": "approval_requested",
         "request_id": request_id,
-        "summary": "approval-required: place current Amazon order exactly once if bound checkout summary still matches",
-        "proposal": proposal_text,
-        "subject": "Final Amazon Place Order for current Star checkout",
-        "response_to_requester": "If approved, Talon will execute the bound final purchase exactly once after revalidating the live checkout summary.",
-        "board": _agent_request_board(),
-    }))
-    if propose_result.get("error"):
-        raise RuntimeError(str(propose_result.get("error")))
-    return {"submit_result": submit_result, "proposal_result": propose_result, "request_id": request_id}
+        "material_summary_binding": material_summary_binding,
+        "owner_visual_evidence_binding": owner_visual_evidence_binding,
+        "owner_review_id": owner_review_id or "",
+        "minimal_order_facts": facts,
+        "started_at": now,
+        "updated_at": completed_at,
+    }
+    with _final_purchase_state_lock() as handle:
+        state = _load_final_purchase_state(handle)
+        approval_requests = state.setdefault("approval_requests", {})
+        approval_requests[binding_key] = stored_request
+        _store_final_purchase_state(handle, state)
+    return {"status": "approval_requested", "submit_result": submit_result, "proposal_result": propose_result, "request_id": request_id, "binding_key": binding_key}
 
 
 def _current_agent_request_approval(request_id: str) -> dict[str, Any]:
@@ -1413,18 +1491,26 @@ def _request_final_purchase_approval(material_summary_binding: str, owner_visual
         if not blocked_metadata.get("final_purchase_controls_present"):
             raise ValueError("no final purchase control is visible on the bound checkout page")
         ar_result = _submit_final_purchase_approval_request(summary, expected_binding, evidence_binding, owner_review_id, note)
-        _audit("final_purchase_approval_requested", {"request_id": ar_result["request_id"], "material_summary_binding": expected_binding, "owner_visual_evidence_binding": evidence_binding, "owner_review_id": owner_review_id})
-        return {
+        result_status = str(ar_result.get("status") or "approval_requested")
+        request_id = str(ar_result.get("request_id") or "")
+        _audit("final_purchase_approval_requested", {"status": result_status, "request_id": request_id, "material_summary_binding": expected_binding, "owner_visual_evidence_binding": evidence_binding, "owner_review_id": owner_review_id})
+        response = {
             "operation": "request_final_purchase_approval",
-            "status": "approval_requested",
-            "request_id": ar_result["request_id"],
+            "status": result_status,
+            "request_id": request_id,
             "material_summary_binding": expected_binding,
             "owner_visual_evidence_binding": evidence_binding,
             "owner_review_id": owner_review_id,
             "minimal_order_facts": _minimal_owner_checkout_facts(summary),
-            "agent_request": ar_result["proposal_result"].get("request") or ar_result["submit_result"].get("request"),
             "safety_boundary": "Joy approval is requested through the trusted Agent Request Telegram action path. Final purchase remains blocked until that exact proposal is approved, then shopping_browser_execute_final_purchase must revalidate the live material summary and consume the approval exactly once.",
         }
+        if result_status == "approval_requested":
+            response["agent_request"] = ar_result["proposal_result"].get("request") or ar_result["submit_result"].get("request")
+        elif result_status == "approval_request_already_exists":
+            response["duplicate_state"] = "A final-purchase approval request for this material_summary_binding, owner_visual_evidence_binding, and owner_review_id already exists; no new approval prompt was submitted."
+        else:
+            response["duplicate_state"] = "A final-purchase approval request for this binding is already being submitted; no new approval prompt was submitted. Retry only after confirming the existing attempt is stale or failed."
+        return response
 
     return _with_browser(run)
 
