@@ -331,29 +331,27 @@ resources:
             - "%{nest::kubernetes::fqdn}"
 
   cdp-ingress:
-    apiVersion: networking.k8s.io/v1
-    kind: Ingress
+    apiVersion: projectcontour.io/v1
+    kind: HTTPProxy
     metadata:
       name: "%{nest::kubernetes::service}-cdp"
       namespace: "%{nest::kubernetes::namespace}"
-      annotations:
-        projectcontour.io/websocket-routes: /
     spec:
       ingressClassName: "%{lookup('ingress_class')}"
-      rules:
-        - host: "%{lookup('cdp_fqdn')}"
-          http:
-            paths:
-              - path: /
-                pathType: Prefix
-                backend:
-                  service:
-                    name: "%{nest::kubernetes::service}"
-                    port:
-                      number: 9222
-      tls:
-        - secretName: "%{nest::kubernetes::service}-certs"
-          hosts:
-            - "%{lookup('cdp_fqdn')}"
+      virtualhost:
+        fqdn: "%{lookup('cdp_fqdn')}"
+        tls:
+          secretName: "%{nest::kubernetes::service}-certs"
+      routes:
+        - conditions:
+            - prefix: /
+          enableWebsockets: true
+          services:
+            - name: "%{nest::kubernetes::service}"
+              port: 9222
+              requestHeadersPolicy:
+                set:
+                  - name: Host
+                    value: 127.0.0.1:9222
 
 values: {}
