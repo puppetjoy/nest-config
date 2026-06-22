@@ -1,7 +1,7 @@
 class nest::service::gitlab (
   Optional[String]    $external_name          = undef,
   Optional[String]    $registry_external_name = undef,
-  String              $backups_namespace      = $nest::kubernetes::namespace,
+  Optional[String]    $backups_namespace      = undef,
   Boolean             $https                  = false,
   String              $image                  = 'gitlab/gitlab-ce',
   Stdlib::Port        $ssh_port               = 22,
@@ -21,7 +21,11 @@ class nest::service::gitlab (
       $bucket_user = nest::kubernetes::bucket_user(lookup('ceph_object_store'), $nest::kubernetes::service, lookup('ceph_namespace'))
 
       $artifacts_bucket_config   = nest::kubernetes::bucket_config("${nest::kubernetes::service}-artifacts")
-      $backups_bucket_config     = nest::kubernetes::bucket_config("${nest::kubernetes::service}-backups", $backups_namespace)
+      $effective_backups_namespace = $backups_namespace ? {
+        undef   => $nest::kubernetes::namespace,
+        default => $backups_namespace,
+      }
+      $backups_bucket_config     = nest::kubernetes::bucket_config("${nest::kubernetes::service}-backups", $effective_backups_namespace)
       $backups_tmp_bucket_config = nest::kubernetes::bucket_config("${nest::kubernetes::service}-backups-tmp")
       $lfs_bucket_config         = nest::kubernetes::bucket_config("${nest::kubernetes::service}-lfs")
       $packages_bucket_config    = nest::kubernetes::bucket_config("${nest::kubernetes::service}-packages")
