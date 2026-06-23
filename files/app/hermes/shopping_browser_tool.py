@@ -1814,6 +1814,237 @@ def _refresh_plan() -> dict[str, Any]:
     }
 
 
+
+def _extract_order_status_from_facts(facts: list[str], current_status: str = "") -> str:
+    text = " ".join(str(fact or "") for fact in facts).lower()
+    if re.search(r"\bdelivered\b", text):
+        return "delivered"
+    if re.search(r"\bout\s+for\s+delivery\b", text):
+        return "out_for_delivery"
+    if re.search(r"\b(shipped|on the way|in transit|track package)\b", text):
+        return "shipped"
+    if re.search(r"\b(arriving|arrives|expected|estimated|delivery)\b", text):
+        return current_status if current_status in {"shipped", "out_for_delivery"} else "processing"
+    return current_status or "confirmed"
+
+
+def _extract_order_eta_from_facts(facts: list[str], current_eta: str = "") -> str:
+    for fact in facts:
+        text = _coarse_date(fact)
+        if not text:
+            continue
+        match = re.search(r"\b(?:arriv(?:es|ing)|expected|estimated|delivery|delivered)\b[^.;,]{0,80}", text, re.IGNORECASE)
+        if match:
+            return _coarse_date(match.group(0)) or current_eta
+    return current_eta
+
+
+def _order_match_terms(order: dict[str, Any]) -> list[str]:
+    candidates = [order.get("item_nickname"), order.get("item_category"), order.get("handle")]
+    terms: list[str] = []
+    for candidate in candidates:
+        text = re.sub(r"[^a-z0-9 ]+", " ", str(candidate or "").lower())
+        words = [word for word in text.split() if len(word) >= 4 and word not in {"order", "item", "amazon", "shopping"}]
+        terms.extend(words[:4])
+    deduped: list[str] = []
+    for term in terms:
+        if term not in deduped:
+            deduped.append(term)
+    return deduped[:6]
+
+
+def _facts_match_order(order: dict[str, Any], facts: list[str]) -> bool:
+    terms = _order_match_terms(order)
+    if not terms:
+        return True
+    haystack = " ".join(str(fact or "") for fact in facts).lower()
+    return any(term in haystack for term in terms)
+
+
+def _amazon_your_orders_observation(order: dict[str, Any]) -> dict[str, Any]:
+    if str(order.get("retailer") or "").lower() not in {"amazon", "amazon.com", ""}:
+        return {"source": "amazon_your_orders", "status": "skipped", "reason": "retailer is not amazon"}
+
+    def run(browser: CdpSession) -> dict[str, Any]:
+        target_id = _claim_owner_target(browser, create=True)
+        session_id = _attach(browser, target_id)
+        _navigate_and_wait(browser, session_id, "https://www.amazon.com/gp/your-account/order-history")
+        page_url = str(_evaluate(browser, session_id, "location.href") or "")
+        page_title = str(_evaluate(browser, session_id, "document.title") or "")
+        if not _is_amazon_post_purchase_page(page_url, page_title):
+            return {"source": "amazon_your_orders", "status": "unavailable", "reason": "Amazon order-history page was not visible without owner intervention", "page_title": _sanitize_shopping_text(page_title)[:160], "url": _sanitize_url(page_url)}
+        summary = _post_purchase_summary_from_browser(browser, session_id)
+        facts = _bounded_checkout_list(summary.get("delivery_status"), 8) + _bounded_checkout_list(summary.get("order_presence"), 4) + _bounded_checkout_list(summary.get("item_clues"), 4)
+        if not facts:
+            return {"source": "amazon_your_orders", "status": "no_update", "reason": "no sanitized order facts visible", "post_purchase_summary_binding": summary.get("post_purchase_summary_binding")}
+        if not _facts_match_order(order, facts):
+            return {"source": "amazon_your_orders", "status": "no_match", "reason": "visible sanitized order facts did not match this safe order nickname", "post_purchase_summary_binding": summary.get("post_purchase_summary_binding")}
+        return {
+            "source": "amazon_your_orders",
+            "status": "ok",
+            "order_status": _extract_order_status_from_facts(facts, str(order.get("status") or "confirmed")),
+            "eta_window": _extract_order_eta_from_facts(facts, str(order.get("eta_window") or "")),
+            "safe_delivery_facts": facts[:6],
+            "evidence_bindings": [summary.get("post_purchase_summary_binding")] if summary.get("post_purchase_summary_binding") else [],
+            "source_refs": ["amazon_your_orders"],
+        }
+
+    try:
+        return _with_browser(run)
+    except Exception as exc:
+        return {"source": "amazon_your_orders", "status": "unavailable", "reason": str(exc)[:300]}
+
+
+def _gmail_order_email_observation(order: dict[str, Any]) -> dict[str, Any]:
+    try:
+        from tools.google_workspace_tool import google_workspace_gmail_search_tool  # type: ignore[import-not-found]
+    except Exception as exc:
+        return {"source": "gmail_order_email", "status": "unavailable", "reason": f"Google Workspace tool unavailable: {exc}"[:300]}
+    terms = _order_match_terms(order)
+    query_terms = " OR ".join(terms[:3]) if terms else str(order.get("item_nickname") or "")[:80]
+    query = f'newer_than:90d (from:amazon OR subject:(shipped OR delivered OR order)) ({query_terms})'
+    try:
+        raw = google_workspace_gmail_search_tool({"query": query, "max_results": 5})
+        result = json.loads(raw)
+    except Exception as exc:
+        return {"source": "gmail_order_email", "status": "unavailable", "reason": str(exc)[:300]}
+    if result.get("error"):
+        return {"source": "gmail_order_email", "status": "unavailable", "reason": _sanitize_checkout_text(str(result.get("message") or result.get("error")))[:300]}
+    messages = result.get("messages") or result.get("results") or []
+    snippets: list[str] = []
+    if isinstance(messages, list):
+        for message in messages[:5]:
+            if isinstance(message, dict):
+                snippets.extend(_bounded_checkout_list([message.get("snippet"), message.get("subject"), message.get("from")], 3))
+            else:
+                snippets.append(_sanitize_checkout_text(str(message))[:200])
+    snippets = _bounded_checkout_list(snippets, 8)
+    if not snippets:
+        return {"source": "gmail_order_email", "status": "no_update", "reason": "no matching read-only Gmail order/shipment snippets"}
+    if not _facts_match_order(order, snippets):
+        return {"source": "gmail_order_email", "status": "no_match", "reason": "Gmail snippets did not match this safe order nickname"}
+    return {
+        "source": "gmail_order_email",
+        "status": "ok",
+        "order_status": _extract_order_status_from_facts(snippets, str(order.get("status") or "confirmed")),
+        "eta_window": _extract_order_eta_from_facts(snippets, str(order.get("eta_window") or "")),
+        "safe_delivery_facts": snippets[:6],
+        "source_refs": ["gmail_order_email"],
+    }
+
+
+def _carrier_page_observation(order: dict[str, Any]) -> dict[str, Any]:
+    safe_refs = []
+    for ref in _coerce_json_list(order.get("source_refs")):
+        text = str(ref or "")
+        if text.startswith("https://") and not re.search(r"ups\.com|tracking|tracknum|track(?:ing)?[=/:-]|\b1z[0-9a-z]+\b", text, re.IGNORECASE):
+            safe_refs.append(text)
+    if not safe_refs:
+        return {"source": "carrier_page", "status": "skipped", "reason": "no safe bot-accessible carrier URL hint without tracking identifiers"}
+    return {"source": "carrier_page", "status": "skipped", "reason": "carrier pages are opportunistic only; no safe generic adapter is enabled yet"}
+
+
+def _refresh_observation_for_source(order: dict[str, Any], source: str) -> dict[str, Any]:
+    if source == "amazon_your_orders":
+        return _amazon_your_orders_observation(order)
+    if source == "gmail_order_email":
+        return _gmail_order_email_observation(order)
+    if source == "carrier_page":
+        return _carrier_page_observation(order)
+    return {"source": source, "status": "skipped", "reason": "unknown refresh source"}
+
+
+def _notification_message(order: dict[str, Any], decision: dict[str, Any]) -> str:
+    event_type = str(decision.get("event_type") or "status_changed").replace("_", " ")
+    facts = _bounded_checkout_list(order.get("safe_delivery_facts"), 3)
+    lines = [
+        f"🛒 Star order update: {event_type}",
+        f"Item: {_safe_item_nickname(order.get('item_nickname'))}",
+        f"Status: {_safe_order_status(order.get('status'))}",
+    ]
+    if order.get("eta_window"):
+        lines.append(f"ETA: {_coarse_date(order.get('eta_window'))}")
+    if facts:
+        lines.append("Facts: " + "; ".join(facts))
+    return "\n".join(_sanitize_checkout_text(line)[:500] for line in lines if line)
+
+
+def _send_order_notification(message: str) -> dict[str, Any]:
+    token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+    chat_id = os.environ.get("TELEGRAM_HOME_CHANNEL", "").strip() or os.environ.get("TELEGRAM_ALLOWED_USERS", "").split(",")[0].strip()
+    if not token or not chat_id:
+        return {"status": "skipped", "reason": "Telegram bot token or home channel unavailable in profile environment"}
+    payload = json.dumps({"chat_id": chat_id, "text": message, "disable_notification": False}).encode("utf-8")
+    request = Request(f"https://api.telegram.org/bot{token}/sendMessage", data=payload, headers={"Content-Type": "application/json"})
+    try:
+        with urlopen(request, timeout=20) as response:
+            body = response.read(16384).decode("utf-8", "replace")
+        parsed = json.loads(body)
+    except Exception as exc:
+        return {"status": "failed", "reason": str(exc)[:300]}
+    if not parsed.get("ok"):
+        return {"status": "failed", "reason": _sanitize_checkout_text(str(parsed.get("description") or "Telegram send failed"))[:300]}
+    result = parsed.get("result") if isinstance(parsed.get("result"), dict) else {}
+    return {"status": "sent", "telegram_message_id": result.get("message_id")}
+
+
+def _apply_refresh_observation(order: dict[str, Any], observation: dict[str, Any]) -> dict[str, Any]:
+    candidate_args = {
+        **order,
+        "handle": order["handle"],
+        "status": observation.get("order_status") or order.get("status"),
+        "eta_window": observation.get("eta_window") or order.get("eta_window"),
+        "safe_delivery_facts": observation.get("safe_delivery_facts") or order.get("safe_delivery_facts"),
+        "evidence_bindings": _coerce_json_list(order.get("evidence_bindings")) + _coerce_json_list(observation.get("evidence_bindings")),
+        "source_refs": _coerce_json_list(order.get("source_refs")) + _coerce_json_list(observation.get("source_refs")),
+        "notes": order.get("notes") or "",
+    }
+    preview = _preview_order_update(candidate_args)
+    stored = _upsert_order_entry(candidate_args)
+    notification = {"status": "not_required"}
+    decision = preview.get("notification_decision") if isinstance(preview.get("notification_decision"), dict) else {}
+    if decision.get("should_notify"):
+        notification = _send_order_notification(_notification_message(stored["order"], decision))
+        if notification.get("status") == "sent":
+            _mark_order_notified(stored["order"]["handle"], str(decision.get("event_type") or "status_changed"))
+    return {"observation": observation, "preview": preview, "stored_order": stored.get("order"), "notification": notification}
+
+
+def _refresh_due_orders(send_notifications: bool = True, limit: int = 20) -> dict[str, Any]:
+    plan = _refresh_plan()
+    due_orders = plan.get("due_orders") if isinstance(plan.get("due_orders"), list) else []
+    refreshed = []
+    for due in due_orders[:max(0, min(int(limit), 50))]:
+        handle = str(due.get("handle") or "")
+        with _ledger_connect() as conn:
+            order = _get_order(conn, _safe_order_handle(handle))
+        if not order:
+            continue
+        attempts = []
+        applied = None
+        for source in order.get("refresh_sources") or ORDER_REFRESH_SOURCE_PRIORITY:
+            observation = _refresh_observation_for_source(order, str(source))
+            attempts.append(observation)
+            if observation.get("status") == "ok":
+                if send_notifications:
+                    applied = _apply_refresh_observation(order, observation)
+                else:
+                    candidate_args = {**order, "status": observation.get("order_status") or order.get("status"), "eta_window": observation.get("eta_window") or order.get("eta_window"), "safe_delivery_facts": observation.get("safe_delivery_facts") or order.get("safe_delivery_facts")}
+                    applied = {"observation": observation, "preview": _preview_order_update(candidate_args), "notification": {"status": "dry_run"}}
+                break
+        refreshed.append({"handle": handle, "attempts": attempts, "applied": applied})
+    sent_count = sum(1 for item in refreshed if ((item.get("applied") or {}).get("notification") or {}).get("status") == "sent")
+    _audit("shopping_order_refresh_run", {"due_count": len(due_orders), "refreshed_count": len(refreshed), "sent_count": sent_count})
+    return {
+        "operation": "shopping_order_refresh_run",
+        "status": "ok",
+        "plan": plan,
+        "refreshed": refreshed,
+        "notifications_sent": sent_count,
+        "privacy_boundary": "Scheduled refresh stores and notifies only sanitized order status/ETA facts; it never places, cancels, reorders, returns, edits accounts/payment/address, exposes raw order numbers, or returns raw browser/Gmail/carrier content.",
+    }
+
+
 def _upsert_consumable(args: dict[str, Any]) -> dict[str, Any]:
     nickname = _safe_item_nickname(args.get("item_nickname") or args.get("nickname") or "consumable item")
     handle = _safe_order_handle(args.get("handle") or re.sub(r"[^a-z0-9]+", "-", nickname.lower()).strip("-") or "consumable", nickname)
@@ -4359,7 +4590,7 @@ def shopping_browser_status_tool(args: dict[str, Any], **_kw: Any) -> str:
         "remote_debug_port": REMOTE_DEBUG_PORT,
         "secure_browser_owner": BROWSER_OWNER,
         "ownership_state_path": OWNERSHIP_STATE_PATH,
-        "browser_operations": ["navigate", "page_snapshot", "query", "click", "type", "screenshot", "visual_evidence", "current_page_summary", "owner_checkout_review", "order_list", "order_read", "order_upsert", "order_close", "order_refresh_plan", "consumable_list", "consumable_upsert"],
+        "browser_operations": ["navigate", "page_snapshot", "query", "click", "type", "screenshot", "visual_evidence", "current_page_summary", "owner_checkout_review", "order_list", "order_read", "order_upsert", "order_close", "order_notification_preview", "order_mark_notified", "order_refresh_plan", "order_refresh_run", "consumable_list", "consumable_upsert"],
         "trusted_assistant_access": {
             "status": "broad_browsing_available",
             "message": "Star may navigate and inspect ordinary shopping/account research surfaces, including Amazon order history, Buy Again, past-order details, and product links. The bridge gates capabilities and sanitizes outputs instead of blanket-blocking account/order-history URLs.",
@@ -4586,6 +4817,16 @@ def shopping_browser_order_refresh_plan_tool(args: dict[str, Any], **_kw: Any) -
         return _json(_refresh_plan())
     except Exception as exc:
         return _json({"error": "SHOPPING_ORDER_REFRESH_PLAN_FAILED", "message": str(exc)[:1000], "operation": "shopping_order_refresh_plan"})
+
+
+def shopping_browser_order_refresh_run_tool(args: dict[str, Any], **_kw: Any) -> str:
+    try:
+        return _json(_refresh_due_orders(
+            send_notifications=bool(args.get("send_notifications", True)),
+            limit=int(args.get("limit") or 20),
+        ))
+    except Exception as exc:
+        return _json({"error": "SHOPPING_ORDER_REFRESH_RUN_FAILED", "message": str(exc)[:1000], "operation": "shopping_order_refresh_run"})
 
 
 def shopping_browser_consumable_list_tool(args: dict[str, Any], **_kw: Any) -> str:
@@ -4904,6 +5145,19 @@ ORDER_REFRESH_PLAN_SCHEMA = {
     "parameters": {"type": "object", "properties": {}, "required": []},
 }
 
+ORDER_REFRESH_RUN_SCHEMA = {
+    "name": "shopping_browser_order_refresh_run",
+    "description": "Run the safe scheduled Star order refresh loop for due active orders: refresh sanitized status/ETA from Amazon Your Orders first, read-only Gmail snippets as fallback, carrier pages only opportunistically, update the ledger, and send Joy a Telegram notification only when shopping_browser_order_notification_preview says the event is material. Does not place, cancel, reorder, return, or modify orders.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "send_notifications": {"type": "boolean", "description": "Send Joy Telegram notifications for material events; defaults true", "default": True},
+            "limit": {"type": "integer", "description": "Maximum due orders to refresh this run, 1-50", "default": 20},
+        },
+        "required": [],
+    },
+}
+
 CONSUMABLE_LIST_SCHEMA = {
     "name": "shopping_browser_consumable_list",
     "description": "List stable/tentative consumable items separately from transient order state. Returns safe item nicknames/categories, confidence/source, and last safe order handle only.",
@@ -5062,6 +5316,7 @@ for _schema, _handler, _emoji in [
     (ORDER_NOTIFICATION_PREVIEW_SCHEMA, shopping_browser_order_notification_preview_tool, "🔕"),
     (ORDER_MARK_NOTIFIED_SCHEMA, shopping_browser_order_mark_notified_tool, "📌"),
     (ORDER_REFRESH_PLAN_SCHEMA, shopping_browser_order_refresh_plan_tool, "🔄"),
+    (ORDER_REFRESH_RUN_SCHEMA, shopping_browser_order_refresh_run_tool, "⏰"),
     (CONSUMABLE_LIST_SCHEMA, shopping_browser_consumable_list_tool, "☕"),
     (CONSUMABLE_UPSERT_SCHEMA, shopping_browser_consumable_upsert_tool, "📝"),
     (CONSUMABLE_SUGGEST_FROM_ORDER_SCHEMA, shopping_browser_consumable_suggest_from_order_tool, "🌱"),
@@ -5425,6 +5680,31 @@ if __name__ == "__main__":
         assert tracking["order"]["status"] == "confirmed"
         assert tracking["order"]["refresh_sources"][:2] == ["amazon_your_orders", "gmail_order_email"]
         assert json.loads(shopping_browser_order_refresh_plan_tool({}))["scheduled_refresh_spec"]["primary_source"] == "Amazon Your Orders via secure shopping browser owner/post-purchase evidence path"
+        with _ledger_connect() as conn:
+            conn.execute("UPDATE shopping_orders SET status = 'shipped', updated_at = ? WHERE handle = ?", ((datetime.now(timezone.utc) - timedelta(hours=7)).isoformat(), tracking["order"]["handle"]))
+            conn.commit()
+        original_refresh_observation = _refresh_observation_for_source
+        original_send_order_notification = _send_order_notification
+        try:
+            globals()["_refresh_observation_for_source"] = lambda order, source: {
+                "source": source,
+                "status": "ok",
+                "order_status": "delivered",
+                "eta_window": "Delivered Tuesday",
+                "safe_delivery_facts": ["Delivered Tuesday"],
+                "source_refs": [source],
+            }
+            globals()["_send_order_notification"] = lambda message: {"status": "sent", "telegram_message_id": 4242, "message": message}
+            refresh_run = json.loads(shopping_browser_order_refresh_run_tool({"send_notifications": True, "limit": 5}))
+        finally:
+            globals()["_refresh_observation_for_source"] = original_refresh_observation
+            globals()["_send_order_notification"] = original_send_order_notification
+        assert refresh_run["status"] == "ok"
+        assert refresh_run["notifications_sent"] == 1
+        assert refresh_run["refreshed"][0]["applied"]["notification"]["status"] == "sent"
+        refreshed_order = json.loads(shopping_browser_order_read_tool({"handle": tracking["order"]["handle"]}))["order"]
+        assert refreshed_order["status"] == "delivered"
+        assert refreshed_order["notification_state"]["last_notified_delivered"]
     globals()["SHOPPING_ORDER_LEDGER_PATH"] = original_ledger_path
 
     body, content_type = _multipart_request({"chat_id": "123"}, {"document": ("review.png", b"png", "image/png")})
@@ -5448,7 +5728,7 @@ if __name__ == "__main__":
     assert "text('#ppd')" not in ADD_TO_CART_PRECHECK_JS
     assert "condition_summary" in ADD_TO_CART_PRECHECK_JS
     assert "product_condition" in PRODUCT_EXTRACT_JS
-    active_schema_names = [STATUS_SCHEMA["name"], NAVIGATE_SCHEMA["name"], PAGE_SNAPSHOT_SCHEMA["name"], QUERY_SCHEMA["name"], SCREENSHOT_SCHEMA["name"], VISUAL_EVIDENCE_SCHEMA["name"], CLICK_SCHEMA["name"], TYPE_SCHEMA["name"], CURRENT_PAGE_SUMMARY_SCHEMA["name"], OWNER_CHECKOUT_REVIEW_SCHEMA["name"], ORDER_LIST_SCHEMA["name"], ORDER_READ_SCHEMA["name"], ORDER_UPSERT_SCHEMA["name"], ORDER_CLOSE_SCHEMA["name"], ORDER_NOTIFICATION_PREVIEW_SCHEMA["name"], ORDER_MARK_NOTIFIED_SCHEMA["name"], ORDER_REFRESH_PLAN_SCHEMA["name"], CONSUMABLE_LIST_SCHEMA["name"], CONSUMABLE_UPSERT_SCHEMA["name"], CONSUMABLE_SUGGEST_FROM_ORDER_SCHEMA["name"], GUARDRAIL_SCHEMA["name"]]
+    active_schema_names = [STATUS_SCHEMA["name"], NAVIGATE_SCHEMA["name"], PAGE_SNAPSHOT_SCHEMA["name"], QUERY_SCHEMA["name"], SCREENSHOT_SCHEMA["name"], VISUAL_EVIDENCE_SCHEMA["name"], CLICK_SCHEMA["name"], TYPE_SCHEMA["name"], CURRENT_PAGE_SUMMARY_SCHEMA["name"], OWNER_CHECKOUT_REVIEW_SCHEMA["name"], ORDER_LIST_SCHEMA["name"], ORDER_READ_SCHEMA["name"], ORDER_UPSERT_SCHEMA["name"], ORDER_CLOSE_SCHEMA["name"], ORDER_NOTIFICATION_PREVIEW_SCHEMA["name"], ORDER_MARK_NOTIFIED_SCHEMA["name"], ORDER_REFRESH_PLAN_SCHEMA["name"], ORDER_REFRESH_RUN_SCHEMA["name"], CONSUMABLE_LIST_SCHEMA["name"], CONSUMABLE_UPSERT_SCHEMA["name"], CONSUMABLE_SUGGEST_FROM_ORDER_SCHEMA["name"], GUARDRAIL_SCHEMA["name"]]
     assert "shopping_browser_owner_checkout_review" in active_schema_names
     assert "shopping_browser_order_upsert" in active_schema_names
     assert "shopping_browser_consumable_upsert" in active_schema_names

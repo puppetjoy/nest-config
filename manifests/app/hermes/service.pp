@@ -11,6 +11,8 @@ class nest::app::hermes::service {
   $systemd_main_pid        = '$MAINPID'
   $gitlab_mr_note_poller_profile  = $nest::app::hermes::gitlab_mr_note_poller_profile
   $gitlab_mr_note_poller_interval = $nest::app::hermes::gitlab_mr_note_poller_interval
+  $star_order_refresh_profile     = $nest::app::hermes::star_order_refresh_profile
+  $star_order_refresh_interval    = $nest::app::hermes::star_order_refresh_interval
 
   file { $systemd_user_dir:
     ensure => directory,
@@ -73,6 +75,15 @@ class nest::app::hermes::service {
     owner   => 'root',
     group   => 'root',
     source  => 'puppet:///modules/nest/app/hermes/hermes-systemd-user-refresh',
+    require => File["${install_dir}/bin"],
+  }
+
+  file { "${install_dir}/bin/star-order-refresh-runner":
+    ensure  => file,
+    mode    => '0755',
+    owner   => 'root',
+    group   => 'root',
+    source  => 'puppet:///modules/nest/app/hermes/star-order-refresh-runner.py',
     require => File["${install_dir}/bin"],
   }
 
@@ -227,6 +238,97 @@ class nest::app::hermes::service {
     }
 
     file { "${systemd_user_dir}/hermes-agent-request-gitlab-mr-notes.service":
+      ensure => absent,
+      owner  => $nest::user,
+      group  => $nest::user,
+      notify => Systemd::Daemon_reload['hermes-systemd-user-daemon-reload'],
+    }
+  }
+
+  if $nest::app::hermes::star_order_refresh_enabled {
+    file { "${systemd_user_dir}/hermes-star-order-refresh.service":
+      ensure  => file,
+      mode    => '0644',
+      owner   => $nest::user,
+      group   => $nest::user,
+      content => @("UNIT"),
+        [Unit]
+        Description=Star safe shopping-order refresh and material notification pass
+        After=network-online.target
+        Wants=network-online.target
+
+        [Service]
+        Type=oneshot
+        EnvironmentFile=-${hermes_home_dir}/profiles/${star_order_refresh_profile}/systemd.env
+        Environment=HERMES_HOME=${hermes_home_dir}
+        Environment=HERMES_PROFILE=${star_order_refresh_profile}
+        Environment=PYTHONPATH=${pythonpath}
+        Environment=SSL_CERT_FILE=${ca_bundle_file}
+        Environment=REQUESTS_CA_BUNDLE=${ca_bundle_file}
+        Environment=CURL_CA_BUNDLE=${ca_bundle_file}
+        Environment=SSL_CERT_DIR=/etc/ssl/certs
+        ExecStart=${venv_python} ${install_dir}/bin/star-order-refresh-runner --json
+        WorkingDirectory=/home/${nest::user}
+        StandardOutput=journal
+        StandardError=journal
+        | UNIT
+      require => [
+        File[$systemd_user_dir],
+        File["${install_dir}/bin/star-order-refresh-runner"],
+        Exec['install_hermes_agent'],
+      ],
+      notify  => Systemd::Daemon_reload['hermes-systemd-user-daemon-reload'],
+    }
+
+    file { "${systemd_user_dir}/hermes-star-order-refresh.timer":
+      ensure  => file,
+      mode    => '0644',
+      owner   => $nest::user,
+      group   => $nest::user,
+      content => @("UNIT"),
+        [Unit]
+        Description=Schedule Star safe shopping-order refreshes
+
+        [Timer]
+        OnBootSec=10min
+        OnUnitActiveSec=${star_order_refresh_interval}
+        RandomizedDelaySec=5min
+        AccuracySec=1min
+        Persistent=false
+
+        [Install]
+        WantedBy=timers.target
+        | UNIT
+      require => File["${systemd_user_dir}/hermes-star-order-refresh.service"],
+      notify  => Systemd::Daemon_reload['hermes-systemd-user-daemon-reload'],
+    }
+
+    systemd::user_service { 'hermes-star-order-refresh':
+      ensure  => running,
+      enable  => true,
+      unit    => 'hermes-star-order-refresh.timer',
+      user    => $nest::user,
+      require => [
+        Loginctl_user[$nest::user],
+        File["${systemd_user_dir}/hermes-star-order-refresh.timer"],
+      ],
+    }
+  } else {
+    systemd::user_service { 'hermes-star-order-refresh':
+      ensure => stopped,
+      enable => false,
+      unit   => 'hermes-star-order-refresh.timer',
+      user   => $nest::user,
+    }
+
+    file { "${systemd_user_dir}/hermes-star-order-refresh.timer":
+      ensure => absent,
+      owner  => $nest::user,
+      group  => $nest::user,
+      notify => Systemd::Daemon_reload['hermes-systemd-user-daemon-reload'],
+    }
+
+    file { "${systemd_user_dir}/hermes-star-order-refresh.service":
       ensure => absent,
       owner  => $nest::user,
       group  => $nest::user,
