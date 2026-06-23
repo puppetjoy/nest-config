@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/opt/hermes-agent/venv/bin/python
 """Run Star's safe shopping-order refresh loop.
 
 This small systemd-friendly wrapper calls the shopping_browser tool substrate in
