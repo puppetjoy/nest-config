@@ -117,6 +117,8 @@ SENSITIVE_TYPED_TEXT_RE = re.compile(
 )
 CHECKOUTISH_PAGE_RE = re.compile(r"checkout|buy|payselect|ship|spc|review|ordering", re.IGNORECASE)
 CHECKOUT_QUERY_PAGE_RE = re.compile(r"checkout|payselect|spc|ordering|place[-\s]?order|review\s+your\s+order|order\s+review|/gp/buy|/buy|shipping\s+(address|option|speed|method)|delivery\s+(option|date|window)", re.IGNORECASE)
+POST_PURCHASE_CONFIRMATION_RE = re.compile(r"thank\s*you|order\s+(?:confirmation|confirmed|placed|received)|purchase\s+(?:complete|completed|confirmed)|/gp/buy/thankyou|thankyou|order-confirmation", re.IGNORECASE)
+AMAZON_ORDERS_RE = re.compile(r"/gp/(?:css/)?order-history|/gp/your-account/order|/your-orders|/order-details|orderID=", re.IGNORECASE)
 SAFE_CHECKOUT_SENSITIVE_LABEL_RE = re.compile(r"shipping\s+(speed|option|method)|delivery\s+(option|date|window)|gift(?!\s*card\s*(number|code))|gift\s+card\s+balance|use\s+a\s+gift\s+card|coupon|promo|promotion|claim\s+code|payment\s+(summary|method|option)|paying\s+with|quantity|qty|delete|remove|one[-\s]?time|subscribe|subscription|cart", re.IGNORECASE)
 MUTATING_QUERY_RE = re.compile(r"\b(click|submit|fetch|XMLHttpRequest|sendBeacon|localStorage|sessionStorage|indexedDB|cookie|setAttribute|removeAttribute|appendChild|removeChild|innerHTML\s*=|location\s*=|open\s*\()\b", re.IGNORECASE)
 
@@ -955,11 +957,56 @@ ORDER_REVIEW_EXTRACT_JS = r"""
 })()
 """
 
+POST_PURCHASE_EXTRACT_JS = r"""
+(() => {
+  const clean = (value) => (value || '').replace(/\s+/g, ' ').trim();
+  const redact = (value) => clean(value)
+    .replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g, '[email redacted]')
+    .replace(/\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/g, '[phone redacted]')
+    .replace(/\b(?:\d[ -]*?){12,19}\b/g, '[payment/account number redacted]')
+    .replace(/\b(?:order|confirmation)\s*(?:#|number|no\.?|id)?\s*[:#-]?\s*[A-Z0-9-]{6,}\b/gi, '[order reference redacted]')
+    .replace(/\b\d{1,6}\s+[^\n,]{2,80}\b\s+(?:Apt|Apartment|Unit|Ste|Suite|Road|Rd|Street|St|Avenue|Ave|Lane|Ln|Drive|Dr|Court|Ct|Way|Blvd|Boulevard)\b/gi, '[street address redacted]')
+    .replace(/\b[A-Z]{2}\s+\d{5}(?:-\d{4})?\b/g, '[state/zip redacted]')
+    .replace(/\b\d{5}(?:-\d{4})?\b/g, '[zip redacted]');
+  const pageText = clean(document.body ? document.body.innerText : '');
+  const lines = pageText
+    .split(/(?:\n+|\s{2,})/)
+    .map(redact)
+    .filter(Boolean)
+    .filter((line) => line.length <= 320);
+  const pick = (patterns, limit = 5) => {
+    const out = [];
+    for (const line of lines) {
+      if (patterns.some((re) => re.test(line)) && !out.includes(line)) out.push(line);
+      if (out.length >= limit) break;
+    }
+    return out;
+  };
+  const url = location.href || '';
+  const title = document.title || '';
+  const lower = `${url} ${title} ${pageText}`.toLowerCase();
+  const ordersVisible = /your orders|order history|buy again|orders placed|track package|view order details|order details/.test(lower);
+  const confirmationVisible = /thank you|order placed|order confirmed|order received|purchase complete|confirmation/.test(lower) || /\/gp\/buy\/thankyou|thankyou|order-confirmation/i.test(url);
+  return {
+    page_title: title,
+    url,
+    post_purchase_state: ordersVisible ? 'post_purchase_orders_visible' : (confirmationVisible ? 'post_purchase_confirmation_visible' : 'post_purchase_context_visible'),
+    confirmation_visible: confirmationVisible,
+    orders_page_visible: ordersVisible,
+    order_presence: pick([/thank you|order placed|order confirmed|order received|purchase complete|confirmation|your orders|order history|orders placed/i], 6),
+    delivery_status: pick([/arriv(?:es|ing)|delivered|delivery|expected|estimated|by \w+day|today|tomorrow|track package|shipped|not yet shipped/i], 8),
+    item_clues: pick([/qty|quantity|sold by|seller|buy it again|view item|return or replace|write a product review/i], 8),
+    action_controls_visible: pick([/track package|view order details|buy it again|return or replace|cancel items|archive order|invoice/i], 8),
+    policy: 'Sanitized post-purchase confirmation/order-verification summary only: raw order numbers, full address/payment/account/contact details, raw DOM, cookies, storage, request headers, and screenshots are not returned to Star. Complete visual proof remains owner-only to Joy.'
+  };
+})()
+"""
+
 CHECKOUT_SCREENSHOT_REDACTION_JS = r"""
 (() => {
   const clean = (value) => (value || '').replace(/\s+/g, ' ').trim();
-  const sensitiveLabel = /(ship\s+to|deliver\s+to|delivery\s+address|shipping\s+address|billing\s+address|payment\s+method|wallet|card|visa|mastercard|amex|american express|discover|gift\s+card|claim\s+code|promo(?:tion)?\s+code|email|phone|security\s+code|captcha|verification|passcode|password|passkey|cvv|cvc)/i;
-  const sensitiveValue = /([\w.+-]+@[\w.-]+\.[A-Za-z]{2,}|\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b|\b\d{1,6}\s+[^\n,]{2,60}\b\s+(?:Apt|Apartment|Unit|Ste|Suite|Road|Rd|Street|St|Avenue|Ave|Lane|Ln|Drive|Dr|Court|Ct|Way|Blvd|Boulevard)\b|\b[A-Z]{2}\s+\d{5}(?:-\d{4})?\b|\b(?:\d[ -]*?){12,19}\b)/i;
+  const sensitiveLabel = /(ship\s+to|deliver\s+to|delivery\s+address|shipping\s+address|billing\s+address|payment\s+method|wallet|card|visa|mastercard|amex|american express|discover|gift\s+card|claim\s+code|promo(?:tion)?\s+code|order\s*(?:#|number|no\.?|id)|confirmation\s*(?:#|number|no\.?|id)|email|phone|security\s+code|captcha|verification|passcode|password|passkey|cvv|cvc)/i;
+  const sensitiveValue = /([\w.+-]+@[\w.-]+\.[A-Za-z]{2,}|\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b|\b(?:order|confirmation)\s*(?:#|number|no\.?|id)?\s*[:#-]?\s*[A-Z0-9-]{6,}\b|\b\d{1,6}\s+[^\n,]{2,60}\b\s+(?:Apt|Apartment|Unit|Ste|Suite|Road|Rd|Street|St|Avenue|Ave|Lane|Ln|Drive|Dr|Court|Ct|Way|Blvd|Boulevard)\b|\b[A-Z]{2}\s+\d{5}(?:-\d{4})?\b|\b(?:\d[ -]*?){12,19}\b)/i;
   const keepFinalPurchase = /(place\s+(your\s+)?order|submit\s+order|complete\s+purchase|buy\s+now)/i;
   document.querySelectorAll('[data-shopping-browser-redaction="checkout-prep"]').forEach((node) => node.remove());
   const candidates = new Set();
@@ -1067,6 +1114,9 @@ VISUAL_REGIONS_JS = r"""
       delivery_returns: 760,
       search_result: 740,
       review_excerpt: 720,
+      post_purchase_confirmation: 990,
+      post_purchase_delivery: 940,
+      post_purchase_order_card: 920,
       final_purchase_control_blocked: 650,
     }[category] || 100;
     return categoryBoost + Math.min(area / 100, 400) + Math.min(text.length, 200);
@@ -1116,7 +1166,10 @@ VISUAL_REGIONS_JS = r"""
   add('delivery_returns', first(['#mir-layout-DELIVERY_BLOCK', '#deliveryBlockMessage', '#returnsInfoFeature_feature_div', '[data-feature-name*="delivery" i]']), 'delivery and returns');
   add('checkout_totals_block', first(['#subtotals-marketplace-table', '#spc-order-summary', '[data-testid*="order-summary" i]', '[id*="orderSummary" i]', '[class*="order-summary" i]']), 'checkout totals block');
   add('checkout_order_summary_block', first(['#orderSummaryPrimaryActionBtn', '#submitOrderButtonId', '[name="placeYourOrder1"]', '[data-testid*="place-order" i]'])?.closest('form, .a-box, .a-section, div') || null, 'order review block');
+  add('post_purchase_confirmation', first(['#thankYou', '#order-summary', '[data-testid*="confirmation" i]', '[id*="thank" i]', '[class*="thank" i]', 'h1']), 'post-purchase confirmation');
+  add('post_purchase_delivery', first(['[id*="delivery" i]', '[class*="delivery" i]', '[data-testid*="delivery" i]', '[aria-label*="delivery" i]']), 'post-purchase delivery');
 
+  Array.from(document.querySelectorAll('.order, [class*="order" i], [data-order-id], [data-testid*="order" i], .yohtmlc-order-card')).slice(0, 8).forEach((node, index) => add('post_purchase_order_card', node, `post-purchase order card ${index + 1}`));
   Array.from(document.querySelectorAll('.s-result-item[data-asin], [data-component-type="s-search-result"], [role="listitem"], article')).slice(0, 12).forEach((node, index) => add('search_result', node, `search result ${index + 1}`));
   Array.from(document.querySelectorAll('.sc-list-item, [data-name="Active Items"] [data-asin], [data-testid*="cart-item" i]')).slice(0, 12).forEach((node, index) => add('cart_item', node, `cart item ${index + 1}`));
   Array.from(document.querySelectorAll('[data-hook="review"], .review, [id*="customer_review"], blockquote')).slice(0, 8).forEach((node, index) => add('review_excerpt', node, `review excerpt ${index + 1}`));
@@ -1223,7 +1276,42 @@ def _minimal_owner_checkout_facts(checkout_review: dict[str, Any]) -> dict[str, 
     }
 
 
+def _minimal_post_purchase_facts(post_purchase: dict[str, Any]) -> dict[str, Any]:
+    """Return compact Star-visible facts for post-purchase owner-only proof."""
+    return {
+        "post_purchase_state": _bounded_checkout_scalar(post_purchase.get("post_purchase_state"), 80, "post_purchase_context_visible") or "post_purchase_context_visible",
+        "confirmation_visible": bool(post_purchase.get("confirmation_visible")),
+        "orders_page_visible": bool(post_purchase.get("orders_page_visible")),
+        "order_presence": _bounded_checkout_list(post_purchase.get("order_presence"), 4),
+        "delivery_status": _bounded_checkout_list(post_purchase.get("delivery_status"), 4),
+        "item_clues": _bounded_checkout_list(post_purchase.get("item_clues"), 3),
+    }
+
+
 def _compact_owner_checkout_review_result(data: dict[str, Any]) -> dict[str, Any]:
+    post_purchase = data.get("post_purchase_review") or data.get("post_purchase")
+    if isinstance(post_purchase, dict):
+        deliveries = data.get("telegram_message_ids")
+        delivery_count = len(deliveries) if isinstance(deliveries, list) else 0
+        return {
+            "operation": "owner_post_purchase_review",
+            "status": _bounded_checkout_scalar(data.get("status"), 80, "sent_owner_only") or "sent_owner_only",
+            "review_id": _bounded_checkout_scalar(data.get("review_id"), 80),
+            "url": _bounded_checkout_scalar(data.get("url"), 500),
+            "page_title": _bounded_checkout_scalar(data.get("page_title"), 200),
+            "delivery": {
+                "telegram": bool(delivery_count),
+                "telegram_message_count": delivery_count,
+                "status": "sent" if delivery_count else "not_delivered",
+            },
+            "post_purchase_summary_binding": _bounded_checkout_scalar(data.get("post_purchase_summary_binding") or post_purchase.get("post_purchase_summary_binding"), 128),
+            "owner_visual_evidence_binding": _bounded_checkout_scalar(data.get("owner_visual_evidence_binding"), 128),
+            "capture_mode": _bounded_checkout_scalar(data.get("capture_mode"), 80),
+            "artifact_count": data.get("artifact_count"),
+            "minimal_post_purchase_facts": _minimal_post_purchase_facts(post_purchase),
+            "retention": _bounded_checkout_scalar(data.get("retention"), 200),
+            "safety_boundary": "Complete post-purchase confirmation/order-verification screenshots were sent only to Joy via the trusted Telegram path. This acknowledgement omits raw screenshots, file paths, DOM, cookies, storage, request headers, order numbers, and full address/payment/account/contact details.",
+        }
     checkout_review = data.get("checkout_review")
     if not isinstance(checkout_review, dict):
         checkout_review = {}
@@ -1593,8 +1681,20 @@ def _execute_final_purchase(approval_request_id: str, material_summary_binding: 
         if not click_result.get("clicked"):
             raise RuntimeError(str(click_result.get("reason") or "final purchase control was not clicked"))
         time.sleep(2.0)
-        final_url = _sanitize_url(str(_evaluate(browser, session_id, "location.href") or ""))
-        final_title = _sanitize_checkout_text(str(_evaluate(browser, session_id, "document.title") or ""))
+        raw_final_url = str(_evaluate(browser, session_id, "location.href") or "")
+        raw_final_title = str(_evaluate(browser, session_id, "document.title") or "")
+        final_url = _sanitize_url(raw_final_url)
+        final_title = _sanitize_shopping_text(raw_final_title)
+        post_purchase_proof: dict[str, Any] = {}
+        if _is_amazon_post_purchase_page(raw_final_url, raw_final_title):
+            try:
+                post_purchase_proof = _owner_post_purchase_review_from_attached(browser, session_id, raw_final_url, raw_final_title, retain_local=False)
+            except Exception as exc:
+                post_purchase_proof = {
+                    "status": "post_purchase_owner_proof_failed",
+                    "message": str(exc)[:500],
+                    "safety_boundary": "Final purchase click had already succeeded; post-purchase proof capture failed without exposing raw order, address, payment, browser, or screenshot data to Star.",
+                }
         with _final_purchase_state_lock() as handle:
             state = _load_final_purchase_state(handle)
             tokens = state.setdefault("tokens", {})
@@ -1604,6 +1704,7 @@ def _execute_final_purchase(approval_request_id: str, material_summary_binding: 
                 "completed_at": datetime.now(timezone.utc).isoformat(),
                 "final_url": final_url,
                 "final_title": final_title,
+                "post_purchase_proof_status": post_purchase_proof.get("status") if post_purchase_proof else "not_attempted",
             }
             _store_final_purchase_state(handle, state)
         _audit("final_purchase_executed", {"request_id": request_id, "approval_id": approval_id, "material_summary_binding": expected_binding, "owner_visual_evidence_binding": evidence_binding, "final_url": final_url, "final_title": final_title})
@@ -1617,8 +1718,9 @@ def _execute_final_purchase(approval_request_id: str, material_summary_binding: 
             "final_url": final_url,
             "final_page_title": final_title,
             "control_label": _sanitize_checkout_text(str(click_result.get("control_label") or ""))[:120],
+            "post_purchase_proof": post_purchase_proof or {"status": "not_attempted", "reason": "landing page was not recognized as an Amazon post-purchase confirmation/orders page"},
             "exactly_once_token": token_key,
-            "safety_boundary": "Final purchase was executed only after a trusted Agent Request approval, live material-summary revalidation, and exactly-once token consumption. The result does not expose cookies, storage, raw DOM, order references, full payment/address details, or CDP handles.",
+            "safety_boundary": "Final purchase was executed only after a trusted Agent Request approval, live material-summary revalidation, and exactly-once token consumption. Post-purchase proof is owner-only when captured. The result does not expose cookies, storage, raw DOM, order references, full payment/address details, screenshots, or CDP handles.",
         }
 
     return _with_browser(run)
@@ -1667,7 +1769,19 @@ def _safe_read_only_query(value: Any) -> str:
 def _is_amazon_checkoutish_page(url: str, title: str = "") -> bool:
     parsed = urlparse(str(url or ""))
     page_material = " ".join([parsed.path, parsed.query, str(title or "")])
+    if POST_PURCHASE_CONFIRMATION_RE.search(page_material) or AMAZON_ORDERS_RE.search(page_material):
+        return False
     return bool(parsed.scheme == "https" and AMAZON_HOST_RE.search(parsed.netloc) and CHECKOUT_QUERY_PAGE_RE.search(page_material))
+
+
+def _is_amazon_post_purchase_page(url: str, title: str = "") -> bool:
+    parsed = urlparse(str(url or ""))
+    page_material = " ".join([parsed.path, parsed.query, str(title or "")])
+    return bool(
+        parsed.scheme == "https"
+        and AMAZON_HOST_RE.search(parsed.netloc)
+        and (POST_PURCHASE_CONFIRMATION_RE.search(page_material) or AMAZON_ORDERS_RE.search(page_material))
+    )
 
 
 def _is_checkoutish_page(url: str, title: str = "") -> bool:
@@ -2083,6 +2197,64 @@ def _sanitize_checkout_summary(summary: dict[str, Any], safety: dict[str, Any], 
     return sanitized
 
 
+def _sanitize_post_purchase_detail_text(value: Any, field: str = "") -> str:
+    raw = str(value or "")
+    text = _sanitize_shopping_text(raw)
+    if not text:
+        return ""
+    if str(field or "").lower() == "delivery_status":
+        delivery_match = re.search(
+            r"\b(arriv(?:es|ing)(?:\s+(?:today|tomorrow|by\s+[^,.;]+|on\s+[^,.;]+))?|expected(?:\s+delivery)?(?:\s+[^,.;]+)?|estimated(?:\s+delivery)?(?:\s+[^,.;]+)?|delivered(?:\s+[^,.;]+)?|not\s+yet\s+shipped|shipped|track\s+package)\b",
+            text,
+            re.IGNORECASE,
+        )
+        if delivery_match:
+            return delivery_match.group(0)[:160].strip()
+    if _checkout_text_has_sensitive_marker(text) or _checkout_text_has_mixed_summary(text):
+        return "[post-purchase detail redacted]"
+    if len(text) > 220:
+        return text[:217].rstrip() + "…"
+    return text
+
+
+def _sanitize_post_purchase_detail_list(value: Any, limit: int = 8, field: str = "") -> list[str]:
+    return _dedupe_checkout_values([_sanitize_post_purchase_detail_text(item, field=field) for item in _as_checkout_list(value)])[:limit]
+
+
+def _sanitize_post_purchase_summary(summary: dict[str, Any]) -> dict[str, Any]:
+    sanitized: dict[str, Any] = {
+        "operation": "post_purchase_summary",
+        "page_title": _sanitize_shopping_text(str(summary.get("page_title") or "")),
+        "url": _sanitize_url(str(summary.get("url") or "")),
+        "post_purchase_state": str(summary.get("post_purchase_state") or "post_purchase_context_visible"),
+        "confirmation_visible": bool(summary.get("confirmation_visible")),
+        "orders_page_visible": bool(summary.get("orders_page_visible")),
+        "order_presence": _sanitize_post_purchase_detail_list(summary.get("order_presence"), limit=6, field="order_presence"),
+        "delivery_status": _sanitize_post_purchase_detail_list(summary.get("delivery_status"), limit=8, field="delivery_status"),
+        "item_clues": _sanitize_post_purchase_detail_list(summary.get("item_clues"), limit=6, field="item_clues"),
+        "action_controls_visible": _sanitize_post_purchase_detail_list(summary.get("action_controls_visible"), limit=6, field="action_controls_visible"),
+        "post_purchase_visual_evidence": "owner_only_available",
+        "policy": "Sanitized post-purchase confirmation/order-verification summary only: raw order numbers, full address/payment/account/contact details, raw DOM, cookies, storage, request headers, and screenshots are not returned to Star. Complete visual proof remains owner-only to Joy.",
+    }
+    if sanitized["post_purchase_state"] not in {"post_purchase_confirmation_visible", "post_purchase_orders_visible", "post_purchase_context_visible"}:
+        sanitized["post_purchase_state"] = "post_purchase_context_visible"
+    binding_material = {
+        "url": sanitized["url"],
+        "post_purchase_state": sanitized["post_purchase_state"],
+        "confirmation_visible": sanitized["confirmation_visible"],
+        "orders_page_visible": sanitized["orders_page_visible"],
+        "order_presence": sanitized["order_presence"],
+        "delivery_status": sanitized["delivery_status"],
+    }
+    sanitized["post_purchase_summary_binding"] = hashlib.sha256(json.dumps(binding_material, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
+    return sanitized
+
+
+def _post_purchase_summary_from_browser(browser: CdpSession, session_id: str) -> dict[str, Any]:
+    summary = _evaluate(browser, session_id, POST_PURCHASE_EXTRACT_JS) or {}
+    return _sanitize_post_purchase_summary(summary)
+
+
 def _check_human_takeover_text(text: str) -> None:
     if SENSITIVE_ACTION_RE.search(text) or CHECKOUT_PREP_RE.search(text) or FINAL_PURCHASE_RE.search(text):
         raise ValueError("matched element appears to involve checkout/payment/address/login challenge scope; Joy must take over or use an explicit supervised checkout-prep effect")
@@ -2224,8 +2396,10 @@ _ORDER_REFERENCE_RE = re.compile(r"\b(?:order|confirmation)\s*(?:#|number|no\.?|
 
 
 def _sanitize_shopping_text(value: Any) -> str:
-    text = _sanitize_checkout_text(str(value or ""))
+    raw = _ORDER_REFERENCE_RE.sub("[order reference redacted]", str(value or ""))
+    text = _sanitize_checkout_text(raw)
     text = _ORDER_REFERENCE_RE.sub("[order reference redacted]", text)
+    text = text.replace("[[order reference redacted] redacted]", "[order reference redacted]")
     return text
 
 
@@ -2259,6 +2433,8 @@ def _safe_screenshot_path() -> str:
 def _screenshot_policy(url: str, title: str) -> dict[str, Any]:
     parsed = urlparse(url)
     sensitive_url = " ".join([parsed.path, parsed.query, title]).lower()
+    if _is_amazon_post_purchase_page(url, title):
+        return {"mode": "post_purchase_redacted", "redaction_required": True}
     if re.search(r"(signin|login|ap/signin|account|orders|passkey|password|captcha|verification)", sensitive_url):
         raise ValueError("current page appears to be login, account, order-history, CAPTCHA, passkey, or verification scope; Joy must take over before screenshots")
     checkoutish = re.search(r"checkout|buy|payselect|ship|spc|review|ordering", " ".join([parsed.path, parsed.query, title]), re.IGNORECASE)
@@ -3006,7 +3182,7 @@ def _screenshot(full_page: bool = False) -> dict[str, Any]:
             if checkout_review.get("human_takeover_required"):
                 raise ValueError(str(checkout_review.get("blocked_reason") or "sensitive checkout/security prompt is visible; Joy must take over before screenshots"))
             redaction = _evaluate(browser, session_id, CHECKOUT_SCREENSHOT_REDACTION_JS) or {}
-            if int(redaction.get("redaction_overlay_count") or 0) < 1:
+            if int(redaction.get("redaction_overlay_count") or 0) < 1 and policy.get("mode") == "checkout_prep_redacted":
                 raise ValueError("checkout-prep screenshot redaction found no address/payment/contact regions to cover; refusing visual capture")
         params = {"format": "png", "fromSurface": True, "captureBeyondViewport": bool(full_page) and not policy["redaction_required"]}
         capture_method = "cdp"
@@ -3050,7 +3226,7 @@ def _screenshot(full_page: bool = False) -> dict[str, Any]:
                 "status": "applied",
                 "overlay_count": int(redaction.get("redaction_overlay_count") or 0),
                 "redaction_rects_hash": _redaction_hash(redaction),
-                "policy": "Checkout-prep screenshot uses browser-side opaque overlays for address, payment, account/contact, gift/promo-code, and security-prompt regions before capture. Full-page capture is disabled for redacted checkout evidence so off-viewport secrets are not captured without overlays.",
+                "policy": "Redacted screenshot uses browser-side opaque overlays for address, payment, account/contact, order-reference, gift/promo-code, and security-prompt regions before capture. Full-page capture is disabled for redacted checkout/post-purchase evidence so off-viewport secrets are not captured without overlays.",
             }
             if checkout_review is not None:
                 result["checkout_review"] = checkout_review
@@ -3078,6 +3254,94 @@ def _capture_cdp_png(browser: CdpSession, session_id: str, full_page: bool) -> b
     if not encoded:
         raise RuntimeError("shopping browser did not return screenshot data")
     return base64.b64decode(encoded, validate=True)
+
+
+def _capture_owner_visual_artifacts(browser: CdpSession, session_id: str, review_id: str, retain_local: bool, caption_builder: Any) -> tuple[str, list[dict[str, Any]], list[str], int]:
+    artifacts: list[tuple[str, bytes, str]] = []
+    capture_mode = "full-page"
+    try:
+        artifacts.append(("full-page", _capture_cdp_png(browser, session_id, full_page=True), "full-page"))
+    except Exception:
+        capture_mode = "viewport-sequence"
+        layout = _evaluate(browser, session_id, "(() => ({width: Math.max(document.documentElement.scrollWidth, document.body ? document.body.scrollWidth : 0, window.innerWidth), height: Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0, window.innerHeight), viewport_width: window.innerWidth, viewport_height: window.innerHeight, original_x: window.scrollX, original_y: window.scrollY}))()") or {}
+        viewport_height = max(1, int(layout.get("viewport_height") or 900))
+        document_height = max(viewport_height, int(layout.get("height") or viewport_height))
+        positions = list(range(0, document_height, viewport_height))[:MAX_OWNER_REVIEW_VIEWPORTS]
+        if positions and positions[-1] + viewport_height < document_height:
+            positions.append(max(0, document_height - viewport_height))
+        for seq, y in enumerate(positions[:MAX_OWNER_REVIEW_VIEWPORTS], 1):
+            _evaluate(browser, session_id, f"window.scrollTo(0, {int(y)})")
+            time.sleep(0.2)
+            artifacts.append((f"viewport-{seq:02d}", _capture_cdp_png(browser, session_id, full_page=False), "viewport"))
+        _evaluate(browser, session_id, f"window.scrollTo({int(layout.get('original_x') or 0)}, {int(layout.get('original_y') or 0)})")
+    if not artifacts:
+        raise RuntimeError("owner-only review captured no visual evidence")
+
+    deliveries: list[dict[str, Any]] = []
+    artifact_hashes: list[str] = []
+    paths_to_remove: list[str] = []
+    try:
+        for index, (name, png_data, mode) in enumerate(artifacts, 1):
+            artifact_hashes.append(hashlib.sha256(png_data).hexdigest())
+            output_path = _safe_owner_review_path(f"{review_id}-{name}")
+            _write_screenshot(output_path, png_data)
+            if not retain_local:
+                paths_to_remove.append(output_path)
+            caption = caption_builder(index, len(artifacts), mode)
+            deliveries.append(_telegram_send_document(output_path, caption))
+    finally:
+        if not retain_local:
+            for path in paths_to_remove:
+                with contextlib.suppress(OSError):
+                    os.remove(path)
+    return capture_mode, deliveries, artifact_hashes, len(artifacts)
+
+
+def _owner_post_purchase_review_caption(review_id: str, index: int, count: int, binding: str, mode: str, post_purchase: dict[str, Any]) -> str:
+    facts = _minimal_post_purchase_facts(post_purchase)
+    delivery_note = ""
+    if facts.get("delivery_status"):
+        delivery_note = f"\nSanitized delivery clue: {str(facts['delivery_status'][0])[:160]}"
+    return (
+        "🔐 Owner-only post-purchase proof\n"
+        f"Review: {review_id} ({index}/{count}, {mode})\n"
+        f"Post-purchase summary binding: {binding}\n"
+        f"State: {facts.get('post_purchase_state')}\n"
+        "Inspect thank-you/order-confirmation or Your Orders evidence, including expected delivery information when visible.\n"
+        "Star received only a redacted acknowledgement/summary; raw order numbers, full address/payment/account details, and screenshots stay owner-only."
+        f"{delivery_note}"
+    )
+
+
+def _owner_post_purchase_review_from_attached(browser: CdpSession, session_id: str, url: str, title: str, retain_local: bool = False) -> dict[str, Any]:
+    post_purchase = _post_purchase_summary_from_browser(browser, session_id)
+    binding = str(post_purchase.get("post_purchase_summary_binding") or "")
+    if not binding:
+        raise RuntimeError("post-purchase review did not produce a summary binding")
+    review_id = hashlib.sha256(f"post-purchase:{binding}:{time.time_ns()}".encode("utf-8")).hexdigest()[:16]
+
+    def caption_builder(index: int, count: int, mode: str) -> str:
+        return _owner_post_purchase_review_caption(review_id, index, count, binding, mode, post_purchase)
+
+    capture_mode, deliveries, artifact_hashes, artifact_count = _capture_owner_visual_artifacts(browser, session_id, review_id, retain_local, caption_builder)
+    evidence_binding = hashlib.sha256(json.dumps({"post_purchase_summary_binding": binding, "artifact_hashes": artifact_hashes}, sort_keys=True).encode("utf-8")).hexdigest()
+    result = {
+        "operation": "owner_post_purchase_review",
+        "status": "sent_owner_only",
+        "review_id": review_id,
+        "url": _sanitize_url(url),
+        "page_title": _sanitize_shopping_text(title),
+        "post_purchase_summary_binding": binding,
+        "owner_visual_evidence_binding": evidence_binding,
+        "capture_mode": capture_mode,
+        "artifact_count": artifact_count,
+        "telegram_message_ids": [item.get("message_id") for item in deliveries],
+        "post_purchase_review": post_purchase,
+        "retention": "sensitive PNG artifacts were deleted locally after Telegram delivery" if not retain_local else "sensitive PNG artifacts retained locally with 0600 files under owner review directory",
+        "safety_boundary": "Complete post-purchase screenshots were sent directly to Joy's configured Telegram destination and are not returned as MEDIA handles, file paths, raw DOM, cookies, storage, request headers, CDP endpoints, order numbers, or full address/payment/account/contact details to Star.",
+    }
+    _audit("owner_post_purchase_review", {"review_id": review_id, "url": result["url"], "page_title": title, "post_purchase_summary_binding": binding, "owner_visual_evidence_binding": evidence_binding, "capture_mode": capture_mode, "artifact_count": artifact_count, "retained_local": retain_local})
+    return _compact_owner_checkout_review_result(result)
 
 
 def _owner_checkout_review_caption(review_id: str, index: int, count: int, binding: str, mode: str, checkout_review: dict[str, Any]) -> str:
@@ -3108,10 +3372,13 @@ def _owner_checkout_review(send_to_telegram: bool = True, retain_local: bool = F
         title = str(page_info.get("title") or "")
         parsed = urlparse(url)
         checkoutish = re.search(r"checkout|buy|payselect|ship|spc|review|ordering", " ".join([parsed.path, parsed.query, title]), re.IGNORECASE)
-        if not (parsed.scheme == "https" and AMAZON_HOST_RE.search(parsed.netloc) and checkoutish):
-            raise ValueError("owner-only checkout review currently requires an Amazon checkout/order-review page")
+        post_purchase = _is_amazon_post_purchase_page(url, title)
+        if not (parsed.scheme == "https" and AMAZON_HOST_RE.search(parsed.netloc) and (checkoutish or post_purchase)):
+            raise ValueError("owner-only checkout review currently requires an Amazon checkout/order-review or post-purchase confirmation/orders page")
         target_id = page_info.get("id") or _first_page_target(browser)
         session_id = _attach(browser, str(target_id))
+        if post_purchase and not checkoutish:
+            return _owner_post_purchase_review_from_attached(browser, session_id, url, title, retain_local=retain_local)
         safety = _evaluate(browser, session_id, CHECKOUT_PAGE_SAFETY_JS) or {}
         if safety.get("blocked_reason"):
             raise ValueError(str(safety.get("blocked_reason")))
@@ -3120,43 +3387,10 @@ def _owner_checkout_review(send_to_telegram: bool = True, retain_local: bool = F
         if not binding:
             raise RuntimeError("checkout review did not produce a material summary binding")
         review_id = hashlib.sha256(f"{binding}:{time.time_ns()}".encode("utf-8")).hexdigest()[:16]
-        artifacts: list[tuple[str, bytes, str]] = []
-        capture_mode = "full-page"
-        try:
-            artifacts.append(("full-page", _capture_cdp_png(browser, session_id, full_page=True), "full-page"))
-        except Exception:
-            capture_mode = "viewport-sequence"
-            layout = _evaluate(browser, session_id, "(() => ({width: Math.max(document.documentElement.scrollWidth, document.body ? document.body.scrollWidth : 0, window.innerWidth), height: Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0, window.innerHeight), viewport_width: window.innerWidth, viewport_height: window.innerHeight, original_x: window.scrollX, original_y: window.scrollY}))()") or {}
-            viewport_height = max(1, int(layout.get("viewport_height") or 900))
-            document_height = max(viewport_height, int(layout.get("height") or viewport_height))
-            positions = list(range(0, document_height, viewport_height))[:MAX_OWNER_REVIEW_VIEWPORTS]
-            if positions and positions[-1] + viewport_height < document_height:
-                positions.append(max(0, document_height - viewport_height))
-            for seq, y in enumerate(positions[:MAX_OWNER_REVIEW_VIEWPORTS], 1):
-                _evaluate(browser, session_id, f"window.scrollTo(0, {int(y)})")
-                time.sleep(0.2)
-                artifacts.append((f"viewport-{seq:02d}", _capture_cdp_png(browser, session_id, full_page=False), "viewport"))
-            _evaluate(browser, session_id, f"window.scrollTo({int(layout.get('original_x') or 0)}, {int(layout.get('original_y') or 0)})")
-        if not artifacts:
-            raise RuntimeError("owner-only checkout review captured no visual evidence")
+        def caption_builder(index: int, count: int, mode: str) -> str:
+            return _owner_checkout_review_caption(review_id, index, count, binding, mode, checkout_review)
 
-        deliveries = []
-        artifact_hashes = []
-        paths_to_remove = []
-        try:
-            for index, (name, png_data, mode) in enumerate(artifacts, 1):
-                artifact_hashes.append(hashlib.sha256(png_data).hexdigest())
-                output_path = _safe_owner_review_path(f"{review_id}-{name}")
-                _write_screenshot(output_path, png_data)
-                if not retain_local:
-                    paths_to_remove.append(output_path)
-                caption = _owner_checkout_review_caption(review_id, index, len(artifacts), binding, mode, checkout_review)
-                deliveries.append(_telegram_send_document(output_path, caption))
-        finally:
-            if not retain_local:
-                for path in paths_to_remove:
-                    with contextlib.suppress(OSError):
-                        os.remove(path)
+        capture_mode, deliveries, artifact_hashes, artifact_count = _capture_owner_visual_artifacts(browser, session_id, review_id, retain_local, caption_builder)
         evidence_binding = hashlib.sha256(json.dumps({"material_summary_binding": binding, "artifact_hashes": artifact_hashes}, sort_keys=True).encode("utf-8")).hexdigest()
         result = {
             "operation": "owner_checkout_review",
@@ -3167,13 +3401,13 @@ def _owner_checkout_review(send_to_telegram: bool = True, retain_local: bool = F
             "material_summary_binding": binding,
             "owner_visual_evidence_binding": evidence_binding,
             "capture_mode": capture_mode,
-            "artifact_count": len(artifacts),
+            "artifact_count": artifact_count,
             "telegram_message_ids": [item.get("message_id") for item in deliveries],
             "checkout_review": checkout_review,
             "retention": "sensitive PNG artifacts were deleted locally after Telegram delivery" if not retain_local else "sensitive PNG artifacts retained locally with 0600 files under owner review directory",
             "safety_boundary": "Complete checkout screenshots were sent directly to Joy's configured Telegram destination and are not returned as MEDIA handles, file paths, raw DOM, cookies, storage, request headers, CDP endpoints, credentials, passkeys, 2FA/CAPTCHA, or structured address/payment text to Star. Final Place Order remains blocked from ordinary shopping tools.",
         }
-        _audit("owner_checkout_review", {"review_id": review_id, "url": result["url"], "page_title": title, "material_summary_binding": binding, "owner_visual_evidence_binding": evidence_binding, "capture_mode": capture_mode, "artifact_count": len(artifacts), "retained_local": retain_local})
+        _audit("owner_checkout_review", {"review_id": review_id, "url": result["url"], "page_title": title, "material_summary_binding": binding, "owner_visual_evidence_binding": evidence_binding, "capture_mode": capture_mode, "artifact_count": artifact_count, "retained_local": retain_local})
         return _compact_owner_checkout_review_result(result)
 
     return _with_browser(run)
@@ -3529,6 +3763,12 @@ def _current_page_summary() -> dict[str, Any]:
         session_id = _attach(browser, target_id)
         url = str(_evaluate(browser, session_id, "location.href") or "")
         title = str(_evaluate(browser, session_id, "document.title") or "")
+        if _is_amazon_post_purchase_page(url, title):
+            result = _post_purchase_summary_from_browser(browser, session_id)
+            result["operation"] = "post_purchase_current_page_summary"
+            result["secure_browser_owner"] = BROWSER_OWNER
+            result["summary_note"] = "Post-purchase confirmation/order-verification pages return sanitized proof fields, not checkout-prep or final-purchase approval state."
+            return result
         if re.search(r"checkout|buy|payselect|ship|spc|review|ordering", " ".join([url, title]), re.IGNORECASE):
             result = _checkout_summary_from_browser(browser, session_id)
             result["operation"] = "checkout_prep_current_page_summary"
@@ -3568,7 +3808,7 @@ def shopping_browser_status_tool(args: dict[str, Any], **_kw: Any) -> str:
             "approved_type_effects": ["apply_checkout_option", "cart_line_adjustment"],
             "boundary": "Star may inspect sanitized checkout-prep controls and click/type into ordinary review-page controls under Joy's live supervision with explicit approved_effect values. Star must pause for login, Bitwarden, passkeys, 2FA, CAPTCHA, suspicious security prompts, payment/address/account edits, or sensitive-information prompts.",
             "sanitization": "Checkout-prep snapshots/current-page summaries return isolated structured item/totals/delivery/surprise fields plus destination city-state/abstract label and payment labels. Mixed blobs, sensitive redaction-marker text, and final purchase controls are removed from ordinary summary fields.",
-            "visual_confirmation": "shopping_browser_visual_evidence returns a bounded visual proof bundle: a local PNG screenshot, sanitized suggested regions, and optional focused crops. Amazon checkout/order-review pages are allowed only as redacted checkout-prep viewport evidence; login/account/payment/address/security pages remain Joy-only.",
+            "visual_confirmation": "shopping_browser_visual_evidence returns a bounded visual proof bundle: a local PNG screenshot, sanitized suggested regions, and optional focused crops. Amazon checkout/order-review pages are allowed only as redacted checkout-prep viewport evidence; Amazon thank-you/post-purchase pages are labeled as post-purchase evidence; login/account/payment/address/security pages remain Joy-only.",
             "owner_only_confirmation": "shopping_browser_owner_checkout_review can send complete unredacted checkout screenshots directly to Joy's configured Telegram destination without returning paths, MEDIA handles, raw DOM, cookies, storage, request headers, CDP endpoints, or address/payment text to Star.",
         },
         "approval_gated_operations": {
@@ -3894,13 +4134,13 @@ ADD_TO_CART_SCHEMA = {
 
 CURRENT_PAGE_SUMMARY_SCHEMA = {
     "name": "shopping_browser_current_page_summary",
-    "description": "Read-only summary of the current Kasm shopping browser page using safe structured fields only.",
+    "description": "Read-only summary of the current Kasm shopping browser page using safe structured fields only. Amazon thank-you/order-confirmation and Your Orders pages are labeled as post-purchase confirmation/order-verification context, not checkout-prep/final-purchase approval state.",
     "parameters": {"type": "object", "properties": {}, "required": []},
 }
 
 OWNER_CHECKOUT_REVIEW_SCHEMA = {
     "name": "shopping_browser_owner_checkout_review",
-    "description": "Send complete sensitive checkout/order-review visual evidence directly to Joy's configured Telegram destination for owner-only review. Intended for final pre-purchase verification of address, payment, item, delivery, tax/total, discounts, and final controls. Returns only a redacted acknowledgement, material_summary_binding, owner visual-evidence binding, and sanitized checkout summary to Star; it never returns image paths, MEDIA handles, raw DOM, cookies, storage, request headers, CDP endpoints, credentials, passkeys, 2FA/CAPTCHA data, or structured address/payment details. Final Place Order remains blocked pending trusted approval.",
+    "description": "Send complete sensitive checkout/order-review or post-purchase confirmation/order-verification visual evidence directly to Joy's configured Telegram destination for owner-only review. For pre-purchase checkout, intended for verification of address, payment, item, delivery, tax/total, discounts, and final controls. For post-purchase pages, intended for thank-you/confirmation and Your Orders delivery proof. Returns only a redacted acknowledgement, bindings, and sanitized summary to Star; it never returns image paths, MEDIA handles, raw DOM, cookies, storage, request headers, CDP endpoints, credentials, passkeys, 2FA/CAPTCHA data, raw order numbers, or structured address/payment details. Final Place Order remains blocked pending trusted approval before purchase.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -3929,7 +4169,7 @@ REQUEST_FINAL_PURCHASE_APPROVAL_SCHEMA = {
 
 EXECUTE_FINAL_PURCHASE_SCHEMA = {
     "name": "shopping_browser_execute_final_purchase",
-    "description": "Trusted final purchase executor. Use only after Joy approved the bound Agent Request proposal. It verifies the current Agent Request approval, refuses reused approvals, re-reads the live checkout material summary, refuses if anything material changed or sensitive verification is visible, then clicks exactly one final purchase control. Not for ordinary Star browsing.",
+    "description": "Trusted final purchase executor. Use only after Joy approved the bound Agent Request proposal. It verifies the current Agent Request approval, refuses reused approvals, re-reads the live checkout material summary, refuses if anything material changed or sensitive verification is visible, clicks exactly one final purchase control, then attempts owner-only post-purchase proof capture from the Amazon confirmation page. Not for ordinary Star browsing.",
     "parameters": {
         "type": "object",
         "properties": {
