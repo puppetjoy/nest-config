@@ -1,0 +1,40 @@
+---
+description: 'Deploy Flight Deck Agent Request console'
+
+parameters:
+  service:
+    description: 'Flight Deck instance/release name'
+    type: String
+    default: 'flight-deck-dev'
+
+  namespace:
+    description: 'Kubernetes namespace'
+    type: String
+    default: 'ai'
+
+  deploy:
+    description: 'Run or skip the deployment'
+    type: Boolean
+    default: true
+
+  init:
+    description: 'Deploy initial revision'
+    type: Boolean
+    default: false
+
+  render_to:
+    description: 'Just render the template'
+    type: String
+    default: ''
+
+steps:
+  - description: 'Deploy Flight Deck'
+    plan: nest::kubernetes::deploy
+    parameters:
+      namespace: $namespace
+      service: $service
+      app: 'flight-deck'
+      deploy: $deploy
+      init: $init
+      wait: $deploy
+      render_to: $render_to

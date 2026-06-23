@@ -1,0 +1,335 @@
+---
+# Read-only Flight Deck Agent Request console.  Instance-specific settings live in
+# data/kubernetes/service/flight-deck*.yaml so dev and prod can run side by side.
+service_name: "%{nest::kubernetes::service}"
+cert_issuer: eyrie-ca
+cert_issuer_kind: ClusterIssuer
+ingress_class: contour-compute
+node_role: compute
+flight_deck_image: "%{lookup('registry')}/nest/stage1/server:latest"
+flight_deck_repo: git@gitlab.joyfullee.me:nest/flight-deck.git
+flight_deck_ref_name: talon/interactive-flight-deck-polish
+flight_deck_commit: 1bf2a59f87cb426d7cc1272ef0b1ad56673f7fff
+flight_deck_board: agent-requests-dev
+flight_deck_environment: Dev
+flight_deck_port: 4173
+kanban_home_host_path: /nest/home/.hermes/kanban
+hermes_profile_host_path: /nest/home/.hermes/profiles/talon
+smoke_test_image: "%{lookup('config_registry')}/nest/stage1/server:latest"
+
+.affinity: &affinity
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+          - key: "node-role.kubernetes.io/%{lookup('node_role')}"
+            operator: Exists
+
+.tolerations: &tolerations
+  - key: "node-role.kubernetes.io/%{lookup('node_role')}"
+    operator: Exists
+    effect: NoSchedule
+
+resources:
+  backup: {}
+  restore: {}
+
+  certs:
+    apiVersion: cert-manager.io/v1
+    kind: Certificate
+    metadata:
+      name: "%{nest::kubernetes::service}-certs"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      secretName: "%{nest::kubernetes::service}-certs"
+      issuerRef:
+        name: "%{lookup('cert_issuer')}"
+        kind: "%{lookup('cert_issuer_kind')}"
+      dnsNames:
+        - "%{nest::kubernetes::fqdn}"
+
+  deployment:
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: "%{nest::kubernetes::service}"
+      namespace: "%{nest::kubernetes::namespace}"
+      labels:
+        app: "%{nest::kubernetes::service}"
+        app.kubernetes.io/name: flight-deck
+        app.kubernetes.io/instance: "%{nest::kubernetes::service}"
+        app.kubernetes.io/component: web
+      annotations:
+        joyfullee.me/source-repo: "%{lookup('flight_deck_repo')}"
+        joyfullee.me/source-ref: "%{lookup('flight_deck_ref_name')}"
+        joyfullee.me/source-commit: "%{lookup('flight_deck_commit')}"
+        joyfullee.me/board: "%{lookup('flight_deck_board')}"
+        joyfullee.me/read-only: 'true'
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app: "%{nest::kubernetes::service}"
+      template:
+        metadata:
+          labels:
+            app: "%{nest::kubernetes::service}"
+            app.kubernetes.io/name: flight-deck
+            app.kubernetes.io/instance: "%{nest::kubernetes::service}"
+            app.kubernetes.io/component: web
+          annotations:
+            joyfullee.me/source-repo: "%{lookup('flight_deck_repo')}"
+            joyfullee.me/source-ref: "%{lookup('flight_deck_ref_name')}"
+            joyfullee.me/source-commit: "%{lookup('flight_deck_commit')}"
+            joyfullee.me/board: "%{lookup('flight_deck_board')}"
+            joyfullee.me/environment: "%{lookup('flight_deck_environment')}"
+            joyfullee.me/read-only: 'true'
+        spec:
+          affinity: *affinity
+          tolerations: *tolerations
+          imagePullSecrets:
+            - name: "%{nest::kubernetes::service}-registry-auths"
+          initContainers:
+            - name: fetch-flight-deck
+              image: "%{lookup('flight_deck_image')}"
+              imagePullPolicy: IfNotPresent
+              command:
+                - /bin/sh
+                - -ceu
+                - |
+                  rm -rf /work/flight-deck
+                  git clone --no-checkout --depth 20 --branch "$FLIGHT_DECK_REF_NAME" "$FLIGHT_DECK_REPO" /work/flight-deck
+                  cd /work/flight-deck
+                  git checkout "$FLIGHT_DECK_COMMIT"
+                  git rev-parse HEAD > .flight-deck-source-revision
+              env:
+                - name: FLIGHT_DECK_REPO
+                  value: "%{lookup('flight_deck_repo')}"
+                - name: FLIGHT_DECK_REF_NAME
+                  value: "%{lookup('flight_deck_ref_name')}"
+                - name: FLIGHT_DECK_COMMIT
+                  value: "%{lookup('flight_deck_commit')}"
+                - name: GIT_SSH_COMMAND
+                  value: >-
+                    ssh -F /dev/null -o HostName=ssh.gitlab.eyrie -o HostKeyAlias=gitlab.joyfullee.me
+                    -o UserKnownHostsFile=/etc/ssh/ssh_known_hosts -o StrictHostKeyChecking=yes
+                    -o IdentitiesOnly=yes -i /root/.ssh/id_ed25519
+              volumeMounts:
+                - name: app-source
+                  mountPath: /work
+                - name: eyrie-ssh-key
+                  mountPath: /root/.ssh/id_ed25519
+                  readOnly: true
+                - name: ssh-known-hosts
+                  mountPath: /etc/ssh/ssh_known_hosts
+                  readOnly: true
+          containers:
+            - name: flight-deck
+              image: "%{lookup('flight_deck_image')}"
+              imagePullPolicy: IfNotPresent
+              workingDir: /app
+              command:
+                - python3
+                - /app/server.py
+                - --host
+                - 0.0.0.0
+                - --port
+                - "%{alias('flight_deck_port')}"
+                - --board
+                - "%{lookup('flight_deck_board')}"
+              env:
+                - name: FLIGHT_DECK_BOARD
+                  value: "%{lookup('flight_deck_board')}"
+                - name: FLIGHT_DECK_ENVIRONMENT
+                  value: "%{lookup('flight_deck_environment')}"
+                - name: FLIGHT_DECK_BASE_URL
+                  value: "https://%{nest::kubernetes::fqdn}"
+                - name: HERMES_KANBAN_HOME
+                  value: /hermes/kanban
+                - name: HERMES_STATE_DB
+                  value: /hermes/profiles/talon/state.db
+              ports:
+                - name: http
+                  containerPort: "%{alias('flight_deck_port')}"
+              readinessProbe:
+                httpGet:
+                  path: /api/requests
+                  port: http
+                initialDelaySeconds: 5
+                periodSeconds: 15
+                timeoutSeconds: 5
+              livenessProbe:
+                httpGet:
+                  path: /
+                  port: http
+                initialDelaySeconds: 20
+                periodSeconds: 30
+                timeoutSeconds: 5
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: 500m
+                  memory: 512Mi
+              volumeMounts:
+                - name: app-source
+                  mountPath: /app
+                  subPath: flight-deck
+                  readOnly: true
+                - name: kanban-home
+                  mountPath: /hermes/kanban
+                  readOnly: true
+                - name: hermes-profile
+                  mountPath: /hermes/profiles/talon
+                  readOnly: true
+          volumes:
+            - name: app-source
+              emptyDir: {}
+            - name: kanban-home
+              hostPath:
+                path: "%{lookup('kanban_home_host_path')}"
+                type: Directory
+            - name: hermes-profile
+              hostPath:
+                path: "%{lookup('hermes_profile_host_path')}"
+                type: Directory
+            - name: eyrie-ssh-key
+              hostPath:
+                path: /root/.ssh/id_ed25519_eyrie
+                type: File
+            - name: ssh-known-hosts
+              hostPath:
+                path: /etc/ssh/ssh_known_hosts
+                type: File
+
+  service:
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: "%{nest::kubernetes::service}"
+      namespace: "%{nest::kubernetes::namespace}"
+      labels:
+        app: "%{nest::kubernetes::service}"
+        app.kubernetes.io/name: flight-deck
+        app.kubernetes.io/instance: "%{nest::kubernetes::service}"
+    spec:
+      type: ClusterIP
+      selector:
+        app: "%{nest::kubernetes::service}"
+      ports:
+        - name: http
+          port: 80
+          targetPort: http
+
+  ingress:
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: "%{nest::kubernetes::service}"
+      namespace: "%{nest::kubernetes::namespace}"
+      annotations:
+        projectcontour.io/response-timeout: 60s
+    spec:
+      ingressClassName: "%{lookup('ingress_class')}"
+      rules:
+        - host: "%{nest::kubernetes::fqdn}"
+          http:
+            paths:
+              - path: /
+                pathType: Prefix
+                backend:
+                  service:
+                    name: "%{nest::kubernetes::service}"
+                    port:
+                      number: 80
+      tls:
+        - secretName: "%{nest::kubernetes::service}-certs"
+          hosts:
+            - "%{nest::kubernetes::fqdn}"
+
+  smoke-test-script:
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: "%{nest::kubernetes::service}-smoke-test"
+      namespace: "%{nest::kubernetes::namespace}"
+    data:
+      smoke_test.py: |-
+        import json
+        import os
+        import sys
+        import urllib.error
+        import urllib.request
+
+        base = os.environ['FLIGHT_DECK_URL'].rstrip('/')
+
+        def request(method, path, body=None):
+            data = None if body is None else body.encode('utf-8')
+            req = urllib.request.Request(base + path, data=data, method=method, headers={'Accept': 'application/json'})
+            try:
+                with urllib.request.urlopen(req, timeout=20) as resp:
+                    payload = resp.read().decode('utf-8', 'replace')
+                    return resp.status, payload
+            except urllib.error.HTTPError as exc:
+                return exc.code, exc.read().decode('utf-8', 'replace')
+
+        checks = {}
+        index_status, index_body = request('GET', '/')
+        checks['index_status'] = index_status
+        api_status, api_body = request('GET', '/api/requests')
+        checks['api_status'] = api_status
+        post_status, post_body = request('POST', '/api/requests', '{}')
+        checks['post_status'] = post_status
+
+        if index_status != 200:
+            raise SystemExit(f'index failed: {json.dumps(checks)}')
+        if api_status != 200 or 'requests' not in api_body:
+            raise SystemExit(f'api failed: {json.dumps(checks)} body={api_body[:500]}')
+        if post_status != 405:
+            raise SystemExit(f'POST was not rejected read-only: {json.dumps(checks)} body={post_body[:500]}')
+
+        print(json.dumps({'ok': True, 'url': base, **checks}, sort_keys=True))
+
+  smoke-test:
+    apiVersion: batch/v1
+    kind: CronJob
+    metadata:
+      name: "%{nest::kubernetes::service}-smoke-test"
+      namespace: "%{nest::kubernetes::namespace}"
+      labels:
+        app: "%{nest::kubernetes::service}"
+        component: smoke-test
+    spec:
+      # Manual validation hook after deploy:
+      # kubectl -n %{nest::kubernetes::namespace} create job --from=cronjob/%{nest::kubernetes::service}-smoke-test %{nest::kubernetes::service}-smoke-test-$(date +%s)
+      suspend: true
+      schedule: '23 4 31 2 *'
+      concurrencyPolicy: Forbid
+      jobTemplate:
+        spec:
+          ttlSecondsAfterFinished: 86400
+          activeDeadlineSeconds: 120
+          template:
+            spec:
+              affinity: *affinity
+              tolerations: *tolerations
+              restartPolicy: Never
+              containers:
+                - name: smoke-test
+                  image: "%{lookup('smoke_test_image')}"
+                  imagePullPolicy: IfNotPresent
+                  command: ['python3', '/scripts/smoke_test.py']
+                  env:
+                    - name: FLIGHT_DECK_URL
+                      value: "https://%{nest::kubernetes::fqdn}"
+                  volumeMounts:
+                    - name: smoke-test-script
+                      mountPath: /scripts
+                      readOnly: true
+              volumes:
+                - name: smoke-test-script
+                  configMap:
+                    name: "%{nest::kubernetes::service}-smoke-test"
+
+values: {}
