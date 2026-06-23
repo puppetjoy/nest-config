@@ -21,9 +21,10 @@ import os
 import re
 import shutil
 import socket
+import sqlite3
 import subprocess
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from urllib.parse import urlparse, urlunparse
@@ -50,6 +51,7 @@ SCREENSHOT_DIR = os.environ.get("SHOPPING_BROWSER_SCREENSHOT_DIR", os.path.expan
 OWNER_CHECKOUT_REVIEW_DIR = os.environ.get("SHOPPING_BROWSER_OWNER_REVIEW_DIR", os.path.expanduser("~/.hermes/profiles/star/shopping-browser-owner-checkout-reviews"))
 AUDIT_LOG = os.environ.get("SHOPPING_BROWSER_AUDIT_LOG", os.path.expanduser("~/.hermes/profiles/star/shopping-browser-audit.log"))
 FINAL_PURCHASE_STATE_PATH = os.environ.get("SHOPPING_BROWSER_FINAL_PURCHASE_STATE", os.path.expanduser("~/.hermes/profiles/star/shopping-browser-final-purchase-approvals.json"))
+SHOPPING_ORDER_LEDGER_PATH = os.environ.get("SHOPPING_ORDER_LEDGER_PATH", os.path.expanduser("~/.hermes/profiles/star/shopping-order-ledger.sqlite3"))
 MAX_PRODUCT_IMAGES = 6
 DEFAULT_MAX_REVIEWS = 5
 MAX_REVIEWS = 10
@@ -1371,6 +1373,558 @@ def _audit(operation: str, details: dict[str, Any]) -> None:
 
 
 
+ORDER_STATUSES_ACTIVE = {"pending_confirmation", "confirmed", "ordered", "processing", "shipped", "out_for_delivery"}
+ORDER_STATUSES_CLOSED = {"delivered", "cancelled", "closed", "archived"}
+ORDER_STATUS_ALLOWED = ORDER_STATUSES_ACTIVE | ORDER_STATUSES_CLOSED
+CONSUMABLE_CONFIDENCE_ALLOWED = {"explicit", "tentative", "suggested", "repeated_purchase"}
+ORDER_REFRESH_SOURCE_PRIORITY = ["amazon_your_orders", "gmail_order_email", "carrier_page"]
+ORDER_NOTIFY_EVENT_TYPES = {"initial_confirmation", "eta_changed", "status_changed", "out_for_delivery", "delivered"}
+SAFE_ORDER_HANDLE_RE = re.compile(r"^[a-z0-9][a-z0-9_.-]{1,80}$", re.IGNORECASE)
+UNSAFE_ORDER_HANDLE_RE = re.compile(r"\b\d{3}[- ]?\d{7}[- ]?\d{7}\b|\b(?:\d[ -]*?){12,19}\b")
+SAFE_ORDER_STATUS_RANK = {
+    "pending_confirmation": 10,
+    "confirmed": 20,
+    "ordered": 25,
+    "processing": 30,
+    "shipped": 40,
+    "out_for_delivery": 50,
+    "delivered": 60,
+    "cancelled": 70,
+    "closed": 80,
+    "archived": 90,
+}
+
+
+def _order_ledger_path() -> str:
+    return os.path.expanduser(SHOPPING_ORDER_LEDGER_PATH)
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _coarse_date(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    text = _sanitize_checkout_text(text)[:80]
+    if re.search(r"\b\d{1,2}:\d{2}\b|\b\d{5}(?:-\d{4})?\b|\b\d{1,6}\s+[^,]{2,60}\b\s+(?:Apt|Apartment|Unit|Ste|Suite|Road|Rd|Street|St|Avenue|Ave|Lane|Ln|Drive|Dr|Court|Ct|Way|Blvd|Boulevard)\b", text, re.IGNORECASE):
+        return ""
+    return text
+
+
+def _coerce_json_dict(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
+
+
+def _coerce_json_list(value: Any) -> list[Any]:
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return []
+        return parsed if isinstance(parsed, list) else []
+    return []
+
+
+def _safe_order_handle(value: Any, item_nickname: str = "order") -> str:
+    raw = str(value or "").strip().lower()
+    if not raw:
+        material = f"{item_nickname}|{int(time.time())}"
+        raw = f"order-{hashlib.sha256(material.encode('utf-8')).hexdigest()[:10]}"
+    raw = re.sub(r"[^a-z0-9_.-]+", "-", raw).strip("-._")[:80]
+    if not raw or not SAFE_ORDER_HANDLE_RE.fullmatch(raw) or UNSAFE_ORDER_HANDLE_RE.search(str(value or "")):
+        raise ValueError("order handle must be a safe nickname/slug, not a raw order number, payment number, address, or blank value")
+    return raw
+
+
+def _safe_order_status(value: Any, default: str = "confirmed") -> str:
+    status = str(value or default).strip().lower().replace(" ", "_").replace("-", "_")
+    if status not in ORDER_STATUS_ALLOWED:
+        raise ValueError(f"unsupported order status: {status}")
+    return status
+
+
+def _safe_retailer(value: Any) -> str:
+    retailer = _sanitize_checkout_text(str(value or "amazon")).strip()[:80]
+    return retailer or "amazon"
+
+
+def _safe_item_nickname(value: Any) -> str:
+    text = _sanitize_checkout_text(str(value or "order item")).strip()
+    text = re.sub(r"\b(?:order|tracking)\s*(?:#|number|id)\s*[:#-]?\s*\S+", "", text, flags=re.IGNORECASE).strip()
+    return text[:120] or "order item"
+
+
+def _safe_item_category(value: Any) -> str:
+    text = _sanitize_checkout_text(str(value or "")).strip()[:80]
+    return text
+
+
+def _safe_evidence_binding(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    if not text:
+        return ""
+    if re.fullmatch(r"[0-9a-f]{16,128}", text):
+        return text[:128]
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _safe_order_payload(args: dict[str, Any], existing: dict[str, Any] | None = None) -> dict[str, Any]:
+    existing = existing or {}
+    item_nickname = _safe_item_nickname(args.get("item_nickname") or existing.get("item_nickname") or args.get("nickname") or "order item")
+    handle = _safe_order_handle(args.get("handle") or args.get("order_handle") or existing.get("handle"), item_nickname)
+    payload = {
+        "handle": handle,
+        "retailer": _safe_retailer(args.get("retailer") or existing.get("retailer") or "amazon"),
+        "item_nickname": item_nickname,
+        "item_category": _safe_item_category(args.get("item_category") or existing.get("item_category") or ""),
+        "status": _safe_order_status(args.get("status") or existing.get("status") or "confirmed"),
+        "eta_window": _coarse_date(args.get("eta_window") or args.get("eta") or existing.get("eta_window") or ""),
+        "safe_delivery_facts": _bounded_checkout_list(args.get("safe_delivery_facts") or args.get("delivery_status") or existing.get("safe_delivery_facts"), 6),
+        "evidence_bindings": [],
+        "source_refs": _bounded_checkout_list(args.get("source_refs") or existing.get("source_refs"), 8),
+        "refresh_sources": _bounded_checkout_list(args.get("refresh_sources") or existing.get("refresh_sources") or ORDER_REFRESH_SOURCE_PRIORITY, 4),
+        "notes": _sanitize_checkout_text(str(args.get("notes") or existing.get("notes") or ""))[:500],
+    }
+    bindings: list[str] = []
+    for value in _coerce_json_list(existing.get("evidence_bindings")) + _coerce_json_list(args.get("evidence_bindings")):
+        safe = _safe_evidence_binding(value)
+        if safe and safe not in bindings:
+            bindings.append(safe)
+    for field in ("material_summary_binding", "post_purchase_summary_binding", "owner_visual_evidence_binding", "owner_review_id", "approval_request_id", "approval_id"):
+        safe = _safe_evidence_binding(args.get(field) or existing.get(field))
+        if safe and safe not in bindings:
+            bindings.append(safe)
+    payload["evidence_bindings"] = bindings[:12]
+    return payload
+
+
+def _ledger_connect() -> sqlite3.Connection:
+    path = _order_ledger_path()
+    os.makedirs(os.path.dirname(path) or ".", mode=0o700, exist_ok=True)
+    conn = sqlite3.connect(path, timeout=30)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA foreign_keys=ON")
+    _init_order_ledger(conn)
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+    return conn
+
+
+def _init_order_ledger(conn: sqlite3.Connection) -> None:
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS shopping_orders (
+            handle TEXT PRIMARY KEY,
+            retailer TEXT NOT NULL,
+            item_nickname TEXT NOT NULL,
+            item_category TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL,
+            eta_window TEXT NOT NULL DEFAULT '',
+            safe_delivery_facts_json TEXT NOT NULL DEFAULT '[]',
+            evidence_bindings_json TEXT NOT NULL DEFAULT '[]',
+            source_refs_json TEXT NOT NULL DEFAULT '[]',
+            refresh_sources_json TEXT NOT NULL DEFAULT '[]',
+            notification_state_json TEXT NOT NULL DEFAULT '{}',
+            notes TEXT NOT NULL DEFAULT '',
+            archived INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            delivered_at TEXT NOT NULL DEFAULT '',
+            closed_at TEXT NOT NULL DEFAULT ''
+        );
+        CREATE TABLE IF NOT EXISTS consumable_items (
+            handle TEXT PRIMARY KEY,
+            item_nickname TEXT NOT NULL,
+            item_category TEXT NOT NULL DEFAULT '',
+            retailer TEXT NOT NULL DEFAULT '',
+            confidence TEXT NOT NULL DEFAULT 'tentative',
+            source TEXT NOT NULL DEFAULT '',
+            evidence_count INTEGER NOT NULL DEFAULT 0,
+            last_order_handle TEXT NOT NULL DEFAULT '',
+            notes TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            archived INTEGER NOT NULL DEFAULT 0
+        );
+        """
+    )
+    # Simple migrations for older local ledgers if this schema grows.
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(shopping_orders)")}
+    if "notification_state_json" not in columns:
+        conn.execute("ALTER TABLE shopping_orders ADD COLUMN notification_state_json TEXT NOT NULL DEFAULT '{}'")
+    conn.commit()
+
+
+def _order_row_to_safe_dict(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "handle": row["handle"],
+        "retailer": row["retailer"],
+        "item_nickname": row["item_nickname"],
+        "item_category": row["item_category"],
+        "status": row["status"],
+        "eta_window": row["eta_window"],
+        "safe_delivery_facts": _coerce_json_list(row["safe_delivery_facts_json"]),
+        "evidence_bindings": _coerce_json_list(row["evidence_bindings_json"]),
+        "source_refs": _coerce_json_list(row["source_refs_json"]),
+        "refresh_sources": _coerce_json_list(row["refresh_sources_json"]),
+        "notification_state": _coerce_json_dict(row["notification_state_json"]),
+        "notes": row["notes"],
+        "archived": bool(row["archived"]),
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+        "delivered_at": row["delivered_at"],
+        "closed_at": row["closed_at"],
+    }
+
+
+def _consumable_row_to_safe_dict(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "handle": row["handle"],
+        "item_nickname": row["item_nickname"],
+        "item_category": row["item_category"],
+        "retailer": row["retailer"],
+        "confidence": row["confidence"],
+        "source": row["source"],
+        "evidence_count": row["evidence_count"],
+        "last_order_handle": row["last_order_handle"],
+        "notes": row["notes"],
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+        "archived": bool(row["archived"]),
+    }
+
+
+def _get_order(conn: sqlite3.Connection, handle: str) -> dict[str, Any] | None:
+    row = conn.execute("SELECT * FROM shopping_orders WHERE handle = ?", (handle,)).fetchone()
+    return _order_row_to_safe_dict(row) if row else None
+
+
+def _upsert_order_entry(args: dict[str, Any]) -> dict[str, Any]:
+    with _ledger_connect() as conn:
+        raw_handle = str(args.get("handle") or args.get("order_handle") or "").strip()
+        existing = _get_order(conn, _safe_order_handle(raw_handle)) if raw_handle else None
+        payload = _safe_order_payload(args, existing)
+        now = _utc_now()
+        created_at = (existing or {}).get("created_at") or now
+        delivered_at = (existing or {}).get("delivered_at") or ""
+        closed_at = (existing or {}).get("closed_at") or ""
+        archived = bool((existing or {}).get("archived"))
+        if payload["status"] == "delivered" and not delivered_at:
+            delivered_at = now
+        if payload["status"] in ORDER_STATUSES_CLOSED and not closed_at:
+            closed_at = now
+        if payload["status"] in ORDER_STATUSES_CLOSED:
+            archived = bool(args.get("archive", payload["status"] in {"closed", "archived"}))
+        notification_state = (existing or {}).get("notification_state") or {}
+        conn.execute(
+            """
+            INSERT INTO shopping_orders(handle, retailer, item_nickname, item_category, status, eta_window, safe_delivery_facts_json, evidence_bindings_json, source_refs_json, refresh_sources_json, notification_state_json, notes, archived, created_at, updated_at, delivered_at, closed_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(handle) DO UPDATE SET
+              retailer=excluded.retailer,
+              item_nickname=excluded.item_nickname,
+              item_category=excluded.item_category,
+              status=excluded.status,
+              eta_window=excluded.eta_window,
+              safe_delivery_facts_json=excluded.safe_delivery_facts_json,
+              evidence_bindings_json=excluded.evidence_bindings_json,
+              source_refs_json=excluded.source_refs_json,
+              refresh_sources_json=excluded.refresh_sources_json,
+              notification_state_json=excluded.notification_state_json,
+              notes=excluded.notes,
+              archived=excluded.archived,
+              updated_at=excluded.updated_at,
+              delivered_at=excluded.delivered_at,
+              closed_at=excluded.closed_at
+            """,
+            (
+                payload["handle"], payload["retailer"], payload["item_nickname"], payload["item_category"], payload["status"], payload["eta_window"],
+                json.dumps(payload["safe_delivery_facts"], ensure_ascii=False), json.dumps(payload["evidence_bindings"], ensure_ascii=False), json.dumps(payload["source_refs"], ensure_ascii=False), json.dumps(payload["refresh_sources"], ensure_ascii=False), json.dumps(notification_state, ensure_ascii=False, sort_keys=True), payload["notes"], int(archived), created_at, now, delivered_at, closed_at,
+            ),
+        )
+        conn.commit()
+        order = _get_order(conn, payload["handle"])
+    _audit("shopping_order_upserted", {"handle": payload["handle"], "status": payload["status"], "retailer": payload["retailer"]})
+    return {
+        "operation": "shopping_order_upsert",
+        "status": "stored",
+        "order": order,
+        "privacy_boundary": "Ledger state is Star-visible safe state only: no raw order numbers, addresses, payment details, cookies, raw DOM, or owner-only screenshots are stored.",
+    }
+
+
+def _list_orders(include_archived: bool = False, status: str = "") -> dict[str, Any]:
+    clauses = [] if include_archived else ["archived = 0"]
+    params: list[Any] = []
+    if status:
+        status = _safe_order_status(status)
+        clauses.append("status = ?")
+        params.append(status)
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    with _ledger_connect() as conn:
+        rows = conn.execute(f"SELECT * FROM shopping_orders {where} ORDER BY updated_at DESC LIMIT 100", params).fetchall()
+    orders = [_order_row_to_safe_dict(row) for row in rows]
+    return {
+        "operation": "shopping_order_list",
+        "status": "ok",
+        "orders": orders,
+        "active_count": sum(1 for order in orders if order["status"] in ORDER_STATUSES_ACTIVE and not order["archived"]),
+        "ledger_path_hint": "profile-local shopping-order ledger",
+    }
+
+
+def _read_order(handle: str) -> dict[str, Any]:
+    safe_handle = _safe_order_handle(handle)
+    with _ledger_connect() as conn:
+        order = _get_order(conn, safe_handle)
+    if not order:
+        return {"operation": "shopping_order_read", "status": "not_found", "handle": safe_handle}
+    return {"operation": "shopping_order_read", "status": "ok", "order": order}
+
+
+def _close_order(handle: str, status: str = "delivered", archive: bool = True, safe_delivery_facts: Any = None, notes: str = "") -> dict[str, Any]:
+    safe_handle = _safe_order_handle(handle)
+    with _ledger_connect() as conn:
+        existing = _get_order(conn, safe_handle)
+        if not existing:
+            return {"operation": "shopping_order_close", "status": "not_found", "handle": safe_handle}
+    args = {
+        **existing,
+        "handle": safe_handle,
+        "status": _safe_order_status(status, "delivered"),
+        "archive": archive,
+        "safe_delivery_facts": safe_delivery_facts if safe_delivery_facts is not None else existing.get("safe_delivery_facts"),
+        "notes": notes or existing.get("notes") or "",
+    }
+    result = _upsert_order_entry(args)
+    result["operation"] = "shopping_order_close"
+    return result
+
+
+def _notification_decision(old: dict[str, Any] | None, new: dict[str, Any], event_hint: str = "") -> dict[str, Any]:
+    event_hint = str(event_hint or "").strip().lower().replace(" ", "_").replace("-", "_")
+    event_type = ""
+    reasons: list[str] = []
+    if old is None:
+        event_type = "initial_confirmation"
+        reasons.append("new safe order tracking entry")
+    else:
+        old_status = str(old.get("status") or "")
+        new_status = str(new.get("status") or "")
+        old_eta = str(old.get("eta_window") or "")
+        new_eta = str(new.get("eta_window") or "")
+        if old_eta != new_eta and new_eta:
+            event_type = "eta_changed"
+            reasons.append("ETA/window changed")
+        if old_status != new_status:
+            status_event = "delivered" if new_status == "delivered" else "out_for_delivery" if new_status == "out_for_delivery" else "status_changed"
+            if not event_type or SAFE_ORDER_STATUS_RANK.get(new_status, 0) >= SAFE_ORDER_STATUS_RANK.get(old_status, 0):
+                event_type = status_event
+            reasons.append(f"status changed from {old_status or 'unknown'} to {new_status or 'unknown'}")
+    if event_hint in ORDER_NOTIFY_EVENT_TYPES:
+        event_type = event_hint
+        reasons.append(f"explicit refresh event: {event_hint}")
+    notification_state = _coerce_json_dict(new.get("notification_state"))
+    last_key = f"last_notified_{event_type}"
+    already_notified = bool(event_type and notification_state.get(last_key))
+    should_notify = bool(event_type) and not already_notified
+    return {
+        "should_notify": should_notify,
+        "event_type": event_type or "no_material_change",
+        "reasons": reasons,
+        "noise_policy": "Notify initial confirmation/ETA, material ETA or status changes, day-of/out-for-delivery/delivered; suppress repeated no-change or duplicate event updates.",
+        "already_notified": already_notified,
+    }
+
+
+def _preview_order_update(args: dict[str, Any]) -> dict[str, Any]:
+    handle = _safe_order_handle(args.get("handle") or args.get("order_handle") or "", args.get("item_nickname") or "order")
+    with _ledger_connect() as conn:
+        existing = _get_order(conn, handle)
+    payload = _safe_order_payload({**(existing or {}), **args, "handle": handle}, existing)
+    candidate = {**(existing or {}), **payload}
+    decision = _notification_decision(existing, candidate, str(args.get("event_type") or ""))
+    return {"operation": "shopping_order_notification_preview", "status": "ok", "handle": handle, "notification_decision": decision, "candidate_order": candidate}
+
+
+def _mark_order_notified(handle: str, event_type: str) -> dict[str, Any]:
+    event_type = str(event_type or "").strip().lower().replace(" ", "_").replace("-", "_")
+    if event_type not in ORDER_NOTIFY_EVENT_TYPES:
+        raise ValueError("event_type must be one of initial_confirmation, eta_changed, status_changed, out_for_delivery, delivered")
+    safe_handle = _safe_order_handle(handle)
+    with _ledger_connect() as conn:
+        order = _get_order(conn, safe_handle)
+        if not order:
+            return {"operation": "shopping_order_mark_notified", "status": "not_found", "handle": safe_handle}
+        state = _coerce_json_dict(order.get("notification_state"))
+        state[f"last_notified_{event_type}"] = _utc_now()
+        conn.execute("UPDATE shopping_orders SET notification_state_json = ?, updated_at = ? WHERE handle = ?", (json.dumps(state, ensure_ascii=False, sort_keys=True), _utc_now(), safe_handle))
+        conn.commit()
+        order = _get_order(conn, safe_handle)
+    return {"operation": "shopping_order_mark_notified", "status": "stored", "order": order}
+
+
+def _refresh_plan() -> dict[str, Any]:
+    now = datetime.now(timezone.utc)
+    due_before = (now - timedelta(hours=6)).isoformat()
+    with _ledger_connect() as conn:
+        placeholders = ", ".join("?" for _ in ORDER_STATUSES_ACTIVE)
+        rows = conn.execute(
+            f"SELECT * FROM shopping_orders WHERE archived = 0 AND status IN ({placeholders}) ORDER BY updated_at ASC LIMIT 50",
+            tuple(sorted(ORDER_STATUSES_ACTIVE)),
+        ).fetchall()
+    due = []
+    for row in rows:
+        order = _order_row_to_safe_dict(row)
+        if order["updated_at"] <= due_before or order["status"] in {"shipped", "out_for_delivery"}:
+            due.append({
+                "handle": order["handle"],
+                "item_nickname": order["item_nickname"],
+                "status": order["status"],
+                "eta_window": order["eta_window"],
+                "refresh_sources": order["refresh_sources"] or ORDER_REFRESH_SOURCE_PRIORITY,
+                "next_step": "Check Amazon Your Orders through the secure shopping browser/post-purchase evidence path first; fall back to read-only Gmail order/shipment emails; try carrier pages only when bot-accessible and treat UPS/bot blocking as non-fatal.",
+            })
+    return {
+        "operation": "shopping_order_refresh_plan",
+        "status": "ok",
+        "due_orders": due,
+        "scheduled_refresh_spec": {
+            "cadence": "every 6h while active, with extra day-of/out-for-delivery checks when source facts expose them",
+            "primary_source": "Amazon Your Orders via secure shopping browser owner/post-purchase evidence path",
+            "fallback_source": "read-only Gmail order/shipment messages",
+            "opportunistic_source": "carrier pages only when bot-accessible; UPS bot blocking is non-fatal",
+            "notification_policy": "notify initial confirmation/ETA, material ETA/status changes, day-of/out-for-delivery/delivered; suppress no-change repeats",
+        },
+    }
+
+
+def _upsert_consumable(args: dict[str, Any]) -> dict[str, Any]:
+    nickname = _safe_item_nickname(args.get("item_nickname") or args.get("nickname") or "consumable item")
+    handle = _safe_order_handle(args.get("handle") or re.sub(r"[^a-z0-9]+", "-", nickname.lower()).strip("-") or "consumable", nickname)
+    confidence = str(args.get("confidence") or "tentative").strip().lower().replace(" ", "_").replace("-", "_")
+    if confidence not in CONSUMABLE_CONFIDENCE_ALLOWED:
+        raise ValueError("confidence must be explicit, tentative, suggested, or repeated_purchase")
+    now = _utc_now()
+    with _ledger_connect() as conn:
+        existing = conn.execute("SELECT * FROM consumable_items WHERE handle = ?", (handle,)).fetchone()
+        created_at = existing["created_at"] if existing else now
+        evidence_count = int(args.get("evidence_count") or (existing["evidence_count"] if existing else 0) or 0)
+        conn.execute(
+            """
+            INSERT INTO consumable_items(handle, item_nickname, item_category, retailer, confidence, source, evidence_count, last_order_handle, notes, created_at, updated_at, archived)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(handle) DO UPDATE SET item_nickname=excluded.item_nickname, item_category=excluded.item_category, retailer=excluded.retailer, confidence=excluded.confidence, source=excluded.source, evidence_count=excluded.evidence_count, last_order_handle=excluded.last_order_handle, notes=excluded.notes, updated_at=excluded.updated_at, archived=excluded.archived
+            """,
+            (
+                handle,
+                nickname,
+                _safe_item_category(args.get("item_category") or (existing["item_category"] if existing else "")),
+                _safe_retailer(args.get("retailer") or (existing["retailer"] if existing else "")),
+                confidence,
+                _sanitize_checkout_text(str(args.get("source") or (existing["source"] if existing else "")))[:120],
+                evidence_count,
+                _safe_order_handle(args.get("last_order_handle") or (existing["last_order_handle"] if existing else ""), "order") if (args.get("last_order_handle") or (existing["last_order_handle"] if existing else "")) else "",
+                _sanitize_checkout_text(str(args.get("notes") or (existing["notes"] if existing else "")))[:500],
+                created_at,
+                now,
+                int(bool(args.get("archived", existing["archived"] if existing else False))),
+            ),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM consumable_items WHERE handle = ?", (handle,)).fetchone()
+    return {
+        "operation": "shopping_consumable_upsert",
+        "status": "stored",
+        "consumable": _consumable_row_to_safe_dict(row),
+        "learning_policy": "Explicit Joy statements may be durable; repeated purchases can be suggested/tentative; ambiguous one-offs should remain tentative or ask before durable memory.",
+    }
+
+
+def _list_consumables(include_archived: bool = False) -> dict[str, Any]:
+    where = "" if include_archived else "WHERE archived = 0"
+    with _ledger_connect() as conn:
+        rows = conn.execute(f"SELECT * FROM consumable_items {where} ORDER BY updated_at DESC LIMIT 100").fetchall()
+    return {"operation": "shopping_consumable_list", "status": "ok", "consumables": [_consumable_row_to_safe_dict(row) for row in rows]}
+
+
+def _suggest_consumable_from_order(handle: str) -> dict[str, Any]:
+    safe_handle = _safe_order_handle(handle)
+    with _ledger_connect() as conn:
+        order = _get_order(conn, safe_handle)
+    if not order:
+        return {"operation": "shopping_consumable_suggest_from_order", "status": "not_found", "handle": safe_handle}
+    suggestion = _upsert_consumable({
+        "handle": re.sub(r"[^a-z0-9]+", "-", order["item_nickname"].lower()).strip("-") or f"consumable-{safe_handle}",
+        "item_nickname": order["item_nickname"],
+        "item_category": order["item_category"],
+        "retailer": order["retailer"],
+        "confidence": "suggested",
+        "source": "post_purchase_order_suggestion",
+        "evidence_count": 1,
+        "last_order_handle": safe_handle,
+        "notes": "Suggested from a purchase; keep tentative unless Joy explicitly confirms or repeated purchases provide stronger evidence.",
+    })
+    suggestion["operation"] = "shopping_consumable_suggest_from_order"
+    return suggestion
+
+
+def _order_entry_from_final_purchase_result(result: dict[str, Any], checkout_summary: dict[str, Any] | None = None) -> dict[str, Any]:
+    checkout_summary = checkout_summary or {}
+    proof = result.get("post_purchase_proof") if isinstance(result.get("post_purchase_proof"), dict) else {}
+    minimal = proof.get("post_purchase_review") if isinstance(proof.get("post_purchase_review"), dict) else {}
+    minimal = minimal or proof.get("post_purchase") if isinstance(proof.get("post_purchase"), dict) else minimal
+    facts = _minimal_post_purchase_facts(minimal) if isinstance(minimal, dict) else {}
+    item_candidates = []
+    item_candidates.extend(_bounded_checkout_list(checkout_summary.get("items"), 3))
+    item_candidates.extend(_bounded_checkout_list(facts.get("item_clues"), 3))
+    item_nickname = item_candidates[0] if item_candidates else "recent Amazon order"
+    delivery_facts = _bounded_checkout_list(facts.get("delivery_status") or checkout_summary.get("delivery"), 6)
+    eta = delivery_facts[0] if delivery_facts else ""
+    material = {
+        "request_id": result.get("request_id"),
+        "approval_id": result.get("approval_id"),
+        "material_summary_binding": result.get("material_summary_binding"),
+        "owner_visual_evidence_binding": result.get("owner_visual_evidence_binding"),
+        "final_url": result.get("final_url"),
+        "item_nickname": item_nickname,
+    }
+    handle = "order-" + hashlib.sha256(json.dumps(material, sort_keys=True).encode("utf-8")).hexdigest()[:10]
+    return _upsert_order_entry({
+        "handle": handle,
+        "retailer": "amazon",
+        "item_nickname": item_nickname,
+        "item_category": "shopping order",
+        "status": "confirmed" if proof else "pending_confirmation",
+        "eta_window": eta,
+        "safe_delivery_facts": delivery_facts,
+        "material_summary_binding": result.get("material_summary_binding"),
+        "owner_visual_evidence_binding": result.get("owner_visual_evidence_binding"),
+        "approval_request_id": result.get("request_id"),
+        "approval_id": result.get("approval_id"),
+        "post_purchase_summary_binding": proof.get("post_purchase_summary_binding") if isinstance(proof, dict) else "",
+        "owner_review_id": proof.get("review_id") if isinstance(proof, dict) else "",
+        "source_refs": ["trusted_final_purchase_executor", "owner_post_purchase_proof" if proof else "post_purchase_proof_not_available"],
+        "refresh_sources": ORDER_REFRESH_SOURCE_PRIORITY,
+        "notes": "Created automatically by trusted final-purchase executor after a successful final purchase click.",
+    })
+
+
 
 def _final_purchase_state_lock():
     os.makedirs(os.path.dirname(FINAL_PURCHASE_STATE_PATH) or ".", mode=0o700, exist_ok=True)
@@ -1708,7 +2262,7 @@ def _execute_final_purchase(approval_request_id: str, material_summary_binding: 
             }
             _store_final_purchase_state(handle, state)
         _audit("final_purchase_executed", {"request_id": request_id, "approval_id": approval_id, "material_summary_binding": expected_binding, "owner_visual_evidence_binding": evidence_binding, "final_url": final_url, "final_title": final_title})
-        return {
+        result = {
             "operation": "execute_final_purchase",
             "status": "clicked",
             "request_id": request_id,
@@ -1722,6 +2276,15 @@ def _execute_final_purchase(approval_request_id: str, material_summary_binding: 
             "exactly_once_token": token_key,
             "safety_boundary": "Final purchase was executed only after a trusted Agent Request approval, live material-summary revalidation, and exactly-once token consumption. Post-purchase proof is owner-only when captured. The result does not expose cookies, storage, raw DOM, order references, full payment/address details, screenshots, or CDP handles.",
         }
+        try:
+            result["shopping_order_tracking"] = _order_entry_from_final_purchase_result(result, summary)
+        except Exception as exc:
+            result["shopping_order_tracking"] = {
+                "status": "ledger_entry_failed",
+                "message": str(exc)[:500],
+                "safety_boundary": "The final purchase click already succeeded; order-ledger ingestion failed without exposing raw order/address/payment/browser evidence to Star.",
+            }
+        return result
 
     return _with_browser(run)
 
@@ -3796,7 +4359,7 @@ def shopping_browser_status_tool(args: dict[str, Any], **_kw: Any) -> str:
         "remote_debug_port": REMOTE_DEBUG_PORT,
         "secure_browser_owner": BROWSER_OWNER,
         "ownership_state_path": OWNERSHIP_STATE_PATH,
-        "browser_operations": ["navigate", "page_snapshot", "query", "click", "type", "screenshot", "visual_evidence", "current_page_summary", "owner_checkout_review"],
+        "browser_operations": ["navigate", "page_snapshot", "query", "click", "type", "screenshot", "visual_evidence", "current_page_summary", "owner_checkout_review", "order_list", "order_read", "order_upsert", "order_close", "order_refresh_plan", "consumable_list", "consumable_upsert"],
         "trusted_assistant_access": {
             "status": "broad_browsing_available",
             "message": "Star may navigate and inspect ordinary shopping/account research surfaces, including Amazon order history, Buy Again, past-order details, and product links. The bridge gates capabilities and sanitizes outputs instead of blanket-blocking account/order-history URLs.",
@@ -3817,6 +4380,15 @@ def shopping_browser_status_tool(args: dict[str, Any], **_kw: Any) -> str:
             "request_final_purchase_approval": "Star-callable after owner_checkout_review; creates a trusted Agent Request Telegram approval proposal bound to material_summary_binding and owner_visual_evidence_binding",
             "place_order": "blocked from ordinary tool use; requires trusted Telegram approval plus shopping_browser_execute_final_purchase live revalidation and exactly-once token consumption",
             "owner_checkout_review": "available only as owner-only Telegram delivery of complete checkout visual evidence tied to the same material_summary_binding; it does not expose sensitive evidence to Star",
+        },
+        "order_tracking": {
+            "ledger": "profile-local SQLite",
+            "ledger_path_hint": "SHOPPING_ORDER_LEDGER_PATH or ~/.hermes/profiles/star/shopping-order-ledger.sqlite3",
+            "refresh_strategy": "Amazon Your Orders via secure shopping browser first; read-only Gmail order/shipment emails fallback; carrier pages opportunistic and bot-blocking non-fatal",
+            "notification_policy": "initial confirmation/ETA, material ETA or status changes, day-of/out-for-delivery/delivered; no repeated no-change spam",
+        },
+        "consumable_tracking": {
+            "boundary": "Stable consumables are tracked separately from transient orders; explicit Joy statements may be durable, repeated purchases may suggest/tentatively learn, ambiguous one-offs stay tentative.",
         },
         "removed_legacy_helpers": ["shopping_browser_inspect_product", "shopping_browser_inspect_reviews", "shopping_browser_inspect_cart", "shopping_browser_add_to_cart"],
         "screenshot_dir": SCREENSHOT_DIR,
@@ -3959,6 +4531,82 @@ def shopping_browser_execute_final_purchase_tool(args: dict[str, Any], **_kw: An
         ))
     except Exception as exc:
         return _json({"error": "FINAL_PURCHASE_EXECUTION_FAILED", "message": str(exc)[:1000], "operation": "execute_final_purchase"})
+
+
+def shopping_browser_order_list_tool(args: dict[str, Any], **_kw: Any) -> str:
+    try:
+        return _json(_list_orders(bool(args.get("include_archived", False)), str(args.get("status") or "")))
+    except Exception as exc:
+        return _json({"error": "SHOPPING_ORDER_LIST_FAILED", "message": str(exc)[:1000], "operation": "shopping_order_list"})
+
+
+def shopping_browser_order_read_tool(args: dict[str, Any], **_kw: Any) -> str:
+    try:
+        return _json(_read_order(str(args.get("handle") or args.get("order_handle") or "")))
+    except Exception as exc:
+        return _json({"error": "SHOPPING_ORDER_READ_FAILED", "message": str(exc)[:1000], "operation": "shopping_order_read"})
+
+
+def shopping_browser_order_upsert_tool(args: dict[str, Any], **_kw: Any) -> str:
+    try:
+        return _json(_upsert_order_entry(args))
+    except Exception as exc:
+        return _json({"error": "SHOPPING_ORDER_UPSERT_FAILED", "message": str(exc)[:1000], "operation": "shopping_order_upsert"})
+
+
+def shopping_browser_order_close_tool(args: dict[str, Any], **_kw: Any) -> str:
+    try:
+        return _json(_close_order(
+            str(args.get("handle") or args.get("order_handle") or ""),
+            str(args.get("status") or "delivered"),
+            bool(args.get("archive", True)),
+            args.get("safe_delivery_facts"),
+            str(args.get("notes") or ""),
+        ))
+    except Exception as exc:
+        return _json({"error": "SHOPPING_ORDER_CLOSE_FAILED", "message": str(exc)[:1000], "operation": "shopping_order_close"})
+
+
+def shopping_browser_order_notification_preview_tool(args: dict[str, Any], **_kw: Any) -> str:
+    try:
+        return _json(_preview_order_update(args))
+    except Exception as exc:
+        return _json({"error": "SHOPPING_ORDER_NOTIFICATION_PREVIEW_FAILED", "message": str(exc)[:1000], "operation": "shopping_order_notification_preview"})
+
+
+def shopping_browser_order_mark_notified_tool(args: dict[str, Any], **_kw: Any) -> str:
+    try:
+        return _json(_mark_order_notified(str(args.get("handle") or args.get("order_handle") or ""), str(args.get("event_type") or "")))
+    except Exception as exc:
+        return _json({"error": "SHOPPING_ORDER_MARK_NOTIFIED_FAILED", "message": str(exc)[:1000], "operation": "shopping_order_mark_notified"})
+
+
+def shopping_browser_order_refresh_plan_tool(args: dict[str, Any], **_kw: Any) -> str:
+    try:
+        return _json(_refresh_plan())
+    except Exception as exc:
+        return _json({"error": "SHOPPING_ORDER_REFRESH_PLAN_FAILED", "message": str(exc)[:1000], "operation": "shopping_order_refresh_plan"})
+
+
+def shopping_browser_consumable_list_tool(args: dict[str, Any], **_kw: Any) -> str:
+    try:
+        return _json(_list_consumables(bool(args.get("include_archived", False))))
+    except Exception as exc:
+        return _json({"error": "SHOPPING_CONSUMABLE_LIST_FAILED", "message": str(exc)[:1000], "operation": "shopping_consumable_list"})
+
+
+def shopping_browser_consumable_upsert_tool(args: dict[str, Any], **_kw: Any) -> str:
+    try:
+        return _json(_upsert_consumable(args))
+    except Exception as exc:
+        return _json({"error": "SHOPPING_CONSUMABLE_UPSERT_FAILED", "message": str(exc)[:1000], "operation": "shopping_consumable_upsert"})
+
+
+def shopping_browser_consumable_suggest_from_order_tool(args: dict[str, Any], **_kw: Any) -> str:
+    try:
+        return _json(_suggest_consumable_from_order(str(args.get("handle") or args.get("order_handle") or "")))
+    except Exception as exc:
+        return _json({"error": "SHOPPING_CONSUMABLE_SUGGEST_FAILED", "message": str(exc)[:1000], "operation": "shopping_consumable_suggest_from_order"})
 
 
 def shopping_browser_guardrail_check_tool(args: dict[str, Any], **_kw: Any) -> str:
@@ -4181,6 +4829,99 @@ EXECUTE_FINAL_PURCHASE_SCHEMA = {
     },
 }
 
+ORDER_LIST_SCHEMA = {
+    "name": "shopping_browser_order_list",
+    "description": "List active/in-flight Star shopping orders from the safe profile-local order ledger. Returns only safe handles, item nicknames/categories, retailer, coarse ETA/status, safe evidence bindings, and sanitized delivery facts; never raw order numbers, address/payment data, cookies, DOM, or owner-only screenshots.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "include_archived": {"type": "boolean", "description": "Include closed/archived order rows", "default": False},
+            "status": {"type": "string", "description": "Optional status filter such as confirmed, shipped, out_for_delivery, delivered"},
+        },
+        "required": [],
+    },
+}
+
+ORDER_READ_SCHEMA = {
+    "name": "shopping_browser_order_read",
+    "description": "Read a safe order-ledger entry by human-friendly handle/nickname. The handle must not be a raw order number or payment/address identifier.",
+    "parameters": {"type": "object", "properties": {"handle": {"type": "string", "description": "Safe order handle/nickname"}}, "required": ["handle"]},
+}
+
+ORDER_UPSERT_SCHEMA = {
+    "name": "shopping_browser_order_upsert",
+    "description": "Add or update a safe Star shopping-order ledger entry from trusted final-purchase/post-purchase proof data or sanitized refresh facts. Use safe handles and item nicknames only; raw order numbers, full addresses, payment details, raw DOM, cookies, and screenshots are not accepted or persisted.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "handle": {"type": "string", "description": "Safe human-friendly order handle/nickname, not a raw order number"},
+            "retailer": {"type": "string", "description": "Retailer, e.g. amazon"},
+            "item_nickname": {"type": "string", "description": "Safe item nickname/category text"},
+            "item_category": {"type": "string", "description": "Safe category such as coffee filters or pipe screens"},
+            "status": {"type": "string", "description": "pending_confirmation, confirmed, ordered, processing, shipped, out_for_delivery, delivered, cancelled, closed, or archived"},
+            "eta_window": {"type": "string", "description": "Coarse delivery day/window only; no address or precise sensitive data"},
+            "safe_delivery_facts": {"type": "array", "items": {"type": "string"}, "description": "Sanitized delivery facts"},
+            "evidence_bindings": {"type": "array", "items": {"type": "string"}, "description": "Safe evidence binding ids/hashes"},
+            "source_refs": {"type": "array", "items": {"type": "string"}, "description": "Safe source labels such as owner_post_purchase_proof or gmail_order_email"},
+            "refresh_sources": {"type": "array", "items": {"type": "string"}, "description": "Preferred refresh sources"},
+            "notes": {"type": "string", "description": "Short sanitized note"},
+        },
+        "required": ["handle", "item_nickname"],
+    },
+}
+
+ORDER_CLOSE_SCHEMA = {
+    "name": "shopping_browser_order_close",
+    "description": "Mark a safe shopping-order ledger entry delivered/closed/archived. This does not modify, cancel, return, reorder, or contact the retailer/carrier.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "handle": {"type": "string", "description": "Safe order handle/nickname"},
+            "status": {"type": "string", "description": "Closed status; defaults to delivered"},
+            "archive": {"type": "boolean", "description": "Archive/quiet the order after closing", "default": True},
+            "safe_delivery_facts": {"type": "array", "items": {"type": "string"}, "description": "Optional sanitized delivery facts"},
+            "notes": {"type": "string", "description": "Optional sanitized closeout note"},
+        },
+        "required": ["handle"],
+    },
+}
+
+ORDER_NOTIFICATION_PREVIEW_SCHEMA = {
+    "name": "shopping_browser_order_notification_preview",
+    "description": "Preview whether a proposed sanitized order status/ETA update is Joy-notifiable under the noise-limited policy. Does not send notifications.",
+    "parameters": {"type": "object", "properties": {"handle": {"type": "string"}, "status": {"type": "string"}, "eta_window": {"type": "string"}, "safe_delivery_facts": {"type": "array", "items": {"type": "string"}}, "event_type": {"type": "string"}}, "required": ["handle"]},
+}
+
+ORDER_MARK_NOTIFIED_SCHEMA = {
+    "name": "shopping_browser_order_mark_notified",
+    "description": "Record that Joy was notified for a material order event so scheduled refreshes do not spam repeated no-change updates. Does not send notifications.",
+    "parameters": {"type": "object", "properties": {"handle": {"type": "string"}, "event_type": {"type": "string", "description": "initial_confirmation, eta_changed, status_changed, out_for_delivery, or delivered"}}, "required": ["handle", "event_type"]},
+}
+
+ORDER_REFRESH_PLAN_SCHEMA = {
+    "name": "shopping_browser_order_refresh_plan",
+    "description": "Return active orders due for scheduled refresh and the safe refresh strategy: Amazon Your Orders via secure browser first, Gmail order/shipment email fallback, carrier pages only opportunistically; UPS bot blocking is non-fatal. Does not browse or send notifications.",
+    "parameters": {"type": "object", "properties": {}, "required": []},
+}
+
+CONSUMABLE_LIST_SCHEMA = {
+    "name": "shopping_browser_consumable_list",
+    "description": "List stable/tentative consumable items separately from transient order state. Returns safe item nicknames/categories, confidence/source, and last safe order handle only.",
+    "parameters": {"type": "object", "properties": {"include_archived": {"type": "boolean", "default": False}}, "required": []},
+}
+
+CONSUMABLE_UPSERT_SCHEMA = {
+    "name": "shopping_browser_consumable_upsert",
+    "description": "Create or update a safe consumable item. Use confidence='explicit' only for Joy's explicit durable statements; repeated purchases can be repeated_purchase; ambiguous one-offs should remain tentative/suggested.",
+    "parameters": {"type": "object", "properties": {"handle": {"type": "string"}, "item_nickname": {"type": "string"}, "item_category": {"type": "string"}, "retailer": {"type": "string"}, "confidence": {"type": "string"}, "source": {"type": "string"}, "evidence_count": {"type": "integer"}, "last_order_handle": {"type": "string"}, "notes": {"type": "string"}, "archived": {"type": "boolean"}}, "required": ["item_nickname", "confidence"]},
+}
+
+CONSUMABLE_SUGGEST_FROM_ORDER_SCHEMA = {
+    "name": "shopping_browser_consumable_suggest_from_order",
+    "description": "Create a tentative consumable suggestion from a safe order handle without promoting it to durable memory. Joy confirmation or repeated purchases are required before treating it as stable.",
+    "parameters": {"type": "object", "properties": {"handle": {"type": "string", "description": "Safe order handle/nickname"}}, "required": ["handle"]},
+}
+
 GUARDRAIL_SCHEMA = {
     "name": "shopping_browser_guardrail_check",
     "description": "Check whether a shopping-browser operation is allowed. Ordinary trusted-assistant shopping/account research browsing is allowed with sanitized outputs. Checkout now means supervised checkout-prep only; final place_order remains blocked pending trusted Telegram approval bound to a material order-summary hash. Raw session, credential, payment/address edit, and secret operations are rejected.",
@@ -4313,6 +5054,29 @@ registry.register(
     emoji="🛒",
     max_result_size_chars=MAX_RESULT_CHARS,
 )
+for _schema, _handler, _emoji in [
+    (ORDER_LIST_SCHEMA, shopping_browser_order_list_tool, "📦"),
+    (ORDER_READ_SCHEMA, shopping_browser_order_read_tool, "🔎"),
+    (ORDER_UPSERT_SCHEMA, shopping_browser_order_upsert_tool, "🧾"),
+    (ORDER_CLOSE_SCHEMA, shopping_browser_order_close_tool, "✅"),
+    (ORDER_NOTIFICATION_PREVIEW_SCHEMA, shopping_browser_order_notification_preview_tool, "🔕"),
+    (ORDER_MARK_NOTIFIED_SCHEMA, shopping_browser_order_mark_notified_tool, "📌"),
+    (ORDER_REFRESH_PLAN_SCHEMA, shopping_browser_order_refresh_plan_tool, "🔄"),
+    (CONSUMABLE_LIST_SCHEMA, shopping_browser_consumable_list_tool, "☕"),
+    (CONSUMABLE_UPSERT_SCHEMA, shopping_browser_consumable_upsert_tool, "📝"),
+    (CONSUMABLE_SUGGEST_FROM_ORDER_SCHEMA, shopping_browser_consumable_suggest_from_order_tool, "🌱"),
+]:
+    registry.register(
+        name=_schema["name"],
+        toolset=TOOLSET,
+        schema=_schema,
+        handler=_handler,
+        check_fn=_check_shopping_browser,
+        description=_schema["description"],
+        emoji=_emoji,
+        max_result_size_chars=MAX_RESULT_CHARS,
+    )
+
 registry.register(
     name=GUARDRAIL_SCHEMA["name"],
     toolset=TOOLSET,
@@ -4598,12 +5362,79 @@ if __name__ == "__main__":
     assert "selector" not in compact_owner_json
     assert "Place Order" not in compact_owner_json
     assert len(compact_owner_json) <= MAX_RESULT_CHARS
+    import tempfile
+
+    original_ledger_path = SHOPPING_ORDER_LEDGER_PATH
+    with tempfile.TemporaryDirectory() as tmpdir:
+        globals()["SHOPPING_ORDER_LEDGER_PATH"] = os.path.join(tmpdir, "shopping-order-ledger.sqlite3")
+        order_result = json.loads(shopping_browser_order_upsert_tool({
+            "handle": "pipe-screens-coffee-filters",
+            "retailer": "amazon",
+            "item_nickname": "pipe screens and coffee filters",
+            "item_category": "consumables",
+            "status": "confirmed",
+            "eta_window": "Tuesday",
+            "safe_delivery_facts": ["Arriving Tuesday"],
+            "material_summary_binding": "a" * 64,
+            "owner_visual_evidence_binding": "b" * 64,
+            "source_refs": ["owner_post_purchase_proof"],
+        }))
+        assert order_result["status"] == "stored"
+        assert order_result["order"]["handle"] == "pipe-screens-coffee-filters"
+        order_json = json.dumps(order_result, ensure_ascii=False)
+        assert "111-2222222-3333333" not in order_json
+        assert "Example Street" not in order_json
+        assert json.loads(shopping_browser_order_read_tool({"handle": "pipe-screens-coffee-filters"}))["order"]["status"] == "confirmed"
+        preview_same = json.loads(shopping_browser_order_notification_preview_tool({"handle": "pipe-screens-coffee-filters", "status": "confirmed", "eta_window": "Tuesday"}))
+        assert preview_same["notification_decision"]["should_notify"] is False
+        preview_eta = json.loads(shopping_browser_order_notification_preview_tool({"handle": "pipe-screens-coffee-filters", "status": "confirmed", "eta_window": "Wednesday"}))
+        assert preview_eta["notification_decision"]["should_notify"] is True
+        assert preview_eta["notification_decision"]["event_type"] == "eta_changed"
+        notified = json.loads(shopping_browser_order_mark_notified_tool({"handle": "pipe-screens-coffee-filters", "event_type": "eta_changed"}))
+        assert notified["status"] == "stored"
+        consumable = json.loads(shopping_browser_consumable_suggest_from_order_tool({"handle": "pipe-screens-coffee-filters"}))
+        assert consumable["status"] == "stored"
+        assert consumable["consumable"]["confidence"] == "suggested"
+        explicit = json.loads(shopping_browser_consumable_upsert_tool({"handle": "coffee-filters", "item_nickname": "coffee filters", "item_category": "coffee", "confidence": "explicit", "source": "joy_statement"}))
+        assert explicit["consumable"]["confidence"] == "explicit"
+        closed = json.loads(shopping_browser_order_close_tool({"handle": "pipe-screens-coffee-filters", "status": "delivered", "safe_delivery_facts": ["Delivered Tuesday"]}))
+        assert closed["order"]["status"] == "delivered"
+        assert closed["order"]["archived"] is True
+        assert json.loads(shopping_browser_order_upsert_tool({"handle": "111-2222222-3333333", "item_nickname": "unsafe"}))["error"] == "SHOPPING_ORDER_UPSERT_FAILED"
+        final_purchase_stub = {
+            "request_id": "ar-20260101-000000-deadbe",
+            "approval_id": "ap-test",
+            "material_summary_binding": "c" * 64,
+            "owner_visual_evidence_binding": "d" * 64,
+            "final_url": "https://www.amazon.com/gp/buy/thankyou/handlers/display.html",
+            "post_purchase_proof": {
+                "status": "sent_owner_only",
+                "review_id": "review-test",
+                "post_purchase_summary_binding": "e" * 64,
+                "post_purchase_review": {
+                    "post_purchase_state": "post_purchase_confirmation_visible",
+                    "confirmation_visible": True,
+                    "orders_page_visible": False,
+                    "item_clues": ["pipe screens and coffee filters"],
+                    "delivery_status": ["Arriving Tuesday"],
+                },
+            },
+        }
+        tracking = _order_entry_from_final_purchase_result(final_purchase_stub, {"items": ["pipe screens and coffee filters"], "delivery": ["Arriving Tuesday"]})
+        assert tracking["order"]["handle"].startswith("order-")
+        assert tracking["order"]["status"] == "confirmed"
+        assert tracking["order"]["refresh_sources"][:2] == ["amazon_your_orders", "gmail_order_email"]
+        assert json.loads(shopping_browser_order_refresh_plan_tool({}))["scheduled_refresh_spec"]["primary_source"] == "Amazon Your Orders via secure shopping browser owner/post-purchase evidence path"
+    globals()["SHOPPING_ORDER_LEDGER_PATH"] = original_ledger_path
+
     body, content_type = _multipart_request({"chat_id": "123"}, {"document": ("review.png", b"png", "image/png")})
     assert b"review.png" in body and content_type.startswith("multipart/form-data")
     status = json.loads(shopping_browser_status_tool({}))
     assert "screenshot" in status["browser_operations"]
     assert "visual_evidence" in status["browser_operations"]
     assert "owner_checkout_review" in status["browser_operations"]
+    assert "order_list" in status["browser_operations"]
+    assert "consumable_upsert" in status["browser_operations"]
     assert status["supervised_checkout_prep"]["status"] == "available"
     assert status["trusted_assistant_access"]["status"] == "broad_browsing_available"
     assert "owner_checkout_review" in status["approval_gated_operations"]
@@ -4617,8 +5448,10 @@ if __name__ == "__main__":
     assert "text('#ppd')" not in ADD_TO_CART_PRECHECK_JS
     assert "condition_summary" in ADD_TO_CART_PRECHECK_JS
     assert "product_condition" in PRODUCT_EXTRACT_JS
-    active_schema_names = [STATUS_SCHEMA["name"], NAVIGATE_SCHEMA["name"], PAGE_SNAPSHOT_SCHEMA["name"], QUERY_SCHEMA["name"], SCREENSHOT_SCHEMA["name"], VISUAL_EVIDENCE_SCHEMA["name"], CLICK_SCHEMA["name"], TYPE_SCHEMA["name"], CURRENT_PAGE_SUMMARY_SCHEMA["name"], OWNER_CHECKOUT_REVIEW_SCHEMA["name"], GUARDRAIL_SCHEMA["name"]]
+    active_schema_names = [STATUS_SCHEMA["name"], NAVIGATE_SCHEMA["name"], PAGE_SNAPSHOT_SCHEMA["name"], QUERY_SCHEMA["name"], SCREENSHOT_SCHEMA["name"], VISUAL_EVIDENCE_SCHEMA["name"], CLICK_SCHEMA["name"], TYPE_SCHEMA["name"], CURRENT_PAGE_SUMMARY_SCHEMA["name"], OWNER_CHECKOUT_REVIEW_SCHEMA["name"], ORDER_LIST_SCHEMA["name"], ORDER_READ_SCHEMA["name"], ORDER_UPSERT_SCHEMA["name"], ORDER_CLOSE_SCHEMA["name"], ORDER_NOTIFICATION_PREVIEW_SCHEMA["name"], ORDER_MARK_NOTIFIED_SCHEMA["name"], ORDER_REFRESH_PLAN_SCHEMA["name"], CONSUMABLE_LIST_SCHEMA["name"], CONSUMABLE_UPSERT_SCHEMA["name"], CONSUMABLE_SUGGEST_FROM_ORDER_SCHEMA["name"], GUARDRAIL_SCHEMA["name"]]
     assert "shopping_browser_owner_checkout_review" in active_schema_names
+    assert "shopping_browser_order_upsert" in active_schema_names
+    assert "shopping_browser_consumable_upsert" in active_schema_names
     assert "shopping_browser_inspect_product" not in active_schema_names
     assert "shopping_browser_inspect_reviews" not in active_schema_names
     assert "shopping_browser_inspect_cart" not in active_schema_names
