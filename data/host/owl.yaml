@@ -163,6 +163,26 @@ nest::app::hermes::instances:
     honcho_user_peer: 'joy'
     honcho_ai_peer: 'talon'
     ssh_auth_sock: '/run/user/1000/ssh-agent.socket'
+    ssh_config_content: |
+      Host gateway
+          HostName gateway.nest
+          IdentityFile /home/joy/.hermes/profiles/talon/.ssh/id_ed25519
+          IdentitiesOnly yes
+          ForwardAgent yes
+
+      Host gateway.nest
+          IdentityFile /home/joy/.hermes/profiles/talon/.ssh/id_ed25519
+          IdentitiesOnly yes
+          ForwardAgent yes
+
+      Host falcon
+          HostName falcon.nest
+          IdentityFile /home/joy/.hermes/profiles/talon/.ssh/id_ed25519
+          IdentitiesOnly yes
+
+      Host falcon.nest
+          IdentityFile /home/joy/.hermes/profiles/talon/.ssh/id_ed25519
+          IdentitiesOnly yes
     gateway_enabled: true
     dashboard_enabled: true
     dashboard_port: 9119
