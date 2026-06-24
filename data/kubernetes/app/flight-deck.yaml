@@ -13,7 +13,7 @@ flight_deck_board: agent-requests-dev
 flight_deck_environment: Dev
 flight_deck_port: 4173
 kanban_home_host_path: /home/joy/.hermes/kanban
-hermes_profile_host_path: /home/joy/.hermes/profiles/talon
+hermes_profile_host_path: /home/joy/.hermes/profiles
 smoke_test_image: "%{lookup('config_registry')}/nest/stage1/server:latest"
 
 .affinity: &affinity
@@ -133,6 +133,10 @@ resources:
                   value: /hermes/kanban
                 - name: HERMES_STATE_DB
                   value: /hermes/profiles/talon/state.db
+                - name: FLIGHT_DECK_PROFILE_HOST_ROOT
+                  value: /home/joy/.hermes/profiles
+                - name: FLIGHT_DECK_PROFILE_MOUNT_ROOT
+                  value: /hermes/profiles
               ports:
                 - name: http
                   containerPort: "%{alias('flight_deck_port')}"
@@ -165,7 +169,8 @@ resources:
                 - name: kanban-home
                   mountPath: /hermes/kanban
                 - name: hermes-profile
-                  mountPath: /hermes/profiles/talon
+                  mountPath: /hermes/profiles
+                  readOnly: true
           volumes:
             - name: app-source
               emptyDir: {}
