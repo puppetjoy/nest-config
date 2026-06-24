@@ -13,8 +13,8 @@ flight_deck_commit: 1bf2a59f87cb426d7cc1272ef0b1ad56673f7fff
 flight_deck_board: agent-requests-dev
 flight_deck_environment: Dev
 flight_deck_port: 4173
-kanban_home_host_path: /nest/home/.hermes/kanban
-hermes_profile_host_path: /nest/home/.hermes/profiles/talon
+kanban_home_host_path: /home/joy/.hermes/kanban
+hermes_profile_host_path: /home/joy/.hermes/profiles/talon
 smoke_test_image: "%{lookup('config_registry')}/nest/stage1/server:latest"
 
 .affinity: &affinity
