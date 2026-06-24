@@ -13,6 +13,7 @@ flight_deck_commit: 1bf2a59f87cb426d7cc1272ef0b1ad56673f7fff
 flight_deck_board: agent-requests-dev
 flight_deck_environment: Dev
 flight_deck_port: 4173
+flight_deck_source_host_path: /home/joy/projects/nest/flight-deck
 kanban_home_host_path: /home/joy/.hermes/kanban
 hermes_profile_host_path: /home/joy/.hermes/profiles/talon
 smoke_test_image: "%{lookup('config_registry')}/nest/stage1/server:latest"
@@ -98,10 +99,10 @@ resources:
                 - -ceu
                 - |
                   rm -rf /work/flight-deck
-                  git clone --no-checkout --depth 20 --branch "$FLIGHT_DECK_REF_NAME" "$FLIGHT_DECK_REPO" /work/flight-deck
-                  cd /work/flight-deck
-                  git checkout "$FLIGHT_DECK_COMMIT"
-                  git rev-parse HEAD > .flight-deck-source-revision
+                  mkdir -p /work/flight-deck
+                  git -C /source/flight-deck cat-file -e "$FLIGHT_DECK_COMMIT^{commit}"
+                  git -C /source/flight-deck archive --format=tar "$FLIGHT_DECK_COMMIT" | tar -C /work/flight-deck -xf -
+                  printf '%s\n' "$FLIGHT_DECK_COMMIT" > /work/flight-deck/.flight-deck-source-revision
               env:
                 - name: FLIGHT_DECK_REPO
                   value: "%{lookup('flight_deck_repo')}"
@@ -109,19 +110,11 @@ resources:
                   value: "%{lookup('flight_deck_ref_name')}"
                 - name: FLIGHT_DECK_COMMIT
                   value: "%{lookup('flight_deck_commit')}"
-                - name: GIT_SSH_COMMAND
-                  value: >-
-                    ssh -F /dev/null -o HostName=ssh.gitlab.eyrie -o HostKeyAlias=gitlab.joyfullee.me
-                    -o UserKnownHostsFile=/etc/ssh/ssh_known_hosts -o StrictHostKeyChecking=yes
-                    -o IdentitiesOnly=yes -i /root/.ssh/id_ed25519
               volumeMounts:
                 - name: app-source
                   mountPath: /work
-                - name: eyrie-ssh-key
-                  mountPath: /root/.ssh/id_ed25519
-                  readOnly: true
-                - name: ssh-known-hosts
-                  mountPath: /etc/ssh/ssh_known_hosts
+                - name: flight-deck-source
+                  mountPath: /source/flight-deck
                   readOnly: true
           containers:
             - name: flight-deck
@@ -189,6 +182,10 @@ resources:
           volumes:
             - name: app-source
               emptyDir: {}
+            - name: flight-deck-source
+              hostPath:
+                path: "%{lookup('flight_deck_source_host_path')}"
+                type: Directory
             - name: kanban-home
               hostPath:
                 path: "%{lookup('kanban_home_host_path')}"
@@ -197,14 +194,6 @@ resources:
               hostPath:
                 path: "%{lookup('hermes_profile_host_path')}"
                 type: Directory
-            - name: eyrie-ssh-key
-              hostPath:
-                path: /root/.ssh/id_ed25519_eyrie
-                type: File
-            - name: ssh-known-hosts
-              hostPath:
-                path: /etc/ssh/ssh_known_hosts
-                type: File
 
   service:
     apiVersion: v1
