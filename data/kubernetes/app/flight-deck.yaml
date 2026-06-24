@@ -129,15 +129,18 @@ resources:
               imagePullPolicy: IfNotPresent
               workingDir: /app
               command:
-                - python3
-                - /app/server.py
-                - --host
-                - 0.0.0.0
-                - --port
-                - "%{alias('flight_deck_port')}"
-                - --board
-                - "%{lookup('flight_deck_board')}"
+                - /bin/sh
+                - -ceu
+                - |
+                  exec python3 /app/server.py \
+                    --host "$FLIGHT_DECK_HOST" \
+                    --port "$FLIGHT_DECK_PORT" \
+                    --board "$FLIGHT_DECK_BOARD"
               env:
+                - name: FLIGHT_DECK_HOST
+                  value: "0.0.0.0"
+                - name: FLIGHT_DECK_PORT
+                  value: "%{lookup('flight_deck_port')}"
                 - name: FLIGHT_DECK_BOARD
                   value: "%{lookup('flight_deck_board')}"
                 - name: FLIGHT_DECK_ENVIRONMENT
