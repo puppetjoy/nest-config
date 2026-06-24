@@ -14,6 +14,11 @@ flight_deck_environment: Dev
 flight_deck_port: 4173
 kanban_home_host_path: /home/joy/.hermes/kanban
 hermes_profile_host_path: /home/joy/.hermes/profiles
+flight_deck_participants_host_path: /home/joy/.hermes/flight-deck
+# Participant cache rows store avatar_path values under the host cache root, so
+# mount the directory at the same in-pod path instead of remapping it to /hermes.
+flight_deck_participants_mount_path: /home/joy/.hermes/flight-deck
+flight_deck_participants_path: /home/joy/.hermes/flight-deck/participants.json
 smoke_test_image: "%{lookup('config_registry')}/nest/stage1/server:latest"
 
 .affinity: &affinity
@@ -137,6 +142,8 @@ resources:
                   value: /home/joy/.hermes/profiles
                 - name: FLIGHT_DECK_PROFILE_MOUNT_ROOT
                   value: /hermes/profiles
+                - name: FLIGHT_DECK_PARTICIPANTS_PATH
+                  value: "%{lookup('flight_deck_participants_path')}"
               ports:
                 - name: http
                   containerPort: "%{alias('flight_deck_port')}"
@@ -171,6 +178,9 @@ resources:
                 - name: hermes-profile
                   mountPath: /hermes/profiles
                   readOnly: true
+                - name: flight-deck-participants
+                  mountPath: "%{lookup('flight_deck_participants_mount_path')}"
+                  readOnly: true
           volumes:
             - name: app-source
               emptyDir: {}
@@ -181,6 +191,10 @@ resources:
             - name: hermes-profile
               hostPath:
                 path: "%{lookup('hermes_profile_host_path')}"
+                type: Directory
+            - name: flight-deck-participants
+              hostPath:
+                path: "%{lookup('flight_deck_participants_host_path')}"
                 type: Directory
 
   service:
