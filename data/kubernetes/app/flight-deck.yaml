@@ -175,10 +175,8 @@ resources:
                   readOnly: true
                 - name: kanban-home
                   mountPath: /hermes/kanban
-                  readOnly: true
                 - name: hermes-profile
                   mountPath: /hermes/profiles/talon
-                  readOnly: true
           volumes:
             - name: app-source
               emptyDir: {}
