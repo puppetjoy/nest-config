@@ -1311,6 +1311,7 @@ def _compact_owner_checkout_review_result(data: dict[str, Any]) -> dict[str, Any
             "capture_mode": _bounded_checkout_scalar(data.get("capture_mode"), 80),
             "artifact_count": data.get("artifact_count"),
             "minimal_post_purchase_facts": _minimal_post_purchase_facts(post_purchase),
+            "shopping_order_tracking": data.get("shopping_order_tracking"),
             "retention": _bounded_checkout_scalar(data.get("retention"), 200),
             "safety_boundary": "Complete post-purchase confirmation/order-verification screenshots were sent only to Joy via the trusted Telegram path. This acknowledgement omits raw screenshots, file paths, DOM, cookies, storage, request headers, order numbers, and full address/payment/account/contact details.",
         }
@@ -1915,7 +1916,12 @@ def _gmail_order_email_observation(order: dict[str, Any]) -> dict[str, Any]:
     if isinstance(messages, list):
         for message in messages[:5]:
             if isinstance(message, dict):
-                snippets.extend(_bounded_checkout_list([message.get("snippet"), message.get("subject"), message.get("from")], 3))
+                # Keep only sanitized subject/snippet facts.  Sender addresses and raw Gmail
+                # metadata are unnecessary for matching and should not leak into ledger facts.
+                snippets.extend(_bounded_checkout_list([
+                    _sanitize_checkout_text(str(message.get("snippet") or ""))[:200],
+                    _sanitize_checkout_text(str(message.get("subject") or ""))[:200],
+                ], 3))
             else:
                 snippets.append(_sanitize_checkout_text(str(message))[:200])
     snippets = _bounded_checkout_list(snippets, 8)
@@ -2153,6 +2159,45 @@ def _order_entry_from_final_purchase_result(result: dict[str, Any], checkout_sum
         "source_refs": ["trusted_final_purchase_executor", "owner_post_purchase_proof" if proof else "post_purchase_proof_not_available"],
         "refresh_sources": ORDER_REFRESH_SOURCE_PRIORITY,
         "notes": "Created automatically by trusted final-purchase executor after a successful final purchase click.",
+    })
+
+
+
+def _order_entry_from_post_purchase_review_result(result: dict[str, Any]) -> dict[str, Any]:
+    post_purchase = result.get("post_purchase_review") if isinstance(result.get("post_purchase_review"), dict) else {}
+    post_purchase = post_purchase or (result.get("post_purchase") if isinstance(result.get("post_purchase"), dict) else {})
+    facts = _minimal_post_purchase_facts(post_purchase) if post_purchase else {}
+    item_candidates: list[str] = []
+    item_candidates.extend(_bounded_checkout_list(facts.get("item_clues"), 3))
+    item_candidates.extend(_bounded_checkout_list(facts.get("order_presence"), 3))
+    item_nickname = item_candidates[0] if item_candidates else "recent Amazon order"
+    delivery_facts = _bounded_checkout_list(facts.get("delivery_status"), 6)
+    presence_facts = _bounded_checkout_list(facts.get("order_presence"), 4)
+    status = _extract_order_status_from_facts(delivery_facts + presence_facts, "confirmed")
+    eta = _extract_order_eta_from_facts(delivery_facts, "")
+    material = {
+        "post_purchase_summary_binding": result.get("post_purchase_summary_binding") or post_purchase.get("post_purchase_summary_binding"),
+        "owner_visual_evidence_binding": result.get("owner_visual_evidence_binding"),
+        "review_id": result.get("review_id"),
+        "url": result.get("url"),
+        "item_nickname": item_nickname,
+    }
+    handle = "order-" + hashlib.sha256(json.dumps(material, sort_keys=True).encode("utf-8")).hexdigest()[:10]
+    return _upsert_order_entry({
+        "handle": handle,
+        "retailer": "amazon",
+        "item_nickname": item_nickname,
+        "item_category": "secure browser order",
+        "status": status,
+        "eta_window": eta,
+        "safe_delivery_facts": delivery_facts or presence_facts,
+        "post_purchase_summary_binding": result.get("post_purchase_summary_binding") or post_purchase.get("post_purchase_summary_binding"),
+        "owner_visual_evidence_binding": result.get("owner_visual_evidence_binding"),
+        "owner_review_id": result.get("review_id"),
+        "source_refs": ["owner_post_purchase_review"],
+        "refresh_sources": ORDER_REFRESH_SOURCE_PRIORITY,
+        "archive": False,
+        "notes": "Created automatically from owner-only post-purchase confirmation/order-verification review.",
     })
 
 
@@ -2670,7 +2715,8 @@ _STREET_ADDRESS_RE = re.compile(
     r"\b(?:\s+(?:apt|apartment|unit|suite|ste\.?|#)\s*[A-Za-z0-9-]+)?",
     re.IGNORECASE,
 )
-_UNIT_RE = re.compile(r"\b(?:apt|apartment|unit|suite|ste\.?|#)\s*[A-Za-z0-9-]+\b", re.IGNORECASE)
+_UNIT_RE = re.compile(r"\b(?:apt|apartment|unit|suite|ste\.?)\s*[A-Za-z0-9-]+\b", re.IGNORECASE)
+_STANDALONE_ZIP_RE = re.compile(r"(?<![#A-Za-z0-9])\d{5}(?:-\d{4})?\b")
 _LONG_PAYMENT_NUMBER_RE = re.compile(r"\b(?:\d[ -]?){5,}\d\b")
 _FULL_CARD_RE = re.compile(r"\b(?:\d[ -]?){12,18}\d\b")
 _PAYMENT_BRAND_RE = re.compile(r"\b(visa|mastercard|amex|american express|discover|gift card)\b", re.IGNORECASE)
@@ -2693,7 +2739,7 @@ def _sanitize_checkout_text(value: str) -> str:
     text = _STREET_ADDRESS_RE.sub("[street address redacted]", text)
     text = _UNIT_RE.sub("[address unit redacted]", text)
     text = _ZIP_RE.sub(r"\1 [zip redacted]", text)
-    text = re.sub(r"\b\d{5}(?:-\d{4})?\b", "[zip redacted]", text)
+    text = _STANDALONE_ZIP_RE.sub("[zip redacted]", text)
     return re.sub(r"\s{2,}", " ", text).strip()
 
 
@@ -4134,7 +4180,15 @@ def _owner_post_purchase_review_from_attached(browser: CdpSession, session_id: s
         "retention": "sensitive PNG artifacts were deleted locally after Telegram delivery" if not retain_local else "sensitive PNG artifacts retained locally with 0600 files under owner review directory",
         "safety_boundary": "Complete post-purchase screenshots were sent directly to Joy's configured Telegram destination and are not returned as MEDIA handles, file paths, raw DOM, cookies, storage, request headers, CDP endpoints, order numbers, or full address/payment/account/contact details to Star.",
     }
-    _audit("owner_post_purchase_review", {"review_id": review_id, "url": result["url"], "page_title": title, "post_purchase_summary_binding": binding, "owner_visual_evidence_binding": evidence_binding, "capture_mode": capture_mode, "artifact_count": artifact_count, "retained_local": retain_local})
+    try:
+        result["shopping_order_tracking"] = _order_entry_from_post_purchase_review_result(result)
+    except Exception as exc:
+        result["shopping_order_tracking"] = {
+            "status": "ledger_entry_failed",
+            "message": str(exc)[:500],
+            "safety_boundary": "Post-purchase owner proof was captured; order-ledger ingestion failed without exposing raw order/address/payment/browser evidence to Star.",
+        }
+    _audit("owner_post_purchase_review", {"review_id": review_id, "url": result["url"], "page_title": title, "post_purchase_summary_binding": binding, "owner_visual_evidence_binding": evidence_binding, "capture_mode": capture_mode, "artifact_count": artifact_count, "retained_local": retain_local, "order_tracking_status": (result.get("shopping_order_tracking") or {}).get("status")})
     return _compact_owner_checkout_review_result(result)
 
 
