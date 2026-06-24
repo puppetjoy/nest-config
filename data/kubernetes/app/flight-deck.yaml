@@ -7,13 +7,11 @@ cert_issuer_kind: ClusterIssuer
 ingress_class: contour-compute
 node_role: compute
 flight_deck_image: "%{lookup('registry')}/nest/stage1/server:latest"
-flight_deck_repo: git@gitlab.joyfullee.me:nest/flight-deck.git
-flight_deck_ref_name: talon/interactive-flight-deck-polish
-flight_deck_commit: 1bf2a59f87cb426d7cc1272ef0b1ad56673f7fff
+flight_deck_repo: https://gitlab.joyfullee.me/nest/flight-deck.git
+flight_deck_ref_name: main
 flight_deck_board: agent-requests-dev
 flight_deck_environment: Dev
 flight_deck_port: 4173
-flight_deck_source_host_path: /home/joy/projects/nest/flight-deck
 kanban_home_host_path: /home/joy/.hermes/kanban
 hermes_profile_host_path: /home/joy/.hermes/profiles/talon
 smoke_test_image: "%{lookup('config_registry')}/nest/stage1/server:latest"
@@ -63,7 +61,6 @@ resources:
       annotations:
         joyfullee.me/source-repo: "%{lookup('flight_deck_repo')}"
         joyfullee.me/source-ref: "%{lookup('flight_deck_ref_name')}"
-        joyfullee.me/source-commit: "%{lookup('flight_deck_commit')}"
         joyfullee.me/board: "%{lookup('flight_deck_board')}"
         joyfullee.me/read-only: 'true'
     spec:
@@ -81,7 +78,6 @@ resources:
           annotations:
             joyfullee.me/source-repo: "%{lookup('flight_deck_repo')}"
             joyfullee.me/source-ref: "%{lookup('flight_deck_ref_name')}"
-            joyfullee.me/source-commit: "%{lookup('flight_deck_commit')}"
             joyfullee.me/board: "%{lookup('flight_deck_board')}"
             joyfullee.me/environment: "%{lookup('flight_deck_environment')}"
             joyfullee.me/read-only: 'true'
@@ -99,23 +95,16 @@ resources:
                 - -ceu
                 - |
                   rm -rf /work/flight-deck
-                  mkdir -p /work/flight-deck
-                  git -C /source/flight-deck cat-file -e "$FLIGHT_DECK_COMMIT^{commit}"
-                  git -C /source/flight-deck archive --format=tar "$FLIGHT_DECK_COMMIT" | tar -C /work/flight-deck -xf -
-                  printf '%s\n' "$FLIGHT_DECK_COMMIT" > /work/flight-deck/.flight-deck-source-revision
+                  git clone --depth 1 --branch "$FLIGHT_DECK_REF_NAME" "$FLIGHT_DECK_REPO" /work/flight-deck
+                  git -C /work/flight-deck rev-parse HEAD > /work/flight-deck/.flight-deck-source-revision
               env:
                 - name: FLIGHT_DECK_REPO
                   value: "%{lookup('flight_deck_repo')}"
                 - name: FLIGHT_DECK_REF_NAME
                   value: "%{lookup('flight_deck_ref_name')}"
-                - name: FLIGHT_DECK_COMMIT
-                  value: "%{lookup('flight_deck_commit')}"
               volumeMounts:
                 - name: app-source
                   mountPath: /work
-                - name: flight-deck-source
-                  mountPath: /source/flight-deck
-                  readOnly: true
           containers:
             - name: flight-deck
               image: "%{lookup('flight_deck_image')}"
@@ -180,10 +169,6 @@ resources:
           volumes:
             - name: app-source
               emptyDir: {}
-            - name: flight-deck-source
-              hostPath:
-                path: "%{lookup('flight_deck_source_host_path')}"
-                type: Directory
             - name: kanban-home
               hostPath:
                 path: "%{lookup('kanban_home_host_path')}"

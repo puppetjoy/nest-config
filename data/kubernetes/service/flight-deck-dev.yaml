@@ -3,5 +3,4 @@
 service_name: flight-deck-dev
 flight_deck_board: agent-requests-dev
 flight_deck_environment: Dev
-flight_deck_ref_name: talon/interactive-flight-deck-polish
-flight_deck_commit: 1bf2a59f87cb426d7cc1272ef0b1ad56673f7fff
+flight_deck_ref_name: main
