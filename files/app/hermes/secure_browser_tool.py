@@ -1,10 +1,10 @@
-"""Broad shopping browser bridge for Star.
+"""Broad secure browser bridge for Star.
 
 This custom Hermes toolset exposes browser-like control of the Puppet/KubeCM
-managed Kasm shopping browser while keeping the raw Chrome DevTools endpoint,
+managed Kasm secure browser while keeping the raw Chrome DevTools endpoint,
 cookies, local storage, request headers, downloads, and credential material out
 of model-visible tool results.  Screenshots are scoped to the persistent
-shopping browser viewport and returned only as local media artifacts.  Policy
+secure browser viewport and returned only as local media artifacts.  Policy
 lives in the tool descriptions, bounded argument schemas, lightweight runtime
 guardrails, and a high-level audit log rather than in one-off helpers for every
 shopping action.
@@ -33,25 +33,25 @@ from urllib.request import Request, urlopen
 import websockets.sync.client
 from tools.registry import registry
 
-TOOLSET = "shopping_browser"
-NAMESPACE = os.environ.get("SHOPPING_BROWSER_NAMESPACE", "ai")
-WORKLOAD = os.environ.get("SHOPPING_BROWSER_WORKLOAD", "deployment/secure-browser")
-REMOTE_DEBUG_PORT = int(os.environ.get("SHOPPING_BROWSER_CDP_PORT", "9222"))
-CDP_ENDPOINT_URL = os.environ.get("SHOPPING_BROWSER_CDP_URL", "").rstrip("/")
-BROWSER_OWNER = os.environ.get("SHOPPING_BROWSER_OWNER", "shopping")
+TOOLSET = "secure_browser"
+NAMESPACE = os.environ.get("SECURE_BROWSER_NAMESPACE", "ai")
+WORKLOAD = os.environ.get("SECURE_BROWSER_WORKLOAD", "deployment/secure-browser")
+REMOTE_DEBUG_PORT = int(os.environ.get("SECURE_BROWSER_CDP_PORT", "9222"))
+CDP_ENDPOINT_URL = os.environ.get("SECURE_BROWSER_CDP_URL", "").rstrip("/")
+BROWSER_OWNER = os.environ.get("SECURE_BROWSER_OWNER", "shopping")
 OWNERSHIP_STATE_PATH = os.environ.get("SECURE_BROWSER_OWNERSHIP_STATE", os.path.expanduser("~/.hermes/secure-browser-tabs.json"))
-BROWSER_DISPLAY = os.environ.get("SHOPPING_BROWSER_DISPLAY", ":1")
-XWD_TIMEOUT_SECONDS = float(os.environ.get("SHOPPING_BROWSER_XWD_TIMEOUT_SECONDS", "15"))
+BROWSER_DISPLAY = os.environ.get("SECURE_BROWSER_DISPLAY", ":1")
+XWD_TIMEOUT_SECONDS = float(os.environ.get("SECURE_BROWSER_XWD_TIMEOUT_SECONDS", "15"))
 MAX_RESULT_CHARS = 16000
 MAX_TEXT_CHARS = 12000
 MAX_LINKS = 80
 MAX_QUERY_RESULT_CHARS = 8000
 MAX_TYPE_CHARS = 2000
-SCREENSHOT_DIR = os.environ.get("SHOPPING_BROWSER_SCREENSHOT_DIR", os.path.expanduser("~/.hermes/profiles/star/shopping-browser-screenshots"))
-OWNER_CHECKOUT_REVIEW_DIR = os.environ.get("SHOPPING_BROWSER_OWNER_REVIEW_DIR", os.path.expanduser("~/.hermes/profiles/star/shopping-browser-owner-checkout-reviews"))
-AUDIT_LOG = os.environ.get("SHOPPING_BROWSER_AUDIT_LOG", os.path.expanduser("~/.hermes/profiles/star/shopping-browser-audit.log"))
-FINAL_PURCHASE_STATE_PATH = os.environ.get("SHOPPING_BROWSER_FINAL_PURCHASE_STATE", os.path.expanduser("~/.hermes/profiles/star/shopping-browser-final-purchase-approvals.json"))
-SHOPPING_ORDER_LEDGER_PATH = os.environ.get("SHOPPING_ORDER_LEDGER_PATH", os.path.expanduser("~/.hermes/profiles/star/shopping-order-ledger.sqlite3"))
+SCREENSHOT_DIR = os.environ.get("SECURE_BROWSER_SCREENSHOT_DIR", os.path.expanduser("~/.hermes/profiles/star/secure-browser-screenshots"))
+OWNER_CHECKOUT_REVIEW_DIR = os.environ.get("SECURE_BROWSER_OWNER_REVIEW_DIR", os.path.expanduser("~/.hermes/profiles/star/secure-browser-owner-checkout-reviews"))
+AUDIT_LOG = os.environ.get("SECURE_BROWSER_AUDIT_LOG", os.path.expanduser("~/.hermes/profiles/star/secure-browser-audit.log"))
+FINAL_PURCHASE_STATE_PATH = os.environ.get("SECURE_BROWSER_FINAL_PURCHASE_STATE", os.path.expanduser("~/.hermes/profiles/star/secure-browser-final-purchase-approvals.json"))
+SECURE_BROWSER_ORDER_LEDGER_PATH = os.environ.get("SECURE_BROWSER_ORDER_LEDGER_PATH", os.path.expanduser("~/.hermes/profiles/star/secure-browser-order-ledger.sqlite3"))
 MAX_PRODUCT_IMAGES = 6
 DEFAULT_MAX_REVIEWS = 5
 MAX_REVIEWS = 10
@@ -736,7 +736,7 @@ CHECKOUT_PREP_CONTROLS_JS = r"""
 (() => {
   const maxControls = __MAX_CONTROLS__;
   const clean = (value) => (value || '').replace(/\s+/g, ' ').trim();
-  document.querySelectorAll('[data-shopping-browser-checkout-control]').forEach((node) => node.removeAttribute('data-shopping-browser-checkout-control'));
+  document.querySelectorAll('[data-secure-browser-checkout-control]').forEach((node) => node.removeAttribute('data-secure-browser-checkout-control'));
   const redact = (value) => clean(value)
     .replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g, '[email redacted]')
     .replace(/\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/g, '[phone redacted]')
@@ -848,8 +848,8 @@ CHECKOUT_PREP_CONTROLS_JS = r"""
       continue;
     }
     const safeControlId = `sb-checkout-${controls.length + 1}`;
-    el.setAttribute('data-shopping-browser-checkout-control', safeControlId);
-    const selector = `[data-shopping-browser-checkout-control="${safeControlId}"]`;
+    el.setAttribute('data-secure-browser-checkout-control', safeControlId);
+    const selector = `[data-secure-browser-checkout-control="${safeControlId}"]`;
     if (!selector || seen.has(selector)) continue;
     seen.add(selector);
     const rect = el.getBoundingClientRect();
@@ -1010,11 +1010,11 @@ CHECKOUT_SCREENSHOT_REDACTION_JS = r"""
   const sensitiveLabel = /(ship\s+to|deliver\s+to|delivery\s+address|shipping\s+address|billing\s+address|payment\s+method|wallet|card|visa|mastercard|amex|american express|discover|gift\s+card|claim\s+code|promo(?:tion)?\s+code|order\s*(?:#|number|no\.?|id)|confirmation\s*(?:#|number|no\.?|id)|email|phone|security\s+code|captcha|verification|passcode|password|passkey|cvv|cvc)/i;
   const sensitiveValue = /([\w.+-]+@[\w.-]+\.[A-Za-z]{2,}|\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b|\b(?:order|confirmation)\s*(?:#|number|no\.?|id)?\s*[:#-]?\s*[A-Z0-9-]{6,}\b|\b\d{1,6}\s+[^\n,]{2,60}\b\s+(?:Apt|Apartment|Unit|Ste|Suite|Road|Rd|Street|St|Avenue|Ave|Lane|Ln|Drive|Dr|Court|Ct|Way|Blvd|Boulevard)\b|\b[A-Z]{2}\s+\d{5}(?:-\d{4})?\b|\b(?:\d[ -]*?){12,19}\b)/i;
   const keepFinalPurchase = /(place\s+(your\s+)?order|submit\s+order|complete\s+purchase|buy\s+now)/i;
-  document.querySelectorAll('[data-shopping-browser-redaction="checkout-prep"]').forEach((node) => node.remove());
+  document.querySelectorAll('[data-secure-browser-redaction="checkout-prep"]').forEach((node) => node.remove());
   const candidates = new Set();
   const addCandidate = (node) => {
     if (!node || node.nodeType !== Node.ELEMENT_NODE) return;
-    if (node.closest('[data-shopping-browser-redaction="checkout-prep"]')) return;
+    if (node.closest('[data-secure-browser-redaction="checkout-prep"]')) return;
     const text = clean(node.innerText || node.textContent || node.getAttribute('aria-label') || node.value || '');
     if (keepFinalPurchase.test(text)) return;
     candidates.add(node);
@@ -1046,7 +1046,7 @@ CHECKOUT_SCREENSHOT_REDACTION_JS = r"""
     if (!rect || rect.width < 4 || rect.height < 4) return;
     if (rect.bottom <= 0 || rect.right <= 0 || rect.top >= viewportHeight || rect.left >= viewportWidth) return;
     const overlay = document.createElement('div');
-    overlay.setAttribute('data-shopping-browser-redaction', 'checkout-prep');
+    overlay.setAttribute('data-secure-browser-redaction', 'checkout-prep');
     overlay.textContent = 'redacted';
     Object.assign(overlay.style, {
       position: 'fixed',
@@ -1077,7 +1077,7 @@ CHECKOUT_SCREENSHOT_REDACTION_JS = r"""
 
 CHECKOUT_SCREENSHOT_REDACTION_CLEANUP_JS = r"""
 (() => {
-  const nodes = Array.from(document.querySelectorAll('[data-shopping-browser-redaction="checkout-prep"]'));
+  const nodes = Array.from(document.querySelectorAll('[data-secure-browser-redaction="checkout-prep"]'));
   nodes.forEach((node) => node.remove());
   return {removed: nodes.length};
 })()
@@ -1127,7 +1127,7 @@ VISUAL_REGIONS_JS = r"""
   const seen = new Set();
   const add = (category, node, label) => {
     if (!node || node.nodeType !== Node.ELEMENT_NODE) return;
-    if (node.closest('[data-shopping-browser-redaction="checkout-prep"]')) return;
+    if (node.closest('[data-secure-browser-redaction="checkout-prep"]')) return;
     const rect = node.getBoundingClientRect();
     if (!rect || rect.width < 8 || rect.height < 8) return;
     if (rect.bottom + window.scrollY < 0 || rect.right + window.scrollX < 0) return;
@@ -1351,7 +1351,7 @@ def _json(data: dict[str, Any]) -> str:
         return payload
     return json.dumps({
         "error": "RESULT_TOO_LARGE",
-        "message": "Sanitized result exceeded the shopping browser tool result budget after compaction.",
+        "message": "Sanitized result exceeded the secure browser tool result budget after compaction.",
         "operation": data.get("operation"),
         "result_truncated": True,
     }, ensure_ascii=False, sort_keys=True)
@@ -1396,7 +1396,7 @@ SAFE_ORDER_STATUS_RANK = {
 
 
 def _order_ledger_path() -> str:
-    return os.path.expanduser(SHOPPING_ORDER_LEDGER_PATH)
+    return os.path.expanduser(SECURE_BROWSER_ORDER_LEDGER_PATH)
 
 
 def _utc_now() -> str:
@@ -1684,7 +1684,7 @@ def _list_orders(include_archived: bool = False, status: str = "") -> dict[str, 
         "status": "ok",
         "orders": orders,
         "active_count": sum(1 for order in orders if order["status"] in ORDER_STATUSES_ACTIVE and not order["archived"]),
-        "ledger_path_hint": "profile-local shopping-order ledger",
+        "ledger_path_hint": "profile-local secure-browser-order ledger",
     }
 
 
@@ -1798,7 +1798,7 @@ def _refresh_plan() -> dict[str, Any]:
                 "status": order["status"],
                 "eta_window": order["eta_window"],
                 "refresh_sources": order["refresh_sources"] or ORDER_REFRESH_SOURCE_PRIORITY,
-                "next_step": "Check Amazon Your Orders through the secure shopping browser/post-purchase evidence path first; fall back to read-only Gmail order/shipment emails; try carrier pages only when bot-accessible and treat UPS/bot blocking as non-fatal.",
+                "next_step": "Check Amazon Your Orders through the secure browser/post-purchase evidence path first; fall back to read-only Gmail order/shipment emails; try carrier pages only when bot-accessible and treat UPS/bot blocking as non-fatal.",
             })
     return {
         "operation": "shopping_order_refresh_plan",
@@ -1806,7 +1806,7 @@ def _refresh_plan() -> dict[str, Any]:
         "due_orders": due,
         "scheduled_refresh_spec": {
             "cadence": "every 6h while active, with extra day-of/out-for-delivery checks when source facts expose them",
-            "primary_source": "Amazon Your Orders via secure shopping browser owner/post-purchase evidence path",
+            "primary_source": "Amazon Your Orders via secure browser owner/post-purchase evidence path",
             "fallback_source": "read-only Gmail order/shipment messages",
             "opportunistic_source": "carrier pages only when bot-accessible; UPS bot blocking is non-fatal",
             "notification_policy": "notify initial confirmation/ETA, material ETA/status changes, day-of/out-for-delivery/delivered; suppress no-change repeats",
@@ -2140,7 +2140,7 @@ def _order_entry_from_final_purchase_result(result: dict[str, Any], checkout_sum
         "handle": handle,
         "retailer": "amazon",
         "item_nickname": item_nickname,
-        "item_category": "shopping order",
+        "item_category": "secure browser order",
         "status": "confirmed" if proof else "pending_confirmation",
         "eta_window": eta,
         "safe_delivery_facts": delivery_facts,
@@ -2280,9 +2280,9 @@ def _submit_final_purchase_approval_request(summary: dict[str, Any], material_su
         raise RuntimeError(f"Agent Request tool bridge is unavailable: {exc}") from exc
 
     request_body = (
-        "Trusted final-purchase execution request for the Star shopping browser. "
+        "Trusted final-purchase execution request for the Star secure browser. "
         "Do not perform shopping research or checkout-prep. After Joy approves the bound proposal, "
-        "execute exactly one final Place Order action through shopping_browser_execute_final_purchase, "
+        "execute exactly one final Place Order action through secure_browser_execute_final_purchase, "
         "and only if the live checkout material_summary_binding and owner_visual_evidence_binding still match."
     )
     context = "\n".join([
@@ -2312,7 +2312,7 @@ def _submit_final_purchase_approval_request(summary: dict[str, Any], material_su
             raise RuntimeError("Agent Request submission did not return a request_id or request.id")
 
         proposal_text = "\n".join([
-            "Approve exactly one final Amazon Place Order action for the current Star shopping-browser checkout.",
+            "Approve exactly one final Amazon Place Order action for the current Star secure-browser checkout.",
             f"Bound material_summary_binding: {material_summary_binding}",
             f"Bound owner_visual_evidence_binding: {owner_visual_evidence_binding}",
             f"Owner checkout review id: {owner_review_id or 'not supplied'}",
@@ -2411,7 +2411,7 @@ def _request_final_purchase_approval(material_summary_binding: str, owner_visual
             "owner_visual_evidence_binding": evidence_binding,
             "owner_review_id": owner_review_id,
             "minimal_order_facts": _minimal_owner_checkout_facts(summary),
-            "safety_boundary": "Joy approval is requested through the trusted Agent Request Telegram action path. Final purchase remains blocked until that exact proposal is approved, then shopping_browser_execute_final_purchase must revalidate the live material summary and consume the approval exactly once.",
+            "safety_boundary": "Joy approval is requested through the trusted Agent Request Telegram action path. Final purchase remains blocked until that exact proposal is approved, then secure_browser_execute_final_purchase must revalidate the live material summary and consume the approval exactly once.",
         }
         if result_status == "approval_requested":
             response["agent_request"] = ar_result["proposal_result"].get("request") or ar_result["submit_result"].get("request")
@@ -2523,9 +2523,9 @@ def _safe_browser_url(value: str) -> str:
     candidate = str(value or "").strip()
     parsed = urlparse(candidate)
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
-        raise ValueError("shopping browser navigation only accepts http(s) URLs")
+        raise ValueError("secure browser navigation only accepts http(s) URLs")
     if parsed.scheme != "https" and not parsed.hostname in ("localhost", "127.0.0.1"):
-        raise ValueError("shopping browser navigation requires https except localhost")
+        raise ValueError("secure browser navigation requires https except localhost")
     if FINAL_PURCHASE_RE.search(candidate) or re.search(r"\bcheckout\b|/checkout|/buy/|/gp/buy(?:/|$)", candidate, re.IGNORECASE):
         raise ValueError("URL appears to target checkout, Buy Now, Place Order, or other final-purchase scope")
     if HUMAN_TAKEOVER_URL_RE.search(candidate):
@@ -2644,7 +2644,7 @@ def _checkout_query_summary_response(checkout_review: dict[str, Any], expression
         },
     }
     result["query_boundary"] = (
-        "Generic shopping_browser_query is restricted on checkout/order-review pages. "
+        "Generic secure_browser_query is restricted on checkout/order-review pages. "
         "The requested JavaScript was not returned directly; this result contains only the sanitized checkout-prep summary and non-secret controls. "
         "Ask for a specific checkout-control category such as payment/gift-card controls to receive a compact filtered control list."
     )
@@ -2944,7 +2944,7 @@ def _sanitize_checkout_summary(summary: dict[str, Any], safety: dict[str, Any], 
         "final_purchase_controls_visible": final_purchase_controls,
         "checkout_prep_safe_control_count": len(checkout_prep_controls),
         "sensitive_controls_suppressed_count": int(controls.get("sensitive_controls_suppressed_count") or 0),
-        "final_purchase_policy": "Final Buy Now, Place Order, or equivalent order-submission controls are blocked and must not be clicked through ordinary shopping_browser tools.",
+        "final_purchase_policy": "Final Buy Now, Place Order, or equivalent order-submission controls are blocked and must not be clicked through ordinary secure_browser tools.",
     }
     if safety.get("blocked_reason"):
         blocked_metadata["human_takeover_reason"] = _sanitize_checkout_text(str(safety.get("blocked_reason") or ""))
@@ -3132,7 +3132,7 @@ def _assert_checkout_click_allowed(metadata: dict[str, Any], effect: str, reason
     control_text = _checkout_metadata_text(metadata)
     control_identity_text = _checkout_control_identity_text(metadata)
     if FINAL_PURCHASE_RE.search(control_identity_text):
-        raise ValueError("final purchase controls cannot be clicked by shopping_browser_click; use the trusted Telegram approval path")
+        raise ValueError("final purchase controls cannot be clicked by secure_browser_click; use the trusted Telegram approval path")
     if effect == "checkout_prep":
         if not CART_URL_RE.search(parsed.path):
             raise ValueError("checkout_prep clicks must start from an Amazon cart page")
@@ -3161,7 +3161,7 @@ def _assert_checkout_type_allowed(metadata: dict[str, Any], effect: str, reason:
         raise ValueError("matched checkout field is hidden or sensitive; Joy must take over")
     control_text = _checkout_metadata_text(metadata)
     if FINAL_PURCHASE_RE.search(_checkout_control_identity_text(metadata)):
-        raise ValueError("final purchase controls cannot be modified by shopping_browser_type; use the trusted Telegram approval path")
+        raise ValueError("final purchase controls cannot be modified by secure_browser_type; use the trusted Telegram approval path")
     _assert_checkout_page(metadata, effect)
     _assert_checkout_control_not_sensitive(control_text)
     if SENSITIVE_FIELD_RE.search(control_text) and not SAFE_CHECKOUT_SENSITIVE_LABEL_RE.search(control_text):
@@ -3177,7 +3177,7 @@ def _checkout_summary_from_browser(browser: CdpSession, session_id: str, max_con
     controls = _evaluate(browser, session_id, controls_expr) or {}
     return _sanitize_checkout_summary(summary, safety, controls)
 
-def _check_shopping_browser() -> bool:
+def _check_secure_browser() -> bool:
     return bool(CDP_ENDPOINT_URL) or shutil.which("kubectl") is not None
 
 
@@ -3221,7 +3221,7 @@ def _sanitize_product_image_url(value: str) -> str | None:
 def _safe_screenshot_path() -> str:
     os.makedirs(SCREENSHOT_DIR, mode=0o700, exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    return os.path.join(SCREENSHOT_DIR, f"shopping-browser-{stamp}-{os.getpid()}.png")
+    return os.path.join(SCREENSHOT_DIR, f"secure-browser-{stamp}-{os.getpid()}.png")
 
 
 def _screenshot_policy(url: str, title: str) -> dict[str, Any]:
@@ -3254,7 +3254,7 @@ def _safe_owner_review_path(name: Any) -> str:
     os.makedirs(OWNER_CHECKOUT_REVIEW_DIR, mode=0o700, exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     stem = _safe_artifact_stem(name, "owner-checkout-review")
-    return os.path.join(OWNER_CHECKOUT_REVIEW_DIR, f"shopping-browser-{stamp}-{os.getpid()}-{stem}.png")
+    return os.path.join(OWNER_CHECKOUT_REVIEW_DIR, f"secure-browser-{stamp}-{os.getpid()}-{stem}.png")
 
 
 def _profile_env_candidates() -> list[str]:
@@ -3305,20 +3305,20 @@ def _env_or_dotenv(key: str) -> str:
 
 
 def _telegram_owner_destination() -> tuple[str, str | None]:
-    target = _env_or_dotenv("SHOPPING_BROWSER_OWNER_TELEGRAM_CHAT") or _env_or_dotenv("TELEGRAM_HOME_CHANNEL")
+    target = _env_or_dotenv("SECURE_BROWSER_OWNER_TELEGRAM_CHAT") or _env_or_dotenv("TELEGRAM_HOME_CHANNEL")
     target = target.strip()
     if not target:
-        raise RuntimeError("owner-only checkout review requires TELEGRAM_HOME_CHANNEL or SHOPPING_BROWSER_OWNER_TELEGRAM_CHAT")
+        raise RuntimeError("owner-only checkout review requires TELEGRAM_HOME_CHANNEL or SECURE_BROWSER_OWNER_TELEGRAM_CHAT")
     if target.startswith("telegram:"):
         target = target.split(":", 1)[1]
-    thread_id = _env_or_dotenv("SHOPPING_BROWSER_OWNER_TELEGRAM_THREAD")
+    thread_id = _env_or_dotenv("SECURE_BROWSER_OWNER_TELEGRAM_THREAD")
     if not thread_id and target.count(":") == 1 and target.split(":", 1)[0].lstrip("-").isdigit():
         target, thread_id = target.split(":", 1)
     return target, (thread_id or None)
 
 
 def _multipart_request(fields: dict[str, str], files: dict[str, tuple[str, bytes, str]]) -> tuple[bytes, str]:
-    boundary = f"shopping-browser-{os.getpid()}-{int(time.time() * 1000)}"
+    boundary = f"secure-browser-{os.getpid()}-{int(time.time() * 1000)}"
     chunks: list[bytes] = []
     for key, value in fields.items():
         chunks.append(f"--{boundary}\r\n".encode("utf-8"))
@@ -3368,7 +3368,7 @@ def _safe_visual_path(name: Any, suffix: str = ".png") -> str:
     os.makedirs(SCREENSHOT_DIR, mode=0o700, exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     stem = _safe_artifact_stem(name, "visual-evidence")
-    return os.path.join(SCREENSHOT_DIR, f"shopping-browser-{stamp}-{os.getpid()}-{stem}{suffix}")
+    return os.path.join(SCREENSHOT_DIR, f"secure-browser-{stamp}-{os.getpid()}-{stem}{suffix}")
 
 
 def _png_dimensions(path: str) -> tuple[int, int]:
@@ -3410,7 +3410,7 @@ def _bounded_crop_rect(rect: dict[str, Any], image_width: int, image_height: int
 
 def _crop_png(source_path: str, output_path: str, crop: dict[str, int], highlight: bool) -> None:
     if shutil.which("ffmpeg") is None:
-        raise RuntimeError("ffmpeg is required for shopping browser crop generation")
+        raise RuntimeError("ffmpeg is required for secure browser crop generation")
     crop_filter = f"crop={crop['width']}:{crop['height']}:{crop['x']}:{crop['y']}"
     filters = [crop_filter]
     if highlight:
@@ -3627,7 +3627,7 @@ def _reject_unsafe_operation(operation: str) -> dict[str, Any]:
             "operation": op,
             "approval_required": False,
             "boundary": "trusted_assistant_browsing_sanitized",
-            "message": "Allowed for ordinary shopping/account research, including Amazon order history and Buy Again pages. Outputs are sanitized; Star must pause for login, Bitwarden, passkeys, 2FA/CAPTCHA, suspicious security prompts, payment/address/account edits, and final purchase submission.",
+            "message": "Allowed for ordinary shopping, account research, including Amazon order history and Buy Again pages. Outputs are sanitized; Star must pause for login, Bitwarden, passkeys, 2FA/CAPTCHA, suspicious security prompts, payment/address/account edits, and final purchase submission.",
         }
     if op == "checkout":
         return {
@@ -3635,7 +3635,7 @@ def _reject_unsafe_operation(operation: str) -> dict[str, Any]:
             "operation": op,
             "approval_required": False,
             "boundary": "checkout_prep_only",
-            "message": "Checkout prep is allowed under Joy's live supervision only through broad shopping-browser clicks with approved_effect='checkout_prep', 'select_shipping_option', or 'apply_checkout_option'. Star must pause for login, Bitwarden, passkeys, 2FA, CAPTCHA, suspicious security prompts, payment/address/account edits, or sensitive-information prompts. Final Buy Now/Place Order remains blocked.",
+            "message": "Checkout prep is allowed under Joy's live supervision only through broad secure-browser clicks with approved_effect='checkout_prep', 'select_shipping_option', or 'apply_checkout_option'. Star must pause for login, Bitwarden, passkeys, 2FA, CAPTCHA, suspicious security prompts, payment/address/account edits, or sensitive-information prompts. Final Buy Now/Place Order remains blocked.",
         }
     if op in ("checkout_prep", "select_shipping_option", "apply_checkout_option"):
         return {
@@ -3643,14 +3643,14 @@ def _reject_unsafe_operation(operation: str) -> dict[str, Any]:
             "operation": op,
             "approval_required": False,
             "boundary": "supervised_checkout_prep",
-            "message": "Allowed only as an audited broad shopping_browser_click approved_effect on visible Amazon checkout-prep controls. Final order submission and sensitive account/payment/address/login scopes are refused.",
+            "message": "Allowed only as an audited broad secure_browser_click approved_effect on visible Amazon checkout-prep controls. Final order submission and sensitive account/payment/address/login scopes are refused.",
         }
     if op == "remove_from_cart":
         return {
             "allowed": True,
             "operation": op,
             "approval_required": True,
-            "message": "Allowed only through shopping_browser_click with approved_effect='remove_from_cart', a human-readable reason/approval reference, and a visible Delete/Remove cart line-item control on an Amazon cart page.",
+            "message": "Allowed only through secure_browser_click with approved_effect='remove_from_cart', a human-readable reason/approval reference, and a visible Delete/Remove cart line-item control on an Amazon cart page.",
         }
     if op in ("request_final_purchase_approval", "final_purchase_approval"):
         return {
@@ -3693,7 +3693,7 @@ class CdpBridge:
 
     def __enter__(self) -> str:
         if self.cdp_url:
-            self._wait_for_endpoint(self.cdp_url, "shopping browser CDP endpoint")
+            self._wait_for_endpoint(self.cdp_url, "secure browser CDP endpoint")
             return self.cdp_url
 
         cmd = [
@@ -3710,7 +3710,7 @@ class CdpBridge:
         env.setdefault("HOME", "/home/joy")
         self.process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
         self.cdp_url = f"http://127.0.0.1:{self.local_port}"
-        self._wait_for_endpoint(self.cdp_url, "shopping browser CDP bridge")
+        self._wait_for_endpoint(self.cdp_url, "secure browser CDP bridge")
         return self.cdp_url
 
     def _wait_for_endpoint(self, cdp_url: str, label: str) -> None:
@@ -3772,7 +3772,7 @@ def _browser_ws_url(cdp_url: str) -> str:
         version = json.loads(response.read().decode("utf-8"))
     url = str(version.get("webSocketDebuggerUrl") or "")
     if not url:
-        raise RuntimeError("shopping browser CDP endpoint did not report a browser websocket")
+        raise RuntimeError("secure browser CDP endpoint did not report a browser websocket")
     endpoint = urlparse(cdp_url)
     parsed = urlparse(url)
     scheme = "wss" if endpoint.scheme == "https" else "ws"
@@ -3951,7 +3951,7 @@ def _query(expression: str) -> dict[str, Any]:
             checkout_review = _checkout_summary_from_browser(browser, session_id)
             return _checkout_query_summary_response(checkout_review, safe_expression, url=url, title=title)
         if _is_checkoutish_page(url, title):
-            raise ValueError("generic shopping_browser_query is unavailable on checkout/order-review pages outside the Amazon checkout-prep sanitizer boundary")
+            raise ValueError("generic secure_browser_query is unavailable on checkout/order-review pages outside the Amazon checkout-prep sanitizer boundary")
         value = _sanitize_shopping_value(_evaluate(browser, session_id, wrapped))
         payload = json.dumps(value, ensure_ascii=False, sort_keys=True)
         if len(payload) > MAX_QUERY_RESULT_CHARS:
@@ -3985,7 +3985,7 @@ def _screenshot(full_page: bool = False) -> dict[str, Any]:
             captured = browser.call("Page.captureScreenshot", params, session_id=session_id)
             encoded = str(captured.get("data") or "")
             if not encoded:
-                raise RuntimeError("shopping browser did not return screenshot data")
+                raise RuntimeError("secure browser did not return screenshot data")
             png_data = base64.b64decode(encoded, validate=True)
         except Exception as exc:
             # Amazon can leave the page target unresponsive to Page/Runtime CDP
@@ -4013,7 +4013,7 @@ def _screenshot(full_page: bool = False) -> dict[str, Any]:
             "full_page": bool(full_page) and capture_method == "cdp" and not policy["redaction_required"],
             "capture_method": capture_method,
             "screenshot_mode": policy["mode"],
-            "safety_boundary": "Captured only the persistent shopping browser page as a local PNG artifact. No raw CDP endpoint, cookies, local storage, request headers, vault contents, passwords, passkeys, 2FA/CAPTCHA data, or account/payment/address secrets were returned as structured text.",
+            "safety_boundary": "Captured only the persistent secure browser page as a local PNG artifact. No raw CDP endpoint, cookies, local storage, request headers, vault contents, passwords, passkeys, 2FA/CAPTCHA data, or account/payment/address secrets were returned as structured text.",
         }
         if policy["redaction_required"]:
             result["redaction"] = {
@@ -4046,7 +4046,7 @@ def _capture_cdp_png(browser: CdpSession, session_id: str, full_page: bool) -> b
     captured = browser.call("Page.captureScreenshot", params, session_id=session_id)
     encoded = str(captured.get("data") or "")
     if not encoded:
-        raise RuntimeError("shopping browser did not return screenshot data")
+        raise RuntimeError("secure browser did not return screenshot data")
     return base64.b64decode(encoded, validate=True)
 
 
@@ -4338,7 +4338,7 @@ def _visual_evidence(full_page: bool, include_full_page: bool, crops: list[Any])
             "redaction": screenshot.get("redaction"),
             "checkout_review": screenshot.get("checkout_review"),
             "material_summary_binding": screenshot.get("material_summary_binding"),
-            "safety_boundary": "Full-page/viewport image artifacts and crops are local PNGs from the shopping browser only. Suggested regions expose sanitized labels, selectors, and bounding boxes, not raw DOM/HTML, cookies, local storage, request headers, CDP endpoints, credentials, or browser internals. Checkout-prep evidence is redacted and downgraded to viewport capture when necessary.",
+            "safety_boundary": "Full-page/viewport image artifacts and crops are local PNGs from the secure browser only. Suggested regions expose sanitized labels, selectors, and bounding boxes, not raw DOM/HTML, cookies, local storage, request headers, CDP endpoints, credentials, or browser internals. Checkout-prep evidence is redacted and downgraded to viewport capture when necessary.",
         }
         _audit("visual_evidence", {"url": result["url"], "page_title": result["page_title"], "full_page_path": result["full_page_path"], "crop_count": len(crop_results), "full_page_captured": result["full_page_captured"], "screenshot_mode": result["screenshot_mode"], "checkout_binding": result.get("material_summary_binding")})
         return result
@@ -4579,7 +4579,7 @@ def _current_page_summary() -> dict[str, Any]:
     return _with_browser(run)
 
 
-def shopping_browser_status_tool(args: dict[str, Any], **_kw: Any) -> str:
+def secure_browser_status_tool(args: dict[str, Any], **_kw: Any) -> str:
     status = {
         "toolset": TOOLSET,
         "namespace": NAMESPACE,
@@ -4593,7 +4593,7 @@ def shopping_browser_status_tool(args: dict[str, Any], **_kw: Any) -> str:
         "browser_operations": ["navigate", "page_snapshot", "query", "click", "type", "screenshot", "visual_evidence", "current_page_summary", "owner_checkout_review", "order_list", "order_read", "order_upsert", "order_close", "order_notification_preview", "order_mark_notified", "order_refresh_plan", "order_refresh_run", "consumable_list", "consumable_upsert"],
         "trusted_assistant_access": {
             "status": "broad_browsing_available",
-            "message": "Star may navigate and inspect ordinary shopping/account research surfaces, including Amazon order history, Buy Again, past-order details, and product links. The bridge gates capabilities and sanitizes outputs instead of blanket-blocking account/order-history URLs.",
+            "message": "Star may navigate and inspect ordinary shopping, account research surfaces, including Amazon order history, Buy Again, past-order details, and product links. The bridge gates capabilities and sanitizes outputs instead of blanket-blocking account/order-history URLs.",
             "human_takeover_boundaries": ["login", "Bitwarden", "passkeys", "2FA/OTP", "CAPTCHA", "suspicious security prompts", "payment/address/account edits", "final purchase submission"],
         },
         "supervised_checkout_prep": {
@@ -4602,26 +4602,26 @@ def shopping_browser_status_tool(args: dict[str, Any], **_kw: Any) -> str:
             "approved_type_effects": ["apply_checkout_option", "cart_line_adjustment"],
             "boundary": "Star may inspect sanitized checkout-prep controls and click/type into ordinary review-page controls under Joy's live supervision with explicit approved_effect values. Star must pause for login, Bitwarden, passkeys, 2FA, CAPTCHA, suspicious security prompts, payment/address/account edits, or sensitive-information prompts.",
             "sanitization": "Checkout-prep snapshots/current-page summaries return isolated structured item/totals/delivery/surprise fields plus destination city-state/abstract label and payment labels. Mixed blobs, sensitive redaction-marker text, and final purchase controls are removed from ordinary summary fields.",
-            "visual_confirmation": "shopping_browser_visual_evidence returns a bounded visual proof bundle: a local PNG screenshot, sanitized suggested regions, and optional focused crops. Amazon checkout/order-review pages are allowed only as redacted checkout-prep viewport evidence; Amazon thank-you/post-purchase pages are labeled as post-purchase evidence; login/account/payment/address/security pages remain Joy-only.",
-            "owner_only_confirmation": "shopping_browser_owner_checkout_review can send complete unredacted checkout screenshots directly to Joy's configured Telegram destination without returning paths, MEDIA handles, raw DOM, cookies, storage, request headers, CDP endpoints, or address/payment text to Star.",
+            "visual_confirmation": "secure_browser_visual_evidence returns a bounded visual proof bundle: a local PNG screenshot, sanitized suggested regions, and optional focused crops. Amazon checkout/order-review pages are allowed only as redacted checkout-prep viewport evidence; Amazon thank-you/post-purchase pages are labeled as post-purchase evidence; login/account/payment/address/security pages remain Joy-only.",
+            "owner_only_confirmation": "secure_browser_owner_checkout_review can send complete unredacted checkout screenshots directly to Joy's configured Telegram destination without returning paths, MEDIA handles, raw DOM, cookies, storage, request headers, CDP endpoints, or address/payment text to Star.",
         },
         "approval_gated_operations": {
-            "add_to_cart": "available only through the broad shopping_browser_click flow with approved_effect='add_to_cart' and a human-readable approval reference",
-            "remove_from_cart": "available only through shopping_browser_click with approved_effect='remove_from_cart', a human-readable approval reference, and a visible Delete/Remove cart line-item control on an Amazon cart page",
+            "add_to_cart": "available only through the broad secure_browser_click flow with approved_effect='add_to_cart' and a human-readable approval reference",
+            "remove_from_cart": "available only through secure_browser_click with approved_effect='remove_from_cart', a human-readable approval reference, and a visible Delete/Remove cart line-item control on an Amazon cart page",
             "request_final_purchase_approval": "Star-callable after owner_checkout_review; creates a trusted Agent Request Telegram approval proposal bound to material_summary_binding and owner_visual_evidence_binding",
-            "place_order": "blocked from ordinary tool use; requires trusted Telegram approval plus shopping_browser_execute_final_purchase live revalidation and exactly-once token consumption",
+            "place_order": "blocked from ordinary tool use; requires trusted Telegram approval plus secure_browser_execute_final_purchase live revalidation and exactly-once token consumption",
             "owner_checkout_review": "available only as owner-only Telegram delivery of complete checkout visual evidence tied to the same material_summary_binding; it does not expose sensitive evidence to Star",
         },
         "order_tracking": {
             "ledger": "profile-local SQLite",
-            "ledger_path_hint": "SHOPPING_ORDER_LEDGER_PATH or ~/.hermes/profiles/star/shopping-order-ledger.sqlite3",
-            "refresh_strategy": "Amazon Your Orders via secure shopping browser first; read-only Gmail order/shipment emails fallback; carrier pages opportunistic and bot-blocking non-fatal",
+            "ledger_path_hint": "SECURE_BROWSER_ORDER_LEDGER_PATH or ~/.hermes/profiles/star/secure-browser-order-ledger.sqlite3",
+            "refresh_strategy": "Amazon Your Orders via secure browser first; read-only Gmail order/shipment emails fallback; carrier pages opportunistic and bot-blocking non-fatal",
             "notification_policy": "initial confirmation/ETA, material ETA or status changes, day-of/out-for-delivery/delivered; no repeated no-change spam",
         },
         "consumable_tracking": {
             "boundary": "Stable consumables are tracked separately from transient orders; explicit Joy statements may be durable, repeated purchases may suggest/tentatively learn, ambiguous one-offs stay tentative.",
         },
-        "removed_legacy_helpers": ["shopping_browser_inspect_product", "shopping_browser_inspect_reviews", "shopping_browser_inspect_cart", "shopping_browser_add_to_cart"],
+        "removed_legacy_helpers": ["secure_browser_inspect_product", "secure_browser_inspect_reviews", "secure_browser_inspect_cart", "secure_browser_add_to_cart"],
         "screenshot_dir": SCREENSHOT_DIR,
         "audit_log": AUDIT_LOG,
         "blocked_operations": sorted(UNSAFE_OPERATIONS | {"place_order"}),
@@ -4631,7 +4631,7 @@ def shopping_browser_status_tool(args: dict[str, Any], **_kw: Any) -> str:
 
 
 
-def shopping_browser_navigate_tool(args: dict[str, Any], **_kw: Any) -> str:
+def secure_browser_navigate_tool(args: dict[str, Any], **_kw: Any) -> str:
     try:
         url = str(args.get("url") or "").strip()
         new_page = bool(args.get("new_page", False))
@@ -4640,28 +4640,28 @@ def shopping_browser_navigate_tool(args: dict[str, Any], **_kw: Any) -> str:
         return _json({"error": "NAVIGATE_FAILED", "message": str(exc)[:1000], "operation": "navigate"})
 
 
-def shopping_browser_page_snapshot_tool(args: dict[str, Any], **_kw: Any) -> str:
+def secure_browser_page_snapshot_tool(args: dict[str, Any], **_kw: Any) -> str:
     try:
         return _json(_page_snapshot(int(args.get("max_text_chars") or MAX_TEXT_CHARS), int(args.get("max_interactive") or MAX_LINKS)))
     except Exception as exc:
         return _json({"error": "PAGE_SNAPSHOT_FAILED", "message": str(exc)[:1000], "operation": "page_snapshot"})
 
 
-def shopping_browser_query_tool(args: dict[str, Any], **_kw: Any) -> str:
+def secure_browser_query_tool(args: dict[str, Any], **_kw: Any) -> str:
     try:
         return _json(_query(str(args.get("expression") or "")))
     except Exception as exc:
         return _json({"error": "QUERY_FAILED", "message": str(exc)[:1000], "operation": "query"})
 
 
-def shopping_browser_screenshot_tool(args: dict[str, Any], **_kw: Any) -> str:
+def secure_browser_screenshot_tool(args: dict[str, Any], **_kw: Any) -> str:
     try:
         return _json(_screenshot(bool(args.get("full_page", False))))
     except Exception as exc:
         return _json({"error": "SCREENSHOT_FAILED", "message": str(exc)[:1000], "operation": "screenshot"})
 
 
-def shopping_browser_visual_evidence_tool(args: dict[str, Any], **_kw: Any) -> str:
+def secure_browser_visual_evidence_tool(args: dict[str, Any], **_kw: Any) -> str:
     try:
         crops = args.get("crops") or []
         if not isinstance(crops, list):
@@ -4671,21 +4671,21 @@ def shopping_browser_visual_evidence_tool(args: dict[str, Any], **_kw: Any) -> s
         return _json({"error": "VISUAL_EVIDENCE_FAILED", "message": str(exc)[:1000], "operation": "visual_evidence"})
 
 
-def shopping_browser_click_tool(args: dict[str, Any], **_kw: Any) -> str:
+def secure_browser_click_tool(args: dict[str, Any], **_kw: Any) -> str:
     try:
         return _json(_click(str(args.get("selector") or ""), str(args.get("reason") or ""), str(args.get("approved_effect") or "browse")))
     except Exception as exc:
         return _json({"error": "CLICK_FAILED", "message": str(exc)[:1000], "operation": "click"})
 
 
-def shopping_browser_type_tool(args: dict[str, Any], **_kw: Any) -> str:
+def secure_browser_type_tool(args: dict[str, Any], **_kw: Any) -> str:
     try:
         return _json(_type(str(args.get("selector") or ""), str(args.get("text") or ""), str(args.get("reason") or ""), str(args.get("approved_effect") or "type")))
     except Exception as exc:
         return _json({"error": "TYPE_FAILED", "message": str(exc)[:1000], "operation": "type"})
 
 
-def shopping_browser_inspect_product_tool(args: dict[str, Any], **_kw: Any) -> str:
+def secure_browser_inspect_product_tool(args: dict[str, Any], **_kw: Any) -> str:
     url = str(args.get("url") or "").strip()
     if not url:
         return _json({"error": "url is required"})
@@ -4695,7 +4695,7 @@ def shopping_browser_inspect_product_tool(args: dict[str, Any], **_kw: Any) -> s
         return _json({"error": "INSPECT_PRODUCT_FAILED", "message": str(exc)[:1000], "operation": "inspect_product"})
 
 
-def shopping_browser_inspect_reviews_tool(args: dict[str, Any], **_kw: Any) -> str:
+def secure_browser_inspect_reviews_tool(args: dict[str, Any], **_kw: Any) -> str:
     url = str(args.get("url") or "").strip()
     if not url:
         return _json({"error": "url is required"})
@@ -4706,7 +4706,7 @@ def shopping_browser_inspect_reviews_tool(args: dict[str, Any], **_kw: Any) -> s
         return _json({"error": "INSPECT_REVIEWS_FAILED", "message": str(exc)[:1000], "operation": "inspect_reviews"})
 
 
-def shopping_browser_inspect_cart_tool(args: dict[str, Any], **_kw: Any) -> str:
+def secure_browser_inspect_cart_tool(args: dict[str, Any], **_kw: Any) -> str:
     try:
         return _json(_inspect_cart())
     except Exception as exc:
@@ -4714,7 +4714,7 @@ def shopping_browser_inspect_cart_tool(args: dict[str, Any], **_kw: Any) -> str:
 
 
 
-def shopping_browser_add_to_cart_tool(args: dict[str, Any], **_kw: Any) -> str:
+def secure_browser_add_to_cart_tool(args: dict[str, Any], **_kw: Any) -> str:
     try:
         url_or_asin = str(args.get("url_or_asin") or args.get("url") or args.get("asin") or "").strip()
         quantity = _parse_quantity(args.get("quantity"))
@@ -4727,21 +4727,21 @@ def shopping_browser_add_to_cart_tool(args: dict[str, Any], **_kw: Any) -> str:
         return _json({"error": "ADD_TO_CART_FAILED", "message": str(exc)[:1000], "operation": "add_to_cart"})
 
 
-def shopping_browser_current_page_summary_tool(args: dict[str, Any], **_kw: Any) -> str:
+def secure_browser_current_page_summary_tool(args: dict[str, Any], **_kw: Any) -> str:
     try:
         return _json(_current_page_summary())
     except Exception as exc:
         return _json({"error": "CURRENT_PAGE_SUMMARY_FAILED", "message": str(exc)[:1000], "operation": "current_page_summary"})
 
 
-def shopping_browser_owner_checkout_review_tool(args: dict[str, Any], **_kw: Any) -> str:
+def secure_browser_owner_checkout_review_tool(args: dict[str, Any], **_kw: Any) -> str:
     try:
         return _json(_owner_checkout_review(bool(args.get("send_to_telegram", True)), bool(args.get("retain_local", False))))
     except Exception as exc:
         return _json({"error": "OWNER_CHECKOUT_REVIEW_FAILED", "message": str(exc)[:1000], "operation": "owner_checkout_review"})
 
 
-def shopping_browser_request_final_purchase_approval_tool(args: dict[str, Any], **_kw: Any) -> str:
+def secure_browser_request_final_purchase_approval_tool(args: dict[str, Any], **_kw: Any) -> str:
     try:
         return _json(_request_final_purchase_approval(
             str(args.get("material_summary_binding") or ""),
@@ -4753,7 +4753,7 @@ def shopping_browser_request_final_purchase_approval_tool(args: dict[str, Any], 
         return _json({"error": "FINAL_PURCHASE_APPROVAL_REQUEST_FAILED", "message": str(exc)[:1000], "operation": "request_final_purchase_approval"})
 
 
-def shopping_browser_execute_final_purchase_tool(args: dict[str, Any], **_kw: Any) -> str:
+def secure_browser_execute_final_purchase_tool(args: dict[str, Any], **_kw: Any) -> str:
     try:
         return _json(_execute_final_purchase(
             str(args.get("approval_request_id") or ""),
@@ -4764,28 +4764,28 @@ def shopping_browser_execute_final_purchase_tool(args: dict[str, Any], **_kw: An
         return _json({"error": "FINAL_PURCHASE_EXECUTION_FAILED", "message": str(exc)[:1000], "operation": "execute_final_purchase"})
 
 
-def shopping_browser_order_list_tool(args: dict[str, Any], **_kw: Any) -> str:
+def secure_browser_order_list_tool(args: dict[str, Any], **_kw: Any) -> str:
     try:
         return _json(_list_orders(bool(args.get("include_archived", False)), str(args.get("status") or "")))
     except Exception as exc:
-        return _json({"error": "SHOPPING_ORDER_LIST_FAILED", "message": str(exc)[:1000], "operation": "shopping_order_list"})
+        return _json({"error": "SECURE_BROWSER_ORDER_LIST_FAILED", "message": str(exc)[:1000], "operation": "shopping_order_list"})
 
 
-def shopping_browser_order_read_tool(args: dict[str, Any], **_kw: Any) -> str:
+def secure_browser_order_read_tool(args: dict[str, Any], **_kw: Any) -> str:
     try:
         return _json(_read_order(str(args.get("handle") or args.get("order_handle") or "")))
     except Exception as exc:
-        return _json({"error": "SHOPPING_ORDER_READ_FAILED", "message": str(exc)[:1000], "operation": "shopping_order_read"})
+        return _json({"error": "SECURE_BROWSER_ORDER_READ_FAILED", "message": str(exc)[:1000], "operation": "shopping_order_read"})
 
 
-def shopping_browser_order_upsert_tool(args: dict[str, Any], **_kw: Any) -> str:
+def secure_browser_order_upsert_tool(args: dict[str, Any], **_kw: Any) -> str:
     try:
         return _json(_upsert_order_entry(args))
     except Exception as exc:
-        return _json({"error": "SHOPPING_ORDER_UPSERT_FAILED", "message": str(exc)[:1000], "operation": "shopping_order_upsert"})
+        return _json({"error": "SECURE_BROWSER_ORDER_UPSERT_FAILED", "message": str(exc)[:1000], "operation": "shopping_order_upsert"})
 
 
-def shopping_browser_order_close_tool(args: dict[str, Any], **_kw: Any) -> str:
+def secure_browser_order_close_tool(args: dict[str, Any], **_kw: Any) -> str:
     try:
         return _json(_close_order(
             str(args.get("handle") or args.get("order_handle") or ""),
@@ -4795,62 +4795,62 @@ def shopping_browser_order_close_tool(args: dict[str, Any], **_kw: Any) -> str:
             str(args.get("notes") or ""),
         ))
     except Exception as exc:
-        return _json({"error": "SHOPPING_ORDER_CLOSE_FAILED", "message": str(exc)[:1000], "operation": "shopping_order_close"})
+        return _json({"error": "SECURE_BROWSER_ORDER_CLOSE_FAILED", "message": str(exc)[:1000], "operation": "shopping_order_close"})
 
 
-def shopping_browser_order_notification_preview_tool(args: dict[str, Any], **_kw: Any) -> str:
+def secure_browser_order_notification_preview_tool(args: dict[str, Any], **_kw: Any) -> str:
     try:
         return _json(_preview_order_update(args))
     except Exception as exc:
-        return _json({"error": "SHOPPING_ORDER_NOTIFICATION_PREVIEW_FAILED", "message": str(exc)[:1000], "operation": "shopping_order_notification_preview"})
+        return _json({"error": "SECURE_BROWSER_ORDER_NOTIFICATION_PREVIEW_FAILED", "message": str(exc)[:1000], "operation": "shopping_order_notification_preview"})
 
 
-def shopping_browser_order_mark_notified_tool(args: dict[str, Any], **_kw: Any) -> str:
+def secure_browser_order_mark_notified_tool(args: dict[str, Any], **_kw: Any) -> str:
     try:
         return _json(_mark_order_notified(str(args.get("handle") or args.get("order_handle") or ""), str(args.get("event_type") or "")))
     except Exception as exc:
-        return _json({"error": "SHOPPING_ORDER_MARK_NOTIFIED_FAILED", "message": str(exc)[:1000], "operation": "shopping_order_mark_notified"})
+        return _json({"error": "SECURE_BROWSER_ORDER_MARK_NOTIFIED_FAILED", "message": str(exc)[:1000], "operation": "shopping_order_mark_notified"})
 
 
-def shopping_browser_order_refresh_plan_tool(args: dict[str, Any], **_kw: Any) -> str:
+def secure_browser_order_refresh_plan_tool(args: dict[str, Any], **_kw: Any) -> str:
     try:
         return _json(_refresh_plan())
     except Exception as exc:
-        return _json({"error": "SHOPPING_ORDER_REFRESH_PLAN_FAILED", "message": str(exc)[:1000], "operation": "shopping_order_refresh_plan"})
+        return _json({"error": "SECURE_BROWSER_ORDER_REFRESH_PLAN_FAILED", "message": str(exc)[:1000], "operation": "shopping_order_refresh_plan"})
 
 
-def shopping_browser_order_refresh_run_tool(args: dict[str, Any], **_kw: Any) -> str:
+def secure_browser_order_refresh_run_tool(args: dict[str, Any], **_kw: Any) -> str:
     try:
         return _json(_refresh_due_orders(
             send_notifications=bool(args.get("send_notifications", True)),
             limit=int(args.get("limit") or 20),
         ))
     except Exception as exc:
-        return _json({"error": "SHOPPING_ORDER_REFRESH_RUN_FAILED", "message": str(exc)[:1000], "operation": "shopping_order_refresh_run"})
+        return _json({"error": "SECURE_BROWSER_ORDER_REFRESH_RUN_FAILED", "message": str(exc)[:1000], "operation": "shopping_order_refresh_run"})
 
 
-def shopping_browser_consumable_list_tool(args: dict[str, Any], **_kw: Any) -> str:
+def secure_browser_consumable_list_tool(args: dict[str, Any], **_kw: Any) -> str:
     try:
         return _json(_list_consumables(bool(args.get("include_archived", False))))
     except Exception as exc:
         return _json({"error": "SHOPPING_CONSUMABLE_LIST_FAILED", "message": str(exc)[:1000], "operation": "shopping_consumable_list"})
 
 
-def shopping_browser_consumable_upsert_tool(args: dict[str, Any], **_kw: Any) -> str:
+def secure_browser_consumable_upsert_tool(args: dict[str, Any], **_kw: Any) -> str:
     try:
         return _json(_upsert_consumable(args))
     except Exception as exc:
         return _json({"error": "SHOPPING_CONSUMABLE_UPSERT_FAILED", "message": str(exc)[:1000], "operation": "shopping_consumable_upsert"})
 
 
-def shopping_browser_consumable_suggest_from_order_tool(args: dict[str, Any], **_kw: Any) -> str:
+def secure_browser_consumable_suggest_from_order_tool(args: dict[str, Any], **_kw: Any) -> str:
     try:
         return _json(_suggest_consumable_from_order(str(args.get("handle") or args.get("order_handle") or "")))
     except Exception as exc:
         return _json({"error": "SHOPPING_CONSUMABLE_SUGGEST_FAILED", "message": str(exc)[:1000], "operation": "shopping_consumable_suggest_from_order"})
 
 
-def shopping_browser_guardrail_check_tool(args: dict[str, Any], **_kw: Any) -> str:
+def secure_browser_guardrail_check_tool(args: dict[str, Any], **_kw: Any) -> str:
     operation = str(args.get("operation") or "").strip()
     if not operation:
         return _json({"error": "operation is required"})
@@ -4858,18 +4858,18 @@ def shopping_browser_guardrail_check_tool(args: dict[str, Any], **_kw: Any) -> s
 
 
 STATUS_SCHEMA = {
-    "name": "shopping_browser_status",
-    "description": "Show the shopping browser bridge status and safety boundary.",
+    "name": "secure_browser_status",
+    "description": "Show the secure browser bridge status and safety boundary.",
     "parameters": {"type": "object", "properties": {}, "required": []},
 }
 
 NAVIGATE_SCHEMA = {
-    "name": "shopping_browser_navigate",
-    "description": "Navigate the persistent Star shopping browser to an http(s) URL. Allows ordinary shopping and account research pages such as Amazon order history/Buy Again, while blocking checkout/final purchase, payment/address/wallet edits, login, passkeys, 2FA/CAPTCHA, and other credential/security challenge targets. Logs sanitized navigation metadata in the shopping browser audit log.",
+    "name": "secure_browser_navigate",
+    "description": "Navigate the persistent Star secure browser to an http(s) URL. Allows ordinary shopping and account research pages such as Amazon order history/Buy Again, while blocking checkout/final purchase, payment/address/wallet edits, login, passkeys, 2FA/CAPTCHA, and other credential/security challenge targets. Logs sanitized navigation metadata in the secure browser audit log.",
     "parameters": {
         "type": "object",
         "properties": {
-            "url": {"type": "string", "description": "HTTP(S) URL to open in the shopping browser"},
+            "url": {"type": "string", "description": "HTTP(S) URL to open in the secure browser"},
             "new_page": {"type": "boolean", "description": "Open in a fresh page/tab instead of reusing the current page", "default": False},
         },
         "required": ["url"],
@@ -4877,8 +4877,8 @@ NAVIGATE_SCHEMA = {
 }
 
 PAGE_SNAPSHOT_SCHEMA = {
-    "name": "shopping_browser_page_snapshot",
-    "description": "Inspect the current shopping browser page as sanitized visible text plus a bounded list of interactive elements and suggested CSS selectors, including ordinary shopping/account research pages such as order history. Redacts emails, phone numbers, street/zip address details, long payment/account numbers, and order references; does not return raw HTML, cookies, local storage, request headers, screenshots, or CDP handles.",
+    "name": "secure_browser_page_snapshot",
+    "description": "Inspect the current secure browser page as sanitized visible text plus a bounded list of interactive elements and suggested CSS selectors, including ordinary shopping, account research pages such as order history. Redacts emails, phone numbers, street/zip address details, long payment/account numbers, and order references; does not return raw HTML, cookies, local storage, request headers, screenshots, or CDP handles.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -4890,8 +4890,8 @@ PAGE_SNAPSHOT_SCHEMA = {
 }
 
 QUERY_SCHEMA = {
-    "name": "shopping_browser_query",
-    "description": "Evaluate a limited read-only JavaScript expression on the current shopping page for structured visible-page facts, including ordinary shopping/account research pages such as order history. Runtime guardrails reject obvious mutation, network, storage, cookie, and navigation tokens, and returned string values are sanitized. On checkout/order-review pages this tool does not return the raw query result; it returns only the sanitized checkout-prep summary and non-secret controls, while complete checkout evidence remains Joy-only.",
+    "name": "secure_browser_query",
+    "description": "Evaluate a limited read-only JavaScript expression on the current shopping page for structured visible-page facts, including ordinary shopping, account research pages such as order history. Runtime guardrails reject obvious mutation, network, storage, cookie, and navigation tokens, and returned string values are sanitized. On checkout/order-review pages this tool does not return the raw query result; it returns only the sanitized checkout-prep summary and non-secret controls, while complete checkout evidence remains Joy-only.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -4902,8 +4902,8 @@ QUERY_SCHEMA = {
 }
 
 SCREENSHOT_SCHEMA = {
-    "name": "shopping_browser_screenshot",
-    "description": "Capture the current visible persistent shopping browser page as a local PNG media artifact for delivery. Refuses obvious login, account, payment, address, order, passkey, CAPTCHA, and verification URLs; Amazon checkout-prep pages are captured only with browser-side redaction and viewport bounds. Logs the high-level capture in the audit log. Returns only a local file path/media handle plus sanitized page metadata, not raw CDP data, cookies, storage, headers, or secrets.",
+    "name": "secure_browser_screenshot",
+    "description": "Capture the current visible persistent secure browser page as a local PNG media artifact for delivery. Refuses obvious login, account, payment, address, order, passkey, CAPTCHA, and verification URLs; Amazon checkout-prep pages are captured only with browser-side redaction and viewport bounds. Logs the high-level capture in the audit log. Returns only a local file path/media handle plus sanitized page metadata, not raw CDP data, cookies, storage, headers, or secrets.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -4914,8 +4914,8 @@ SCREENSHOT_SCHEMA = {
 }
 
 VISUAL_EVIDENCE_SCHEMA = {
-    "name": "shopping_browser_visual_evidence",
-    "description": "Capture retailer-agnostic visual evidence from the current shopping browser page: a local PNG screenshot, sanitized suggested regions, and optional focused crops. Crops may reference a suggested region_id/category/text_anchor, a safe CSS selector, or an explicit bounding rect. Amazon checkout-prep pages are captured only with redaction and viewport bounds; login/account/payment/address/security pages remain Joy-only. Returns PNG paths/media handles plus sanitized metadata, never raw DOM, cookies, storage, request headers, credentials, CDP endpoints, payment/address secrets, or browser internals.",
+    "name": "secure_browser_visual_evidence",
+    "description": "Capture retailer-agnostic visual evidence from the current secure browser page: a local PNG screenshot, sanitized suggested regions, and optional focused crops. Crops may reference a suggested region_id/category/text_anchor, a safe CSS selector, or an explicit bounding rect. Amazon checkout-prep pages are captured only with redaction and viewport bounds; login/account/payment/address/security pages remain Joy-only. Returns PNG paths/media handles plus sanitized metadata, never raw DOM, cookies, storage, request headers, credentials, CDP endpoints, payment/address secrets, or browser internals.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -4946,12 +4946,12 @@ VISUAL_EVIDENCE_SCHEMA = {
 }
 
 CLICK_SCHEMA = {
-    "name": "shopping_browser_click",
-    "description": "Click a visible element in the persistent shopping browser by CSS selector. Use for browsing, selecting variants/options, applying visible coupons, explicitly approved add-to-cart/removal, and supervised checkout-prep controls. Checkout prep requires an explicit checkout approved_effect such as checkout_prep, select_shipping_option, select_delivery_option, apply_checkout_option, fix_purchase_mode, or cart_line_adjustment plus Joy live supervision; it returns a refreshed sanitized order-review summary/material_summary_binding and refuses final purchase controls. Never use for Buy Now, Place Order, account/payment/address edits, login, passkeys, 2FA, or CAPTCHA.",
+    "name": "secure_browser_click",
+    "description": "Click a visible element in the persistent secure browser by CSS selector. Use for browsing, selecting variants/options, applying visible coupons, explicitly approved add-to-cart/removal, and supervised checkout-prep controls. Checkout prep requires an explicit checkout approved_effect such as checkout_prep, select_shipping_option, select_delivery_option, apply_checkout_option, fix_purchase_mode, or cart_line_adjustment plus Joy live supervision; it returns a refreshed sanitized order-review summary/material_summary_binding and refuses final purchase controls. Never use for Buy Now, Place Order, account/payment/address edits, login, passkeys, 2FA, or CAPTCHA.",
     "parameters": {
         "type": "object",
         "properties": {
-            "selector": {"type": "string", "description": "CSS selector from shopping_browser_page_snapshot or a carefully derived selector"},
+            "selector": {"type": "string", "description": "CSS selector from secure_browser_page_snapshot or a carefully derived selector"},
             "approved_effect": {"type": "string", "description": "Expected effect of the click", "enum": list(APPROVED_CLICK_EFFECTS), "default": "browse"},
             "reason": {"type": "string", "description": "Short human-readable reason/approval reference for audit, required for add_to_cart and remove_from_cart"},
         },
@@ -4960,8 +4960,8 @@ CLICK_SCHEMA = {
 }
 
 TYPE_SCHEMA = {
-    "name": "shopping_browser_type",
-    "description": "Type bounded non-sensitive text into a visible field in the persistent shopping browser. Intended for search boxes, quantity fields, and similar shopping UI. Refuses fields that look like password, passkey, OTP, card, contact, address, or payment inputs; Joy must take over those.",
+    "name": "secure_browser_type",
+    "description": "Type bounded non-sensitive text into a visible field in the persistent secure browser. Intended for search boxes, quantity fields, and similar shopping UI. Refuses fields that look like password, passkey, OTP, card, contact, address, or payment inputs; Joy must take over those.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -4975,8 +4975,8 @@ TYPE_SCHEMA = {
 }
 
 INSPECT_PRODUCT_SCHEMA = {
-    "name": "shopping_browser_inspect_product",
-    "description": "Read-only Amazon product inspection through the Kasm shopping session. Returns product title, logged-in price, delivery/Prime text, availability, seller, ship-from text, visible condition text when Amazon exposes it, and public Amazon product image URLs when visible. Does not expose cookies, local storage, request headers, raw CDP, screenshots, or browser handles.",
+    "name": "secure_browser_inspect_product",
+    "description": "Read-only Amazon product inspection through the Kasm secure browser session. Returns product title, logged-in price, delivery/Prime text, availability, seller, ship-from text, visible condition text when Amazon exposes it, and public Amazon product image URLs when visible. Does not expose cookies, local storage, request headers, raw CDP, screenshots, or browser handles.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -4987,8 +4987,8 @@ INSPECT_PRODUCT_SCHEMA = {
 }
 
 INSPECT_REVIEWS_SCHEMA = {
-    "name": "shopping_browser_inspect_reviews",
-    "description": "Read-only Amazon review inspection through the Kasm shopping session. Returns only bounded public review metadata and excerpts visible from the product/review page; max_reviews is capped at 10. Does not expose cookies, local storage, request headers, raw CDP, screenshots, or browser handles.",
+    "name": "secure_browser_inspect_reviews",
+    "description": "Read-only Amazon review inspection through the Kasm secure browser session. Returns only bounded public review metadata and excerpts visible from the product/review page; max_reviews is capped at 10. Does not expose cookies, local storage, request headers, raw CDP, screenshots, or browser handles.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -5000,14 +5000,14 @@ INSPECT_REVIEWS_SCHEMA = {
 }
 
 INSPECT_CART_SCHEMA = {
-    "name": "shopping_browser_inspect_cart",
-    "description": "Read-only Amazon cart inspection through the Kasm shopping session. Returns cart line item names, quantities, prices, subtotal, and delivery estimate when visible. Does not add, remove, update, checkout, or expose secrets.",
+    "name": "secure_browser_inspect_cart",
+    "description": "Read-only Amazon cart inspection through the Kasm secure browser session. Returns cart line item names, quantities, prices, subtotal, and delivery estimate when visible. Does not add, remove, update, checkout, or expose secrets.",
     "parameters": {"type": "object", "properties": {}, "required": []},
 }
 
 
 ADD_TO_CART_SCHEMA = {
-    "name": "shopping_browser_add_to_cart",
+    "name": "secure_browser_add_to_cart",
     "description": "Approval-gated Amazon add-to-cart-only tool. It only accepts exact ASINs/URLs on the current Puppet-managed allowlist, requires quantity, max_item_price, and purchase_mode='one_time', verifies the product/price/seller/ship-from/availability before adding, then stops after returning inspected cart state. It cannot checkout, Buy Now, Place Order, change payment/address/account, or expose raw browser/session data.",
     "parameters": {
         "type": "object",
@@ -5022,13 +5022,13 @@ ADD_TO_CART_SCHEMA = {
 }
 
 CURRENT_PAGE_SUMMARY_SCHEMA = {
-    "name": "shopping_browser_current_page_summary",
-    "description": "Read-only summary of the current Kasm shopping browser page using safe structured fields only. Amazon thank-you/order-confirmation and Your Orders pages are labeled as post-purchase confirmation/order-verification context, not checkout-prep/final-purchase approval state.",
+    "name": "secure_browser_current_page_summary",
+    "description": "Read-only summary of the current Kasm secure browser page using safe structured fields only. Amazon thank-you/order-confirmation and Your Orders pages are labeled as post-purchase confirmation/order-verification context, not checkout-prep/final-purchase approval state.",
     "parameters": {"type": "object", "properties": {}, "required": []},
 }
 
 OWNER_CHECKOUT_REVIEW_SCHEMA = {
-    "name": "shopping_browser_owner_checkout_review",
+    "name": "secure_browser_owner_checkout_review",
     "description": "Send complete sensitive checkout/order-review or post-purchase confirmation/order-verification visual evidence directly to Joy's configured Telegram destination for owner-only review. For pre-purchase checkout, intended for verification of address, payment, item, delivery, tax/total, discounts, and final controls. For post-purchase pages, intended for thank-you/confirmation and Your Orders delivery proof. Returns only a redacted acknowledgement, bindings, and sanitized summary to Star; it never returns image paths, MEDIA handles, raw DOM, cookies, storage, request headers, CDP endpoints, credentials, passkeys, 2FA/CAPTCHA data, raw order numbers, or structured address/payment details. Final Place Order remains blocked pending trusted approval before purchase.",
     "parameters": {
         "type": "object",
@@ -5042,14 +5042,14 @@ OWNER_CHECKOUT_REVIEW_SCHEMA = {
 
 
 REQUEST_FINAL_PURCHASE_APPROVAL_SCHEMA = {
-    "name": "shopping_browser_request_final_purchase_approval",
+    "name": "secure_browser_request_final_purchase_approval",
     "description": "Request Joy's trusted Telegram-native final purchase approval after owner-only checkout review. Re-reads the live checkout page, verifies material_summary_binding still matches, then creates an Agent Request proposal with actionable Telegram buttons. It does not click Place Order and does not expose raw checkout evidence, cookies, storage, CDP handles, or full payment/address details.",
     "parameters": {
         "type": "object",
         "properties": {
-            "material_summary_binding": {"type": "string", "description": "Current checkout material_summary_binding from shopping_browser_owner_checkout_review/current checkout summary"},
-            "owner_visual_evidence_binding": {"type": "string", "description": "Owner-only visual evidence binding returned by shopping_browser_owner_checkout_review"},
-            "owner_review_id": {"type": "string", "description": "Owner checkout review id returned by shopping_browser_owner_checkout_review"},
+            "material_summary_binding": {"type": "string", "description": "Current checkout material_summary_binding from secure_browser_owner_checkout_review/current checkout summary"},
+            "owner_visual_evidence_binding": {"type": "string", "description": "Owner-only visual evidence binding returned by secure_browser_owner_checkout_review"},
+            "owner_review_id": {"type": "string", "description": "Owner checkout review id returned by secure_browser_owner_checkout_review"},
             "note": {"type": "string", "description": "Optional concise Star note for Talon/Joy, without secrets"},
         },
         "required": ["material_summary_binding", "owner_visual_evidence_binding"],
@@ -5057,7 +5057,7 @@ REQUEST_FINAL_PURCHASE_APPROVAL_SCHEMA = {
 }
 
 EXECUTE_FINAL_PURCHASE_SCHEMA = {
-    "name": "shopping_browser_execute_final_purchase",
+    "name": "secure_browser_execute_final_purchase",
     "description": "Trusted final purchase executor. Use only after Joy approved the bound Agent Request proposal. It verifies the current Agent Request approval, refuses reused approvals, re-reads the live checkout material summary, refuses if anything material changed or sensitive verification is visible, clicks exactly one final purchase control, then attempts owner-only post-purchase proof capture from the Amazon confirmation page. Not for ordinary Star browsing.",
     "parameters": {
         "type": "object",
@@ -5071,8 +5071,8 @@ EXECUTE_FINAL_PURCHASE_SCHEMA = {
 }
 
 ORDER_LIST_SCHEMA = {
-    "name": "shopping_browser_order_list",
-    "description": "List active/in-flight Star shopping orders from the safe profile-local order ledger. Returns only safe handles, item nicknames/categories, retailer, coarse ETA/status, safe evidence bindings, and sanitized delivery facts; never raw order numbers, address/payment data, cookies, DOM, or owner-only screenshots.",
+    "name": "secure_browser_order_list",
+    "description": "List active/in-flight Star secure browser orders from the safe profile-local order ledger. Returns only safe handles, item nicknames/categories, retailer, coarse ETA/status, safe evidence bindings, and sanitized delivery facts; never raw order numbers, address/payment data, cookies, DOM, or owner-only screenshots.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -5084,14 +5084,14 @@ ORDER_LIST_SCHEMA = {
 }
 
 ORDER_READ_SCHEMA = {
-    "name": "shopping_browser_order_read",
+    "name": "secure_browser_order_read",
     "description": "Read a safe order-ledger entry by human-friendly handle/nickname. The handle must not be a raw order number or payment/address identifier.",
     "parameters": {"type": "object", "properties": {"handle": {"type": "string", "description": "Safe order handle/nickname"}}, "required": ["handle"]},
 }
 
 ORDER_UPSERT_SCHEMA = {
-    "name": "shopping_browser_order_upsert",
-    "description": "Add or update a safe Star shopping-order ledger entry from trusted final-purchase/post-purchase proof data or sanitized refresh facts. Use safe handles and item nicknames only; raw order numbers, full addresses, payment details, raw DOM, cookies, and screenshots are not accepted or persisted.",
+    "name": "secure_browser_order_upsert",
+    "description": "Add or update a safe Star secure-browser-order ledger entry from trusted final-purchase/post-purchase proof data or sanitized refresh facts. Use safe handles and item nicknames only; raw order numbers, full addresses, payment details, raw DOM, cookies, and screenshots are not accepted or persisted.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -5112,8 +5112,8 @@ ORDER_UPSERT_SCHEMA = {
 }
 
 ORDER_CLOSE_SCHEMA = {
-    "name": "shopping_browser_order_close",
-    "description": "Mark a safe shopping-order ledger entry delivered/closed/archived. This does not modify, cancel, return, reorder, or contact the retailer/carrier.",
+    "name": "secure_browser_order_close",
+    "description": "Mark a safe secure-browser-order ledger entry delivered/closed/archived. This does not modify, cancel, return, reorder, or contact the retailer/carrier.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -5128,26 +5128,26 @@ ORDER_CLOSE_SCHEMA = {
 }
 
 ORDER_NOTIFICATION_PREVIEW_SCHEMA = {
-    "name": "shopping_browser_order_notification_preview",
+    "name": "secure_browser_order_notification_preview",
     "description": "Preview whether a proposed sanitized order status/ETA update is Joy-notifiable under the noise-limited policy. Does not send notifications.",
     "parameters": {"type": "object", "properties": {"handle": {"type": "string"}, "status": {"type": "string"}, "eta_window": {"type": "string"}, "safe_delivery_facts": {"type": "array", "items": {"type": "string"}}, "event_type": {"type": "string"}}, "required": ["handle"]},
 }
 
 ORDER_MARK_NOTIFIED_SCHEMA = {
-    "name": "shopping_browser_order_mark_notified",
+    "name": "secure_browser_order_mark_notified",
     "description": "Record that Joy was notified for a material order event so scheduled refreshes do not spam repeated no-change updates. Does not send notifications.",
     "parameters": {"type": "object", "properties": {"handle": {"type": "string"}, "event_type": {"type": "string", "description": "initial_confirmation, eta_changed, status_changed, out_for_delivery, or delivered"}}, "required": ["handle", "event_type"]},
 }
 
 ORDER_REFRESH_PLAN_SCHEMA = {
-    "name": "shopping_browser_order_refresh_plan",
+    "name": "secure_browser_order_refresh_plan",
     "description": "Return active orders due for scheduled refresh and the safe refresh strategy: Amazon Your Orders via secure browser first, Gmail order/shipment email fallback, carrier pages only opportunistically; UPS bot blocking is non-fatal. Does not browse or send notifications.",
     "parameters": {"type": "object", "properties": {}, "required": []},
 }
 
 ORDER_REFRESH_RUN_SCHEMA = {
-    "name": "shopping_browser_order_refresh_run",
-    "description": "Run the safe scheduled Star order refresh loop for due active orders: refresh sanitized status/ETA from Amazon Your Orders first, read-only Gmail snippets as fallback, carrier pages only opportunistically, update the ledger, and send Joy a Telegram notification only when shopping_browser_order_notification_preview says the event is material. Does not place, cancel, reorder, return, or modify orders.",
+    "name": "secure_browser_order_refresh_run",
+    "description": "Run the safe scheduled Star order refresh loop for due active orders: refresh sanitized status/ETA from Amazon Your Orders first, read-only Gmail snippets as fallback, carrier pages only opportunistically, update the ledger, and send Joy a Telegram notification only when secure_browser_order_notification_preview says the event is material. Does not place, cancel, reorder, return, or modify orders.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -5159,26 +5159,26 @@ ORDER_REFRESH_RUN_SCHEMA = {
 }
 
 CONSUMABLE_LIST_SCHEMA = {
-    "name": "shopping_browser_consumable_list",
+    "name": "secure_browser_consumable_list",
     "description": "List stable/tentative consumable items separately from transient order state. Returns safe item nicknames/categories, confidence/source, and last safe order handle only.",
     "parameters": {"type": "object", "properties": {"include_archived": {"type": "boolean", "default": False}}, "required": []},
 }
 
 CONSUMABLE_UPSERT_SCHEMA = {
-    "name": "shopping_browser_consumable_upsert",
+    "name": "secure_browser_consumable_upsert",
     "description": "Create or update a safe consumable item. Use confidence='explicit' only for Joy's explicit durable statements; repeated purchases can be repeated_purchase; ambiguous one-offs should remain tentative/suggested.",
     "parameters": {"type": "object", "properties": {"handle": {"type": "string"}, "item_nickname": {"type": "string"}, "item_category": {"type": "string"}, "retailer": {"type": "string"}, "confidence": {"type": "string"}, "source": {"type": "string"}, "evidence_count": {"type": "integer"}, "last_order_handle": {"type": "string"}, "notes": {"type": "string"}, "archived": {"type": "boolean"}}, "required": ["item_nickname", "confidence"]},
 }
 
 CONSUMABLE_SUGGEST_FROM_ORDER_SCHEMA = {
-    "name": "shopping_browser_consumable_suggest_from_order",
+    "name": "secure_browser_consumable_suggest_from_order",
     "description": "Create a tentative consumable suggestion from a safe order handle without promoting it to durable memory. Joy confirmation or repeated purchases are required before treating it as stable.",
     "parameters": {"type": "object", "properties": {"handle": {"type": "string", "description": "Safe order handle/nickname"}}, "required": ["handle"]},
 }
 
 GUARDRAIL_SCHEMA = {
-    "name": "shopping_browser_guardrail_check",
-    "description": "Check whether a shopping-browser operation is allowed. Ordinary trusted-assistant shopping/account research browsing is allowed with sanitized outputs. Checkout now means supervised checkout-prep only; final place_order remains blocked pending trusted Telegram approval bound to a material order-summary hash. Raw session, credential, payment/address edit, and secret operations are rejected.",
+    "name": "secure_browser_guardrail_check",
+    "description": "Check whether a secure-browser operation is allowed. Ordinary trusted-assistant shopping, account research browsing is allowed with sanitized outputs. Checkout now means supervised checkout-prep only; final place_order remains blocked pending trusted Telegram approval bound to a material order-summary hash. Raw session, credential, payment/address edit, and secret operations are rejected.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -5192,8 +5192,8 @@ registry.register(
     name=STATUS_SCHEMA["name"],
     toolset=TOOLSET,
     schema=STATUS_SCHEMA,
-    handler=shopping_browser_status_tool,
-    check_fn=_check_shopping_browser,
+    handler=secure_browser_status_tool,
+    check_fn=_check_secure_browser,
     description=STATUS_SCHEMA["description"],
     emoji="🛡️",
     max_result_size_chars=MAX_RESULT_CHARS,
@@ -5202,8 +5202,8 @@ registry.register(
     name=NAVIGATE_SCHEMA["name"],
     toolset=TOOLSET,
     schema=NAVIGATE_SCHEMA,
-    handler=shopping_browser_navigate_tool,
-    check_fn=_check_shopping_browser,
+    handler=secure_browser_navigate_tool,
+    check_fn=_check_secure_browser,
     description=NAVIGATE_SCHEMA["description"],
     emoji="🧭",
     max_result_size_chars=MAX_RESULT_CHARS,
@@ -5212,8 +5212,8 @@ registry.register(
     name=PAGE_SNAPSHOT_SCHEMA["name"],
     toolset=TOOLSET,
     schema=PAGE_SNAPSHOT_SCHEMA,
-    handler=shopping_browser_page_snapshot_tool,
-    check_fn=_check_shopping_browser,
+    handler=secure_browser_page_snapshot_tool,
+    check_fn=_check_secure_browser,
     description=PAGE_SNAPSHOT_SCHEMA["description"],
     emoji="📄",
     max_result_size_chars=MAX_RESULT_CHARS,
@@ -5222,8 +5222,8 @@ registry.register(
     name=QUERY_SCHEMA["name"],
     toolset=TOOLSET,
     schema=QUERY_SCHEMA,
-    handler=shopping_browser_query_tool,
-    check_fn=_check_shopping_browser,
+    handler=secure_browser_query_tool,
+    check_fn=_check_secure_browser,
     description=QUERY_SCHEMA["description"],
     emoji="🔎",
     max_result_size_chars=MAX_RESULT_CHARS,
@@ -5232,8 +5232,8 @@ registry.register(
     name=SCREENSHOT_SCHEMA["name"],
     toolset=TOOLSET,
     schema=SCREENSHOT_SCHEMA,
-    handler=shopping_browser_screenshot_tool,
-    check_fn=_check_shopping_browser,
+    handler=secure_browser_screenshot_tool,
+    check_fn=_check_secure_browser,
     description=SCREENSHOT_SCHEMA["description"],
     emoji="📸",
     max_result_size_chars=MAX_RESULT_CHARS,
@@ -5242,8 +5242,8 @@ registry.register(
     name=VISUAL_EVIDENCE_SCHEMA["name"],
     toolset=TOOLSET,
     schema=VISUAL_EVIDENCE_SCHEMA,
-    handler=shopping_browser_visual_evidence_tool,
-    check_fn=_check_shopping_browser,
+    handler=secure_browser_visual_evidence_tool,
+    check_fn=_check_secure_browser,
     description=VISUAL_EVIDENCE_SCHEMA["description"],
     emoji="🖼️",
     max_result_size_chars=MAX_RESULT_CHARS,
@@ -5252,8 +5252,8 @@ registry.register(
     name=CLICK_SCHEMA["name"],
     toolset=TOOLSET,
     schema=CLICK_SCHEMA,
-    handler=shopping_browser_click_tool,
-    check_fn=_check_shopping_browser,
+    handler=secure_browser_click_tool,
+    check_fn=_check_secure_browser,
     description=CLICK_SCHEMA["description"],
     emoji="👆",
     max_result_size_chars=MAX_RESULT_CHARS,
@@ -5262,8 +5262,8 @@ registry.register(
     name=TYPE_SCHEMA["name"],
     toolset=TOOLSET,
     schema=TYPE_SCHEMA,
-    handler=shopping_browser_type_tool,
-    check_fn=_check_shopping_browser,
+    handler=secure_browser_type_tool,
+    check_fn=_check_secure_browser,
     description=TYPE_SCHEMA["description"],
     emoji="⌨️",
     max_result_size_chars=MAX_RESULT_CHARS,
@@ -5272,8 +5272,8 @@ registry.register(
     name=CURRENT_PAGE_SUMMARY_SCHEMA["name"],
     toolset=TOOLSET,
     schema=CURRENT_PAGE_SUMMARY_SCHEMA,
-    handler=shopping_browser_current_page_summary_tool,
-    check_fn=_check_shopping_browser,
+    handler=secure_browser_current_page_summary_tool,
+    check_fn=_check_secure_browser,
     description=CURRENT_PAGE_SUMMARY_SCHEMA["description"],
     emoji="📄",
     max_result_size_chars=MAX_RESULT_CHARS,
@@ -5282,8 +5282,8 @@ registry.register(
     name=OWNER_CHECKOUT_REVIEW_SCHEMA["name"],
     toolset=TOOLSET,
     schema=OWNER_CHECKOUT_REVIEW_SCHEMA,
-    handler=shopping_browser_owner_checkout_review_tool,
-    check_fn=_check_shopping_browser,
+    handler=secure_browser_owner_checkout_review_tool,
+    check_fn=_check_secure_browser,
     description=OWNER_CHECKOUT_REVIEW_SCHEMA["description"],
     emoji="🔐",
     max_result_size_chars=MAX_RESULT_CHARS,
@@ -5292,8 +5292,8 @@ registry.register(
     name=REQUEST_FINAL_PURCHASE_APPROVAL_SCHEMA["name"],
     toolset=TOOLSET,
     schema=REQUEST_FINAL_PURCHASE_APPROVAL_SCHEMA,
-    handler=shopping_browser_request_final_purchase_approval_tool,
-    check_fn=_check_shopping_browser,
+    handler=secure_browser_request_final_purchase_approval_tool,
+    check_fn=_check_secure_browser,
     description=REQUEST_FINAL_PURCHASE_APPROVAL_SCHEMA["description"],
     emoji="✅",
     max_result_size_chars=MAX_RESULT_CHARS,
@@ -5302,31 +5302,31 @@ registry.register(
     name=EXECUTE_FINAL_PURCHASE_SCHEMA["name"],
     toolset=TOOLSET,
     schema=EXECUTE_FINAL_PURCHASE_SCHEMA,
-    handler=shopping_browser_execute_final_purchase_tool,
-    check_fn=_check_shopping_browser,
+    handler=secure_browser_execute_final_purchase_tool,
+    check_fn=_check_secure_browser,
     description=EXECUTE_FINAL_PURCHASE_SCHEMA["description"],
     emoji="🛒",
     max_result_size_chars=MAX_RESULT_CHARS,
 )
 for _schema, _handler, _emoji in [
-    (ORDER_LIST_SCHEMA, shopping_browser_order_list_tool, "📦"),
-    (ORDER_READ_SCHEMA, shopping_browser_order_read_tool, "🔎"),
-    (ORDER_UPSERT_SCHEMA, shopping_browser_order_upsert_tool, "🧾"),
-    (ORDER_CLOSE_SCHEMA, shopping_browser_order_close_tool, "✅"),
-    (ORDER_NOTIFICATION_PREVIEW_SCHEMA, shopping_browser_order_notification_preview_tool, "🔕"),
-    (ORDER_MARK_NOTIFIED_SCHEMA, shopping_browser_order_mark_notified_tool, "📌"),
-    (ORDER_REFRESH_PLAN_SCHEMA, shopping_browser_order_refresh_plan_tool, "🔄"),
-    (ORDER_REFRESH_RUN_SCHEMA, shopping_browser_order_refresh_run_tool, "⏰"),
-    (CONSUMABLE_LIST_SCHEMA, shopping_browser_consumable_list_tool, "☕"),
-    (CONSUMABLE_UPSERT_SCHEMA, shopping_browser_consumable_upsert_tool, "📝"),
-    (CONSUMABLE_SUGGEST_FROM_ORDER_SCHEMA, shopping_browser_consumable_suggest_from_order_tool, "🌱"),
+    (ORDER_LIST_SCHEMA, secure_browser_order_list_tool, "📦"),
+    (ORDER_READ_SCHEMA, secure_browser_order_read_tool, "🔎"),
+    (ORDER_UPSERT_SCHEMA, secure_browser_order_upsert_tool, "🧾"),
+    (ORDER_CLOSE_SCHEMA, secure_browser_order_close_tool, "✅"),
+    (ORDER_NOTIFICATION_PREVIEW_SCHEMA, secure_browser_order_notification_preview_tool, "🔕"),
+    (ORDER_MARK_NOTIFIED_SCHEMA, secure_browser_order_mark_notified_tool, "📌"),
+    (ORDER_REFRESH_PLAN_SCHEMA, secure_browser_order_refresh_plan_tool, "🔄"),
+    (ORDER_REFRESH_RUN_SCHEMA, secure_browser_order_refresh_run_tool, "⏰"),
+    (CONSUMABLE_LIST_SCHEMA, secure_browser_consumable_list_tool, "☕"),
+    (CONSUMABLE_UPSERT_SCHEMA, secure_browser_consumable_upsert_tool, "📝"),
+    (CONSUMABLE_SUGGEST_FROM_ORDER_SCHEMA, secure_browser_consumable_suggest_from_order_tool, "🌱"),
 ]:
     registry.register(
         name=_schema["name"],
         toolset=TOOLSET,
         schema=_schema,
         handler=_handler,
-        check_fn=_check_shopping_browser,
+        check_fn=_check_secure_browser,
         description=_schema["description"],
         emoji=_emoji,
         max_result_size_chars=MAX_RESULT_CHARS,
@@ -5336,8 +5336,8 @@ registry.register(
     name=GUARDRAIL_SCHEMA["name"],
     toolset=TOOLSET,
     schema=GUARDRAIL_SCHEMA,
-    handler=shopping_browser_guardrail_check_tool,
-    check_fn=_check_shopping_browser,
+    handler=secure_browser_guardrail_check_tool,
+    check_fn=_check_secure_browser,
     description=GUARDRAIL_SCHEMA["description"],
     emoji="🚫",
     max_result_size_chars=MAX_RESULT_CHARS,
@@ -5482,7 +5482,7 @@ if __name__ == "__main__":
                     "viewport_rect": {"x": 10, "y": 20, "width": 15, "height": 15},
                 },
                 {
-                    "selector": "[data-shopping-browser-checkout-control=\"sb-checkout-2\"]",
+                    "selector": "[data-secure-browser-checkout-control=\"sb-checkout-2\"]",
                     "label": "Paying with Visa ending in 5252 plus gift card balance Change",
                     "role": "link",
                     "tag": "A",
@@ -5559,7 +5559,7 @@ if __name__ == "__main__":
         raise AssertionError("off-image crop should be blocked")
     except ValueError:
         pass
-    assert json.loads(shopping_browser_visual_evidence_tool({"crops": "not-a-list"}))["error"] == "INVALID_CROPS"
+    assert json.loads(secure_browser_visual_evidence_tool({"crops": "not-a-list"}))["error"] == "INVALID_CROPS"
     assert _reject_unsafe_operation("request_final_purchase_approval")["trusted_approval_required"] is True
     assert _reject_unsafe_operation("execute_final_purchase")["allowed"] is False
     assert re.fullmatch(r"[0-9a-f]{64}", _approval_token_key("ar-20260101-000000-deadbe", "ap-test", "a" * 64, "b" * 64))
@@ -5568,7 +5568,7 @@ if __name__ == "__main__":
         raise AssertionError("invalid binding should be blocked")
     except ValueError:
         pass
-    disabled_owner_review = json.loads(shopping_browser_owner_checkout_review_tool({"send_to_telegram": False}))
+    disabled_owner_review = json.loads(secure_browser_owner_checkout_review_tool({"send_to_telegram": False}))
     assert disabled_owner_review["error"] == "OWNER_CHECKOUT_REVIEW_FAILED"
     assert disabled_owner_review["operation"] == "owner_checkout_review"
     huge_owner_review = {
@@ -5619,10 +5619,10 @@ if __name__ == "__main__":
     assert len(compact_owner_json) <= MAX_RESULT_CHARS
     import tempfile
 
-    original_ledger_path = SHOPPING_ORDER_LEDGER_PATH
+    original_ledger_path = SECURE_BROWSER_ORDER_LEDGER_PATH
     with tempfile.TemporaryDirectory() as tmpdir:
-        globals()["SHOPPING_ORDER_LEDGER_PATH"] = os.path.join(tmpdir, "shopping-order-ledger.sqlite3")
-        order_result = json.loads(shopping_browser_order_upsert_tool({
+        globals()["SECURE_BROWSER_ORDER_LEDGER_PATH"] = os.path.join(tmpdir, "secure-browser-order-ledger.sqlite3")
+        order_result = json.loads(secure_browser_order_upsert_tool({
             "handle": "pipe-screens-coffee-filters",
             "retailer": "amazon",
             "item_nickname": "pipe screens and coffee filters",
@@ -5639,23 +5639,23 @@ if __name__ == "__main__":
         order_json = json.dumps(order_result, ensure_ascii=False)
         assert "111-2222222-3333333" not in order_json
         assert "Example Street" not in order_json
-        assert json.loads(shopping_browser_order_read_tool({"handle": "pipe-screens-coffee-filters"}))["order"]["status"] == "confirmed"
-        preview_same = json.loads(shopping_browser_order_notification_preview_tool({"handle": "pipe-screens-coffee-filters", "status": "confirmed", "eta_window": "Tuesday"}))
+        assert json.loads(secure_browser_order_read_tool({"handle": "pipe-screens-coffee-filters"}))["order"]["status"] == "confirmed"
+        preview_same = json.loads(secure_browser_order_notification_preview_tool({"handle": "pipe-screens-coffee-filters", "status": "confirmed", "eta_window": "Tuesday"}))
         assert preview_same["notification_decision"]["should_notify"] is False
-        preview_eta = json.loads(shopping_browser_order_notification_preview_tool({"handle": "pipe-screens-coffee-filters", "status": "confirmed", "eta_window": "Wednesday"}))
+        preview_eta = json.loads(secure_browser_order_notification_preview_tool({"handle": "pipe-screens-coffee-filters", "status": "confirmed", "eta_window": "Wednesday"}))
         assert preview_eta["notification_decision"]["should_notify"] is True
         assert preview_eta["notification_decision"]["event_type"] == "eta_changed"
-        notified = json.loads(shopping_browser_order_mark_notified_tool({"handle": "pipe-screens-coffee-filters", "event_type": "eta_changed"}))
+        notified = json.loads(secure_browser_order_mark_notified_tool({"handle": "pipe-screens-coffee-filters", "event_type": "eta_changed"}))
         assert notified["status"] == "stored"
-        consumable = json.loads(shopping_browser_consumable_suggest_from_order_tool({"handle": "pipe-screens-coffee-filters"}))
+        consumable = json.loads(secure_browser_consumable_suggest_from_order_tool({"handle": "pipe-screens-coffee-filters"}))
         assert consumable["status"] == "stored"
         assert consumable["consumable"]["confidence"] == "suggested"
-        explicit = json.loads(shopping_browser_consumable_upsert_tool({"handle": "coffee-filters", "item_nickname": "coffee filters", "item_category": "coffee", "confidence": "explicit", "source": "joy_statement"}))
+        explicit = json.loads(secure_browser_consumable_upsert_tool({"handle": "coffee-filters", "item_nickname": "coffee filters", "item_category": "coffee", "confidence": "explicit", "source": "joy_statement"}))
         assert explicit["consumable"]["confidence"] == "explicit"
-        closed = json.loads(shopping_browser_order_close_tool({"handle": "pipe-screens-coffee-filters", "status": "delivered", "safe_delivery_facts": ["Delivered Tuesday"]}))
+        closed = json.loads(secure_browser_order_close_tool({"handle": "pipe-screens-coffee-filters", "status": "delivered", "safe_delivery_facts": ["Delivered Tuesday"]}))
         assert closed["order"]["status"] == "delivered"
         assert closed["order"]["archived"] is True
-        assert json.loads(shopping_browser_order_upsert_tool({"handle": "111-2222222-3333333", "item_nickname": "unsafe"}))["error"] == "SHOPPING_ORDER_UPSERT_FAILED"
+        assert json.loads(secure_browser_order_upsert_tool({"handle": "111-2222222-3333333", "item_nickname": "unsafe"}))["error"] == "SECURE_BROWSER_ORDER_UPSERT_FAILED"
         final_purchase_stub = {
             "request_id": "ar-20260101-000000-deadbe",
             "approval_id": "ap-test",
@@ -5679,7 +5679,7 @@ if __name__ == "__main__":
         assert tracking["order"]["handle"].startswith("order-")
         assert tracking["order"]["status"] == "confirmed"
         assert tracking["order"]["refresh_sources"][:2] == ["amazon_your_orders", "gmail_order_email"]
-        assert json.loads(shopping_browser_order_refresh_plan_tool({}))["scheduled_refresh_spec"]["primary_source"] == "Amazon Your Orders via secure shopping browser owner/post-purchase evidence path"
+        assert json.loads(secure_browser_order_refresh_plan_tool({}))["scheduled_refresh_spec"]["primary_source"] == "Amazon Your Orders via secure browser owner/post-purchase evidence path"
         with _ledger_connect() as conn:
             conn.execute("UPDATE shopping_orders SET status = 'shipped', updated_at = ? WHERE handle = ?", ((datetime.now(timezone.utc) - timedelta(hours=7)).isoformat(), tracking["order"]["handle"]))
             conn.commit()
@@ -5695,21 +5695,21 @@ if __name__ == "__main__":
                 "source_refs": [source],
             }
             globals()["_send_order_notification"] = lambda message: {"status": "sent", "telegram_message_id": 4242, "message": message}
-            refresh_run = json.loads(shopping_browser_order_refresh_run_tool({"send_notifications": True, "limit": 5}))
+            refresh_run = json.loads(secure_browser_order_refresh_run_tool({"send_notifications": True, "limit": 5}))
         finally:
             globals()["_refresh_observation_for_source"] = original_refresh_observation
             globals()["_send_order_notification"] = original_send_order_notification
         assert refresh_run["status"] == "ok"
         assert refresh_run["notifications_sent"] == 1
         assert refresh_run["refreshed"][0]["applied"]["notification"]["status"] == "sent"
-        refreshed_order = json.loads(shopping_browser_order_read_tool({"handle": tracking["order"]["handle"]}))["order"]
+        refreshed_order = json.loads(secure_browser_order_read_tool({"handle": tracking["order"]["handle"]}))["order"]
         assert refreshed_order["status"] == "delivered"
         assert refreshed_order["notification_state"]["last_notified_delivered"]
-    globals()["SHOPPING_ORDER_LEDGER_PATH"] = original_ledger_path
+    globals()["SECURE_BROWSER_ORDER_LEDGER_PATH"] = original_ledger_path
 
     body, content_type = _multipart_request({"chat_id": "123"}, {"document": ("review.png", b"png", "image/png")})
     assert b"review.png" in body and content_type.startswith("multipart/form-data")
-    status = json.loads(shopping_browser_status_tool({}))
+    status = json.loads(secure_browser_status_tool({}))
     assert "screenshot" in status["browser_operations"]
     assert "visual_evidence" in status["browser_operations"]
     assert "owner_checkout_review" in status["browser_operations"]
@@ -5729,16 +5729,16 @@ if __name__ == "__main__":
     assert "condition_summary" in ADD_TO_CART_PRECHECK_JS
     assert "product_condition" in PRODUCT_EXTRACT_JS
     active_schema_names = [STATUS_SCHEMA["name"], NAVIGATE_SCHEMA["name"], PAGE_SNAPSHOT_SCHEMA["name"], QUERY_SCHEMA["name"], SCREENSHOT_SCHEMA["name"], VISUAL_EVIDENCE_SCHEMA["name"], CLICK_SCHEMA["name"], TYPE_SCHEMA["name"], CURRENT_PAGE_SUMMARY_SCHEMA["name"], OWNER_CHECKOUT_REVIEW_SCHEMA["name"], ORDER_LIST_SCHEMA["name"], ORDER_READ_SCHEMA["name"], ORDER_UPSERT_SCHEMA["name"], ORDER_CLOSE_SCHEMA["name"], ORDER_NOTIFICATION_PREVIEW_SCHEMA["name"], ORDER_MARK_NOTIFIED_SCHEMA["name"], ORDER_REFRESH_PLAN_SCHEMA["name"], ORDER_REFRESH_RUN_SCHEMA["name"], CONSUMABLE_LIST_SCHEMA["name"], CONSUMABLE_UPSERT_SCHEMA["name"], CONSUMABLE_SUGGEST_FROM_ORDER_SCHEMA["name"], GUARDRAIL_SCHEMA["name"]]
-    assert "shopping_browser_owner_checkout_review" in active_schema_names
-    assert "shopping_browser_order_upsert" in active_schema_names
-    assert "shopping_browser_consumable_upsert" in active_schema_names
-    assert "shopping_browser_inspect_product" not in active_schema_names
-    assert "shopping_browser_inspect_reviews" not in active_schema_names
-    assert "shopping_browser_inspect_cart" not in active_schema_names
-    assert "shopping_browser_add_to_cart" not in active_schema_names
+    assert "secure_browser_owner_checkout_review" in active_schema_names
+    assert "secure_browser_order_upsert" in active_schema_names
+    assert "secure_browser_consumable_upsert" in active_schema_names
+    assert "secure_browser_inspect_product" not in active_schema_names
+    assert "secure_browser_inspect_reviews" not in active_schema_names
+    assert "secure_browser_inspect_cart" not in active_schema_names
+    assert "secure_browser_add_to_cart" not in active_schema_names
     assert not any(word in json.dumps(STATUS_SCHEMA).lower() for word in ("cookie", "localstorage"))
     product = {"image_url_candidates": ["https://m.media-amazon.com/images/I/example._AC_SX679_.jpg?x=1", "https://example.com/not-amazon.jpg"]}
     _normalize_product_images(product)
     assert product["primary_image_url"] == "https://m.media-amazon.com/images/I/example._AC_SX679_.jpg"
     assert product["image_urls"] == ["https://m.media-amazon.com/images/I/example._AC_SX679_.jpg"]
-    print("shopping_browser_tool smoke ok")
+    print("secure_browser_tool smoke ok")

@@ -22,7 +22,7 @@ hermes auth add openai-codex --type oauth --label primary --no-browser
 hermes auth add openai-codex --type oauth --label secondary --no-browser
 ```
 
-Open the printed Codex device URL in the owner-operated OAuth browser or Joy's local private/incognito browser and enter the public device code. Joy handles account selection, passwords, passkeys, 2FA, CAPTCHA, and consent directly in the browser.
+Open the printed Codex device URL in the owner-operated secure browser (using the OAuth/device-flow tools) or Joy's local private/incognito browser and enter the public device code. Joy handles account selection, passwords, passkeys, 2FA, CAPTCHA, and consent directly in the browser.
 
 Do not paste token JSON, callback URLs containing codes, browser cookies/storage, passwords, passkeys, or 2FA codes into chat, tickets, Kanban comments, commits, logs, or memory.
 

@@ -150,7 +150,7 @@ nest::app::hermes::instances:
         skills: '📚'
         agent_directory: '🗂️'
         agent_requests: '🪶'
-        oauth_browser: '🔐'
+        secure_browser: '🔐'
         kanban: '📋'
         todo: '☑️'
         gitlab: '🦊'
@@ -285,8 +285,7 @@ nest::app::hermes::instances:
         image_gen: '🎨'
         agent_directory: '🗂️'
         agent_requests: '🦋'
-        oauth_browser: '🔐'
-        shopping_browser: '🛒'
+        secure_browser: '🔐'
         kanban: '📋'
     image_gen_provider: 'openai-codex'
     image_gen_model: 'gpt-image-2-medium'
@@ -302,7 +301,7 @@ nest::app::hermes::instances:
     dashboard_theme: 'rose'
     google_workspace_enabled: true
     environment:
-      SHOPPING_BROWSER_CDP_URL: 'https://secure-browser-cdp.eyrie'
+      SECURE_BROWSER_CDP_URL: 'https://secure-browser-cdp.eyrie'
     voice_auto_tts: true
     stt_enabled: true
     stt_provider: 'voice-speech'
@@ -398,8 +397,7 @@ nest::app::hermes::instances:
         skills: '📚'
         agent_directory: '🗂️'
         agent_requests: '🐝'
-        oauth_browser: '🔐'
-        shopping_browser: '🛒'
+        secure_browser: '🔐'
         kanban: '📋'
         todo: '☑️'
         gitlab: '🦊'
