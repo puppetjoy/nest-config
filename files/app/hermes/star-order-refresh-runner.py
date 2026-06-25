@@ -1,7 +1,7 @@
 #!/opt/hermes-agent/venv/bin/python
-"""Run Star's safe shopping-order refresh loop.
+"""Run Star's safe retail-order refresh loop.
 
-This small systemd-friendly wrapper calls the secure_browser tool substrate in
+This small systemd-friendly wrapper calls the retail_order tool entry point in
 process so the scheduled unit can reuse Star's profile environment and Telegram
 settings without exposing browser/Gmail/carrier raw data in command output.
 """
@@ -40,20 +40,20 @@ def _load_tool_module():
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Run Star safe shopping-order refresh")
+    parser = argparse.ArgumentParser(description="Run Star safe retail-order refresh")
     parser.add_argument("--limit", type=int, default=20, help="maximum due orders to refresh")
     parser.add_argument("--no-notify", action="store_true", help="refresh/preview without Telegram notifications")
     parser.add_argument("--json", action="store_true", help="print compact JSON result")
     args = parser.parse_args(argv)
 
     tool = _load_tool_module()
-    refresh_tool = getattr(tool, "secure_browser_order_refresh_run_tool")
+    refresh_tool = getattr(tool, "retail_order_refresh_run_tool")
     result = json.loads(refresh_tool({"send_notifications": not args.no_notify, "limit": args.limit}))
     if args.json:
         print(json.dumps(result, ensure_ascii=False, sort_keys=True))
     else:
         print(
-            "secure browser order refresh: "
+            "retail order refresh: "
             f"due={len(result.get('plan', {}).get('due_orders', []))} "
             f"refreshed={len(result.get('refreshed', []))} "
             f"notifications_sent={result.get('notifications_sent', 0)}"

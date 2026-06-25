@@ -1660,9 +1660,9 @@ def _upsert_order_entry(args: dict[str, Any]) -> dict[str, Any]:
         )
         conn.commit()
         order = _get_order(conn, payload["handle"])
-    _audit("shopping_order_upserted", {"handle": payload["handle"], "status": payload["status"], "retailer": payload["retailer"]})
+    _audit("retail_order_upserted", {"handle": payload["handle"], "status": payload["status"], "retailer": payload["retailer"]})
     return {
-        "operation": "shopping_order_upsert",
+        "operation": "retail_order_upsert",
         "status": "stored",
         "order": order,
         "privacy_boundary": "Ledger state is Star-visible safe state only: no raw order numbers, addresses, payment details, cookies, raw DOM, or owner-only screenshots are stored.",
@@ -1681,11 +1681,11 @@ def _list_orders(include_archived: bool = False, status: str = "") -> dict[str, 
         rows = conn.execute(f"SELECT * FROM shopping_orders {where} ORDER BY updated_at DESC LIMIT 100", params).fetchall()
     orders = [_order_row_to_safe_dict(row) for row in rows]
     return {
-        "operation": "shopping_order_list",
+        "operation": "retail_order_list",
         "status": "ok",
         "orders": orders,
         "active_count": sum(1 for order in orders if order["status"] in ORDER_STATUSES_ACTIVE and not order["archived"]),
-        "ledger_path_hint": "profile-local secure-browser-order ledger",
+        "ledger_path_hint": "profile-local retail-order ledger",
     }
 
 
@@ -1694,8 +1694,8 @@ def _read_order(handle: str) -> dict[str, Any]:
     with _ledger_connect() as conn:
         order = _get_order(conn, safe_handle)
     if not order:
-        return {"operation": "shopping_order_read", "status": "not_found", "handle": safe_handle}
-    return {"operation": "shopping_order_read", "status": "ok", "order": order}
+        return {"operation": "retail_order_read", "status": "not_found", "handle": safe_handle}
+    return {"operation": "retail_order_read", "status": "ok", "order": order}
 
 
 def _close_order(handle: str, status: str = "delivered", archive: bool = True, safe_delivery_facts: Any = None, notes: str = "") -> dict[str, Any]:
@@ -1703,7 +1703,7 @@ def _close_order(handle: str, status: str = "delivered", archive: bool = True, s
     with _ledger_connect() as conn:
         existing = _get_order(conn, safe_handle)
         if not existing:
-            return {"operation": "shopping_order_close", "status": "not_found", "handle": safe_handle}
+            return {"operation": "retail_order_close", "status": "not_found", "handle": safe_handle}
     args = {
         **existing,
         "handle": safe_handle,
@@ -1713,7 +1713,7 @@ def _close_order(handle: str, status: str = "delivered", archive: bool = True, s
         "notes": notes or existing.get("notes") or "",
     }
     result = _upsert_order_entry(args)
-    result["operation"] = "shopping_order_close"
+    result["operation"] = "retail_order_close"
     return result
 
 
@@ -1760,7 +1760,7 @@ def _preview_order_update(args: dict[str, Any]) -> dict[str, Any]:
     payload = _safe_order_payload({**(existing or {}), **args, "handle": handle}, existing)
     candidate = {**(existing or {}), **payload}
     decision = _notification_decision(existing, candidate, str(args.get("event_type") or ""))
-    return {"operation": "shopping_order_notification_preview", "status": "ok", "handle": handle, "notification_decision": decision, "candidate_order": candidate}
+    return {"operation": "retail_order_notification_preview", "status": "ok", "handle": handle, "notification_decision": decision, "candidate_order": candidate}
 
 
 def _mark_order_notified(handle: str, event_type: str) -> dict[str, Any]:
@@ -1771,13 +1771,13 @@ def _mark_order_notified(handle: str, event_type: str) -> dict[str, Any]:
     with _ledger_connect() as conn:
         order = _get_order(conn, safe_handle)
         if not order:
-            return {"operation": "shopping_order_mark_notified", "status": "not_found", "handle": safe_handle}
+            return {"operation": "retail_order_mark_notified", "status": "not_found", "handle": safe_handle}
         state = _coerce_json_dict(order.get("notification_state"))
         state[f"last_notified_{event_type}"] = _utc_now()
         conn.execute("UPDATE shopping_orders SET notification_state_json = ?, updated_at = ? WHERE handle = ?", (json.dumps(state, ensure_ascii=False, sort_keys=True), _utc_now(), safe_handle))
         conn.commit()
         order = _get_order(conn, safe_handle)
-    return {"operation": "shopping_order_mark_notified", "status": "stored", "order": order}
+    return {"operation": "retail_order_mark_notified", "status": "stored", "order": order}
 
 
 def _refresh_plan() -> dict[str, Any]:
@@ -1802,7 +1802,7 @@ def _refresh_plan() -> dict[str, Any]:
                 "next_step": "Check Amazon Your Orders through the secure browser/post-purchase evidence path first; fall back to read-only Gmail order/shipment emails; try carrier pages only when bot-accessible and treat UPS/bot blocking as non-fatal.",
             })
     return {
-        "operation": "shopping_order_refresh_plan",
+        "operation": "retail_order_refresh_plan",
         "status": "ok",
         "due_orders": due,
         "scheduled_refresh_spec": {
@@ -2040,9 +2040,9 @@ def _refresh_due_orders(send_notifications: bool = True, limit: int = 20) -> dic
                 break
         refreshed.append({"handle": handle, "attempts": attempts, "applied": applied})
     sent_count = sum(1 for item in refreshed if ((item.get("applied") or {}).get("notification") or {}).get("status") == "sent")
-    _audit("shopping_order_refresh_run", {"due_count": len(due_orders), "refreshed_count": len(refreshed), "sent_count": sent_count})
+    _audit("retail_order_refresh_run", {"due_count": len(due_orders), "refreshed_count": len(refreshed), "sent_count": sent_count})
     return {
-        "operation": "shopping_order_refresh_run",
+        "operation": "retail_order_refresh_run",
         "status": "ok",
         "plan": plan,
         "refreshed": refreshed,
@@ -2086,7 +2086,7 @@ def _upsert_consumable(args: dict[str, Any]) -> dict[str, Any]:
         conn.commit()
         row = conn.execute("SELECT * FROM consumable_items WHERE handle = ?", (handle,)).fetchone()
     return {
-        "operation": "shopping_consumable_upsert",
+        "operation": "consumable_upsert",
         "status": "stored",
         "consumable": _consumable_row_to_safe_dict(row),
         "learning_policy": "Explicit Joy statements may be durable; repeated purchases can be suggested/tentative; ambiguous one-offs should remain tentative or ask before durable memory.",
@@ -2097,7 +2097,7 @@ def _list_consumables(include_archived: bool = False) -> dict[str, Any]:
     where = "" if include_archived else "WHERE archived = 0"
     with _ledger_connect() as conn:
         rows = conn.execute(f"SELECT * FROM consumable_items {where} ORDER BY updated_at DESC LIMIT 100").fetchall()
-    return {"operation": "shopping_consumable_list", "status": "ok", "consumables": [_consumable_row_to_safe_dict(row) for row in rows]}
+    return {"operation": "consumable_list", "status": "ok", "consumables": [_consumable_row_to_safe_dict(row) for row in rows]}
 
 
 def _suggest_consumable_from_order(handle: str) -> dict[str, Any]:
@@ -2105,7 +2105,7 @@ def _suggest_consumable_from_order(handle: str) -> dict[str, Any]:
     with _ledger_connect() as conn:
         order = _get_order(conn, safe_handle)
     if not order:
-        return {"operation": "shopping_consumable_suggest_from_order", "status": "not_found", "handle": safe_handle}
+        return {"operation": "consumable_suggest_from_order", "status": "not_found", "handle": safe_handle}
     suggestion = _upsert_consumable({
         "handle": re.sub(r"[^a-z0-9]+", "-", order["item_nickname"].lower()).strip("-") or f"consumable-{safe_handle}",
         "item_nickname": order["item_nickname"],
@@ -2117,7 +2117,7 @@ def _suggest_consumable_from_order(handle: str) -> dict[str, Any]:
         "last_order_handle": safe_handle,
         "notes": "Suggested from a purchase; keep tentative unless Joy explicitly confirms or repeated purchases provide stronger evidence.",
     })
-    suggestion["operation"] = "shopping_consumable_suggest_from_order"
+    suggestion["operation"] = "consumable_suggest_from_order"
     return suggestion
 
 
@@ -2146,7 +2146,7 @@ def _order_entry_from_final_purchase_result(result: dict[str, Any], checkout_sum
         "handle": handle,
         "retailer": "amazon",
         "item_nickname": item_nickname,
-        "item_category": "secure browser order",
+        "item_category": "retail order",
         "status": "confirmed" if proof else "pending_confirmation",
         "eta_window": eta,
         "safe_delivery_facts": delivery_facts,
@@ -2187,7 +2187,7 @@ def _order_entry_from_post_purchase_review_result(result: dict[str, Any]) -> dic
         "handle": handle,
         "retailer": "amazon",
         "item_nickname": item_nickname,
-        "item_category": "secure browser order",
+        "item_category": "retail order",
         "status": status,
         "eta_window": eta,
         "safe_delivery_facts": delivery_facts or presence_facts,
@@ -4644,7 +4644,9 @@ def secure_browser_status_tool(args: dict[str, Any], **_kw: Any) -> str:
         "remote_debug_port": REMOTE_DEBUG_PORT,
         "secure_browser_owner": BROWSER_OWNER,
         "ownership_state_path": OWNERSHIP_STATE_PATH,
-        "browser_operations": ["navigate", "page_snapshot", "query", "click", "type", "screenshot", "visual_evidence", "current_page_summary", "owner_checkout_review", "order_list", "order_read", "order_upsert", "order_close", "order_notification_preview", "order_mark_notified", "order_refresh_plan", "order_refresh_run", "consumable_list", "consumable_upsert"],
+        "browser_operations": ["navigate", "page_snapshot", "query", "click", "type", "screenshot", "visual_evidence", "current_page_summary", "owner_checkout_review"],
+        "retail_order_operations": ["list", "read", "upsert", "close", "notification_preview", "mark_notified", "refresh_plan", "refresh_run"],
+        "consumable_operations": ["list", "upsert", "suggest_from_order"],
         "trusted_assistant_access": {
             "status": "broad_browsing_available",
             "message": "Star may navigate and inspect ordinary shopping, account research surfaces, including Amazon order history, Buy Again, past-order details, and product links. The bridge gates capabilities and sanitizes outputs instead of blanket-blocking account/order-history URLs.",
@@ -4818,28 +4820,28 @@ def secure_browser_execute_final_purchase_tool(args: dict[str, Any], **_kw: Any)
         return _json({"error": "FINAL_PURCHASE_EXECUTION_FAILED", "message": str(exc)[:1000], "operation": "execute_final_purchase"})
 
 
-def secure_browser_order_list_tool(args: dict[str, Any], **_kw: Any) -> str:
+def retail_order_list_tool(args: dict[str, Any], **_kw: Any) -> str:
     try:
         return _json(_list_orders(bool(args.get("include_archived", False)), str(args.get("status") or "")))
     except Exception as exc:
-        return _json({"error": "SECURE_BROWSER_ORDER_LIST_FAILED", "message": str(exc)[:1000], "operation": "shopping_order_list"})
+        return _json({"error": "RETAIL_ORDER_LIST_FAILED", "message": str(exc)[:1000], "operation": "retail_order_list"})
 
 
-def secure_browser_order_read_tool(args: dict[str, Any], **_kw: Any) -> str:
+def retail_order_read_tool(args: dict[str, Any], **_kw: Any) -> str:
     try:
         return _json(_read_order(str(args.get("handle") or args.get("order_handle") or "")))
     except Exception as exc:
-        return _json({"error": "SECURE_BROWSER_ORDER_READ_FAILED", "message": str(exc)[:1000], "operation": "shopping_order_read"})
+        return _json({"error": "RETAIL_ORDER_READ_FAILED", "message": str(exc)[:1000], "operation": "retail_order_read"})
 
 
-def secure_browser_order_upsert_tool(args: dict[str, Any], **_kw: Any) -> str:
+def retail_order_upsert_tool(args: dict[str, Any], **_kw: Any) -> str:
     try:
         return _json(_upsert_order_entry(args))
     except Exception as exc:
-        return _json({"error": "SECURE_BROWSER_ORDER_UPSERT_FAILED", "message": str(exc)[:1000], "operation": "shopping_order_upsert"})
+        return _json({"error": "RETAIL_ORDER_UPSERT_FAILED", "message": str(exc)[:1000], "operation": "retail_order_upsert"})
 
 
-def secure_browser_order_close_tool(args: dict[str, Any], **_kw: Any) -> str:
+def retail_order_close_tool(args: dict[str, Any], **_kw: Any) -> str:
     try:
         return _json(_close_order(
             str(args.get("handle") or args.get("order_handle") or ""),
@@ -4849,59 +4851,59 @@ def secure_browser_order_close_tool(args: dict[str, Any], **_kw: Any) -> str:
             str(args.get("notes") or ""),
         ))
     except Exception as exc:
-        return _json({"error": "SECURE_BROWSER_ORDER_CLOSE_FAILED", "message": str(exc)[:1000], "operation": "shopping_order_close"})
+        return _json({"error": "RETAIL_ORDER_CLOSE_FAILED", "message": str(exc)[:1000], "operation": "retail_order_close"})
 
 
-def secure_browser_order_notification_preview_tool(args: dict[str, Any], **_kw: Any) -> str:
+def retail_order_notification_preview_tool(args: dict[str, Any], **_kw: Any) -> str:
     try:
         return _json(_preview_order_update(args))
     except Exception as exc:
-        return _json({"error": "SECURE_BROWSER_ORDER_NOTIFICATION_PREVIEW_FAILED", "message": str(exc)[:1000], "operation": "shopping_order_notification_preview"})
+        return _json({"error": "RETAIL_ORDER_NOTIFICATION_PREVIEW_FAILED", "message": str(exc)[:1000], "operation": "retail_order_notification_preview"})
 
 
-def secure_browser_order_mark_notified_tool(args: dict[str, Any], **_kw: Any) -> str:
+def retail_order_mark_notified_tool(args: dict[str, Any], **_kw: Any) -> str:
     try:
         return _json(_mark_order_notified(str(args.get("handle") or args.get("order_handle") or ""), str(args.get("event_type") or "")))
     except Exception as exc:
-        return _json({"error": "SECURE_BROWSER_ORDER_MARK_NOTIFIED_FAILED", "message": str(exc)[:1000], "operation": "shopping_order_mark_notified"})
+        return _json({"error": "RETAIL_ORDER_MARK_NOTIFIED_FAILED", "message": str(exc)[:1000], "operation": "retail_order_mark_notified"})
 
 
-def secure_browser_order_refresh_plan_tool(args: dict[str, Any], **_kw: Any) -> str:
+def retail_order_refresh_plan_tool(args: dict[str, Any], **_kw: Any) -> str:
     try:
         return _json(_refresh_plan())
     except Exception as exc:
-        return _json({"error": "SECURE_BROWSER_ORDER_REFRESH_PLAN_FAILED", "message": str(exc)[:1000], "operation": "shopping_order_refresh_plan"})
+        return _json({"error": "RETAIL_ORDER_REFRESH_PLAN_FAILED", "message": str(exc)[:1000], "operation": "retail_order_refresh_plan"})
 
 
-def secure_browser_order_refresh_run_tool(args: dict[str, Any], **_kw: Any) -> str:
+def retail_order_refresh_run_tool(args: dict[str, Any], **_kw: Any) -> str:
     try:
         return _json(_refresh_due_orders(
             send_notifications=bool(args.get("send_notifications", True)),
             limit=int(args.get("limit") or 20),
         ))
     except Exception as exc:
-        return _json({"error": "SECURE_BROWSER_ORDER_REFRESH_RUN_FAILED", "message": str(exc)[:1000], "operation": "shopping_order_refresh_run"})
+        return _json({"error": "RETAIL_ORDER_REFRESH_RUN_FAILED", "message": str(exc)[:1000], "operation": "retail_order_refresh_run"})
 
 
-def secure_browser_consumable_list_tool(args: dict[str, Any], **_kw: Any) -> str:
+def consumable_list_tool(args: dict[str, Any], **_kw: Any) -> str:
     try:
         return _json(_list_consumables(bool(args.get("include_archived", False))))
     except Exception as exc:
-        return _json({"error": "SHOPPING_CONSUMABLE_LIST_FAILED", "message": str(exc)[:1000], "operation": "shopping_consumable_list"})
+        return _json({"error": "CONSUMABLE_LIST_FAILED", "message": str(exc)[:1000], "operation": "consumable_list"})
 
 
-def secure_browser_consumable_upsert_tool(args: dict[str, Any], **_kw: Any) -> str:
+def consumable_upsert_tool(args: dict[str, Any], **_kw: Any) -> str:
     try:
         return _json(_upsert_consumable(args))
     except Exception as exc:
-        return _json({"error": "SHOPPING_CONSUMABLE_UPSERT_FAILED", "message": str(exc)[:1000], "operation": "shopping_consumable_upsert"})
+        return _json({"error": "CONSUMABLE_UPSERT_FAILED", "message": str(exc)[:1000], "operation": "consumable_upsert"})
 
 
-def secure_browser_consumable_suggest_from_order_tool(args: dict[str, Any], **_kw: Any) -> str:
+def consumable_suggest_from_order_tool(args: dict[str, Any], **_kw: Any) -> str:
     try:
         return _json(_suggest_consumable_from_order(str(args.get("handle") or args.get("order_handle") or "")))
     except Exception as exc:
-        return _json({"error": "SHOPPING_CONSUMABLE_SUGGEST_FAILED", "message": str(exc)[:1000], "operation": "shopping_consumable_suggest_from_order"})
+        return _json({"error": "CONSUMABLE_SUGGEST_FAILED", "message": str(exc)[:1000], "operation": "consumable_suggest_from_order"})
 
 
 def secure_browser_guardrail_check_tool(args: dict[str, Any], **_kw: Any) -> str:
@@ -5125,8 +5127,8 @@ EXECUTE_FINAL_PURCHASE_SCHEMA = {
 }
 
 ORDER_LIST_SCHEMA = {
-    "name": "secure_browser_order_list",
-    "description": "List active/in-flight Star secure browser orders from the safe profile-local order ledger. Returns only safe handles, item nicknames/categories, retailer, coarse ETA/status, safe evidence bindings, and sanitized delivery facts; never raw order numbers, address/payment data, cookies, DOM, or owner-only screenshots.",
+    "name": "retail_order_list",
+    "description": "List active/in-flight Star retail orders from the safe profile-local order ledger. Returns only safe handles, item nicknames/categories, retailer, coarse ETA/status, safe evidence bindings, and sanitized delivery facts; never raw order numbers, address/payment data, cookies, DOM, or owner-only screenshots.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -5138,14 +5140,14 @@ ORDER_LIST_SCHEMA = {
 }
 
 ORDER_READ_SCHEMA = {
-    "name": "secure_browser_order_read",
+    "name": "retail_order_read",
     "description": "Read a safe order-ledger entry by human-friendly handle/nickname. The handle must not be a raw order number or payment/address identifier.",
     "parameters": {"type": "object", "properties": {"handle": {"type": "string", "description": "Safe order handle/nickname"}}, "required": ["handle"]},
 }
 
 ORDER_UPSERT_SCHEMA = {
-    "name": "secure_browser_order_upsert",
-    "description": "Add or update a safe Star secure-browser-order ledger entry from trusted final-purchase/post-purchase proof data or sanitized refresh facts. Use safe handles and item nicknames only; raw order numbers, full addresses, payment details, raw DOM, cookies, and screenshots are not accepted or persisted.",
+    "name": "retail_order_upsert",
+    "description": "Add or update a safe Star retail-order ledger entry from trusted final-purchase/post-purchase proof data or sanitized refresh facts. Use safe handles and item nicknames only; raw order numbers, full addresses, payment details, raw DOM, cookies, and screenshots are not accepted or persisted.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -5166,8 +5168,8 @@ ORDER_UPSERT_SCHEMA = {
 }
 
 ORDER_CLOSE_SCHEMA = {
-    "name": "secure_browser_order_close",
-    "description": "Mark a safe secure-browser-order ledger entry delivered/closed/archived. This does not modify, cancel, return, reorder, or contact the retailer/carrier.",
+    "name": "retail_order_close",
+    "description": "Mark a safe retail-order ledger entry delivered/closed/archived. This does not modify, cancel, return, reorder, or contact the retailer/carrier.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -5182,26 +5184,26 @@ ORDER_CLOSE_SCHEMA = {
 }
 
 ORDER_NOTIFICATION_PREVIEW_SCHEMA = {
-    "name": "secure_browser_order_notification_preview",
+    "name": "retail_order_notification_preview",
     "description": "Preview whether a proposed sanitized order status/ETA update is Joy-notifiable under the noise-limited policy. Does not send notifications.",
     "parameters": {"type": "object", "properties": {"handle": {"type": "string"}, "status": {"type": "string"}, "eta_window": {"type": "string"}, "safe_delivery_facts": {"type": "array", "items": {"type": "string"}}, "event_type": {"type": "string"}}, "required": ["handle"]},
 }
 
 ORDER_MARK_NOTIFIED_SCHEMA = {
-    "name": "secure_browser_order_mark_notified",
+    "name": "retail_order_mark_notified",
     "description": "Record that Joy was notified for a material order event so scheduled refreshes do not spam repeated no-change updates. Does not send notifications.",
     "parameters": {"type": "object", "properties": {"handle": {"type": "string"}, "event_type": {"type": "string", "description": "initial_confirmation, eta_changed, status_changed, out_for_delivery, or delivered"}}, "required": ["handle", "event_type"]},
 }
 
 ORDER_REFRESH_PLAN_SCHEMA = {
-    "name": "secure_browser_order_refresh_plan",
+    "name": "retail_order_refresh_plan",
     "description": "Return active orders due for scheduled refresh and the safe refresh strategy: Amazon Your Orders via secure browser first, Gmail order/shipment email fallback, carrier pages only opportunistically; UPS bot blocking is non-fatal. Does not browse or send notifications.",
     "parameters": {"type": "object", "properties": {}, "required": []},
 }
 
 ORDER_REFRESH_RUN_SCHEMA = {
-    "name": "secure_browser_order_refresh_run",
-    "description": "Run the safe scheduled Star order refresh loop for due active orders: refresh sanitized status/ETA from Amazon Your Orders first, read-only Gmail snippets as fallback, carrier pages only opportunistically, update the ledger, and send Joy a Telegram notification only when secure_browser_order_notification_preview says the event is material. Does not place, cancel, reorder, return, or modify orders.",
+    "name": "retail_order_refresh_run",
+    "description": "Run the safe scheduled Star order refresh loop for due active orders: refresh sanitized status/ETA from Amazon Your Orders first, read-only Gmail snippets as fallback, carrier pages only opportunistically, update the ledger, and send Joy a Telegram notification only when retail_order_notification_preview says the event is material. Does not place, cancel, reorder, return, or modify orders.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -5213,19 +5215,19 @@ ORDER_REFRESH_RUN_SCHEMA = {
 }
 
 CONSUMABLE_LIST_SCHEMA = {
-    "name": "secure_browser_consumable_list",
+    "name": "consumable_list",
     "description": "List stable/tentative consumable items separately from transient order state. Returns safe item nicknames/categories, confidence/source, and last safe order handle only.",
     "parameters": {"type": "object", "properties": {"include_archived": {"type": "boolean", "default": False}}, "required": []},
 }
 
 CONSUMABLE_UPSERT_SCHEMA = {
-    "name": "secure_browser_consumable_upsert",
+    "name": "consumable_upsert",
     "description": "Create or update a safe consumable item. Use confidence='explicit' only for Joy's explicit durable statements; repeated purchases can be repeated_purchase; ambiguous one-offs should remain tentative/suggested.",
     "parameters": {"type": "object", "properties": {"handle": {"type": "string"}, "item_nickname": {"type": "string"}, "item_category": {"type": "string"}, "retailer": {"type": "string"}, "confidence": {"type": "string"}, "source": {"type": "string"}, "evidence_count": {"type": "integer"}, "last_order_handle": {"type": "string"}, "notes": {"type": "string"}, "archived": {"type": "boolean"}}, "required": ["item_nickname", "confidence"]},
 }
 
 CONSUMABLE_SUGGEST_FROM_ORDER_SCHEMA = {
-    "name": "secure_browser_consumable_suggest_from_order",
+    "name": "consumable_suggest_from_order",
     "description": "Create a tentative consumable suggestion from a safe order handle without promoting it to durable memory. Joy confirmation or repeated purchases are required before treating it as stable.",
     "parameters": {"type": "object", "properties": {"handle": {"type": "string", "description": "Safe order handle/nickname"}}, "required": ["handle"]},
 }
@@ -5363,17 +5365,17 @@ registry.register(
     max_result_size_chars=MAX_RESULT_CHARS,
 )
 for _schema, _handler, _emoji in [
-    (ORDER_LIST_SCHEMA, secure_browser_order_list_tool, "📦"),
-    (ORDER_READ_SCHEMA, secure_browser_order_read_tool, "🔎"),
-    (ORDER_UPSERT_SCHEMA, secure_browser_order_upsert_tool, "🧾"),
-    (ORDER_CLOSE_SCHEMA, secure_browser_order_close_tool, "✅"),
-    (ORDER_NOTIFICATION_PREVIEW_SCHEMA, secure_browser_order_notification_preview_tool, "🔕"),
-    (ORDER_MARK_NOTIFIED_SCHEMA, secure_browser_order_mark_notified_tool, "📌"),
-    (ORDER_REFRESH_PLAN_SCHEMA, secure_browser_order_refresh_plan_tool, "🔄"),
-    (ORDER_REFRESH_RUN_SCHEMA, secure_browser_order_refresh_run_tool, "⏰"),
-    (CONSUMABLE_LIST_SCHEMA, secure_browser_consumable_list_tool, "☕"),
-    (CONSUMABLE_UPSERT_SCHEMA, secure_browser_consumable_upsert_tool, "📝"),
-    (CONSUMABLE_SUGGEST_FROM_ORDER_SCHEMA, secure_browser_consumable_suggest_from_order_tool, "🌱"),
+    (ORDER_LIST_SCHEMA, retail_order_list_tool, "📦"),
+    (ORDER_READ_SCHEMA, retail_order_read_tool, "🔎"),
+    (ORDER_UPSERT_SCHEMA, retail_order_upsert_tool, "🧾"),
+    (ORDER_CLOSE_SCHEMA, retail_order_close_tool, "✅"),
+    (ORDER_NOTIFICATION_PREVIEW_SCHEMA, retail_order_notification_preview_tool, "🔕"),
+    (ORDER_MARK_NOTIFIED_SCHEMA, retail_order_mark_notified_tool, "📌"),
+    (ORDER_REFRESH_PLAN_SCHEMA, retail_order_refresh_plan_tool, "🔄"),
+    (ORDER_REFRESH_RUN_SCHEMA, retail_order_refresh_run_tool, "⏰"),
+    (CONSUMABLE_LIST_SCHEMA, consumable_list_tool, "☕"),
+    (CONSUMABLE_UPSERT_SCHEMA, consumable_upsert_tool, "📝"),
+    (CONSUMABLE_SUGGEST_FROM_ORDER_SCHEMA, consumable_suggest_from_order_tool, "🌱"),
 ]:
     registry.register(
         name=_schema["name"],
@@ -5675,8 +5677,8 @@ if __name__ == "__main__":
 
     original_ledger_path = SECURE_BROWSER_ORDER_LEDGER_PATH
     with tempfile.TemporaryDirectory() as tmpdir:
-        globals()["SECURE_BROWSER_ORDER_LEDGER_PATH"] = os.path.join(tmpdir, "secure-browser-order-ledger.sqlite3")
-        order_result = json.loads(secure_browser_order_upsert_tool({
+        globals()["SECURE_BROWSER_ORDER_LEDGER_PATH"] = os.path.join(tmpdir, "retail-order-ledger.sqlite3")
+        order_result = json.loads(retail_order_upsert_tool({
             "handle": "pipe-screens-coffee-filters",
             "retailer": "amazon",
             "item_nickname": "pipe screens and coffee filters",
@@ -5693,23 +5695,23 @@ if __name__ == "__main__":
         order_json = json.dumps(order_result, ensure_ascii=False)
         assert "111-2222222-3333333" not in order_json
         assert "Example Street" not in order_json
-        assert json.loads(secure_browser_order_read_tool({"handle": "pipe-screens-coffee-filters"}))["order"]["status"] == "confirmed"
-        preview_same = json.loads(secure_browser_order_notification_preview_tool({"handle": "pipe-screens-coffee-filters", "status": "confirmed", "eta_window": "Tuesday"}))
+        assert json.loads(retail_order_read_tool({"handle": "pipe-screens-coffee-filters"}))["order"]["status"] == "confirmed"
+        preview_same = json.loads(retail_order_notification_preview_tool({"handle": "pipe-screens-coffee-filters", "status": "confirmed", "eta_window": "Tuesday"}))
         assert preview_same["notification_decision"]["should_notify"] is False
-        preview_eta = json.loads(secure_browser_order_notification_preview_tool({"handle": "pipe-screens-coffee-filters", "status": "confirmed", "eta_window": "Wednesday"}))
+        preview_eta = json.loads(retail_order_notification_preview_tool({"handle": "pipe-screens-coffee-filters", "status": "confirmed", "eta_window": "Wednesday"}))
         assert preview_eta["notification_decision"]["should_notify"] is True
         assert preview_eta["notification_decision"]["event_type"] == "eta_changed"
-        notified = json.loads(secure_browser_order_mark_notified_tool({"handle": "pipe-screens-coffee-filters", "event_type": "eta_changed"}))
+        notified = json.loads(retail_order_mark_notified_tool({"handle": "pipe-screens-coffee-filters", "event_type": "eta_changed"}))
         assert notified["status"] == "stored"
-        consumable = json.loads(secure_browser_consumable_suggest_from_order_tool({"handle": "pipe-screens-coffee-filters"}))
+        consumable = json.loads(consumable_suggest_from_order_tool({"handle": "pipe-screens-coffee-filters"}))
         assert consumable["status"] == "stored"
         assert consumable["consumable"]["confidence"] == "suggested"
-        explicit = json.loads(secure_browser_consumable_upsert_tool({"handle": "coffee-filters", "item_nickname": "coffee filters", "item_category": "coffee", "confidence": "explicit", "source": "joy_statement"}))
+        explicit = json.loads(consumable_upsert_tool({"handle": "coffee-filters", "item_nickname": "coffee filters", "item_category": "coffee", "confidence": "explicit", "source": "joy_statement"}))
         assert explicit["consumable"]["confidence"] == "explicit"
-        closed = json.loads(secure_browser_order_close_tool({"handle": "pipe-screens-coffee-filters", "status": "delivered", "safe_delivery_facts": ["Delivered Tuesday"]}))
+        closed = json.loads(retail_order_close_tool({"handle": "pipe-screens-coffee-filters", "status": "delivered", "safe_delivery_facts": ["Delivered Tuesday"]}))
         assert closed["order"]["status"] == "delivered"
         assert closed["order"]["archived"] is True
-        assert json.loads(secure_browser_order_upsert_tool({"handle": "111-2222222-3333333", "item_nickname": "unsafe"}))["error"] == "SECURE_BROWSER_ORDER_UPSERT_FAILED"
+        assert json.loads(retail_order_upsert_tool({"handle": "111-2222222-3333333", "item_nickname": "unsafe"}))["error"] == "RETAIL_ORDER_UPSERT_FAILED"
         final_purchase_stub = {
             "request_id": "ar-20260101-000000-deadbe",
             "approval_id": "ap-test",
@@ -5733,7 +5735,7 @@ if __name__ == "__main__":
         assert tracking["order"]["handle"].startswith("order-")
         assert tracking["order"]["status"] == "confirmed"
         assert tracking["order"]["refresh_sources"][:2] == ["amazon_your_orders", "gmail_order_email"]
-        assert json.loads(secure_browser_order_refresh_plan_tool({}))["scheduled_refresh_spec"]["primary_source"] == "Amazon Your Orders via secure browser owner/post-purchase evidence path"
+        assert json.loads(retail_order_refresh_plan_tool({}))["scheduled_refresh_spec"]["primary_source"] == "Amazon Your Orders via secure browser owner/post-purchase evidence path"
         with _ledger_connect() as conn:
             conn.execute("UPDATE shopping_orders SET status = 'shipped', updated_at = ? WHERE handle = ?", ((datetime.now(timezone.utc) - timedelta(hours=7)).isoformat(), tracking["order"]["handle"]))
             conn.commit()
@@ -5749,14 +5751,14 @@ if __name__ == "__main__":
                 "source_refs": [source],
             }
             globals()["_send_order_notification"] = lambda message: {"status": "sent", "telegram_message_id": 4242, "message": message}
-            refresh_run = json.loads(secure_browser_order_refresh_run_tool({"send_notifications": True, "limit": 5}))
+            refresh_run = json.loads(retail_order_refresh_run_tool({"send_notifications": True, "limit": 5}))
         finally:
             globals()["_refresh_observation_for_source"] = original_refresh_observation
             globals()["_send_order_notification"] = original_send_order_notification
         assert refresh_run["status"] == "ok"
         assert refresh_run["notifications_sent"] == 1
         assert refresh_run["refreshed"][0]["applied"]["notification"]["status"] == "sent"
-        refreshed_order = json.loads(secure_browser_order_read_tool({"handle": tracking["order"]["handle"]}))["order"]
+        refreshed_order = json.loads(retail_order_read_tool({"handle": tracking["order"]["handle"]}))["order"]
         assert refreshed_order["status"] == "delivered"
         assert refreshed_order["notification_state"]["last_notified_delivered"]
     globals()["SECURE_BROWSER_ORDER_LEDGER_PATH"] = original_ledger_path
@@ -5767,8 +5769,10 @@ if __name__ == "__main__":
     assert "screenshot" in status["browser_operations"]
     assert "visual_evidence" in status["browser_operations"]
     assert "owner_checkout_review" in status["browser_operations"]
-    assert "order_list" in status["browser_operations"]
-    assert "consumable_upsert" in status["browser_operations"]
+    assert "order_list" not in status["browser_operations"]
+    assert "consumable_upsert" not in status["browser_operations"]
+    assert "list" in status["retail_order_operations"]
+    assert "upsert" in status["consumable_operations"]
     assert status["supervised_checkout_prep"]["status"] == "available"
     assert status["trusted_assistant_access"]["status"] == "broad_browsing_available"
     assert "owner_checkout_review" in status["approval_gated_operations"]
@@ -5784,8 +5788,12 @@ if __name__ == "__main__":
     assert "product_condition" in PRODUCT_EXTRACT_JS
     active_schema_names = [STATUS_SCHEMA["name"], NAVIGATE_SCHEMA["name"], PAGE_SNAPSHOT_SCHEMA["name"], QUERY_SCHEMA["name"], SCREENSHOT_SCHEMA["name"], VISUAL_EVIDENCE_SCHEMA["name"], CLICK_SCHEMA["name"], TYPE_SCHEMA["name"], CURRENT_PAGE_SUMMARY_SCHEMA["name"], OWNER_CHECKOUT_REVIEW_SCHEMA["name"], ORDER_LIST_SCHEMA["name"], ORDER_READ_SCHEMA["name"], ORDER_UPSERT_SCHEMA["name"], ORDER_CLOSE_SCHEMA["name"], ORDER_NOTIFICATION_PREVIEW_SCHEMA["name"], ORDER_MARK_NOTIFIED_SCHEMA["name"], ORDER_REFRESH_PLAN_SCHEMA["name"], ORDER_REFRESH_RUN_SCHEMA["name"], CONSUMABLE_LIST_SCHEMA["name"], CONSUMABLE_UPSERT_SCHEMA["name"], CONSUMABLE_SUGGEST_FROM_ORDER_SCHEMA["name"], GUARDRAIL_SCHEMA["name"]]
     assert "secure_browser_owner_checkout_review" in active_schema_names
-    assert "secure_browser_order_upsert" in active_schema_names
-    assert "secure_browser_consumable_upsert" in active_schema_names
+    assert "retail_order_upsert" in active_schema_names
+    assert "retail_order_refresh_run" in active_schema_names
+    assert "consumable_upsert" in active_schema_names
+    assert "consumable_suggest_from_order" in active_schema_names
+    assert "secure_browser_order_upsert" not in active_schema_names
+    assert "secure_browser_consumable_upsert" not in active_schema_names
     assert "secure_browser_inspect_product" not in active_schema_names
     assert "secure_browser_inspect_reviews" not in active_schema_names
     assert "secure_browser_inspect_cart" not in active_schema_names
