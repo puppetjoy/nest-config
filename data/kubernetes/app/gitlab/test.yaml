@@ -7,6 +7,7 @@ ingress_class: "contour-%{nest::kubernetes::namespace}"
 nest::service::gitlab::backups_namespace: default
 restore_hour: '7' # Restore requires downtime; pick up 6 AM backup only
 restore_job_ttl: 86400 # 24h; keep last restore job in history
+restore_suspended: true # Disabled while restore retries leave gitlab-test unavailable
 service_name: "%{nest::kubernetes::service}-%{nest::kubernetes::namespace}"
 
 values:
