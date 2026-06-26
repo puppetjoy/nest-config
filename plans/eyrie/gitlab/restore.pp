@@ -159,6 +159,17 @@ plan nest::eyrie::gitlab::restore (
       fail("${service} backup-utility restore failed; deployments were scaled back up")
     }
 
+    $kubectl_wait_started_cmd = [
+      'kubectl', 'wait', '-n', $namespace,
+      "deployment/${service}-prometheus-server",
+      "deployment/${service}-sidekiq-all-in-1-v2",
+      "deployment/${service}-webservice-default",
+      '--for=condition=Available',
+      '--timeout=5m',
+    ].flatten.shellquote
+
+    run_command($kubectl_wait_started_cmd, 'localhost', "Wait for ${service} deployments")
+
     $home_page_url_cmd = [
       'kubectl', 'exec', '-n', $namespace,
       "deploy/${service}-toolbox",
