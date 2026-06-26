@@ -86,7 +86,7 @@ plan nest::eyrie::gitlab::restore (
       's3cmd mb "s3://${bucket}"',
       'fi',
       'done',
-    ].join('; ')
+    ].join("\n")
 
     $kubectl_ensure_object_buckets_cmd = [
       'kubectl', 'exec', '-n', $namespace,
