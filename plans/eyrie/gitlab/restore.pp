@@ -77,6 +77,26 @@ plan nest::eyrie::gitlab::restore (
 
     run_command($kubectl_wait_toolbox_exec_cmd, 'localhost', "Wait for ${service}-toolbox exec")
 
+    $ensure_object_buckets_script = [
+      'set -eu',
+      'for var in TMP_BUCKET_NAME ARTIFACTS_BUCKET_NAME LFS_BUCKET_NAME PACKAGES_BUCKET_NAME REGISTRY_BUCKET_NAME UPLOADS_BUCKET_NAME; do',
+      'eval "bucket=\${$var:-}"',
+      '[ -n "$bucket" ] || continue',
+      'if ! s3cmd ls "s3://${bucket}/" >/dev/null 2>&1; then',
+      's3cmd mb "s3://${bucket}"',
+      'fi',
+      'done',
+    ].join('; ')
+
+    $kubectl_ensure_object_buckets_cmd = [
+      'kubectl', 'exec', '-n', $namespace,
+      "deploy/${service}-toolbox",
+      '--',
+      'sh', '-lc', $ensure_object_buckets_script,
+    ].flatten.shellquote
+
+    run_command($kubectl_ensure_object_buckets_cmd, 'localhost', "Ensure ${service} object buckets")
+
     $kubectl_clean_toolbox_backups_cmd = [
       'kubectl', 'exec', '-n', $namespace,
       "deploy/${service}-toolbox",
