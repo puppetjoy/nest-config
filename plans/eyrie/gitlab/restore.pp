@@ -170,12 +170,19 @@ plan nest::eyrie::gitlab::restore (
 
     run_command($kubectl_wait_started_cmd, 'localhost', "Wait for ${service} deployments")
 
+    $home_page_url_script = [
+      'for i in $(seq 1 60); do',
+      "gitlab-rails runner \"ApplicationSetting.current.update!(home_page_url: '${home_page_url}')\" && exit 0",
+      'sleep 10',
+      'done',
+      'exit 1',
+    ].join("\n")
+
     $home_page_url_cmd = [
       'kubectl', 'exec', '-n', $namespace,
       "deploy/${service}-toolbox",
       '--',
-      'gitlab-rails', 'runner',
-      "ApplicationSetting.current.update!(home_page_url: '${home_page_url}')",
+      'sh', '-lc', $home_page_url_script,
     ].flatten.shellquote
 
     $home_page_result = run_command($home_page_url_cmd, 'localhost', "Set ${service} home_page_url", _catch_errors => true)
