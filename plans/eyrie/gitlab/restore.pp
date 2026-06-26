@@ -172,7 +172,7 @@ plan nest::eyrie::gitlab::restore (
 
     $home_page_url_script = [
       'for i in $(seq 1 60); do',
-      "gitlab-rails runner \"ApplicationSetting.current.update!(home_page_url: '${home_page_url}')\" && exit 0",
+      "timeout 60s gitlab-rails runner \"ApplicationSetting.current.update!(home_page_url: '${home_page_url}')\" && exit 0",
       'sleep 10',
       'done',
       'exit 1',
