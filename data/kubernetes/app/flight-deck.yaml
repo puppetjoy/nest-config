@@ -14,6 +14,7 @@ flight_deck_environment: Dev
 flight_deck_port: 4173
 kanban_home_host_path: /home/joy/.hermes/kanban
 hermes_profile_host_path: /home/joy/.hermes/profiles
+agent_request_artifact_host_path: /home/joy/.hermes/agent-request-artifacts
 flight_deck_participants_host_path: /home/joy/.hermes/flight-deck
 # Participant cache rows store avatar_path values under the host cache root, so
 # mount the directory at the same in-pod path instead of remapping it to /hermes.
@@ -144,6 +145,8 @@ resources:
                   value: /hermes/profiles
                 - name: FLIGHT_DECK_PARTICIPANTS_PATH
                   value: "%{lookup('flight_deck_participants_path')}"
+                - name: FLIGHT_DECK_AGENT_REQUEST_ARTIFACT_ROOT
+                  value: "%{lookup('agent_request_artifact_host_path')}"
               ports:
                 - name: http
                   containerPort: "%{alias('flight_deck_port')}"
@@ -181,6 +184,9 @@ resources:
                 - name: flight-deck-participants
                   mountPath: "%{lookup('flight_deck_participants_mount_path')}"
                   readOnly: true
+                - name: agent-request-artifacts
+                  mountPath: "%{lookup('agent_request_artifact_host_path')}"
+                  readOnly: true
           volumes:
             - name: app-source
               emptyDir: {}
@@ -195,6 +201,10 @@ resources:
             - name: flight-deck-participants
               hostPath:
                 path: "%{lookup('flight_deck_participants_host_path')}"
+                type: Directory
+            - name: agent-request-artifacts
+              hostPath:
+                path: "%{lookup('agent_request_artifact_host_path')}"
                 type: Directory
 
   service:
