@@ -1,0 +1,28 @@
+---
+description: 'Deploy production Flight Deck Agent Request console'
+
+parameters:
+  deploy:
+    description: 'Run or skip the deployment'
+    type: Boolean
+    default: true
+
+  init:
+    description: 'Deploy initial revision'
+    type: Boolean
+    default: false
+
+  render_to:
+    description: 'Just render the template'
+    type: String
+    default: ''
+
+steps:
+  - description: 'Deploy production Flight Deck'
+    plan: nest::eyrie::ai::deploy_flight_deck
+    parameters:
+      service: 'flight-deck'
+      namespace: 'ai'
+      deploy: $deploy
+      init: $init
+      render_to: $render_to

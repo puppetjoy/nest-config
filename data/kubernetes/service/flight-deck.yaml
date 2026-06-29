@@ -1,0 +1,6 @@
+---
+# Production Flight Deck instance for Joy's real Agent Requests board.
+service_name: flight-deck
+flight_deck_board: agent-requests
+flight_deck_environment: Production
+flight_deck_ref_name: main

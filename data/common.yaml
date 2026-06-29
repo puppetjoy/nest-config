@@ -118,6 +118,7 @@ nest::cnames:
   star.eyrie: 'ingress-compute.eyrie'
   beryl.eyrie: 'ingress-compute.eyrie'
   firecrawl.eyrie: 'ingress-compute.eyrie'
+  flight-deck.eyrie: 'ingress-compute.eyrie'
   flight-deck-dev.eyrie: 'ingress-compute.eyrie'
   llama-qwen.eyrie: 'ingress-compute.eyrie'
   searxng.eyrie: 'ingress-compute.eyrie'
