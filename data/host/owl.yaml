@@ -167,21 +167,25 @@ nest::app::hermes::instances:
       Host gateway
           HostName gateway.nest
           IdentityFile /home/joy/.hermes/profiles/talon/.ssh/id_ed25519
+          IdentityAgent /run/user/1000/ssh-agent.socket
           IdentitiesOnly yes
           ForwardAgent yes
 
       Host gateway.nest
           IdentityFile /home/joy/.hermes/profiles/talon/.ssh/id_ed25519
+          IdentityAgent /run/user/1000/ssh-agent.socket
           IdentitiesOnly yes
           ForwardAgent yes
 
       Host falcon
           HostName falcon.nest
           IdentityFile /home/joy/.hermes/profiles/talon/.ssh/id_ed25519
+          IdentityAgent /run/user/1000/ssh-agent.socket
           IdentitiesOnly yes
 
       Host falcon.nest
           IdentityFile /home/joy/.hermes/profiles/talon/.ssh/id_ed25519
+          IdentityAgent /run/user/1000/ssh-agent.socket
           IdentitiesOnly yes
     gateway_enabled: true
     dashboard_enabled: true
