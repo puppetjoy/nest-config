@@ -12,6 +12,7 @@ class nest::tool::camofox (
 
   nest::lib::package { [
     'media-fonts/noto',
+    'media-libs/alsa-lib',
     'net-misc/curl',
     'x11-libs/gtk+',
   ]:
