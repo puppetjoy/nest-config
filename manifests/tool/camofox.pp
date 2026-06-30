@@ -62,6 +62,35 @@ class nest::tool::camofox (
     timeout     => 0,
   }
 
+  # Fix: Camoufox CDP Browser.setDefaultViewport rejects viewport.isMobile=false.
+  # Patch the installed @askjo/camofox-browser server.js to include isMobile:true
+  # in the viewport configuration, matching the CDP schema expectations.
+
+  # Helper script to patch camofox-browser server.js viewport config
+  file { '/usr/local/bin/patch-camofox-browser-viewport':
+    ensure  => file,
+    mode    => '0755',
+    content => [
+      '#!/bin/sh',
+      'set -eu',
+      'JS=$(find /usr/lib*/node_modules/@askjo/camofox-browser -name server.js 2>/dev/null | head -1)',
+      '[ -z "$JS" ] && { echo "ERROR: no server.js found"; exit 1; }',
+      'if ! grep -q "isMobile" "$JS"; then',
+      '  sed -i "s/width: 1280, height: 720/width: 1280, height: 720, isMobile: true/" "$JS"',
+      'fi',
+      'grep -q "isMobile: true" "$JS" || exit 1',
+      'echo "patched: isMobile:true in viewport config of $JS"',
+    ].join("\n"),
+    require => Exec['install_camofox_browser'],
+  }
+
+  exec { 'patch_camofox_browser_viewport':
+    command => '/usr/local/bin/patch-camofox-browser-viewport',
+    unless  => '/bin/grep -q "isMobile: true" /usr/lib*/node_modules/@askjo/camofox-browser/server.js 2>/dev/null',
+    require => Exec['install_camofox_browser'],
+    timeout => 10,
+  }
+
   file { '/usr/local/bin/nest-camofox-browser':
     ensure  => file,
     mode    => '0755',
