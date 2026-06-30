@@ -61,6 +61,12 @@ class nest::tool::camofox (
     timeout     => 0,
   }
 
+  exec { 'patch_camofox_virtual_display_await':
+    command => '/usr/bin/ruby -0pi -e "gsub(%q{vdDisplay = localVirtualDisplay.get();}, %q{vdDisplay = await localVirtualDisplay.get();})" /usr/lib64/node_modules/@askjo/camofox-browser/server.js',
+    unless  => '/bin/grep -F "vdDisplay = await localVirtualDisplay.get();" /usr/lib64/node_modules/@askjo/camofox-browser/server.js >/dev/null',
+    require => Exec['install_camofox_browser'],
+  }
+
   file { '/usr/local/bin/nest-camofox-browser':
     ensure  => file,
     mode    => '0755',
@@ -81,6 +87,7 @@ class nest::tool::camofox (
     require => [
       Exec['install_camofox_browser'],
       Exec['install_camofox_bitwarden_extension'],
+      Exec['patch_camofox_virtual_display_await'],
     ],
   }
 }

@@ -55,7 +55,7 @@ plan nest::build::camofox (
 
   if $build {
     run_command("podman start ${container}", 'localhost', 'Start build container')
-    run_command("podman exec ${container} /bin/sh -lc 'command -v camofox-browser && timeout 20s nest-camofox-browser >/tmp/nest-camofox-smoke.log 2>&1; status=\$?; cat /tmp/nest-camofox-smoke.log; test \"\$status\" -eq 124 && ! /bin/grep -E \"CannotFindXvfb|Couldn.t load XPCOM|unhandledRejection|cannot open shared object file\" /tmp/nest-camofox-smoke.log'", 'localhost', 'Smoke test Camofox Browser startup')
+    run_command("podman exec ${container} /bin/sh -lc 'command -v camofox-browser && timeout 20s nest-camofox-browser >/tmp/nest-camofox-smoke.log 2>&1; status=\$?; cat /tmp/nest-camofox-smoke.log; test \"\$status\" -eq 124 && ! /bin/grep -E \"CannotFindXvfb|Couldn.t load XPCOM|unhandledRejection|cannot open (shared object file|display)|browser pre-warm failed|camoufox launch attempt failed\" /tmp/nest-camofox-smoke.log'", 'localhost', 'Smoke test Camofox Browser startup')
     run_command("podman stop ${container}", 'localhost', 'Stop build container')
   }
 
