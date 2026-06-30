@@ -13,9 +13,15 @@ class nest::tool::camofox (
   nest::lib::package { [
     'media-fonts/noto',
     'net-misc/curl',
-    'x11-base/xorg-server',
+    'x11-libs/gtk+',
   ]:
     ensure => installed,
+    before => Exec['install_camofox_browser'],
+  }
+
+  nest::lib::package { 'x11-base/xorg-server':
+    ensure => installed,
+    use    => 'xvfb',
     before => Exec['install_camofox_browser'],
   }
 
