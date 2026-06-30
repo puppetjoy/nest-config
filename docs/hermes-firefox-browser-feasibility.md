@@ -1,117 +1,112 @@
-# Firefox feasibility for Hermes browser and secure-browser surfaces
+# Camofox migration plan for Hermes browser and secure-browser surfaces
 
 ## Scope
 
-This report evaluates whether Joy's Hermes browser tooling and the shared
-Kasm-backed secure browser can move from Chrome/Chromium to Firefox. It is an
-investigation only: no production browser image, package, profile, or Kasm
-workload was changed.
+Joy asked for the investigation to stop treating Firefox/Camofox as an optional
+limited canary and instead answer the practical question: if Chrome is going
+away, what do we actually need to build so Hermes browser tooling and the
+secure-browser/shopping tools run on Camofox?
 
-## Recommendation
+This report is still investigative only. I did not remove Chrome, deploy
+Camofox, change the production `secure-browser` workload, or alter live shopping
+or OAuth tooling.
 
-Do not attempt a full Chrome/Chromium removal right now.
+## Bottom line
 
-A partial migration is feasible and probably worth a follow-up prototype, but
-only if the surfaces are split clearly:
+A Chrome-removal path is feasible, but it is not a one-line image swap. The
+right target is not stock Firefox or `kasmweb/firefox`; it is a Camofox Browser
+service, because Hermes already has first-class Camofox integration and Camofox
+Browser gives us the pieces Joy cares about:
 
-1. Keep Chromium available for Hermes' built-in `browser_*` tools and any CDP
-   driven automation.
-2. Prototype Firefox/Camofox as an optional Hermes normal-browser backend where
-   Joy wants Firefox-flavored behavior, accepting known gaps such as weaker
-   console capture and a separate service dependency.
-3. Prototype `kasmweb/firefox` only as a user-facing secure-browser UI after the
-   automation contract is redesigned. The current secure-browser tools are
-   Chrome DevTools Protocol clients and are not Firefox-compatible.
+- Camoufox/Firefox engine with anti-detection/fingerprint work
+- REST API with tabs, accessibility snapshots, element refs, click/type/press,
+  screenshots, links/images, downloads, traces, cookie/session endpoints, and
+  JavaScript evaluation
+- optional noVNC/VNC for Joy-operated login, CAPTCHA, OAuth, Bitwarden, and
+  checkout supervision
+- persistent profile/session directories that can live on Kubernetes PVCs
 
-The best near-term target is therefore:
+The main work is replacing Joy's custom secure-browser bridge from direct
+Chrome DevTools Protocol (CDP) calls to Camofox Browser's REST/session model,
+then validating the shopping/checkout guardrails against that backend. The
+built-in Hermes `browser_*` tools are much closer: `/opt/hermes-agent` already
+has a Camofox backend and can route there when `CAMOFOX_URL` is set.
 
-- normal Hermes browser tools: keep existing Chromium path; optionally add a
-  source-managed Camofox canary
-- secure browser: keep current `kasmweb/chrome` for Star/Talon guarded tools;
-  optionally create a separate Firefox Kasm canary for manual Joy login/OAuth
-  evaluation, with no final-purchase or CDP automation authority
+Recommended direction: do the migration in two source-managed tracks:
 
-## Current local evidence
+1. General Hermes browser service: Camofox Browser container exposed only to
+   Hermes profiles, with `CAMOFOX_URL` and persistent identity settings.
+2. Secure browser service: separate Camofox Browser container with noVNC for
+   Joy and a private REST API for the `secure_browser_*` tools, plus a rewritten
+   secure-browser adapter preserving the existing privacy/approval contract.
 
-From this worktree on `owl`/amd64:
+Chrome can be removed after these two tracks pass parity. Until then, removal is
+an implementation milestone, not the first step.
 
-- `agent-browser doctor` passes with `agent-browser` 0.31.1.
-- Google Chrome is installed at `/usr/local/bin/google-chrome`.
-- Chrome reports `Google Chrome 146.0.7680.177`.
-- The doctor headless launch test passed in 0.23s.
-- No `firefox` binary was found in the task PATH.
+## What exists today
 
-No live secure-browser/Kasm workload was modified or restarted.
+### Hermes normal browser tools
 
-## Current Hermes browser-tool dependency map
-
-### Built-in `browser_*` tools
-
-Relevant installed Hermes source files:
+Relevant installed Hermes files:
 
 - `/opt/hermes-agent/src/tools/browser_tool.py`
 - `/opt/hermes-agent/src/tools/browser_camofox.py`
+- `/opt/hermes-agent/src/tools/browser_camofox_state.py`
 - `/opt/hermes-agent/src/agent/browser_provider.py`
 - `/opt/hermes-agent/src/agent/browser_registry.py`
 
-The normal Hermes browser toolset currently has these backend classes:
+Current local evidence on owl:
 
-- local `agent-browser` mode, described in source as headless Chromium via the
-  `agent-browser` CLI
-- cloud providers registered through the browser provider interface:
-  Browser Use, Browserbase, and Firecrawl
-- explicit CDP override mode through `BROWSER_CDP_URL` or `browser.cdp_url`
-- optional Camofox mode through `CAMOFOX_URL`
+- `agent-browser doctor` passed with `agent-browser` 0.31.1.
+- Google Chrome is installed at `/usr/local/bin/google-chrome`.
+- Chrome reports `Google Chrome 146.0.7680.177`.
+- No production browser package or workload was changed during this task.
 
-The built-in tool surface includes navigation, accessibility snapshots,
-click/type/press/scroll/back, console/eval, image listing, screenshots, and
-vision analysis. Its local default is Chromium, not Firefox.
+Hermes already supports Camofox mode. `browser_camofox.py` says that when
+`CAMOFOX_URL` is set, browser tools route through the Camofox backend instead
+of the `agent-browser` CLI. It implements:
 
-The requirements gate in `browser_tool.py` explicitly treats local Chrome mode
-as satisfied by:
+- navigate
+- snapshot/accessibility tree
+- click
+- type
+- scroll
+- back
+- press
+- close
+- image discovery from the accessibility snapshot
+- screenshot + vision analysis
+- managed persistence using `browser.camofox.managed_persistence`
+- configured identity override via `CAMOFOX_USER_ID` / `CAMOFOX_SESSION_KEY`
+- existing-tab adoption via `CAMOFOX_ADOPT_EXISTING_TAB`
+- Docker loopback URL rewriting via `CAMOFOX_REWRITE_LOOPBACK_URLS`
 
-- `AGENT_BROWSER_EXECUTABLE_PATH`
-- system `google-chrome`, `chromium`, `chromium-browser`, or `chrome`
-- Playwright's Chromium/headless-shell cache
+Known gap: Hermes' current Camofox backend returns an empty console result with
+a note because Camofox Browser's REST API does not expose browser console logs
+through that Hermes adapter. That is a real change from local Chromium mode, but
+not a blocker for ordinary browsing if we accept snapshot/vision/query-based
+inspection.
 
-It does not treat a stock `firefox` binary as satisfying the default local
-browser dependency. A Firefox swap at this layer would therefore need either
-Camofox mode, a new browser backend, or upstream `agent-browser` support for a
-Firefox engine.
-
-### Puppet/Nest install path
-
-Relevant Nest config file:
-
-- `manifests/app/hermes/install.pp`
-
-Current source-managed install behavior on amd64:
-
-- installs `www-client/google-chrome`
-- creates `/usr/local/bin/google-chrome -> /usr/bin/google-chrome-stable`
-- installs `agent-browser@latest` globally through npm
-
-This matches the current working local test: Hermes sees Chrome and
-`agent-browser doctor` passes.
-
-### Profile/toolset config
+### Nest/Puppet install path
 
 Relevant Nest config files:
 
+- `manifests/app/hermes/install.pp`
 - `manifests/app/hermes.pp`
 - `manifests/lib/hermes.pp`
+- `data/host/owl.yaml`
 
-Current default Hermes profile toolsets include both `browser` and
-`secure_browser`. Talon and Star profile configs both have:
+Current source-managed behavior on amd64 installs Chrome and `agent-browser`:
 
-- `browser.engine: auto`
-- empty `browser.cdp_url`
-- Camofox config present but not enabled
+- `www-client/google-chrome`
+- `/usr/local/bin/google-chrome -> /usr/bin/google-chrome-stable`
+- global npm `agent-browser@latest`
 
-So the active default is Chromium-backed local browser tooling, not Firefox or
-Camofox.
+Talon and Star profile config currently keeps `browser.engine: auto`, an empty
+`browser.cdp_url`, and Camofox config present but not enabled. So the live
+default is still Chromium-backed unless `CAMOFOX_URL` is injected.
 
-## Current secure-browser/Kasm dependency map
+### Current secure-browser/shopping surface
 
 Relevant Nest config files:
 
@@ -121,26 +116,26 @@ Relevant Nest config files:
 - `files/app/hermes/secure_browser_tool.py`
 - `files/app/hermes/secure_browser_oauth_tool.py`
 
-Current KubeCM source shape:
+Current KubeCM deployment shape:
 
 - image: `docker.io/kasmweb/chrome:1.18.0`
-- public Kasm UI: `secure-browser.eyrie`
+- public UI: `secure-browser.eyrie` on Kasm HTTPS port 6901
 - CDP host: `secure-browser-cdp.eyrie`
 - Chrome args include:
   - `--user-data-dir=/home/kasm-user/.config/secure-browser`
   - `--remote-debugging-address=0.0.0.0`
   - `--remote-debugging-port=9222`
-- service exposes Kasm HTTPS on 6901 and a CDP proxy on 9222/9223
-- a PVC persists `/home/kasm-user`
-- Chrome enterprise policy mounts force-install Bitwarden using the Chrome
-  extension id `nngceckbapebfimnlniiiahkandclblb`
-- the reset-procedure text says OAuth and shopping share one browser process,
-  one profile PVC, the Bitwarden extension install, and a Chrome DevTools
-  endpoint
+- PVC persists `/home/kasm-user`
+- Chrome policy force-installs Bitwarden using extension id
+  `nngceckbapebfimnlniiiahkandclblb`
+- CDP proxy exposes the browser's local port 9222
 
-The custom secure-browser tools are direct CDP clients. They use `/json/version`,
-`/json/list`, a browser websocket, and CDP domains/methods such as:
+The custom secure-browser tools are CDP clients today. They discover and drive
+pages via:
 
+- `/json/version`
+- `/json/list`
+- browser websocket URL
 - `Target.getTargets`
 - `Target.createTarget`
 - `Target.attachToTarget`
@@ -150,345 +145,514 @@ The custom secure-browser tools are direct CDP clients. They use `/json/version`
 - `Page.navigate`
 - `Page.captureScreenshot`
 
-That is the decisive blocker for a drop-in Firefox replacement.
+The public tool contract is broader than those primitives. Star's
+`secure_browser_*` toolset currently promises:
 
-## Upstream/browser capability findings
+- navigate ordinary shopping/account-research pages
+- sanitized visible text and interactive selectors
+- bounded read-only query
+- safe click/type with explicit approved effects
+- redacted screenshots/visual evidence
+- owner-only checkout review sent directly to Joy
+- material-summary binding and trusted final-purchase approval
+- exactly-once final purchase execution after approval
+- order ledger/refresh and consumable tracking
 
-### Hermes Agent docs
+That contract can survive Camofox, but the implementation underneath must be
+rewritten. The existing CDP calls cannot simply point at Firefox/Camofox.
 
-Hermes' current browser docs list multiple modes:
+## Upstream Camofox/Camoufox facts that matter
 
-- Browserbase cloud
-- Browser Use cloud
-- Firecrawl cloud
-- Camofox local mode
-- local Chromium-family CDP via `/browser connect`
-- local browser mode through `agent-browser`
+Sources checked:
 
-The same docs describe Camofox as a self-hosted Node.js server wrapping
-Camoufox, a Firefox fork, with a REST API intended to support Hermes browser
-operations. That means Firefox-family support exists in Hermes, but it is not
-the same dependency path as local `agent-browser` plus Google Chrome.
+- Hermes browser docs:
+  `https://hermes-agent.nousresearch.com/docs/user-guide/features/browser/`
+- `jo-inc/camofox-browser` README and OpenAPI/docs
+- Camofox Browser VNC plugin docs
+- Camofox Browser deployment/Docker docs
+- Camoufox docs:
+  `https://camoufox.com/` and `https://camoufox.com/stealth/`
+- Camoufox Juggler source directory summary
+- Bitwarden managed browser extension deployment docs
 
-Source: https://hermes-agent.nousresearch.com/docs/user-guide/features/browser/
+Key findings:
 
-### Playwright
+- Hermes docs explicitly list Camofox local mode as a supported browser backend.
+- Camofox Browser is a self-hosted Node/Express REST server wrapping Camoufox.
+  Default API port is 9377.
+- Camofox Browser's public API model is tabs/sessions, not raw CDP. Documented
+  endpoint families include `/tabs`, `/tabs/:id/navigate`, `/tabs/:id/click`,
+  `/tabs/:id/type`, `/tabs/:id/press`, `/tabs/:id/scroll`,
+  `/tabs/:id/snapshot`, `/tabs/:id/screenshot`, `/tabs/:id/links`,
+  `/tabs/:id/extract`, session cookie/trace endpoints, health, metrics, and
+  cleanup.
+- Camofox Browser supports noVNC/VNC as an interactive browser UI. The VNC plugin
+  is explicitly intended for visual login, MFA, CAPTCHA, OAuth, and then reuse
+  of authenticated storage state.
+- Camofox Browser Docker deployment uses a persistent data path under
+  `/home/node/.camofox`, including profiles/downloads. Docker examples expose
+  port 9377 for REST and 6080 for noVNC.
+- Camoufox is Firefox-based and uses Playwright's Firefox/Juggler path rather
+  than Chromium CDP as its preferred automation layer. Camoufox docs explicitly
+  call CDP a common bot-detection target and describe Juggler as lower-level and
+  less prone to JavaScript leaks.
+- Camoufox's own docs warn that 2026 releases are active/experimental and may
+  introduce breaking changes. That makes pinning and staged validation more
+  important than with a boring distro Firefox.
+- Bitwarden has Firefox managed extension deployment. The Firefox extension id
+  is `446900e4-71c2-419f-a6a7-df9c091e268b`, with latest XPI URL
+  `https://addons.mozilla.org/firefox/downloads/latest/bitwarden-password-manager/latest.xpi`.
 
-Playwright can launch and automate Chromium, Firefox, and WebKit through its
-own browser APIs. It also has persistent contexts and screenshot/download-type
-capabilities across browser engines.
+## What we would actually build
 
-But Playwright's `connectOverCDP` is Chromium-only. That matters because the
-current secure-browser bridge and several Hermes browser-provider contracts are
-CDP-shaped.
+### 1. Source-managed Camofox Browser image/runtime
 
-Source: https://playwright.dev/docs/api/class-browsertype
+Do not depend on `npx` downloading a browser at pod startup. Source-manage one
+of these:
 
-### Firefox remote automation
+- a pinned upstream Camofox Browser image if Joy accepts upstream image trust and
+  tag cadence, or
+- a Nest-built `registry.eyrie/nest/camofox-browser:<pinned>` image built from a
+  pinned Camofox Browser release, pre-fetching the Camoufox binary during the
+  image build.
 
-Firefox's supported remote automation direction is Marionette and WebDriver
-BiDi, not Chrome DevTools Protocol. Mozilla's remote protocol docs list
-Marionette and WebDriver BiDi. Selenium removed Firefox CDP support in 2025,
-noting that Firefox CDP support was partial and that Firefox 129 stopped
-enabling CDP by default.
+The Nest-built image is more work but better matches Joy's source-managed
+rollout style and avoids runtime network fetches for a security-sensitive
+browser.
 
-Sources:
+Required container properties:
 
-- https://firefox-source-docs.mozilla.org/remote/index.html
-- https://www.selenium.dev/blog/2025/remove-cdp-firefox/
+- REST API on 9377
+- noVNC web UI on 6080 for secure-browser, optional/disabled for headless
+  general Hermes browser
+- persistent mount at `/home/node/.camofox`
+- health check against `/health`
+- access key/API key support enabled for non-loopback Kubernetes access
+- no public exposure of the REST API
+- logs without URLs, cookies, secrets, vault data, checkout details, or raw page
+  text
 
-This means a Firefox secure-browser bridge should be designed around WebDriver
-BiDi, Marionette/geckodriver, Playwright's Firefox protocol, or a Camofox-style
-REST service. It should not depend on reviving Firefox CDP.
+### 2. General Hermes Camofox service
 
-### Kasm Firefox image
+Add a non-shopping Camofox app, for example:
 
-Kasm publishes `kasmweb/firefox`. Docker Hub describes it as a browser-accessible
-Mozilla Firefox image for Kasm Workspaces. It supports stand-alone deployment,
-`LAUNCH_URL`, `APP_ARGS`, and `KASM_RESTRICTED_FILE_CHOOSER`, similar in spirit
-to the Chrome image. Kasm notes that some features such as audio, uploads,
-downloads, and microphone pass-through are only available when using Kasm
-Workspaces orchestration.
+- `data/kubernetes/app/hermes-camofox.yaml`
+- `plans/eyrie/ai/deploy_hermes_camofox.yaml`
+- service DNS visible only inside Nest/Eyrie private network
+- PVC for `/home/node/.camofox`
+- API endpoint like `http://hermes-camofox.ai.svc.cluster.local:9377` or a
+  private Eyrie hostname if profiles need host access
 
-Source: https://hub.docker.com/r/kasmweb/firefox/
+Then set per-profile config/env, probably in Nest-managed Hermes profile
+settings:
 
-So the Kasm UI layer can run Firefox. The automation layer is the blocker.
+- `CAMOFOX_URL=<private service URL>`
+- `browser.camofox.managed_persistence: true` where persistent sessions are
+  wanted
+- stable `CAMOFOX_USER_ID`/`CAMOFOX_SESSION_KEY` only where one profile should
+  reuse a visible/persistent browser identity
+- `CAMOFOX_REWRITE_LOOPBACK_URLS` only for container-to-host local app flows
 
-### Bitwarden extension deployment
+Validation for the general browser track:
 
-Bitwarden documents managed extension deployment for Chrome and Firefox. The
-Firefox extension uses:
-
-- extension id: `446900e4-71c2-419f-a6a7-df9c091e268b`
-- install/update URL:
-  `https://addons.mozilla.org/firefox/downloads/latest/bitwarden-password-manager/latest.xpi`
-
-Source: https://bitwarden.com/help/browserext-deploy/
-
-A Firefox Kasm migration would need Firefox policy files/paths and the Firefox
-Bitwarden XPI policy, not the current Chrome `ExtensionInstallForcelist` JSON
-and Chrome Web Store update URL.
-
-## Capability comparison
-
-### Normal Hermes `browser_*` tools
-
-What works today with Chromium:
-
-- local zero-cost headless browser through `agent-browser`
-- accessibility snapshots and ref-based click/type/press/scroll
-- screenshots and browser vision
-- JavaScript eval and console/error collection
-- CDP override for attaching to an existing Chromium-family browser
-- cloud providers that return CDP URLs
-- hybrid local sidecar behavior for private URLs while cloud providers handle
-  public URLs
-
-What Firefox can support through Camofox/Playwright-style APIs:
-
-- navigation
-- snapshots/accessibility trees
+- `browser_navigate` public site
+- private Eyrie URL if policy allows
+- snapshot refs
 - click/type/press/scroll
-- screenshots/vision
-- persistent profile modes if explicitly configured
+- screenshot/vision
+- read-only page state via snapshot/vision rather than console logs
+- persistence across gateway restart and pod restart
+- behavior when Camofox is down, including clear tool errors and no fallback to
+  Chromium once Chrome removal is in scope
 
-Known or likely changes/gaps:
+Expected loss/change vs current Chromium path:
 
-- stock Firefox cannot satisfy the current `agent-browser` local Chromium
-  requirement
-- `/browser connect` CDP mode remains Chromium-family only
-- cloud providers that expose CDP URLs remain Chromium-shaped
-- Camofox currently reports console logs as unavailable in Hermes source
-- Camofox is a separate server/service dependency with its own lifecycle,
-  persistence, VNC, and loopback-network semantics
-- any tests assuming exact Chromium accessibility tree shape, focus behavior, or
-  bot-detection fingerprint will need cross-browser review
+- no `/browser connect`-style arbitrary CDP attachment to Chrome/Brave/Edge
+- console collection remains unavailable unless upstream Camofox Browser or
+  Hermes Camofox backend adds it
+- accessibility tree and focus behavior may differ from Chromium
+- Camofox service health becomes a required platform dependency
 
-Recommendation for this layer: keep Chromium as the reliable default, and add a
-Camofox canary only if Joy wants a Firefox-family testing target for ordinary
-browser tasks.
+### 3. Secure Camofox service replacing Kasm Chrome
 
-### Secure browser / Kasm surface
+The secure-browser replacement should not be `kasmweb/firefox`. It should be a
+Camofox Browser deployment with the VNC plugin/noVNC enabled, because that gives
+us both sides we need: Joy's visual browser and Star/Talon's automation API
+against the same browser engine/profile.
 
-What works today with Chrome/Kasm:
+Proposed source shape:
 
-- Joy sees a persistent Kasm browser at the normal Eyrie HTTPS endpoint
-- Bitwarden is force-installed using Chrome policy
-- profile state persists on a PVC
-- Star/Talon tools can claim owner-specific tabs through CDP target IDs
-- tools can navigate, inspect sanitized page text, click/type bounded controls,
-  take/redact screenshots, perform owner-only checkout review, and execute a
-  final purchase only after a trusted approval gate
-- guardrails are implemented in Python plus CDP page evaluation/click/screenshot
-  operations
+- `data/kubernetes/app/secure-browser-camofox.yaml`
+- `plans/eyrie/ai/deploy_secure_browser_camofox.yaml`
+- optional new class/define if the existing `nest::service::secure_browser`
+  should remain Chrome-specific during migration
+- public/private UI hostname such as `secure-browser.eyrie` only after cutover;
+  before cutover use a separate canary hostname such as
+  `secure-browser-camofox.eyrie`
+- private REST hostname/service only for Hermes tools, never exposed as a raw
+  user-facing public endpoint
+- PVC mounted at `/home/node/.camofox`
+- `ENABLE_VNC=1`
+- `VNC_RESOLUTION=1920x1080`
+- VNC password or equivalent ingress boundary; today's Kasm deployment disables
+  Basic Auth and relies on Eyrie-private network boundaries, but Camofox noVNC
+  docs warn VNC is unencrypted/open by default, so we should be more explicit
+  about ingress/network policy and whether Joy wants a password layer
+- Camofox access/API key secret mounted from eyaml/Kubernetes secret
 
-What Firefox/Kasm can support without bridge changes:
+Firefox/Bitwarden policy work:
 
-- user-facing browser UI
-- manual Joy login/OAuth/shopping browsing
-- persistent profile PVC, after profile path and seed logic are rewritten
-- Firefox Bitwarden extension policy, after policy mounts are rewritten
+- replace Chrome policy JSON and extension update URLs with Firefox policy
+- use Bitwarden Firefox extension id
+  `446900e4-71c2-419f-a6a7-df9c091e268b`
+- install XPI from Bitwarden's documented AMO latest URL unless we choose to
+  mirror/pin the XPI internally
+- verify the extension is present in the VNC UI before any OAuth/shopping test
+- decide whether the Bitwarden extension state lives in the Camofox profile PVC
+  or needs seeded policy/default-profile files in the image/container
 
-What Firefox/Kasm cannot support as a drop-in replacement:
+Profile migration work:
 
-- Chrome remote debugging flags
-- `/json/version` and `/json/list` CDP discovery
-- current CDP websocket methods used by both secure-browser tool files
-- owner-tab tracking by CDP target id
-- CDP screenshots and Runtime.evaluate guardrail inspections
-- current final-purchase executor implementation
+- the existing Chrome profile under `/home/kasm-user/.config/secure-browser`
+  cannot be copied into Firefox/Camofox as-is
+- plan a new Camofox/Firefox profile, manual Joy login/unlock, and fresh
+  Bitwarden/OAuth/shopping state
+- keep old Chrome PVC snapshot until rollback is no longer needed
 
-Recommendation for this layer: do not switch the production secure browser to
-Firefox until the automation bridge is redesigned and tested. If Joy wants a
-Firefox UI, create a separate canary deployment first, with no exposed CDP
-endpoint and no purchase authority.
+### 4. Rewrite secure-browser tools as a backend adapter
 
-## Security and privacy implications
+The current `files/app/hermes/secure_browser_tool.py` and
+`secure_browser_oauth_tool.py` should keep their public tool names and privacy
+boundaries, but their browser-driving layer should become backend-swappable:
 
-Positive Firefox-side considerations:
+- `ChromeCdpSecureBrowserBackend` for temporary rollback during migration
+- `CamofoxSecureBrowserBackend` for the new path
 
-- better alignment with Joy's non-Chrome personal browser preference
-- reduced reliance on Google Chrome as the user-visible secure browser
-- Firefox/Bitwarden managed extension deployment is documented and possible
+The backend interface should cover the primitives the tools actually need:
 
-Risks and tradeoffs:
+- status/health
+- list/adopt/create owner tab
+- navigate URL
+- current URL/title
+- read visible text and interactive controls
+- evaluate a constrained read-only expression or equivalent structured query
+- click selector/ref
+- type bounded text
+- press key
+- screenshot viewport/full page
+- visual evidence/crop source image
+- owner-only screenshot capture
+- close/reset owner tab mapping
 
-- replacing CDP with WebDriver BiDi/Marionette/Playwright server would be a
-  substantial security-sensitive rewrite of the secure-browser bridge
-- WebDriver/BiDi endpoints must not be exposed publicly, just as raw CDP should
-  not be model-visible or public
-- Camofox's anti-detection features may be useful for ordinary browsing, but it
-  is another service to source-manage, monitor, and patch
-- Kasm standalone Firefox notes limited upload/download/microphone support
-  outside full Kasm Workspaces orchestration
-- Firefox profile and enterprise policy paths differ from Chrome, so careless
-  migration could silently drop Bitwarden or profile persistence
-- checkout/purchase guardrails depend on DOM inspection and click control; any
-  new backend needs parity tests before it can be trusted with the approval gate
+Camofox mapping:
 
-## Puppet/Nest changes required for a Firefox Kasm canary
+- owner mapping: `owner -> userId/sessionKey/tabId`, stored in the existing
+  ownership state file or a new backend-neutral state file
+- tab adoption: use `GET /tabs?userId=...` and `listItemId`/`sessionKey`
+- navigation: `POST /tabs/:tabId/navigate`
+- snapshots: `GET /tabs/:tabId/snapshot`
+- click/type/press/scroll: Camofox interaction endpoints
+- screenshots: `GET /tabs/:tabId/screenshot`
+- extraction: `/tabs/:tabId/extract` after snapshot where useful
+- read-only JS: Camofox Browser OpenAPI includes an interaction/evaluate area;
+  use that if available in the pinned version, otherwise replace risky generic
+  JS evaluation with structured extraction and a small set of server-side helper
+  endpoints we own
 
-A safe canary should be separate from the existing `secure-browser` deployment.
-Do not mutate `secure-browser` in place for the first test.
+The biggest technical question is not "can Camofox click and screenshot?" It can.
+The question is whether our current Amazon checkout sanitizers, redaction
+rectangle discovery, and final-purchase material-summary binding can be ported
+without relying on broad raw DOM/JS access in a way that weakens the safety
+boundary. For that reason, the adapter must come with parity tests before the
+Chrome backend is removed.
 
-Likely source changes:
+### 5. Preserve secure-browser safety semantics
 
-1. Add a new KubeCM app data file, for example
-   `data/kubernetes/app/secure-browser-firefox.yaml`.
-2. Use `docker.io/kasmweb/firefox:<pinned version>` rather than a rolling tag.
-3. Remove Chrome-only args:
-   - `--remote-debugging-address`
-   - `--remote-debugging-port`
-   - Chrome-specific `--disable-features=UseChromeOSDirectVideoDecoder` if not
-     verified for Firefox
-   - Chrome `--user-data-dir` path
-4. Replace Chrome profile seed logic with Firefox profile/PVC logic.
-5. Replace Chrome policy ConfigMap mounts with Firefox policies, including the
-   Bitwarden XPI install URL.
-6. Do not expose `secure-browser-cdp.eyrie` or any replacement automation
-   endpoint in the canary.
-7. Keep Kasm UI ingress/TLS/PVC/readiness patterns from the current deployment.
-8. Create a separate deploy plan, for example
-   `plans/eyrie/ai/deploy_secure_browser_firefox.yaml`.
-9. Verify KubeCM render output before live deployment.
-10. Only after manual Joy validation, decide whether to build a Firefox-safe
-    automation bridge.
+These invariants must not change during the migration:
 
-## Bridge rewrite options for secure browser
+- Star/Talon do not receive cookies, local storage, request headers, vault data,
+  passwords, 2FA, CAPTCHA, passkeys, raw payment/account details, raw full
+  address/contact details, or raw checkout screenshots
+- login, Bitwarden unlock, passkeys, 2FA, CAPTCHA, suspicious prompts, payment,
+  address, and account edits stay Joy-operated through the visible browser
+- final Buy Now/Place Order controls remain blocked from ordinary tool calls
+- final purchase still requires:
+  1. owner-only checkout review sent directly to Joy
+  2. material summary binding
+  3. trusted Agent Request approval
+  4. live re-read/revalidation
+  5. exactly-one final control action
+  6. post-purchase proof handling without exposing secrets
+- order ledger and consumable tools remain sanitized ledgers, not raw browser
+  session dumps
+- raw Camofox REST/VNC/control endpoints stay outside model-visible outputs
 
-If secure-browser automation must move to Firefox, the choices are:
+## Capability comparison after Camofox migration
 
-1. WebDriver BiDi/geckodriver bridge
-   - standards-aligned Firefox direction
-   - would require rewriting tab ownership, navigation, eval, screenshot, and
-     click/type helpers
-   - likely safest long-term Firefox-native path
+### Gains
 
-2. Playwright Firefox bridge
-   - high-level API with Firefox support
-   - can handle persistent contexts and screenshots
-   - would need a controlled server/sidecar model to drive the browser in the
-     Kasm session, not a separate invisible browser
+- Removes Chrome/Kasm from the user-facing browser story
+- Aligns with Joy's non-Chrome preference
+- Uses Hermes' existing Camofox backend for normal browser tools
+- Gains Camofox/Camoufox anti-detection features and fingerprint consistency
+  work
+- VNC/noVNC can replace Kasm for owner-operated login/OAuth/checkout review
+- Potentially lower browser memory footprint than Chrome/Kasm, subject to live
+  measurement on owl/Eyrie
+- One Camofox API model can serve both headless agent browser tasks and the
+  visible secure-browser session
 
-3. Camofox-based bridge
-   - already integrated with Hermes normal `browser_*` tooling
-   - has REST endpoints for snapshots/click/type/screenshot
-   - may not expose every guardrail primitive needed for final-purchase safety;
-     console capture is currently unavailable
+### Losses or changed behavior
 
-4. Keep Chrome for automation and add Firefox only for manual UI
-   - least risky
-   - satisfies most of Joy's "not personally Chrome" concern for manual use if
-     the Firefox UI is the part Joy sees
-   - still leaves Chromium installed for automation and fallbacks
+- Direct CDP is gone. Existing CDP code must be rewritten, not reconfigured.
+- `/browser connect` to arbitrary local Chromium-family browsers is no longer a
+  Chrome-free feature.
+- Console log capture is not currently supported by Hermes' Camofox adapter.
+- Camofox 2026 releases are explicitly active/experimental; pinned versions and
+  rollback matter.
+- noVNC security is different from KasmVNC. We must design auth/network policy
+  instead of inheriting Kasm's behavior.
+- Existing Chrome profile state cannot be reused directly.
+- Browser accessibility trees, selectors, screenshots, and Amazon checkout DOM
+  behavior may differ and must be retuned.
 
-## Migration plan
+### Unknowns requiring prototype evidence
 
-### Phase 0: keep current production unchanged
+- Exact Firefox policy path inside the chosen Camofox Browser image for managed
+  Bitwarden install
+- Whether the pinned Camofox Browser version's evaluate endpoint is sufficient
+  for all existing checkout sanitizers, or whether we need custom helper
+  endpoints
+- Whether Amazon login/cart/checkout pages behave better, worse, or differently
+  under Camofox fingerprints from Joy's Eyrie IPs
+- Whether Camofox VNC UX is good enough for Joy compared with Kasm
+- Whether profile persistence handles Bitwarden extension state cleanly across
+  pod restarts
+- Resource usage under one persistent secure-browser profile plus concurrent
+  general Hermes browsing sessions
 
-- Do not remove `www-client/google-chrome`.
-- Do not change `data/kubernetes/app/secure-browser.yaml` production image.
-- Do not remove the current CDP bridge.
+## Concrete migration plan
 
-### Phase 1: normal-browser Firefox-family canary
+### Phase 0: pin and build Camofox Browser
 
-- Source-manage Camofox configuration for one non-production profile or dev
-  profile.
-- Enable via `CAMOFOX_URL` and optional `browser.camofox` settings.
-- Run a small browser-tool parity checklist:
-  - navigate public page
-  - navigate private Eyrie page if policy allows
-  - snapshot
-  - click/type
-  - screenshot/vision
-  - JavaScript eval
-  - console behavior
-  - persistent profile behavior if desired
-- Keep Chromium as fallback.
+Goal: produce a source-managed Camofox Browser runtime without touching live
+secure-browser.
 
-### Phase 2: Firefox Kasm manual UI canary
+Tasks:
 
-- Add a separate `kasmweb/firefox` KubeCM app with its own hostname/PVC.
-- Install Bitwarden through Firefox policy.
-- Verify manual Joy flows:
-  - Kasm connection
-  - Bitwarden extension present
-  - login/passkey/2FA UX
-  - OAuth/device-code flow
-  - Amazon/product/cart pages for manual browsing only
-  - profile persistence across pod restart
-- Do not wire Star's current secure-browser tools to this canary.
+1. Choose upstream release/tag, starting from Camofox Browser 1.11.2 or newer
+   after checking changelog/stability.
+2. Decide upstream image vs Nest-built image. I recommend Nest-built for the
+   secure-browser path.
+3. Build/push `registry.eyrie/nest/camofox-browser:<version>-nest` with Camoufox
+   binary pre-fetched.
+4. Add minimal KubeCM app for a private `hermes-camofox` service.
+5. Add secrets/config for Camofox access/API/admin keys.
+6. Verify `/health`, REST auth, noVNC disabled/enabled modes, PVC persistence,
+   and resource limits.
 
-### Phase 3: automation bridge decision
+Validation:
 
-After Phase 2, choose one:
+- Kubernetes pod healthy
+- `/health` reports browser-ready state
+- creating a tab works
+- snapshot, click/type, screenshot work
+- pod restart preserves configured profile/session state where expected
 
-- keep Firefox as manual-only and Chrome as automation backend
-- build a WebDriver BiDi/Playwright/Camofox bridge behind the same
-  `secure_browser_*` privacy contract
-- abandon Firefox Kasm if the operational burden is not worth it
+Rollback:
 
-### Phase 4: guarded production switch only after parity
+- delete/scale only the Camofox app
+- leave existing Chrome/Kasm secure-browser untouched
 
-Only if a new bridge passes parity and guardrail tests:
+### Phase 1: move general Hermes browser tools to Camofox
 
-- add source-managed rollback to the Chrome deployment
-- deploy to dev/canary first
-- test final-purchase approval refusal/success paths with synthetic pages, not
-  live purchases
-- run Joy-supervised live OAuth/shopping validation
-- switch production only through an explicit Joy-approved Agent Request
+Goal: make ordinary `browser_*` use Camofox without touching shopping tools.
 
-## Rollback
+Tasks:
 
-Normal browser tools:
+1. Add Nest-managed per-profile `CAMOFOX_URL` and `browser.camofox` config for a
+   target profile.
+2. Enable managed persistence only where useful; keep ephemeral sessions for
+   generic throwaway browsing if preferred.
+3. Remove or disable Chromium fallback in that profile's browser path once
+   Camofox checks pass, so failures are visible instead of silently using
+   Chrome.
+4. Run the Hermes browser parity checklist.
 
-- unset `CAMOFOX_URL`
-- remove/disable Camofox config
-- keep or restore `browser.engine: auto`
-- verify `agent-browser doctor` passes with Chrome
-- restart affected Hermes gateway sessions if needed
+Validation checklist:
 
-Secure browser:
+- `browser_navigate`
+- `browser_snapshot`
+- `browser_click`
+- `browser_type`
+- `browser_press`
+- `browser_scroll`
+- `browser_vision`
+- image listing expectations
+- failure when Camofox is unavailable is clear and actionable
+- no accidental Chrome process used for these tool calls
 
-- keep the existing `data/kubernetes/app/secure-browser.yaml` Chrome deployment
-  unchanged during canary work
-- if a Firefox canary fails, delete or scale down only the canary deployment and
-  preserve the production `secure-browser` PVC/deployment
-- if a production switch ever happens, rollback should restore the previous
-  `kasmweb/chrome` image, Chrome args, Chrome policy mounts, CDP service, and
-  Chrome profile PVC snapshot/backup
+### Phase 2: create secure-browser Camofox canary
 
-## Recommended next requests
+Goal: give Joy a visible Camofox browser with persistent state and Bitwarden,
+without purchase authority yet.
 
-1. Camofox normal-browser canary for Talon
-   - repo: Nest config plus Hermes config as needed
-   - goal: source-manage and validate a non-production Camofox backend for
-     normal `browser_*` tools
-   - non-goal: no secure-browser or shopping/final-purchase changes
+Tasks:
 
-2. Firefox Kasm manual secure-browser canary
+1. Add `secure-browser-camofox` KubeCM app using the pinned Camofox Browser
+   image.
+2. Enable VNC/noVNC and expose only the Joy-facing UI hostname.
+3. Keep REST API private to Hermes/Nest networks.
+4. Mount a fresh PVC for `/home/node/.camofox`.
+5. Add Firefox/Bitwarden policy or profile seeding.
+6. Add reset/revoke procedure equivalent to the current ConfigMap, but written
+   for Camofox profiles and Camofox API keys.
+7. Verify manual Joy flows before any automation wiring.
+
+Validation checklist:
+
+- noVNC page loads through Eyrie
+- Bitwarden extension is installed and visible
+- Joy can unlock/use Bitwarden manually
+- OAuth/device flow can be completed manually
+- Amazon login/product/cart pages can be reached manually
+- profile and extension state survive pod restart
+- no raw REST/API endpoint is exposed publicly
+
+### Phase 3: implement Camofox secure-browser backend
+
+Goal: port the secure-browser/shopping tools to Camofox while keeping tool names
+and safety behavior.
+
+Tasks:
+
+1. Refactor current secure-browser tool code to isolate CDP calls behind a
+   backend interface.
+2. Implement `CamofoxSecureBrowserBackend` against Camofox REST.
+3. Map selectors/refs carefully. Current public tools accept CSS selectors;
+   Camofox's strongest model is element refs from snapshots. We can either:
+   - translate safe CSS selectors through a constrained evaluate/locator helper,
+   - change internal suggested selectors to Camofox refs while keeping public
+     tool schema stable, or
+   - return both `selector` and `ref` during transition.
+4. Port sanitizers and checkout summary extraction.
+5. Port screenshot/redaction pipeline to Camofox screenshot PNGs.
+6. Port owner-only checkout review and material-summary binding.
+7. Port final-purchase executor only after synthetic parity tests pass.
+8. Keep `ChromeCdpSecureBrowserBackend` available behind config until Camofox is
+   accepted.
+
+Required tests:
+
+- backend fake tests for owner tab mapping/adoption
+- fake Camofox REST server tests for navigation/snapshot/click/type/screenshot
+- sanitizer tests using captured/synthetic Amazon-like HTML states
+- screenshot redaction tests using generated images, not live secrets
+- final purchase refusal tests: no approval, stale binding, changed material
+  summary, multiple final controls, login/security prompt visible
+- final purchase success test on a synthetic page only
+- order ledger refresh path still sanitized
+- no tool result contains raw Camofox URL, API key, cookies, local storage,
+  request headers, vault content, full address/payment, or unredacted checkout
+  evidence
+
+### Phase 4: switch secure-browser production endpoint
+
+Goal: replace Chrome/Kasm only after parity.
+
+Tasks:
+
+1. Snapshot/backup old Chrome secure-browser PVC.
+2. Keep old deployment scaled down but restorable for a defined rollback window.
+3. Point `SECURE_BROWSER_PUBLIC_URL` and backend config to the Camofox service.
+4. Remove `SECURE_BROWSER_CDP_URL` dependency for Camofox mode.
+5. Run Joy-supervised live OAuth/shopping validation.
+6. Only then remove Chrome/Kasm source references and package installs.
+
+Validation:
+
+- secure browser status reports Camofox backend
+- no Chrome/Kasm pod is serving the active endpoint
+- Bitwarden still available
+- owner-only checkout review reaches Joy
+- approval gate refuses/accepts only as expected on synthetic pages
+- live shopping browsing works with Joy supervision
+- no Chrome process/package is required by active Hermes browser/secure-browser
+  paths
+
+## Puppet/Nest changes likely required
+
+Source changes in `nest/config`:
+
+- Camofox image build source or KubeCM app image reference
+- new Hiera/KubeCM app data for `hermes-camofox`
+- new Hiera/KubeCM app data for `secure-browser-camofox`
+- deploy plans for both apps
+- DNS entries for any private/public Eyrie hostnames
+- cert-manager/ingress resources for the noVNC UI
+- Kubernetes secrets for Camofox access/API/admin keys
+- PVC definitions for `/home/node/.camofox`
+- Firefox/Bitwarden policy/profile seed ConfigMaps or image assets
+- Hermes profile env/config for `CAMOFOX_URL`, persistence, identity, and secure
+  backend selection
+- secure-browser tool code copied by `manifests/app/hermes/install.pp`
+- reset/revoke procedure docs for Camofox profile and keys
+- eventual removal of `www-client/google-chrome`, `agent-browser`, Chrome/Kasm
+  args, Chrome policy mounts, and `secure-browser-cdp.eyrie` only after parity
+
+## Recommended next Agent Requests
+
+1. Build/deploy private Camofox Browser runtime for Hermes
    - repo: Nest config
-   - goal: add a separate `kasmweb/firefox` KubeCM app with Firefox Bitwarden
-     policy and persistent profile, manual Joy validation only
-   - non-goal: no Star guarded tool wiring and no purchase authority
+   - goal: source-managed pinned Camofox Browser image/app with REST health,
+     private API, optional noVNC, PVC persistence, and no production secure
+     browser changes
+   - follow-through: deploy canary and verify live health
 
-3. Secure-browser automation backend design
-   - repo: Nest config and Hermes secure-browser tool source
-   - goal: design WebDriver BiDi/Playwright/Camofox bridge parity requirements
-     and guardrail tests before any implementation
-   - non-goal: no production switch until design and canaries are accepted
+2. Move one Hermes profile's normal `browser_*` tools to Camofox
+   - repo: Nest config and Hermes profile config
+   - goal: configure `CAMOFOX_URL` and Camofox persistence for Talon or a dev
+     profile, run browser tool parity, prove Chrome is not used for those calls
+   - non-goal: secure-browser/shopping tools
 
-## Bottom line
+3. Create secure-browser Camofox UI canary with Bitwarden
+   - repo: Nest config
+   - goal: Camofox noVNC UI, persistent profile, Firefox Bitwarden install,
+     Joy manual OAuth/shopping validation
+   - non-goal: final purchase/tool automation authority
 
-Firefox can participate in Joy's browser stack, but it is not a drop-in
-replacement for the current Chrome/Chromium foundation.
+4. Implement Camofox backend for `secure_browser_*`
+   - repo: Nest config plus Hermes secure-browser tool source
+   - goal: backend abstraction, Camofox adapter, parity tests, synthetic checkout
+     approval/refusal tests, no secret leakage
+   - non-goal: production endpoint switch until reviewed
 
-The normal Hermes browser tools already have a Firefox-family path through
-Camofox, but the reliable installed default remains local Chromium through
-`agent-browser`. The secure-browser surface is much more Chrome-specific: both
-its KubeCM deployment and its custom tools are built around Chrome policy,
-Chrome profile layout, and Chrome DevTools Protocol. A user-facing Firefox Kasm
-canary is safe to investigate, but production guarded secure-browser automation
-should remain Chromium until a new non-CDP bridge exists and passes guardrail
-parity tests.
+5. Remove Chrome/Kasm after Camofox parity
+   - repo: Nest config
+   - goal: switch production endpoints, retire Chrome/Kasm/CDP service/package
+     dependencies, verify rollback and live paths
+   - precondition: phases 1-4 accepted and deployed
+
+## Answer to Joy's specific question
+
+What would we actually need to do to get this working with the
+secure-browser/shopping tools?
+
+We need to stop thinking of Camofox as "Firefox pretending to provide CDP" and
+instead make Camofox Browser the browser service. For normal Hermes browsing,
+that is mostly configuration plus a source-managed service because Hermes
+already has a Camofox backend. For secure browsing, we need a new backend under
+our `secure_browser_*` tools that drives the same visible Camofox/noVNC session
+through Camofox Browser's REST API, not Chrome CDP.
+
+The work is real but bounded: build/deploy Camofox Browser, install Bitwarden in
+its Firefox profile, persist `/home/node/.camofox`, expose noVNC to Joy, keep the
+REST API private, refactor secure-browser tools behind a backend adapter, port
+navigation/snapshot/click/type/screenshot/query/redaction/final-approval
+primitives, and prove with synthetic checkout tests that the approval gate still
+cannot leak secrets or click Place Order without the exact trusted approval.
+
+If those tests pass, Chrome and Kasm can go away. If they fail, the likely
+failure point will not be Camofox's basic browsing ability; it will be one of
+our high-trust shopping guardrails needing a Camofox-specific extraction or
+redaction implementation.
