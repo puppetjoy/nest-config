@@ -2,7 +2,8 @@
 nest::classes:
   - 'nest::tool::camofox'
 
-nest::tool::camofox::package_version: '1.11.2'
+nest::tool::camofox::package_name: 'camofox-browser'
+nest::tool::camofox::package_version: '2.4.6'
 
 # Camofox Browser/Camoufox runs only on amd64 for the initial Nest tool image.
 # Keep this image as a browser runtime, not an authority bundle: no profile

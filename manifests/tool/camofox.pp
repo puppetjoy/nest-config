@@ -4,7 +4,8 @@
 # runtime during the image build so Kubernetes pods do not download browser
 # binaries at startup.
 class nest::tool::camofox (
-  String $package_version          = '1.11.2',
+  String $package_name             = 'camofox-browser',
+  String $package_version          = '2.4.6',
   String $bitwarden_extension_url  = 'https://addons.mozilla.org/firefox/downloads/latest/bitwarden-password-manager/latest.xpi',
   String $bitwarden_extension_path = '/opt/nest/camofox/extensions/bitwarden.xpi',
 ) {
@@ -54,17 +55,11 @@ class nest::tool::camofox (
   }
 
   exec { 'install_camofox_browser':
-    command     => "${nodejs::npm_path} install --global @askjo/camofox-browser@${package_version}",
-    unless      => "${nodejs::npm_path} list --global @askjo/camofox-browser@${package_version} --depth=0 >/dev/null 2>&1",
+    command     => "${nodejs::npm_path} install --global ${package_name}@${package_version}",
+    unless      => "${nodejs::npm_path} list --global ${package_name}@${package_version} --depth=0 >/dev/null 2>&1",
     environment => ['HOME=/root'],
     require     => Class['nodejs'],
     timeout     => 0,
-  }
-
-  exec { 'patch_camofox_virtual_display_await':
-    command => '/usr/bin/ruby -0pi -e "gsub(%q{vdDisplay = localVirtualDisplay.get();}, %q{vdDisplay = await localVirtualDisplay.get();})" /usr/lib64/node_modules/@askjo/camofox-browser/server.js',
-    unless  => '/bin/grep -F "vdDisplay = await localVirtualDisplay.get();" /usr/lib64/node_modules/@askjo/camofox-browser/server.js >/dev/null',
-    require => Exec['install_camofox_browser'],
   }
 
   file { '/usr/local/bin/nest-camofox-browser':
@@ -77,6 +72,7 @@ class nest::tool::camofox (
       'export CAMOFOX_HOST="${CAMOFOX_HOST:-0.0.0.0}"',
       'export CAMOFOX_PORT="${CAMOFOX_PORT:-9377}"',
       'export CAMOFOX_DATA_DIR="${CAMOFOX_DATA_DIR:-/home/node/.camofox}"',
+      'export CAMOFOX_AUTH_MODE="${CAMOFOX_AUTH_MODE:-disabled}"',
       'export HOME="${HOME:-/home/node}"',
       '',
       'mkdir -p "${CAMOFOX_DATA_DIR}" "${HOME}"',
@@ -87,7 +83,6 @@ class nest::tool::camofox (
     require => [
       Exec['install_camofox_browser'],
       Exec['install_camofox_bitwarden_extension'],
-      Exec['patch_camofox_virtual_display_await'],
     ],
   }
 }

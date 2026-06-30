@@ -130,13 +130,21 @@ resources:
                 - name: CAMOFOX_HOST
                   value: 0.0.0.0
                 - name: CAMOFOX_PORT
-                  value: "%{alias('camofox_port')}"
+                  value: "%{lookup('camofox_port')}"
                 - name: CAMOFOX_DATA_DIR
                   value: "%{lookup('camofox_data_dir')}"
+                - name: CAMOFOX_PROFILE_DIR
+                  value: "%{lookup('camofox_data_dir')}/profiles"
+                - name: CAMOFOX_COOKIES_DIR
+                  value: "%{lookup('camofox_data_dir')}/cookies"
+                - name: CAMOFOX_TRACES_DIR
+                  value: "%{lookup('camofox_data_dir')}/traces"
                 - name: CAMOFOX_LOG_LEVEL
                   value: "%{lookup('camofox_log_level')}"
                 - name: CAMOFOX_TELEMETRY_DISABLED
                   value: "%{lookup('camofox_telemetry_disabled')}"
+                - name: CAMOFOX_AUTH_MODE
+                  value: disabled
                 - name: CAMOFOX_SERVICE_INSTANCE
                   value: "%{lookup('service_instance')}"
                 - name: CAMOFOX_BITWARDEN_EXTENSION_PATH
