@@ -11,6 +11,7 @@ ingress_class: contour-compute
 node_role: compute
 image: registry.gitlab.joyfullee.me/nest/tools/camofox:latest
 profile_storage_size: 8Gi
+profile_storage_description: persistent by default; camofox-general overrides this to emptyDir
 camofox_port: 9377
 camofox_data_dir: /home/node/.camofox
 camofox_log_level: info
@@ -71,6 +72,11 @@ resources:
         Non-final-purchase Chrome/Kasm parity gaps should be handled by meeting
         Camofox at its API level: REST snapshots, refs, screenshots, extraction,
         and a future backend adapter rather than raw CDP shims.
+
+        Persistence is intentionally service-specific. camofox-general should be
+        treated as disposable automation state. camofox-secure is the migration
+        canary for Joy-operated login/session continuity and may use a persistent
+        profile plus Bitwarden extension policy once reviewed.
 
   profile-storage:
     apiVersion: v1
@@ -133,6 +139,8 @@ resources:
                   value: "%{lookup('camofox_telemetry_disabled')}"
                 - name: CAMOFOX_SERVICE_INSTANCE
                   value: "%{lookup('service_instance')}"
+                - name: CAMOFOX_BITWARDEN_EXTENSION_PATH
+                  value: "%{lookup('bitwarden_extension_path')}"
               ports:
                 - name: http
                   containerPort: "%{alias('camofox_port')}"

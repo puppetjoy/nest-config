@@ -2,3 +2,22 @@
 service_name: camofox-general
 service_instance: general
 profile_storage_size: 8Gi
+profile_storage_description: ephemeral emptyDir automation state
+bitwarden_extension_path: ''
+
+resources:
+  profile-storage: {}
+
+patches:
+  10-ephemeral-profile:
+    patch:
+      - op: replace
+        path: '/spec/template/spec/volumes/0'
+        value:
+          name: profile
+          emptyDir: {}
+    target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: camofox-general

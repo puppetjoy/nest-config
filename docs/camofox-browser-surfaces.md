@@ -20,7 +20,10 @@ standard `nest/stage1/server:zen5` path. The Puppet class installs the pinned
 `@askjo/camofox-browser` package and its Camoufox runtime during image build so
 pods do not fetch browser binaries at startup. The image remains authority-free:
 no cookies, profile state, kubeconfigs, SSH keys, tokens, or Joy browser data are
-baked into it.
+baked into it. The image does pre-fetch the public Bitwarden Firefox XPI into
+`/opt/nest/camofox/extensions/bitwarden.xpi` so the secure instance can enable a
+managed extension policy without embedding Joy's vault state or browser profile
+into the image.
 
 The matching external `nest/tools/camofox` GitLab project should be created with
 the same small CI-wrapper shape as the other `nest/tools/*` repositories before a
@@ -45,18 +48,28 @@ Relevant files:
 - `plans/eyrie/ai/deploy_camofox_secure.yaml`
 
 The general instance is deliberately not called "Hermes browser" even though
-Hermes browser tools are the likely first client. The secure instance is a
-canary/runtime surface for the secure-browser migration, not the live
-shopping/final-purchase path.
+Hermes browser tools are the likely first client. It is intended to be the
+ordinary, low-authority automation surface, so its `/home/node/.camofox` profile
+is backed by `emptyDir` and should be treated as disposable across pod
+replacements.
+
+The secure instance is a canary/runtime surface for the secure-browser
+migration, not the live shopping/final-purchase path. It keeps a persistent
+`/home/node/.camofox` PVC so Joy-operated login/session continuity can survive
+pod replacement, and it carries the Bitwarden Firefox extension preinstall
+intent separately from any active final-purchase authority.
 
 The top-level `nest::eyrie::ai::deploy` plan has a `camofox` switch defaulting to
 `false`. This keeps normal AI deploys from silently introducing the new browser
 surface before review. To render without applying:
 
 ```sh
-bolt plan run nest::eyrie::ai::deploy_camofox_general deploy=false render_to=/tmp/camofox-general.yaml
-bolt plan run nest::eyrie::ai::deploy_camofox_secure deploy=false render_to=/tmp/camofox-secure.yaml
+bolt plan run nest::eyrie::ai::deploy_camofox_general deploy=true render_to=/modules/nest/build/camofox-general.yaml
+bolt plan run nest::eyrie::ai::deploy_camofox_secure deploy=true render_to=/modules/nest/build/camofox-secure.yaml
 ```
+
+The `render_to` path keeps this in Helm-template/render mode; it does not apply
+resources to the cluster.
 
 ## Rollout knobs
 
@@ -101,8 +114,10 @@ Render checks:
 
 - render `deploy_camofox_general` with `deploy=false`
 - render `deploy_camofox_secure` with `deploy=false`
-- confirm each render has a distinct Deployment, PVC, Certificate, Service, and
-  HTTPProxy using `camofox-general` / `camofox-secure`
+- confirm `camofox-general` renders with an `emptyDir` profile and no durable
+  browser-session PVC
+- confirm `camofox-secure` renders with a profile PVC, the Bitwarden policy
+  ConfigMap, a distinct Deployment, Certificate, Service, and HTTPProxy
 - confirm no resources mutate the current `secure-browser` Chrome/Kasm workload
 
 Canary checks after image publication and review approval:
@@ -111,7 +126,8 @@ Canary checks after image publication and review approval:
 - verify `/health` through the private Eyrie endpoint
 - create/navigate/snapshot/click/type/screenshot through Camofox Browser's REST
   API
-- restart the pod and verify profile persistence expectations
-- only then test `camofox-secure`, keeping Star's active
+- restart the general pod and verify its profile behaves as disposable state
+- only then test `camofox-secure`; verify profile persistence and Bitwarden
+  extension availability, while keeping Star's active
   `SECURE_BROWSER_CDP_URL` pointed at the existing Chrome/Kasm service until the
   secure-browser backend adapter is separately reviewed

@@ -4,7 +4,9 @@
 # runtime during the image build so Kubernetes pods do not download browser
 # binaries at startup.
 class nest::tool::camofox (
-  String $package_version = '1.11.2',
+  String $package_version          = '1.11.2',
+  String $bitwarden_extension_url  = 'https://addons.mozilla.org/firefox/downloads/latest/bitwarden-password-manager/latest.xpi',
+  String $bitwarden_extension_path = '/opt/nest/camofox/extensions/bitwarden.xpi',
 ) {
   include 'nodejs'
 
@@ -15,6 +17,21 @@ class nest::tool::camofox (
   ]:
     ensure => installed,
     before => Exec['install_camofox_browser'],
+  }
+
+  file { '/opt/nest/camofox/extensions':
+    ensure => directory,
+    mode   => '0755',
+  }
+
+  exec { 'install_camofox_bitwarden_extension':
+    command => "curl --fail --location --show-error --output ${bitwarden_extension_path} ${bitwarden_extension_url}",
+    creates => $bitwarden_extension_path,
+    require => [
+      Nest::Lib::Package['net-misc/curl'],
+      File['/opt/nest/camofox/extensions'],
+    ],
+    timeout => 0,
   }
 
   exec { 'install_camofox_browser':
@@ -42,6 +59,9 @@ class nest::tool::camofox (
       'exec camofox-browser "$@"',
       '',
     ].join("\n"),
-    require => Exec['install_camofox_browser'],
+    require => [
+      Exec['install_camofox_browser'],
+      Exec['install_camofox_bitwarden_extension'],
+    ],
   }
 }

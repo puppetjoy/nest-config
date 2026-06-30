@@ -7,3 +7,8 @@ nest::tool::camofox::package_version: '1.11.2'
 # Camofox Browser/Camoufox runs only on amd64 for the initial Nest tool image.
 # Keep this image as a browser runtime, not an authority bundle: no profile
 # secrets, cookies, kubeconfigs, SSH keys, or user browser profiles are baked in.
+
+# Pre-fetch the Firefox Bitwarden extension into the authority-free image so
+# secure Camofox can enable it without baking Joy's profile/session data into
+# the image.
+nest::tool::camofox::bitwarden_extension_url: 'https://addons.mozilla.org/firefox/downloads/latest/bitwarden-password-manager/latest.xpi'
