@@ -44,6 +44,19 @@ class nest::tool::camofox (
     require => File['/opt/nest/camofox'],
   }
 
+  file { '/opt/nest/camofox/bin':
+    ensure  => directory,
+    mode    => '0755',
+    require => File['/opt/nest/camofox'],
+  }
+
+  file { '/opt/nest/camofox/bin/patch-camofox-viewport-isMobile.sh':
+      ensure  => file,
+      mode    => '0755',
+      source  => 'puppet:///modules/nest/camofox-browser/patch-camofox-viewport-isMobile.sh',
+      require => File['/opt/nest/camofox/bin'],
+    }
+
   exec { 'install_camofox_bitwarden_extension':
     command => "/usr/bin/curl --fail --location --show-error --output ${bitwarden_extension_path} ${bitwarden_extension_url}",
     creates => $bitwarden_extension_path,
@@ -60,6 +73,17 @@ class nest::tool::camofox (
     environment => ['HOME=/root'],
     require     => Class['nodejs'],
     timeout     => 0,
+  }
+
+  # Strip isMobile from viewport in camofox-browser server.js before it
+  # reaches the Camoufox CDP layer.  Camoufox translates { width, height }
+  # into a Browser.setDefaultViewport message that includes isMobile: false,
+  # which the Camoufox CDP scheme rejects (ar-20260630-233757-a80b42).
+  exec { 'patch_camofox_viewport_isMobile':
+    command     => '/bin/bash /opt/nest/camofox/bin/patch-camofox-viewport-isMobile.sh',
+    unless      => '/bin/grep -q "delete contextOptions.viewport.isMobile" /usr/lib64/node_modules/@askjo/camofox-browser/server.js 2>/dev/null',
+    require     => Exec['install_camofox_browser'],
+    timeout     => 30,
   }
 
   file { '/usr/local/bin/nest-camofox-browser':
