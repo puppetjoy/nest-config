@@ -25,7 +25,7 @@ class nest::tool::camofox (
   }
 
   exec { 'install_camofox_bitwarden_extension':
-    command => "curl --fail --location --show-error --output ${bitwarden_extension_path} ${bitwarden_extension_url}",
+    command => "/usr/bin/curl --fail --location --show-error --output ${bitwarden_extension_path} ${bitwarden_extension_url}",
     creates => $bitwarden_extension_path,
     require => [
       Nest::Lib::Package['net-misc/curl'],
