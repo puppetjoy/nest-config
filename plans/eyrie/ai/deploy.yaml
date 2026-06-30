@@ -42,6 +42,11 @@ parameters:
     type: Boolean
     default: true
 
+  camofox:
+    description: 'Deploy Camofox browser service instances'
+    type: Boolean
+    default: false
+
   voice_speech:
     description: 'Deploy local ROCm speech API'
     type: Boolean
@@ -90,6 +95,11 @@ steps:
     plan: nest::eyrie::ai::deploy_secure_browser
     parameters:
       deploy: $deploy and $secure_browser
+
+  - description: 'Deploy Camofox browser service instances'
+    plan: nest::eyrie::ai::deploy_camofox
+    parameters:
+      deploy: $deploy and $camofox
 
   - description: 'Deploy local ROCm speech API'
     plan: nest::eyrie::ai::deploy_voice_speech

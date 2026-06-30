@@ -1,0 +1,4 @@
+---
+service_name: camofox-secure
+service_instance: secure
+profile_storage_size: 12Gi

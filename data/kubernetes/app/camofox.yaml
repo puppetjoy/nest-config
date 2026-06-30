@@ -1,0 +1,201 @@
+---
+include:
+  - 'nest::service::camofox'
+
+plan_base: 'nest::eyrie::ai::camofox'
+service_name: "%{nest::kubernetes::service}"
+service_instance: general
+cert_issuer: eyrie-ca
+cert_issuer_kind: ClusterIssuer
+ingress_class: contour-compute
+node_role: compute
+image: registry.gitlab.joyfullee.me/nest/tools/camofox:latest
+profile_storage_size: 8Gi
+camofox_port: 9377
+camofox_data_dir: /home/node/.camofox
+camofox_log_level: info
+camofox_telemetry_disabled: '1'
+final_purchase_gate_required: true
+
+.affinity: &affinity
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+          - key: "node-role.kubernetes.io/%{lookup('node_role')}"
+            operator: Exists
+
+.tolerations: &tolerations
+  - key: "node-role.kubernetes.io/%{lookup('node_role')}"
+    operator: Exists
+    effect: NoSchedule
+
+resources:
+  backup: {}
+  restore: {}
+  registry_auths: {}
+
+  certs:
+    apiVersion: cert-manager.io/v1
+    kind: Certificate
+    metadata:
+      name: "%{nest::kubernetes::service}-certs"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      secretName: "%{nest::kubernetes::service}-certs"
+      issuerRef:
+        name: "%{lookup('cert_issuer')}"
+        kind: "%{lookup('cert_issuer_kind')}"
+      dnsNames:
+        - "%{nest::kubernetes::fqdn}"
+
+  policy:
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: "%{nest::kubernetes::service}-policy"
+      namespace: "%{nest::kubernetes::namespace}"
+    data:
+      README.txt: |-
+        Camofox service instance: %{lookup('service_instance')}
+
+        This is one KubeCM app (`camofox`) rendered as multiple service
+        instances. The initial instances are camofox-general and camofox-secure.
+
+        The secure instance is a canary/runtime surface only. It does not relax
+        the Star secure-browser final-purchase gate: final purchase still must
+        go through owner-only checkout review, material summary binding,
+        trusted Agent Request approval, live re-read/revalidation, exactly-one
+        final control action, and post-purchase proof handling.
+
+        Non-final-purchase Chrome/Kasm parity gaps should be handled by meeting
+        Camofox at its API level: REST snapshots, refs, screenshots, extraction,
+        and a future backend adapter rather than raw CDP shims.
+
+  profile-storage:
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: "%{nest::kubernetes::service}-profile"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: "%{lookup('profile_storage_size')}"
+      storageClassName: owl-crypt
+
+  deployment:
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: "%{nest::kubernetes::service}"
+      namespace: "%{nest::kubernetes::namespace}"
+      labels:
+        app: "%{nest::kubernetes::service}"
+        camofox.joyfullee.me/app: camofox
+        camofox.joyfullee.me/instance: "%{lookup('service_instance')}"
+    spec:
+      replicas: 1
+      strategy:
+        type: Recreate
+      selector:
+        matchLabels:
+          app: "%{nest::kubernetes::service}"
+      template:
+        metadata:
+          labels:
+            app: "%{nest::kubernetes::service}"
+            camofox.joyfullee.me/app: camofox
+            camofox.joyfullee.me/instance: "%{lookup('service_instance')}"
+        spec:
+          affinity: *affinity
+          tolerations: *tolerations
+          securityContext:
+            fsGroup: 1000
+          containers:
+            - name: camofox
+              image: "%{lookup('image')}"
+              imagePullPolicy: Always
+              command:
+                - /usr/local/bin/nest-camofox-browser
+              env:
+                - name: CAMOFOX_HOST
+                  value: 0.0.0.0
+                - name: CAMOFOX_PORT
+                  value: "%{alias('camofox_port')}"
+                - name: CAMOFOX_DATA_DIR
+                  value: "%{lookup('camofox_data_dir')}"
+                - name: CAMOFOX_LOG_LEVEL
+                  value: "%{lookup('camofox_log_level')}"
+                - name: CAMOFOX_TELEMETRY_DISABLED
+                  value: "%{lookup('camofox_telemetry_disabled')}"
+                - name: CAMOFOX_SERVICE_INSTANCE
+                  value: "%{lookup('service_instance')}"
+              ports:
+                - name: http
+                  containerPort: "%{alias('camofox_port')}"
+              readinessProbe:
+                httpGet:
+                  path: /health
+                  port: http
+                periodSeconds: 5
+                timeoutSeconds: 2
+                failureThreshold: 12
+              livenessProbe:
+                httpGet:
+                  path: /health
+                  port: http
+                periodSeconds: 20
+                timeoutSeconds: 2
+              volumeMounts:
+                - name: profile
+                  mountPath: /home/node/.camofox
+                - name: dshm
+                  mountPath: /dev/shm
+          volumes:
+            - name: profile
+              persistentVolumeClaim:
+                claimName: "%{nest::kubernetes::service}-profile"
+            - name: dshm
+              emptyDir:
+                medium: Memory
+                sizeLimit: 1Gi
+
+  service:
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: "%{nest::kubernetes::service}"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      type: ClusterIP
+      selector:
+        app: "%{nest::kubernetes::service}"
+      ports:
+        - name: http
+          port: 9377
+          targetPort: http
+
+  ingress:
+    apiVersion: projectcontour.io/v1
+    kind: HTTPProxy
+    metadata:
+      name: "%{nest::kubernetes::service}"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      ingressClassName: "%{lookup('ingress_class')}"
+      virtualhost:
+        fqdn: "%{nest::kubernetes::fqdn}"
+        tls:
+          secretName: "%{nest::kubernetes::service}-certs"
+      routes:
+        - conditions:
+            - prefix: /
+          enableWebsockets: true
+          services:
+            - name: "%{nest::kubernetes::service}"
+              port: 9377
+
+values: {}

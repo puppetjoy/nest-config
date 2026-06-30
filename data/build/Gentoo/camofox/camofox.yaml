@@ -1,0 +1,9 @@
+---
+nest::classes:
+  - 'nest::tool::camofox'
+
+nest::tool::camofox::package_version: '1.11.2'
+
+# Camofox Browser/Camoufox runs only on amd64 for the initial Nest tool image.
+# Keep this image as a browser runtime, not an authority bundle: no profile
+# secrets, cookies, kubeconfigs, SSH keys, or user browser profiles are baked in.

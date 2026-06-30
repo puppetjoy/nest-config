@@ -1,0 +1,4 @@
+---
+service_name: camofox-general
+service_instance: general
+profile_storage_size: 8Gi

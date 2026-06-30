@@ -1,0 +1,29 @@
+---
+description: 'Deploy Camofox browser service instances'
+
+parameters:
+  deploy:
+    description: 'Run or skip the deployments'
+    type: Boolean
+    default: true
+
+  general:
+    description: 'Deploy the general Camofox browser instance'
+    type: Boolean
+    default: true
+
+  secure:
+    description: 'Deploy the secure Camofox browser instance'
+    type: Boolean
+    default: true
+
+steps:
+  - description: 'Deploy Camofox general browser service'
+    plan: 'nest::eyrie::ai::deploy_camofox_general'
+    parameters:
+      deploy: $deploy and $general
+
+  - description: 'Deploy Camofox secure browser service'
+    plan: 'nest::eyrie::ai::deploy_camofox_secure'
+    parameters:
+      deploy: $deploy and $secure
