@@ -19,9 +19,15 @@ class nest::tool::camofox (
     before => Exec['install_camofox_browser'],
   }
 
-  file { '/opt/nest/camofox':
+  file { '/opt/nest':
     ensure => directory,
     mode   => '0755',
+  }
+
+  file { '/opt/nest/camofox':
+    ensure  => directory,
+    mode    => '0755',
+    require => File['/opt/nest'],
   }
 
   file { '/opt/nest/camofox/extensions':
