@@ -79,17 +79,18 @@ rewritten back to the Camofox REST root. The old `camofox-general.eyrie` and
 `camofox-general-api.eyrie` / `camofox-secure-api.eyrie` API hostnames are not
 retained as compatibility aliases.
 
-The deployment runs a `kasmweb/firefox` single-application KasmVNC container
-beside the Camofox Browser container in the same pod. KasmVNC owns the visible X
-display and web UI, with Basic Auth disabled behind the private Eyrie ingress
-just like the existing Chrome/Kasm secure-browser surface. Using Kasm's
-single-application browser image avoids the general Ubuntu desktop, panels, and
-icons; Joy lands in a browser-only surface rather than a full desktop. The
-Camofox container waits for the shared X socket, then starts with
-`CAMOFOX_HEADLESS=false`, `DISPLAY=:1`, and `XAUTHORITY` pointed at the Kasm
-user's authority file. Operator-visible Camofox contexts therefore render in the
-persistent KasmVNC browser workspace instead of calling upstream `toggle-display`
-to spawn a short-lived fixed `Xvfb :99` plus x11vnc helper.
+The deployment runs a `kasmweb/firefox` KasmVNC container beside the Camofox
+Browser container in the same pod. KasmVNC owns the visible X display and web UI,
+with Basic Auth disabled behind the private Eyrie ingress just like the existing
+Chrome/Kasm secure-browser surface, but its own Firefox application startup is
+disabled with `DISABLE_CUSTOM_STARTUP=1`. That image is used as the KasmVNC/noVNC
+shell, not as the browser Joy operates. The Camofox container waits for the
+shared X socket, starts with `CAMOFOX_HEADLESS=false`, `DISPLAY=:1`, and
+`XAUTHORITY` pointed at the Kasm user's authority file, then creates a managed
+`nest-operator` Camofox tab after `/health` is ready. Joy therefore lands in the
+managed Camoufox browser session rather than an Ubuntu desktop, a generic Firefox
+window, or upstream `toggle-display` spawning a short-lived fixed `Xvfb :99` plus
+x11vnc helper.
 
 KasmVNC is deliberately the viewport owner because its normal web client supports
 remote/client resizing (`desktop.allow_resize: true` in KasmVNC's documented
@@ -169,14 +170,15 @@ Render checks:
 Canary checks after image publication and review approval:
 
 - deploy only `camofox-general` first
-- verify `https://camofox.eyrie/` loads the KasmVNC operator client, not
-  JSON
+- verify `https://camofox.eyrie/` loads the KasmVNC operator client showing the
+  managed Camoufox/Camofox browser tab, not JSON, an Ubuntu desktop, or generic
+  Firefox
 - verify `https://camofox.eyrie/api/health` and
   `https://browser.eyrie/api/health` return Camofox Browser JSON
 - create/navigate/snapshot/click/type/screenshot through Camofox Browser's REST
   API
-- create an operator-visible Camofox context and verify it appears in the
-  persistent KasmVNC display without calling `toggle-display`
+- verify the startup-created `nest-operator` Camofox tab appears in the
+  persistent KasmVNC display without generic Firefox startup or `toggle-display`
 - resize a desktop client and a mobile-sized client and verify the remote display
   geometry changes instead of shrinking/scaling a fixed framebuffer
 - restart the general pod and verify its profile behaves as disposable state

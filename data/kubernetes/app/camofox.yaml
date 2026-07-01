@@ -24,6 +24,7 @@ operator_port: 6901
 operator_display: ':1'
 operator_home: /home/kasm-user
 operator_vnc_options: '-disableBasicAuth'
+operator_start_url: about:blank
 final_purchase_gate_required: true
 
 .affinity: &affinity
@@ -100,13 +101,12 @@ resources:
         https://%{lookup('operator_fqdn')}/ so the stable root URL can belong to
         the operator browser UI without keeping a separate API hostname. Camofox
         is started with CAMOFOX_HEADLESS=false and DISPLAY pointed at the
-        KasmVNC-owned X display, so operator-visible contexts render in the
-        persistent browser-only workspace instead of launching an on-demand fixed
-        Xvfb framebuffer through upstream toggle-display/noVNC. The operator
-        sidecar uses Kasm's single-application Firefox workspace image rather
-        than the general Ubuntu desktop image, avoiding panels, icons, and other
-        desktop/window-manager distractions while preserving KasmVNC remote
-        resize behavior.
+        KasmVNC-owned X display, and the Kasm sidecar's generic Firefox startup
+        is disabled. The Camofox server creates a managed operator tab on that
+        display after /health is ready, so Joy lands in the Camoufox browser
+        session instead of an Ubuntu desktop, generic Firefox window, or
+        upstream on-demand fixed Xvfb framebuffer. The sidecar still provides
+        KasmVNC's web client and remote resize behavior.
 
   profile-storage:
     apiVersion: v1
@@ -187,6 +187,11 @@ resources:
                   value: "%{lookup('operator_vnc_options')}"
                 - name: LAUNCH_URL
                   value: about:blank
+                # The Kasm Firefox image is only the KasmVNC/noVNC shell here.
+                # Do not launch its generic Firefox; Camofox creates the
+                # operator-visible Camoufox tab on the shared X display.
+                - name: DISABLE_CUSTOM_STARTUP
+                  value: '1'
                 - name: KASM_RESTRICTED_FILE_CHOOSER
                   value: '1'
               ports:
@@ -279,7 +284,63 @@ resources:
                     done;
                     test -S "/tmp/.X11-unix/X${display_number}";
                   fi
-                  exec /usr/local/bin/nest-camofox-browser
+                  /usr/local/bin/nest-camofox-browser &
+                  server_pid="$!"
+
+                  cleanup() {
+                    kill "${server_pid}" 2>/dev/null || true;
+                    wait "${server_pid}" 2>/dev/null || true;
+                  }
+                  trap cleanup INT TERM
+
+                  if [ -n "${CAMOFOX_OPERATOR_START_URL:-}" ]; then
+                    for i in $(seq 1 60); do
+                      if curl --fail --silent --show-error "http://127.0.0.1:${CAMOFOX_PORT:-9377}/health" >/dev/null; then
+                        break;
+                      fi
+                      if ! kill -0 "${server_pid}" 2>/dev/null; then
+                        wait "${server_pid}";
+                        exit "$?";
+                      fi
+                      sleep 1;
+                    done;
+
+                    node <<'JS' || true
+                  const http = require('node:http');
+
+                  const payload = JSON.stringify({
+                    userId: 'nest-operator',
+                    sessionKey: process.env.CAMOFOX_SERVICE_INSTANCE || 'operator',
+                    url: process.env.CAMOFOX_OPERATOR_START_URL,
+                  });
+
+                  const req = http.request({
+                    host: '127.0.0.1',
+                    port: Number(process.env.CAMOFOX_PORT || 9377),
+                    path: '/tabs',
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Content-Length': Buffer.byteLength(payload),
+                    },
+                  }, (res) => {
+                    res.resume();
+                    res.on('end', () => {
+                      if (res.statusCode < 200 || res.statusCode >= 300) {
+                        console.warn(`[nest] Camofox operator tab returned HTTP ${res.statusCode}`);
+                        process.exitCode = 1;
+                      }
+                    });
+                  });
+                  req.on('error', (error) => {
+                    console.warn(`[nest] Camofox operator tab request failed: ${error.message}`);
+                    process.exitCode = 1;
+                  });
+                  req.end(payload);
+                  JS
+                  fi
+
+                  wait "${server_pid}"
               env:
                 - name: CAMOFOX_HOST
                   value: 0.0.0.0
@@ -316,6 +377,8 @@ resources:
                   value: disabled
                 - name: CAMOFOX_SERVICE_INSTANCE
                   value: "%{lookup('service_instance')}"
+                - name: CAMOFOX_OPERATOR_START_URL
+                  value: "%{lookup('operator_start_url')}"
                 - name: CAMOFOX_BITWARDEN_EXTENSION_PATH
                   value: "%{lookup('bitwarden_extension_path')}"
                 # Kubernetes blocks Firefox's content-process user namespace
