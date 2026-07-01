@@ -87,11 +87,13 @@ upstream Kasm "empty display server" surface: it supplies KasmVNC/noVNC wiring
 without carrying a Firefox application image, and Nest still sets
 `DISABLE_CUSTOM_STARTUP=1` so the sidecar is not the browser Joy operates. The
 Camofox container waits for the shared X socket, starts with
-`CAMOFOX_HEADLESS=false`, `DISPLAY=:1`, and `XAUTHORITY` pointed at the Kasm
-user's authority file, then creates a managed `nest-operator` Camofox tab after
-`/health` is ready. Joy therefore lands in the managed Camoufox browser session
-rather than an Ubuntu desktop, a generic Firefox window, or upstream
-`toggle-display` spawning a short-lived fixed `Xvfb :99` plus x11vnc helper.
+`CAMOFOX_HEADLESS=false` and `DISPLAY=:1`, creates the local X lock marker that
+Camofox Browser uses to recognize a usable Linux display, copies Kasm's
+authority cookie to a Camofox-owned `XAUTHORITY` path, then creates a managed
+`nest-operator` Camofox tab after `/health` is ready. Joy therefore lands in the
+managed Camoufox browser session rather than an Ubuntu desktop, a generic
+Firefox window, or upstream `toggle-display` spawning a short-lived fixed
+`Xvfb :99` plus x11vnc helper.
 
 Integrating KasmVNC directly into the Nest `tools/camofox` image is feasible but
 larger than this operator polish pass. The current Nest image is Gentoo/Puppet

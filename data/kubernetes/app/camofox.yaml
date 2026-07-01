@@ -285,6 +285,21 @@ resources:
                       sleep 1;
                     done;
                     test -S "/tmp/.X11-unix/X${display_number}";
+                    # Camofox Browser treats a missing X lock as no usable
+                    # display and falls back to its own hidden Xvfb. KasmVNC
+                    # exposes the socket through the shared emptyDir, but the
+                    # lock file lives outside that socket directory, so create
+                    # the local marker after the socket is present.
+                    [ -e "/tmp/.X${display_number}-lock" ] || touch "/tmp/.X${display_number}-lock";
+                    # Camoufox refuses to run as root against an Xauthority
+                    # file owned by the Kasm user. Keep Kasm's real cookie but
+                    # copy it to a root-owned path for the Camofox process.
+                    if [ -n "${XAUTHORITY:-}" ] && [ -f "${XAUTHORITY}" ]; then
+                      cp "${XAUTHORITY}" /tmp/camofox.Xauthority;
+                      chown "$(id -u):$(id -g)" /tmp/camofox.Xauthority;
+                      chmod 0600 /tmp/camofox.Xauthority;
+                      export XAUTHORITY=/tmp/camofox.Xauthority;
+                    fi
                   fi
                   /usr/local/bin/nest-camofox-browser &
                   server_pid="$!"
@@ -310,11 +325,14 @@ resources:
                     node <<'JS' || true
                   const http = require('node:http');
 
-                  const payload = JSON.stringify({
+                  const payload = {
                     userId: 'nest-operator',
                     sessionKey: process.env.CAMOFOX_SERVICE_INSTANCE || 'operator',
-                    url: process.env.CAMOFOX_OPERATOR_START_URL,
-                  });
+                  };
+                  if (process.env.CAMOFOX_OPERATOR_START_URL && process.env.CAMOFOX_OPERATOR_START_URL !== 'about:blank') {
+                    payload.url = process.env.CAMOFOX_OPERATOR_START_URL;
+                  }
+                  const body = JSON.stringify(payload);
 
                   const req = http.request({
                     host: '127.0.0.1',
@@ -323,7 +341,7 @@ resources:
                     method: 'POST',
                     headers: {
                       'Content-Type': 'application/json',
-                      'Content-Length': Buffer.byteLength(payload),
+                      'Content-Length': Buffer.byteLength(body),
                     },
                   }, (res) => {
                     res.resume();
@@ -338,7 +356,7 @@ resources:
                     console.warn(`[nest] Camofox operator tab request failed: ${error.message}`);
                     process.exitCode = 1;
                   });
-                  req.end(payload);
+                  req.end(body);
                   JS
                   fi
 
