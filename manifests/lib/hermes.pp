@@ -12,6 +12,7 @@ define nest::lib::hermes (
   Boolean              $gitlab_enabled             = false,
   String[1]            $firecrawl_api_url          = 'https://firecrawl.eyrie',
   String[1]            $searxng_url                = 'https://searxng.eyrie',
+  Optional[String[1]]  $browser_camofox_url        = undef,
   Any                  $telegram_bot_token         = undef,
   Boolean              $telegram_enabled           = true,
   String[1]            $telegram_allowed           = '8756212310',
@@ -577,6 +578,16 @@ define nest::lib::hermes (
     true    => {},
     default => { 'terminal' => $terminal },
   }
+  $browser_camofox_config = $browser_camofox_url ? {
+    undef   => {},
+    default => {
+      'browser' => {
+        'camofox' => {
+          'url' => $browser_camofox_url,
+        },
+      },
+    },
+  }
   $agent_directory_profile_icon_config = $profile_icon ? {
     undef   => {},
     default => { 'profile_icon' => $profile_icon },
@@ -745,7 +756,7 @@ define nest::lib::hermes (
         'portal_url' => $dashboard_oauth_portal_url_value,
       },
     } + $dashboard_theme_config + $dashboard_profile_switcher_config,
-  } + $credential_pool_strategy_config + $providers_config + $terminal_config + $image_gen_config + $plugins_config
+  } + $credential_pool_strategy_config + $providers_config + $terminal_config + $browser_camofox_config + $image_gen_config + $plugins_config
 
   $env_content = [$gitlab_env_lines, $release_digest_gitlab_token_env_lines, $web_backend_env_lines, $telegram_env_lines, $openrouter_env_lines, $voice_tools_openai_env_lines, $agent_request_env_lines, $ssh_env_lines, $kubeconfig_env_lines, $tls_trust_env_lines].flatten.join("\n")
 

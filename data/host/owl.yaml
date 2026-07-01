@@ -17,6 +17,9 @@ nest::app::hermes::git_ref: 'nest'
 nest::app::hermes::agent_request_kanban_board: 'agent-requests'
 nest::app::hermes::gitlab_mr_note_poller_enabled: true
 nest::app::hermes::gitlab_mr_note_poller_profile: 'talon'
+# Ordinary browser tools use the Camofox general service by default. Chrome and
+# agent-browser remain installed for rollback by clearing this managed setting.
+nest::app::hermes::browser_camofox_url: 'https://camofox-general.eyrie'
 
 nest::kernel_cmdline:
   # Max VRAM allocation (112 GiB)

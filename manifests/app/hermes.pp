@@ -18,6 +18,7 @@ class nest::app::hermes (
   Optional[Sensitive[String[1]]] $agent_request_gitlab_joy_token = undef,
   String[1]                      $firecrawl_api_url              = 'https://firecrawl.eyrie',
   String[1]                      $searxng_url                    = 'https://searxng.eyrie',
+  Optional[String[1]]            $browser_camofox_url            = undef,
   Optional[Sensitive[String[1]]] $telegram_bot_token             = undef,
   Optional[Sensitive[String[1]]] $openrouter_api_key             = undef,
   Optional[Sensitive[String[1]]] $voice_tools_openai_key         = undef,
