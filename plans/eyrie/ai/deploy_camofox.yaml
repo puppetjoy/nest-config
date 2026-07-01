@@ -1,29 +1,24 @@
 ---
-description: 'Deploy Camofox browser service instances'
+description: 'Deploy singleton Camofox REST API service'
 
 parameters:
   deploy:
-    description: 'Run or skip the deployments'
+    description: 'Run or skip the deployment'
     type: Boolean
     default: true
 
-  general:
-    description: 'Deploy the general Camofox browser instance'
-    type: Boolean
-    default: true
-
-  secure:
-    description: 'Deploy the legacy secure Camofox rollback instance'
-    type: Boolean
-    default: false
+  render_to:
+    description: 'Just render the template'
+    type: String
+    default: ''
 
 steps:
-  - description: 'Deploy Camofox general browser service'
-    plan: 'nest::eyrie::ai::deploy_camofox_general'
+  - description: 'Deploy singleton Camofox REST API service'
+    plan: nest::kubernetes::deploy
     parameters:
-      deploy: $deploy and $general
-
-  - description: 'Deploy legacy secure Camofox rollback service'
-    plan: 'nest::eyrie::ai::deploy_camofox_secure'
-    parameters:
-      deploy: $deploy and $secure
+      service: 'camofox'
+      app: 'camofox'
+      namespace: 'ai'
+      init: false
+      deploy: $deploy
+      render_to: $render_to

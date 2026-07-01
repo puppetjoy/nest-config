@@ -1,19 +1,18 @@
-# Camofox browser surfaces
+# Camofox browser REST API
 
-This page records the current Nest split between the ordinary Camofox browser
-API and the persistent secure browser.
+This page records the source-managed Nest split between the ordinary Camofox
+browser API and Joy's persistent secure browser.
 
-- `camofox.eyrie` is the singleton low-authority Camofox/Camoufox REST browser
-  API for ordinary Hermes browser tooling. Its public root may expose the
-  operator/KasmVNC surface for troubleshooting, but callers should use
-  `https://camofox.eyrie/api` for the REST API.
+- `camofox.eyrie` is the singleton Camofox/Camoufox REST browser API for
+  ordinary Hermes browser tooling. It is agent-first and ephemeral, not a VNC or
+  operator desktop.
 - `browser.eyrie` is not a Camofox service. It belongs to the separate
   Firefox/Kasm secure-browser canary described in
   `docs/firefox-secure-browser-bridge.md`.
-- The legacy `camofox-secure` service data is retained only as an explicit
-  rollback canary and is disabled by default in `deploy_camofox`; it must not
-  be used as the public secure-browser hostname or final-purchase backend
-  without a new review.
+- The previous `camofox-general` and `camofox-secure` service instances,
+  `/api` operator-host rewrites, KasmVNC sidecar, display sharing, and noVNC
+  operator surface were historical exploration and are not part of this final
+  Camofox shape.
 
 ## Source-managed Camofox image
 
@@ -21,78 +20,100 @@ The image recipe lives in this repository, using the existing Nest tool-image
 pattern:
 
 - `manifests/tool/camofox.pp`
-- `data/build/Gentoo/camofox/camofox.yaml`
+- `files/nest/tool/camofox/nest-camofox-browser.sh`
 - `plans/build/camofox.pp`
 - `bin/build camofox zen5 ...`
 
 It normally builds `registry.gitlab.joyfullee.me/nest/tools/camofox:latest` from
-the standard `nest/stage1/server:zen5` path. The image remains authority-free:
-no cookies, profile state, kubeconfigs, SSH keys, tokens, or Joy browser data
-are baked into it. The image may pre-fetch public browser extension artifacts as
-build inputs, but extension state and Joy profile data belong to runtime PVCs or
-operator-owned browser state, not the image.
+the standard `nest/stage1/server:zen5` path. The Puppet class installs the
+pinned `camofox-browser` package and its Camoufox runtime during image build so
+pods do not fetch browser binaries at startup. Refreshed builds explicitly
+remove the legacy scoped `@askjo/camofox-browser` package first, because both
+packages expose the same `camofox-browser` executable and stale refreshed images
+can otherwise keep serving the old scoped runtime.
+
+The image remains authority-free: no cookies, profile state, kubeconfigs, SSH
+keys, tokens, or Joy browser data are baked into it. It may still carry the
+public Bitwarden XPI cache for future experiments, but the singleton Camofox API
+does not enable a persistent secure-browser profile or final-purchase authority.
 
 ## KubeCM app model
 
-The Kubernetes side is one KubeCM app named `camofox` with a default general
-service instance:
+The Kubernetes side is one KubeCM app and one service:
+
+- app: `camofox`
+- service: `camofox`
+- canonical REST URL: `https://camofox.eyrie/`
+
+Relevant files:
 
 - `data/kubernetes/app/camofox.yaml`
-- `data/kubernetes/service/camofox-general.yaml`
 - `plans/eyrie/ai/deploy_camofox.yaml`
-- `plans/eyrie/ai/deploy_camofox_general.yaml`
 
-`camofox-general` is deliberately not named "Hermes browser" even though Hermes
-browser tools are the likely first client. It is intended to be the ordinary,
-low-authority automation surface, so its `/home/node/.camofox` profile is backed
-by `emptyDir` and should be treated as disposable across pod replacements.
-
-The deployment runs a `kasmweb/core-ubuntu-jammy` KasmVNC container beside the
-Camofox Browser container in the same pod. KasmVNC owns the visible X display and
-web UI, while Camofox serves its REST API below `/api/` on the same host. The
-sidecar remains a display shell, not Joy's persistent secure browser.
+The Camofox pod exposes the Camofox Browser REST API directly through Contour at
+`https://camofox.eyrie/`. It runs headless/default Camofox Browser behavior with
+an emptyDir `/home/node/.camofox` profile, so automated sessions are disposable
+across pod replacement.
 
 ## Rollout knobs
 
-`data/host/owl.yaml` exposes the Camofox general URL hints for Talon and Star:
+`data/host/owl.yaml` points Hermes standard browser tools at the singleton REST
+API:
 
-- `CAMOFOX_GENERAL_URL=https://camofox.eyrie/api`
-- `CAMOFOX_GENERAL_OPERATOR_URL=https://camofox.eyrie`
+- `nest::app::hermes::browser_camofox_url=https://camofox.eyrie`
+- `CAMOFOX_URL=https://camofox.eyrie`
 
-It intentionally does not set the active Hermes `CAMOFOX_URL`. A future canary
-can opt a profile into the general Camofox backend explicitly after the KubeCM
-service is healthy and Joy approves the follow-through.
+Star keeps `SECURE_BROWSER_CDP_URL=https://secure-browser-cdp.eyrie`; secure
+browser operations do not cut over to Camofox in this change. `browser.eyrie`
+remains represented by `SECURE_BROWSER_OPERATOR_URL` and the separate
+Firefox/Kasm app.
 
 ## Secure-browser boundary
 
-Camofox does not weaken the secure-browser final purchase gate. Any final
-purchase remains blocked unless the existing secure-browser flow performs:
+Private-network navigation and temporary HTTPS-error ignores are enabled for this
+trusted internal endpoint so Hermes can open `.eyrie` pages such as Flight Deck.
+The app NetworkPolicy still blocks cloud/link-local metadata egress. Do not reuse
+this no-auth/private-network combination for public or multi-tenant Camofox.
+
+This Camofox service does not weaken the secure-browser final purchase gate. Any
+final purchase remains blocked unless the existing secure-browser flow performs:
 
 1. owner-only checkout review sent directly to Joy
 2. material summary binding
 3. trusted Agent Request approval
-4. live re-read/revalidation
+4. live re-read and revalidation
 5. exactly-one final control action
 6. post-purchase proof handling without exposing secrets
 
-The persistent Joy-observed browser surface is the separate Firefox/Kasm app at
-`browser.eyrie`. Do not add a Camofox REST API, raw CDP/WebDriver endpoint,
-credential endpoint, or final-purchase authority to that hostname.
+For standard browser tools, meet Camofox at its REST API level: navigation,
+accessibility snapshots, refs, screenshots, extraction, and explicit viewport
+resizing. Do not add VNC/noVNC/operator desktop shims to this app.
 
 ## Validation checklist
 
 Source checks:
 
+- `ruby -e "require 'yaml'; Dir['data/**/*.yaml'].each { |p| YAML.load_file(p, aliases: true) }"`
 - `pdk validate`
-- `ruby -e "require 'yaml'; Dir['data/**/*.yaml'].each { |p| YAML.load_file(p) }"`
-- `bolt plan run nest::eyrie::ai::deploy_camofox_general deploy=false render_to=/modules/nest/build/camofox-general.yaml`
 
 Render checks:
 
-- confirm `camofox-general` renders with an `emptyDir` profile and no durable
-  browser-session PVC
-- confirm `https://camofox.eyrie/api` routes to the Camofox REST API
-- confirm no `browser.eyrie` Camofox route or `browser.eyrie/api` Camofox API is
+- render `deploy_camofox` with `deploy=false`
+- confirm the rendered Deployment has one `camofox` container and no Kasm/VNC
+  sidecar, display env, operator port, or persistent profile PVC
+- confirm the rendered Service exposes only port 9377
+- confirm the rendered HTTPProxy routes `/` directly to the REST API service
+- confirm no `camofox-general`, `camofox-secure`, or `*-api.eyrie` resources are
   rendered
-- confirm no resources mutate the rollback Chrome/Kasm `secure-browser` workload
-  unless that plan is intentionally deployed
+- confirm no resources mutate the current `secure-browser` Chrome/Kasm workload
+
+Canary checks after review approval:
+
+- deploy only the singleton `camofox` app
+- verify `https://camofox.eyrie/health` returns Camofox Browser JSON
+- create/navigate/snapshot/click/type/screenshot through Camofox Browser's REST
+  API from Hermes browser tools
+- verify desktop screenshots use a normal viewport with no right-edge crop or
+  giant remote desktop framing
+- verify an explicit mobile viewport/probe is intentionally mobile-sized
+- restart the pod and verify its browser state is disposable

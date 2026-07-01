@@ -17,10 +17,10 @@ nest::app::hermes::git_ref: 'nest'
 nest::app::hermes::agent_request_kanban_board: 'agent-requests'
 nest::app::hermes::gitlab_mr_note_poller_enabled: true
 nest::app::hermes::gitlab_mr_note_poller_profile: 'talon'
-# Ordinary browser tools use the Camofox general REST API by default. The
-# operator host root is reserved for the KasmVNC browser UI; Chrome and
-# agent-browser remain installed for rollback by clearing this managed setting.
-nest::app::hermes::browser_camofox_url: 'https://camofox.eyrie/api'
+# Ordinary browser tools use the singleton Camofox REST API by default.
+# Chrome and agent-browser remain installed for rollback by clearing this
+# managed setting.
+nest::app::hermes::browser_camofox_url: 'https://camofox.eyrie'
 
 nest::kernel_cmdline:
   # Max VRAM allocation (112 GiB)
@@ -201,7 +201,8 @@ nest::app::hermes::instances:
     approval_mode: 'off'
     release_digest_enabled: true
     environment:
-      CAMOFOX_GENERAL_URL: 'https://camofox.eyrie/api'
+      CAMOFOX_URL: 'https://camofox.eyrie'
+      CAMOFOX_GENERAL_URL: 'https://camofox.eyrie'
       CAMOFOX_GENERAL_OPERATOR_URL: 'https://camofox.eyrie'
       SECURE_BROWSER_OPERATOR_URL: 'https://browser.eyrie'
     voice_auto_tts: true
@@ -314,7 +315,8 @@ nest::app::hermes::instances:
     google_workspace_enabled: true
     environment:
       SECURE_BROWSER_CDP_URL: 'https://secure-browser-cdp.eyrie'
-      CAMOFOX_GENERAL_URL: 'https://camofox.eyrie/api'
+      CAMOFOX_URL: 'https://camofox.eyrie'
+      CAMOFOX_GENERAL_URL: 'https://camofox.eyrie'
       CAMOFOX_GENERAL_OPERATOR_URL: 'https://camofox.eyrie'
       SECURE_BROWSER_OPERATOR_URL: 'https://browser.eyrie'
     voice_auto_tts: true

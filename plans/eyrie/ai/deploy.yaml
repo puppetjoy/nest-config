@@ -48,7 +48,7 @@ parameters:
     default: true
 
   camofox:
-    description: 'Deploy Camofox browser service instances'
+    description: 'Deploy singleton Camofox REST API service'
     type: Boolean
     default: false
 
@@ -106,7 +106,7 @@ steps:
     parameters:
       deploy: $deploy and $firefox
 
-  - description: 'Deploy Camofox browser service instances'
+  - description: 'Deploy singleton Camofox REST API service'
     plan: nest::eyrie::ai::deploy_camofox
     parameters:
       deploy: $deploy and $camofox

@@ -4,28 +4,20 @@ include:
 
 plan_base: 'nest::eyrie::ai::camofox'
 service_name: "%{nest::kubernetes::service}"
-service_instance: general
+service_instance: api
 cert_issuer: eyrie-ca
 cert_issuer_kind: ClusterIssuer
 ingress_class: contour-compute
 node_role: compute
 image: registry.gitlab.joyfullee.me/nest/tools/camofox:latest
-profile_storage_size: 8Gi
-profile_storage_description: persistent by default; camofox-general overrides this to emptyDir
 camofox_port: 9377
 camofox_data_dir: /home/node/.camofox
 camofox_log_level: info
 camofox_telemetry_disabled: '1'
-camofox_allow_private_network: 'false'
-camofox_ignore_https_errors: 'false'
-operator_fqdn: "%{nest::kubernetes::fqdn}"
-operator_image: docker.io/kasmweb/core-ubuntu-jammy:1.18.0
-operator_port: 6901
-operator_display: ':1'
-operator_home: /home/kasm-user
-operator_vnc_options: '-disableBasicAuth'
-operator_start_url: about:blank
-final_purchase_gate_required: true
+camofox_allow_private_network: 'true'
+camofox_ignore_https_errors: 'true'
+camofox_auth_mode: disabled
+fqdn: camofox.eyrie
 
 .affinity: &affinity
   nodeAffinity:
@@ -57,7 +49,7 @@ resources:
         name: "%{lookup('cert_issuer')}"
         kind: "%{lookup('cert_issuer_kind')}"
       dnsNames:
-        - "%{lookup('operator_fqdn')}"
+        - "%{lookup('fqdn')}"
 
   policy:
     apiVersion: v1
@@ -69,60 +61,21 @@ resources:
       README.txt: |-
         Camofox service instance: %{lookup('service_instance')}
 
-        This is the KubeCM app for Camofox/Camoufox REST browser service
-        instances. The active product surface is the low-authority
-        camofox-general instance behind https://camofox.eyrie/api.
+        This is the singleton Camofox Browser REST API for Hermes standard
+        browser tools. It is intentionally agent-first and ephemeral: the pod
+        exposes Camofox Browser directly at https://%{lookup('fqdn')}/ and uses
+        disposable emptyDir browser state rather than a persistent human desktop
+        profile.
 
-        browser.eyrie is not a Camofox service. It belongs to the separate
-        Firefox/Kasm secure-browser canary, while the existing Chrome/Kasm
-        secure-browser backend remains available for rollback/current Hermes
-        secure_browser_* execution until a Firefox bridge is reviewed.
+        This service is not Joy's persistent secure browser. Operator/login,
+        Bitwarden, checkout, and final-purchase flows belong to the separate
+        secure-browser/Kasm surface at https://browser.eyrie and stay governed
+        by the existing owner-only approval gates.
 
-        Any legacy camofox-secure deployment is rollback-only and does not relax
-        the Star secure-browser final-purchase gate: final purchase still must
-        go through owner-only checkout review, material summary binding,
-        trusted Agent Request approval, live re-read/revalidation, exactly-one
-        final control action, and post-purchase proof handling.
-
-        Camofox should be handled at its API level: REST snapshots, refs,
-        screenshots, extraction, and a backend adapter for ordinary browser
-        tooling rather than raw CDP shims.
-
-        Persistence is intentionally service-specific. camofox-general should be
-        treated as disposable automation state. A legacy camofox-secure rollback
-        instance may use a persistent profile only after explicit review.
-
-        Private-network navigation is disabled by default. Only trusted internal
-        Nest instances such as camofox-general may opt in so approved browser
-        paths can reach `.eyrie` sites; this is not a secure-browser production
-        cutover and does not authorize cloud metadata or credential-service
-        access. Those trusted internal instances may also opt into HTTPS-error
-        ignores until the Eyrie CA is imported into the Camofox/Firefox trust
-        store; keep that opt-in scoped to `.eyrie` Nest services rather than
-        making it a package default.
-
-        The root path can expose a KasmVNC-backed operator surface for the
-        Camofox instance. The Camofox Browser REST API is served only on /api/
-        below https://%{lookup('operator_fqdn')}/ so the stable root URL can
-        belong to the operator browser UI without keeping a separate API
-        hostname. Camofox is started with CAMOFOX_HEADLESS=false and DISPLAY
-        pointed at the KasmVNC-owned X display. The operator sidecar uses Kasm's
-        core Ubuntu image as an empty-ish KasmVNC/noVNC display server, not
-        Joy's persistent secure-browser image.
-
-  profile-storage:
-    apiVersion: v1
-    kind: PersistentVolumeClaim
-    metadata:
-      name: "%{nest::kubernetes::service}-profile"
-      namespace: "%{nest::kubernetes::namespace}"
-    spec:
-      accessModes:
-        - ReadWriteOnce
-      resources:
-        requests:
-          storage: "%{lookup('profile_storage_size')}"
-      storageClassName: owl-crypt
+        Private-network navigation and temporary HTTPS-error ignores are enabled
+        only because this trusted internal Nest endpoint must open `.eyrie`
+        sites such as Flight Deck. Metadata/link-local egress remains blocked by
+        NetworkPolicy; do not reuse this policy for public multi-tenant Camofox.
 
   metadata-egress-guard:
     apiVersion: networking.k8s.io/v1
@@ -137,9 +90,6 @@ resources:
       policyTypes:
         - Egress
       egress:
-        # Allow normal browsing, including trusted internal Nest private ranges,
-        # but keep the common cloud/link-local metadata space unavailable even
-        # when a service instance opts into Camofox private-network navigation.
         - to:
             - ipBlock:
                 cidr: '0.0.0.0/0'
@@ -180,49 +130,6 @@ resources:
           securityContext:
             fsGroup: 1000
           containers:
-            - name: kasm-operator
-              image: "%{lookup('operator_image')}"
-              env:
-                - name: VNC_PW
-                  value: unused
-                - name: VNCOPTIONS
-                  value: "%{lookup('operator_vnc_options')}"
-                - name: LAUNCH_URL
-                  value: about:blank
-                # The Kasm core image is only the KasmVNC/noVNC display shell
-                # here. Do not launch any sidecar app; Camofox creates the
-                # operator-visible Camoufox tab on the shared X display.
-                - name: DISABLE_CUSTOM_STARTUP
-                  value: '1'
-                - name: KASM_RESTRICTED_FILE_CHOOSER
-                  value: '1'
-              ports:
-                - name: operator
-                  containerPort: "%{alias('operator_port')}"
-              readinessProbe:
-                exec:
-                  command:
-                    - /bin/sh
-                    - -ec
-                    - >-
-                      fmt='%'; fmt="${fmt}{http_code}";
-                      code=$(curl -ks -o /dev/null -w "${fmt}" https://127.0.0.1:%{lookup('operator_port')}/ || true);
-                      test "${code}" -ge 200 -a "${code}" -lt 400
-                periodSeconds: 5
-                timeoutSeconds: 2
-                failureThreshold: 24
-              livenessProbe:
-                tcpSocket:
-                  port: operator
-                periodSeconds: 20
-                timeoutSeconds: 2
-              volumeMounts:
-                - name: operator-home
-                  mountPath: "%{lookup('operator_home')}"
-                - name: x11-socket
-                  mountPath: /tmp/.X11-unix
-                - name: dshm
-                  mountPath: /dev/shm
             - name: camofox
               image: "%{lookup('image')}"
               imagePullPolicy: Always
@@ -232,10 +139,10 @@ resources:
                 - |
                   # The upstream Camofox package refuses private-network targets
                   # with disabled API auth when the server binds beyond loopback.
-                  # These Nest instances are trusted internal `.eyrie` services,
+                  # This singleton is a trusted internal `.eyrie` service,
                   # guarded by Kubernetes NetworkPolicy for metadata/link-local
                   # egress, and Hermes clients do not yet send Camofox bearer
-                  # tokens. If a service also opts into HTTPS-error ignores for
+                  # tokens. If the service also opts into HTTPS-error ignores for
                   # the private Eyrie CA, patch the browser context option in the
                   # same tightly-scoped startup shim.
                   if [ "${CAMOFOX_ALLOW_PRIVATE_NETWORK:-false}" = "true" ] && [ "${CAMOFOX_AUTH_MODE:-disabled}" = "disabled" ]; then
@@ -277,90 +184,7 @@ resources:
                   }
                   JS
                   fi
-                  if [ -n "${DISPLAY:-}" ]; then
-                    display_number="${DISPLAY#:}";
-                    display_number="${display_number%%.*}";
-                    for i in $(seq 1 120); do
-                      [ -S "/tmp/.X11-unix/X${display_number}" ] && break;
-                      sleep 1;
-                    done;
-                    test -S "/tmp/.X11-unix/X${display_number}";
-                    # Camofox Browser treats a missing X lock as no usable
-                    # display and falls back to its own hidden Xvfb. KasmVNC
-                    # exposes the socket through the shared emptyDir, but the
-                    # lock file lives outside that socket directory, so create
-                    # the local marker after the socket is present.
-                    [ -e "/tmp/.X${display_number}-lock" ] || touch "/tmp/.X${display_number}-lock";
-                    # Camoufox refuses to run as root against an Xauthority
-                    # file owned by the Kasm user. Keep Kasm's real cookie but
-                    # copy it to a root-owned path for the Camofox process.
-                    if [ -n "${XAUTHORITY:-}" ] && [ -f "${XAUTHORITY}" ]; then
-                      cp "${XAUTHORITY}" /tmp/camofox.Xauthority;
-                      chown "$(id -u):$(id -g)" /tmp/camofox.Xauthority;
-                      chmod 0600 /tmp/camofox.Xauthority;
-                      export XAUTHORITY=/tmp/camofox.Xauthority;
-                    fi
-                  fi
-                  /usr/local/bin/nest-camofox-browser &
-                  server_pid="$!"
-
-                  cleanup() {
-                    kill "${server_pid}" 2>/dev/null || true;
-                    wait "${server_pid}" 2>/dev/null || true;
-                  }
-                  trap cleanup INT TERM
-
-                  if [ -n "${CAMOFOX_OPERATOR_START_URL:-}" ]; then
-                    for i in $(seq 1 60); do
-                      if curl --fail --silent --show-error "http://127.0.0.1:${CAMOFOX_PORT:-9377}/health" >/dev/null; then
-                        break;
-                      fi
-                      if ! kill -0 "${server_pid}" 2>/dev/null; then
-                        wait "${server_pid}";
-                        exit "$?";
-                      fi
-                      sleep 1;
-                    done;
-
-                    node <<'JS' || true
-                  const http = require('node:http');
-
-                  const payload = {
-                    userId: 'nest-operator',
-                    sessionKey: process.env.CAMOFOX_SERVICE_INSTANCE || 'operator',
-                  };
-                  if (process.env.CAMOFOX_OPERATOR_START_URL && process.env.CAMOFOX_OPERATOR_START_URL !== 'about:blank') {
-                    payload.url = process.env.CAMOFOX_OPERATOR_START_URL;
-                  }
-                  const body = JSON.stringify(payload);
-
-                  const req = http.request({
-                    host: '127.0.0.1',
-                    port: Number(process.env.CAMOFOX_PORT || 9377),
-                    path: '/tabs',
-                    method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json',
-                      'Content-Length': Buffer.byteLength(body),
-                    },
-                  }, (res) => {
-                    res.resume();
-                    res.on('end', () => {
-                      if (res.statusCode < 200 || res.statusCode >= 300) {
-                        console.warn(`[nest] Camofox operator tab returned HTTP ${res.statusCode}`);
-                        process.exitCode = 1;
-                      }
-                    });
-                  });
-                  req.on('error', (error) => {
-                    console.warn(`[nest] Camofox operator tab request failed: ${error.message}`);
-                    process.exitCode = 1;
-                  });
-                  req.end(body);
-                  JS
-                  fi
-
-                  wait "${server_pid}"
+                  exec /usr/local/bin/nest-camofox-browser
               env:
                 - name: CAMOFOX_HOST
                   value: 0.0.0.0
@@ -380,31 +204,17 @@ resources:
                   value: "%{lookup('camofox_log_level')}"
                 - name: CAMOFOX_TELEMETRY_DISABLED
                   value: "%{lookup('camofox_telemetry_disabled')}"
-                # Camofox blocks loopback/private/link-local targets when bound
-                # beyond localhost. Keep the default false, and opt in only for
-                # trusted internal Nest instances that must open `.eyrie` sites.
                 - name: CAMOFOX_ALLOW_PRIVATE_NETWORK
                   value: "%{lookup('camofox_allow_private_network')}"
                 - name: CAMOFOX_IGNORE_HTTPS_ERRORS
                   value: "%{lookup('camofox_ignore_https_errors')}"
-                - name: CAMOFOX_HEADLESS
-                  value: 'false'
-                - name: DISPLAY
-                  value: "%{lookup('operator_display')}"
-                - name: XAUTHORITY
-                  value: "%{lookup('operator_home')}/.Xauthority"
                 - name: CAMOFOX_AUTH_MODE
-                  value: disabled
+                  value: "%{lookup('camofox_auth_mode')}"
                 - name: CAMOFOX_SERVICE_INSTANCE
                   value: "%{lookup('service_instance')}"
-                - name: CAMOFOX_OPERATOR_START_URL
-                  value: "%{lookup('operator_start_url')}"
-                - name: CAMOFOX_BITWARDEN_EXTENSION_PATH
-                  value: "%{lookup('bitwarden_extension_path')}"
                 # Kubernetes blocks Firefox's content-process user namespace
                 # sandbox in this container; disable the Linux Firefox sandboxes
-                # explicitly so Camofox can create contexts while the final
-                # purchase gate stays in the Hermes secure-browser layer.
+                # explicitly for the trusted internal automation service.
                 - name: MOZ_DISABLE_CONTENT_SANDBOX
                   value: '1'
                 - name: MOZ_DISABLE_GMP_SANDBOX
@@ -434,19 +244,10 @@ resources:
               volumeMounts:
                 - name: profile
                   mountPath: /home/node/.camofox
-                - name: operator-home
-                  mountPath: "%{lookup('operator_home')}"
-                - name: x11-socket
-                  mountPath: /tmp/.X11-unix
                 - name: dshm
                   mountPath: /dev/shm
           volumes:
             - name: profile
-              persistentVolumeClaim:
-                claimName: "%{nest::kubernetes::service}-profile"
-            - name: operator-home
-              emptyDir: {}
-            - name: x11-socket
               emptyDir: {}
             - name: dshm
               emptyDir:
@@ -459,8 +260,6 @@ resources:
     metadata:
       name: "%{nest::kubernetes::service}"
       namespace: "%{nest::kubernetes::namespace}"
-      annotations:
-        projectcontour.io/upstream-protocol.tls: "%{lookup('operator_port')}"
     spec:
       type: ClusterIP
       selector:
@@ -469,9 +268,6 @@ resources:
         - name: http
           port: 9377
           targetPort: http
-        - name: operator
-          port: "%{alias('operator_port')}"
-          targetPort: operator
 
   ingress:
     apiVersion: projectcontour.io/v1
@@ -482,42 +278,13 @@ resources:
     spec:
       ingressClassName: "%{lookup('ingress_class')}"
       virtualhost:
-        fqdn: "%{lookup('operator_fqdn')}"
+        fqdn: "%{lookup('fqdn')}"
         tls:
           secretName: "%{nest::kubernetes::service}-certs"
       routes:
-        # API compatibility path on the canonical operator hostname.
-        - conditions:
-            - prefix: /api/
-          pathRewritePolicy:
-            replacePrefix:
-              - prefix: /api/
-                replacement: /
-          enableWebsockets: true
-          services:
-            - name: "%{nest::kubernetes::service}"
-              port: 9377
-        - conditions:
-            - prefix: /api
-          pathRewritePolicy:
-            replacePrefix:
-              - prefix: /api
-                replacement: /
-          enableWebsockets: true
-          services:
-            - name: "%{nest::kubernetes::service}"
-              port: 9377
-        - conditions:
-            - exact: /
-          requestRedirectPolicy:
-            path: /index.html
-            statusCode: 302
         - conditions:
             - prefix: /
           enableWebsockets: true
           services:
             - name: "%{nest::kubernetes::service}"
-              port: "%{alias('operator_port')}"
-
-
-values: {}
+              port: 9377
