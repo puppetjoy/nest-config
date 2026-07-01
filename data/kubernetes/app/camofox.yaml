@@ -427,14 +427,9 @@ resources:
               port: 9377
         - conditions:
             - exact: /
-          pathRewritePolicy:
-            replacePrefix:
-              - prefix: /
-                replacement: /index.html
-          enableWebsockets: true
-          services:
-            - name: "%{nest::kubernetes::service}"
-              port: "%{alias('operator_port')}"
+          requestRedirectPolicy:
+            path: /index.html
+            statusCode: 302
         - conditions:
             - prefix: /
           enableWebsockets: true
