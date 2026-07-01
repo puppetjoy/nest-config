@@ -1,0 +1,264 @@
+---
+include:
+  - 'nest::service::firefox'
+
+plan_base: 'nest::eyrie::ai::firefox'
+service_name: firefox
+operator_fqdn: browser.eyrie
+
+cert_issuer: eyrie-ca
+cert_issuer_kind: ClusterIssuer
+ingress_class: contour-compute
+node_role: compute
+image: docker.io/kasmweb/firefox:1.18.0
+launch_url: about:blank
+vnc_options: '-disableBasicAuth'
+storage_class: owl-crypt
+profile_storage_size: 12Gi
+bitwarden_extension_id: '{446900e4-71c2-419f-a6a7-df9c091e268b}'
+bitwarden_extension_install_url: https://addons.mozilla.org/firefox/downloads/latest/bitwarden-password-manager/latest.xpi
+
+.affinity: &affinity
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+          - key: "node-role.kubernetes.io/%{lookup('node_role')}"
+            operator: Exists
+
+.tolerations: &tolerations
+  - key: "node-role.kubernetes.io/%{lookup('node_role')}"
+    operator: Exists
+    effect: NoSchedule
+
+.firefox_policy: &firefox_policy |-
+  {
+    "policies": {
+      "DisableTelemetry": true,
+      "DontCheckDefaultBrowser": true,
+      "ExtensionSettings": {
+        "%{lookup('bitwarden_extension_id')}": {
+          "installation_mode": "force_installed",
+          "install_url": "%{lookup('bitwarden_extension_install_url')}"
+        }
+      }
+    }
+  }
+
+resources:
+  backup: {}
+  restore: {}
+  registry_auths: {}
+
+  certs:
+    apiVersion: cert-manager.io/v1
+    kind: Certificate
+    metadata:
+      name: "%{nest::kubernetes::service}-certs"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      secretName: "%{nest::kubernetes::service}-certs"
+      issuerRef:
+        name: "%{lookup('cert_issuer')}"
+        kind: "%{lookup('cert_issuer_kind')}"
+      dnsNames:
+        - "%{lookup('operator_fqdn')}"
+
+  browser-policy:
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: "%{nest::kubernetes::service}-browser-policy"
+      namespace: "%{nest::kubernetes::namespace}"
+    data:
+      README.txt: |-
+        Firefox/Kasm policy for the persistent browser.eyrie secure-browser
+        canary. The public Bitwarden Firefox extension is force-installed via
+        AMO using Firefox enterprise policy; this ConfigMap does not contain
+        Joy vault state, browser profile state, credentials, payment/address
+        details, cookies, storage, tokens, or final-purchase authority.
+      policies.json: *firefox_policy
+
+  reset-procedure:
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: "%{nest::kubernetes::service}-reset-procedure"
+      namespace: "%{nest::kubernetes::namespace}"
+    data:
+      README.txt: |-
+        Reset/revoke procedure for the browser.eyrie Firefox/Kasm profile:
+        1. Stop the live session: kubectl -n %{nest::kubernetes::namespace} scale deployment/%{nest::kubernetes::service} --replicas=0
+        2. Wipe persistent Firefox/Kasm user state: kubectl -n %{nest::kubernetes::namespace} delete pvc %{nest::kubernetes::service}-profile
+        3. Recreate managed resources: bolt plan run nest::eyrie::ai::deploy_firefox
+        4. Joy should re-enter any required login and Bitwarden state directly in the visible browser UI.
+
+        This canary intentionally exposes only the KasmVNC/noVNC operator UI at
+        https://%{lookup('operator_fqdn')}/. It does not expose CDP, WebDriver,
+        Marionette, raw VNC credentials, cookies, storage, request headers,
+        screenshots of secret pages, vault data, payment/address details, or
+        direct final-purchase authority to models. Current Hermes
+        secure_browser_* execution remains on the existing Chrome/Kasm CDP
+        backend until a narrow Firefox bridge is separately implemented,
+        reviewed, and parity-tested.
+
+  profile-storage:
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: "%{nest::kubernetes::service}-profile"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: "%{lookup('profile_storage_size')}"
+      storageClassName: "%{lookup('storage_class')}"
+
+  metadata-egress-guard:
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: "%{nest::kubernetes::service}-metadata-egress-guard"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      podSelector:
+        matchLabels:
+          app: "%{nest::kubernetes::service}"
+      policyTypes:
+        - Egress
+      egress:
+        - to:
+            - ipBlock:
+                cidr: '0.0.0.0/0'
+                except:
+                  - '169.254.0.0/16'
+        - to:
+            - ipBlock:
+                cidr: '::/0'
+                except:
+                  - 'fe80::/10'
+
+  deployment:
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: "%{nest::kubernetes::service}"
+      namespace: "%{nest::kubernetes::namespace}"
+      labels:
+        app: "%{nest::kubernetes::service}"
+        browser.joyfullee.me/app: firefox
+    spec:
+      replicas: 1
+      strategy:
+        type: Recreate
+      selector:
+        matchLabels:
+          app: "%{nest::kubernetes::service}"
+      template:
+        metadata:
+          labels:
+            app: "%{nest::kubernetes::service}"
+            browser.joyfullee.me/app: firefox
+        spec:
+          affinity: *affinity
+          tolerations: *tolerations
+          securityContext:
+            fsGroup: 1000
+          containers:
+            - name: kasm-firefox
+              image: "%{lookup('image')}"
+              env:
+                - name: VNC_PW
+                  value: unused
+                - name: VNCOPTIONS
+                  value: "%{lookup('vnc_options')}"
+                - name: LAUNCH_URL
+                  value: "%{lookup('launch_url')}"
+                - name: KASM_RESTRICTED_FILE_CHOOSER
+                  value: '1'
+              ports:
+                - name: https
+                  containerPort: 6901
+              readinessProbe:
+                exec:
+                  command:
+                    - /bin/sh
+                    - -ec
+                    - >-
+                      fmt='%'; fmt="${fmt}{http_code}";
+                      code=$(curl -ks -o /dev/null -w "${fmt}" https://127.0.0.1:6901/ || true);
+                      test "${code}" -ge 200 -a "${code}" -lt 400
+                periodSeconds: 5
+                timeoutSeconds: 2
+                failureThreshold: 24
+              livenessProbe:
+                tcpSocket:
+                  port: https
+                periodSeconds: 20
+                timeoutSeconds: 2
+              volumeMounts:
+                - name: profile
+                  mountPath: /home/kasm-user
+                - name: browser-policy
+                  mountPath: /usr/lib/firefox/distribution/policies.json
+                  subPath: policies.json
+                  readOnly: true
+                - name: dshm
+                  mountPath: /dev/shm
+          volumes:
+            - name: profile
+              persistentVolumeClaim:
+                claimName: "%{nest::kubernetes::service}-profile"
+            - name: browser-policy
+              configMap:
+                name: "%{nest::kubernetes::service}-browser-policy"
+            - name: dshm
+              emptyDir:
+                medium: Memory
+                sizeLimit: 1Gi
+
+  service:
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: "%{nest::kubernetes::service}"
+      namespace: "%{nest::kubernetes::namespace}"
+      annotations:
+        projectcontour.io/upstream-protocol.tls: '6901'
+    spec:
+      type: ClusterIP
+      selector:
+        app: "%{nest::kubernetes::service}"
+      ports:
+        - name: https
+          port: 6901
+          targetPort: https
+
+  ingress:
+    apiVersion: projectcontour.io/v1
+    kind: HTTPProxy
+    metadata:
+      name: "%{nest::kubernetes::service}"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      ingressClassName: "%{lookup('ingress_class')}"
+      virtualhost:
+        fqdn: "%{lookup('operator_fqdn')}"
+        tls:
+          secretName: "%{nest::kubernetes::service}-certs"
+      routes:
+        - conditions:
+            - exact: /
+          requestRedirectPolicy:
+            path: /index.html
+            statusCode: 302
+        - conditions:
+            - prefix: /
+          enableWebsockets: true
+          services:
+            - name: "%{nest::kubernetes::service}"
+              port: 6901
+
+values: {}

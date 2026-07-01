@@ -69,46 +69,46 @@ resources:
       README.txt: |-
         Camofox service instance: %{lookup('service_instance')}
 
-        This is one KubeCM app (`camofox`) rendered as multiple service
-        instances. The initial instances are camofox-general and camofox-secure.
+        This is the KubeCM app for Camofox/Camoufox REST browser service
+        instances. The active product surface is the low-authority
+        camofox-general instance behind https://camofox.eyrie/api.
 
-        The secure instance is a canary/runtime surface only. It does not relax
+        browser.eyrie is not a Camofox service. It belongs to the separate
+        Firefox/Kasm secure-browser canary, while the existing Chrome/Kasm
+        secure-browser backend remains available for rollback/current Hermes
+        secure_browser_* execution until a Firefox bridge is reviewed.
+
+        Any legacy camofox-secure deployment is rollback-only and does not relax
         the Star secure-browser final-purchase gate: final purchase still must
         go through owner-only checkout review, material summary binding,
         trusted Agent Request approval, live re-read/revalidation, exactly-one
         final control action, and post-purchase proof handling.
 
-        Non-final-purchase Chrome/Kasm parity gaps should be handled by meeting
-        Camofox at its API level: REST snapshots, refs, screenshots, extraction,
-        and a future backend adapter rather than raw CDP shims.
+        Camofox should be handled at its API level: REST snapshots, refs,
+        screenshots, extraction, and a backend adapter for ordinary browser
+        tooling rather than raw CDP shims.
 
         Persistence is intentionally service-specific. camofox-general should be
-        treated as disposable automation state. camofox-secure is the migration
-        canary for Joy-operated login/session continuity and may use a persistent
-        profile plus Bitwarden extension policy once reviewed.
+        treated as disposable automation state. A legacy camofox-secure rollback
+        instance may use a persistent profile only after explicit review.
 
         Private-network navigation is disabled by default. Only trusted internal
-        Nest instances such as camofox-general and camofox-secure may opt in so
-        approved browser paths can reach `.eyrie` sites; this is not a
-        secure-browser production cutover and does not authorize cloud metadata
-        or credential-service access. Those trusted internal instances may also
-        opt into HTTPS-error ignores until the Eyrie CA is imported into the
-        Camofox/Firefox trust store; keep that opt-in scoped to `.eyrie` Nest
-        services rather than making it a package default.
+        Nest instances such as camofox-general may opt in so approved browser
+        paths can reach `.eyrie` sites; this is not a secure-browser production
+        cutover and does not authorize cloud metadata or credential-service
+        access. Those trusted internal instances may also opt into HTTPS-error
+        ignores until the Eyrie CA is imported into the Camofox/Firefox trust
+        store; keep that opt-in scoped to `.eyrie` Nest services rather than
+        making it a package default.
 
-        The root path is the persistent KasmVNC-backed operator surface. The
-        Camofox Browser REST API is served only on /api/ below
-        https://%{lookup('operator_fqdn')}/ so the stable root URL can belong to
-        the operator browser UI without keeping a separate API hostname. Camofox
-        is started with CAMOFOX_HEADLESS=false and DISPLAY pointed at the
-        KasmVNC-owned X display. The operator sidecar uses Kasm's core Ubuntu
-        image as an empty-ish KasmVNC/noVNC display server, not a browser image.
-        The Camofox server creates a managed operator tab on that display after
-        /health is ready, so Joy lands in the Camoufox browser session instead
-        of an Ubuntu desktop, generic Firefox window, or upstream on-demand
-        fixed Xvfb framebuffer. The sidecar still provides KasmVNC's web client
-        and remote resize behavior while the browser itself remains the managed
-        Camofox/Camoufox runtime.
+        The root path can expose a KasmVNC-backed operator surface for the
+        Camofox instance. The Camofox Browser REST API is served only on /api/
+        below https://%{lookup('operator_fqdn')}/ so the stable root URL can
+        belong to the operator browser UI without keeping a separate API
+        hostname. Camofox is started with CAMOFOX_HEADLESS=false and DISPLAY
+        pointed at the KasmVNC-owned X display. The operator sidecar uses Kasm's
+        core Ubuntu image as an empty-ish KasmVNC/noVNC display server, not
+        Joy's persistent secure-browser image.
 
   profile-storage:
     apiVersion: v1

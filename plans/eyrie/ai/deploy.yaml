@@ -38,7 +38,12 @@ parameters:
     default: true
 
   secure_browser:
-    description: 'Deploy shared Secure Browser'
+    description: 'Deploy rollback Chrome/Kasm secure-browser backend'
+    type: Boolean
+    default: true
+
+  firefox:
+    description: 'Deploy Firefox/Kasm browser.eyrie secure-browser canary'
     type: Boolean
     default: true
 
@@ -91,10 +96,15 @@ steps:
     parameters:
       deploy: $deploy and $beryl
 
-  - description: 'Deploy shared Secure Browser'
+  - description: 'Deploy rollback Chrome/Kasm secure-browser backend'
     plan: nest::eyrie::ai::deploy_secure_browser
     parameters:
       deploy: $deploy and $secure_browser
+
+  - description: 'Deploy Firefox/Kasm browser.eyrie secure-browser canary'
+    plan: nest::eyrie::ai::deploy_firefox
+    parameters:
+      deploy: $deploy and $firefox
 
   - description: 'Deploy Camofox browser service instances'
     plan: nest::eyrie::ai::deploy_camofox

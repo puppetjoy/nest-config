@@ -13,9 +13,9 @@ parameters:
     default: true
 
   secure:
-    description: 'Deploy the secure Camofox browser instance'
+    description: 'Deploy the legacy secure Camofox rollback instance'
     type: Boolean
-    default: true
+    default: false
 
 steps:
   - description: 'Deploy Camofox general browser service'
@@ -23,7 +23,7 @@ steps:
     parameters:
       deploy: $deploy and $general
 
-  - description: 'Deploy Camofox secure browser service'
+  - description: 'Deploy legacy secure Camofox rollback service'
     plan: 'nest::eyrie::ai::deploy_camofox_secure'
     parameters:
       deploy: $deploy and $secure
