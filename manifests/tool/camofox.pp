@@ -44,6 +44,19 @@ class nest::tool::camofox (
     require => File['/opt/nest/camofox'],
   }
 
+  file { '/opt/nest/camofox/bin':
+    ensure  => directory,
+    mode    => '0755',
+    require => File['/opt/nest/camofox'],
+  }
+
+  file { '/opt/nest/camofox/bin/smoke-tabs.sh':
+    ensure  => file,
+    mode    => '0755',
+    source  => 'puppet:///modules/nest/camofox-browser/smoke-tabs.sh',
+    require => File['/opt/nest/camofox/bin'],
+  }
+
   exec { 'install_camofox_bitwarden_extension':
     command => "/usr/bin/curl --fail --location --show-error --output ${bitwarden_extension_path} ${bitwarden_extension_url}",
     creates => $bitwarden_extension_path,
@@ -52,6 +65,15 @@ class nest::tool::camofox (
       File['/opt/nest/camofox/extensions'],
     ],
     timeout => 0,
+  }
+
+  exec { 'remove_legacy_askjo_camofox_browser':
+    command     => "${nodejs::npm_path} uninstall --global @askjo/camofox-browser",
+    onlyif      => "${nodejs::npm_path} list --global @askjo/camofox-browser --depth=0 >/dev/null 2>&1",
+    environment => ['HOME=/root'],
+    require     => Class['nodejs'],
+    before      => Exec['install_camofox_browser'],
+    timeout     => 0,
   }
 
   exec { 'install_camofox_browser':

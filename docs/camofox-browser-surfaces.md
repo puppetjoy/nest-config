@@ -15,15 +15,25 @@ pattern:
 - `plans/build/camofox.pp`
 - `bin/build camofox zen5 ...`
 
-It builds `registry.gitlab.joyfullee.me/nest/tools/camofox:latest` from the
-standard `nest/stage1/server:zen5` path. The Puppet class installs the pinned
-`@askjo/camofox-browser` package and its Camoufox runtime during image build so
-pods do not fetch browser binaries at startup. The image remains authority-free:
-no cookies, profile state, kubeconfigs, SSH keys, tokens, or Joy browser data are
-baked into it. The image does pre-fetch the public Bitwarden Firefox XPI into
-`/opt/nest/camofox/extensions/bitwarden.xpi` so the secure instance can enable a
-managed extension policy without embedding Joy's vault state or browser profile
-into the image.
+It normally builds `registry.gitlab.joyfullee.me/nest/tools/camofox:latest` from
+the standard `nest/stage1/server:zen5` path. In this context, "refresh" is the
+existing Nest tool-image `refresh => true` build mode in `nest::build::tool`: the
+build container is created from the previously published
+`registry.gitlab.joyfullee.me/nest/tools/camofox:latest` image instead of the
+stage1 base, then Puppet reapplies `nest::tool::camofox`, the smoke check runs,
+and the container is committed/pushed back to the same tool-image tag if deploy is
+approved. It is not a live Kubernetes pod restart and it does not mutate the
+running Camofox services until a later approved image publish/deploy step. The
+Puppet class installs the pinned `camofox-browser` package and its Camoufox
+runtime during image build so pods do not fetch browser binaries at startup. Those
+refreshed builds explicitly remove the legacy scoped `@askjo/camofox-browser`
+package first, because both packages expose the same `camofox-browser` executable
+and stale refreshed images can otherwise keep serving the old scoped runtime. The
+image remains authority-free: no cookies, profile state, kubeconfigs, SSH keys,
+tokens, or Joy browser data are baked into it. The image does pre-fetch the public
+Bitwarden Firefox XPI into `/opt/nest/camofox/extensions/bitwarden.xpi` so the
+secure instance can enable a managed extension policy without embedding Joy's
+vault state or browser profile into the image.
 
 The matching external `nest/tools/camofox` GitLab project should be created with
 the same small CI-wrapper shape as the other `nest/tools/*` repositories before a
