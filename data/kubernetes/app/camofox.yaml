@@ -19,7 +19,7 @@ camofox_telemetry_disabled: '1'
 camofox_allow_private_network: 'false'
 camofox_ignore_https_errors: 'false'
 operator_fqdn: "%{nest::kubernetes::fqdn}"
-operator_image: docker.io/kasmweb/firefox:1.18.0
+operator_image: docker.io/kasmweb/core-ubuntu-jammy:1.18.0
 operator_port: 6901
 operator_display: ':1'
 operator_home: /home/kasm-user
@@ -101,12 +101,14 @@ resources:
         https://%{lookup('operator_fqdn')}/ so the stable root URL can belong to
         the operator browser UI without keeping a separate API hostname. Camofox
         is started with CAMOFOX_HEADLESS=false and DISPLAY pointed at the
-        KasmVNC-owned X display, and the Kasm sidecar's generic Firefox startup
-        is disabled. The Camofox server creates a managed operator tab on that
-        display after /health is ready, so Joy lands in the Camoufox browser
-        session instead of an Ubuntu desktop, generic Firefox window, or
-        upstream on-demand fixed Xvfb framebuffer. The sidecar still provides
-        KasmVNC's web client and remote resize behavior.
+        KasmVNC-owned X display. The operator sidecar uses Kasm's core Ubuntu
+        image as an empty-ish KasmVNC/noVNC display server, not a browser image.
+        The Camofox server creates a managed operator tab on that display after
+        /health is ready, so Joy lands in the Camoufox browser session instead
+        of an Ubuntu desktop, generic Firefox window, or upstream on-demand
+        fixed Xvfb framebuffer. The sidecar still provides KasmVNC's web client
+        and remote resize behavior while the browser itself remains the managed
+        Camofox/Camoufox runtime.
 
   profile-storage:
     apiVersion: v1
@@ -187,8 +189,8 @@ resources:
                   value: "%{lookup('operator_vnc_options')}"
                 - name: LAUNCH_URL
                   value: about:blank
-                # The Kasm Firefox image is only the KasmVNC/noVNC shell here.
-                # Do not launch its generic Firefox; Camofox creates the
+                # The Kasm core image is only the KasmVNC/noVNC display shell
+                # here. Do not launch any sidecar app; Camofox creates the
                 # operator-visible Camoufox tab on the shared X display.
                 - name: DISABLE_CUSTOM_STARTUP
                   value: '1'

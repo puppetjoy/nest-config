@@ -79,18 +79,27 @@ rewritten back to the Camofox REST root. The old `camofox-general.eyrie` and
 `camofox-general-api.eyrie` / `camofox-secure-api.eyrie` API hostnames are not
 retained as compatibility aliases.
 
-The deployment runs a `kasmweb/firefox` KasmVNC container beside the Camofox
-Browser container in the same pod. KasmVNC owns the visible X display and web UI,
-with Basic Auth disabled behind the private Eyrie ingress just like the existing
-Chrome/Kasm secure-browser surface, but its own Firefox application startup is
-disabled with `DISABLE_CUSTOM_STARTUP=1`. That image is used as the KasmVNC/noVNC
-shell, not as the browser Joy operates. The Camofox container waits for the
-shared X socket, starts with `CAMOFOX_HEADLESS=false`, `DISPLAY=:1`, and
-`XAUTHORITY` pointed at the Kasm user's authority file, then creates a managed
-`nest-operator` Camofox tab after `/health` is ready. Joy therefore lands in the
-managed Camoufox browser session rather than an Ubuntu desktop, a generic Firefox
-window, or upstream `toggle-display` spawning a short-lived fixed `Xvfb :99` plus
-x11vnc helper.
+The deployment runs a `kasmweb/core-ubuntu-jammy` KasmVNC container beside the
+Camofox Browser container in the same pod. KasmVNC owns the visible X display and
+web UI, with Basic Auth disabled behind the private Eyrie ingress just like the
+existing Chrome/Kasm secure-browser surface. The core image is the closest
+upstream Kasm "empty display server" surface: it supplies KasmVNC/noVNC wiring
+without carrying a Firefox application image, and Nest still sets
+`DISABLE_CUSTOM_STARTUP=1` so the sidecar is not the browser Joy operates. The
+Camofox container waits for the shared X socket, starts with
+`CAMOFOX_HEADLESS=false`, `DISPLAY=:1`, and `XAUTHORITY` pointed at the Kasm
+user's authority file, then creates a managed `nest-operator` Camofox tab after
+`/health` is ready. Joy therefore lands in the managed Camoufox browser session
+rather than an Ubuntu desktop, a generic Firefox window, or upstream
+`toggle-display` spawning a short-lived fixed `Xvfb :99` plus x11vnc helper.
+
+Integrating KasmVNC directly into the Nest `tools/camofox` image is feasible but
+larger than this operator polish pass. The current Nest image is Gentoo/Puppet
+managed and already contains Camofox Browser plus the upstream noVNC/x11vnc
+helper packages; adding KasmVNC itself would need source-managed package/build
+work, startup/session wiring, and a new image build/publish before KubeCM could
+drop the sidecar. Until that image work is reviewed, the core Kasm sidecar keeps
+the change narrow while removing the confusing generic Firefox image.
 
 KasmVNC is deliberately the viewport owner because its normal web client supports
 remote/client resizing (`desktop.allow_resize: true` in KasmVNC's documented
@@ -170,9 +179,9 @@ Render checks:
 Canary checks after image publication and review approval:
 
 - deploy only `camofox-general` first
-- verify `https://camofox.eyrie/` loads the KasmVNC operator client showing the
-  managed Camoufox/Camofox browser tab, not JSON, an Ubuntu desktop, or generic
-  Firefox
+- verify `https://camofox.eyrie/` loads the KasmVNC operator client from the core
+  sidecar showing the managed Camoufox/Camofox browser tab, not JSON, an Ubuntu
+  desktop, or generic Firefox
 - verify `https://camofox.eyrie/api/health` and
   `https://browser.eyrie/api/health` return Camofox Browser JSON
 - create/navigate/snapshot/click/type/screenshot through Camofox Browser's REST
