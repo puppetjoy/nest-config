@@ -426,6 +426,16 @@ resources:
             - name: "%{nest::kubernetes::service}"
               port: 9377
         - conditions:
+            - exact: /
+          pathRewritePolicy:
+            replacePrefix:
+              - prefix: /
+                replacement: /index.html
+          enableWebsockets: true
+          services:
+            - name: "%{nest::kubernetes::service}"
+              port: "%{alias('operator_port')}"
+        - conditions:
             - prefix: /
           enableWebsockets: true
           services:
