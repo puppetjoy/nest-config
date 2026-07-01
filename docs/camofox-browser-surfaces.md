@@ -69,17 +69,34 @@ migration, not the live shopping/final-purchase path. It keeps a persistent
 pod replacement, and it carries the Bitwarden Firefox extension preinstall
 intent separately from any active final-purchase authority.
 
-The public root of each Camofox host is the Camofox Browser REST/health API,
-so `https://camofox-general.eyrie/` and `https://camofox-secure.eyrie/` returning
-JSON is expected. The interactive noVNC viewer is on-demand, because upstream
-Camofox starts `x11vnc` and `websockify` only after a user session is switched to
-virtual display mode. Create or reuse a Camofox user session, call
-`POST /sessions/:userId/toggle-display` with `{"headless":"virtual"}`, then
-open the returned `vncUrl` on the same HTTPS host. The source-managed ingress
-routes noVNC assets and the WebSocket endpoint (`/vnc.html`, `/app/`, `/core/`,
-`/vendor/`, and `/websockify`) to the VNC helper while preserving `/` and the
-REST API on port 9377. The viewer is intentionally short-lived; switch the
-session back to `{"headless":true}` when finished.
+The public root of each Camofox operator host is now the persistent
+KasmVNC-backed browser surface. `https://camofox.eyrie/` is the stable general
+operator URL, and `https://browser.eyrie/` is the secure operator URL Joy is
+most likely to use for password/login work. Both should load KasmVNC's web
+client rather than REST JSON. Camofox Browser's REST API is kept on companion
+API hosts and a compatibility subpath. The old `camofox-general.eyrie` and
+`camofox-secure.eyrie` operator hostnames are intentionally not retained as
+compatibility aliases:
+
+- `https://camofox-general-api.eyrie/` for ordinary/general automation
+- `https://camofox-secure-api.eyrie/` for the secure canary API
+- `/api/` below each operator host, rewritten back to the Camofox REST root
+
+The deployment runs a `kasmweb/core-ubuntu-noble` KasmVNC container beside the
+Camofox Browser container in the same pod. KasmVNC owns the visible X display and
+web UI, with Basic Auth disabled behind the private Eyrie ingress just like the
+existing Chrome/Kasm secure-browser surface. The Camofox container waits for the
+shared X socket, then starts with `CAMOFOX_HEADLESS=false`, `DISPLAY=:1`, and
+`XAUTHORITY` pointed at the Kasm user's authority file. Operator-visible Camofox
+contexts therefore render in the persistent KasmVNC desktop instead of calling
+upstream `toggle-display` to spawn a short-lived fixed `Xvfb :99` plus x11vnc
+helper.
+
+KasmVNC is deliberately the viewport owner because its normal web client supports
+remote/client resizing (`desktop.allow_resize: true` in KasmVNC's documented
+defaults). Validation should prove this from the live surface: changing a desktop
+or mobile browser viewport must change the remote display/browser geometry, not
+only CSS-scale a fixed 1920x1080 framebuffer.
 
 The top-level `nest::eyrie::ai::deploy` plan has a `camofox` switch defaulting to
 `false`. This keeps normal AI deploys from silently introducing the new browser
@@ -95,11 +112,15 @@ resources to the cluster.
 
 ## Rollout knobs
 
-`data/host/owl.yaml` exposes non-cutover environment hints for Talon and Star:
+`data/host/owl.yaml` exposes non-cutover environment hints for Talon and Star.
+REST clients should use the API hosts; humans/operators should use the operator
+hosts:
 
-- `CAMOFOX_GENERAL_URL=https://camofox-general.eyrie`
-- `CAMOFOX_SECURE_URL=https://camofox-secure.eyrie`
-- `SECURE_BROWSER_CAMOFOX_URL=https://camofox-secure.eyrie` for Star
+- `CAMOFOX_GENERAL_URL=https://camofox-general-api.eyrie`
+- `CAMOFOX_GENERAL_OPERATOR_URL=https://camofox.eyrie`
+- `CAMOFOX_SECURE_URL=https://camofox-secure-api.eyrie`
+- `CAMOFOX_SECURE_OPERATOR_URL=https://browser.eyrie`
+- `SECURE_BROWSER_CAMOFOX_URL=https://camofox-secure-api.eyrie` for Star
 
 It intentionally does not set the active Hermes `CAMOFOX_URL`. A future canary
 can opt a profile into the general Camofox backend explicitly after the KubeCM
@@ -140,16 +161,25 @@ Render checks:
   browser-session PVC
 - confirm `camofox-secure` renders with a profile PVC, the Bitwarden policy
   ConfigMap, a distinct Deployment, Certificate, Service, and HTTPProxy
+- confirm the rendered Certificate covers both operator and API hostnames
+- confirm the operator HTTPProxy routes `/` to KasmVNC port 6901 and `/api` to
+  the REST API port 9377 with a prefix rewrite
+- confirm the companion `*-api.eyrie` HTTPProxy routes `/` to REST port 9377
 - confirm no resources mutate the current `secure-browser` Chrome/Kasm workload
 
 Canary checks after image publication and review approval:
 
 - deploy only `camofox-general` first
-- verify `/health` through the private Eyrie endpoint
+- verify `https://camofox.eyrie/` loads the KasmVNC operator client, not
+  JSON
+- verify `https://camofox-general-api.eyrie/health` and
+  `https://camofox.eyrie/api/health` return Camofox Browser JSON
 - create/navigate/snapshot/click/type/screenshot through Camofox Browser's REST
   API
-- switch an existing user session to `headless: "virtual"`, verify the returned
-  `vncUrl` loads noVNC through the Eyrie host, then switch back to headless
+- create an operator-visible Camofox context and verify it appears in the
+  persistent KasmVNC display without calling `toggle-display`
+- resize a desktop client and a mobile-sized client and verify the remote display
+  geometry changes instead of shrinking/scaling a fixed framebuffer
 - restart the general pod and verify its profile behaves as disposable state
 - only then test `camofox-secure`; verify profile persistence and Bitwarden
   extension availability, while keeping Star's active

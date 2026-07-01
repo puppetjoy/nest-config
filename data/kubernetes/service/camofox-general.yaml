@@ -1,6 +1,8 @@
 ---
 service_name: camofox-general
 service_instance: general
+operator_fqdn: camofox.eyrie
+api_fqdn: camofox-general-api.eyrie
 # Trusted internal Nest automation endpoint: regular Hermes browser tools need
 # to open `.eyrie` sites such as Flight Deck through this Camofox service.
 # Metadata/link-local egress remains constrained by the app NetworkPolicy.

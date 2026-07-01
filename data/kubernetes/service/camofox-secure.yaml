@@ -1,6 +1,8 @@
 ---
 service_name: camofox-secure
 service_instance: secure
+operator_fqdn: browser.eyrie
+api_fqdn: camofox-secure-api.eyrie
 # Trusted internal Nest canary endpoint: approved secure Camofox paths need
 # the same `.eyrie` reachability as camofox-general while final-purchase
 # authority stays in Hermes secure-browser approval gates.

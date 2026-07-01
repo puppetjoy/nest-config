@@ -18,9 +18,13 @@ camofox_log_level: info
 camofox_telemetry_disabled: '1'
 camofox_allow_private_network: 'false'
 camofox_ignore_https_errors: 'false'
-vnc_port: 6080
-vnc_public_url_base: "https://%{nest::kubernetes::fqdn}"
-vnc_timeout_ms: 300000
+operator_fqdn: "%{nest::kubernetes::fqdn}"
+api_fqdn: "%{nest::kubernetes::service}-api.eyrie"
+operator_image: docker.io/kasmweb/core-ubuntu-noble:1.18.0
+operator_port: 6901
+operator_display: ':1'
+operator_home: /home/kasm-user
+operator_vnc_options: '-disableBasicAuth'
 final_purchase_gate_required: true
 
 .affinity: &affinity
@@ -53,7 +57,8 @@ resources:
         name: "%{lookup('cert_issuer')}"
         kind: "%{lookup('cert_issuer_kind')}"
       dnsNames:
-        - "%{nest::kubernetes::fqdn}"
+        - "%{lookup('operator_fqdn')}"
+        - "%{lookup('api_fqdn')}"
 
   policy:
     apiVersion: v1
@@ -92,13 +97,15 @@ resources:
         Camofox/Firefox trust store; keep that opt-in scoped to `.eyrie` Nest
         services rather than making it a package default.
 
-        The root path is the Camofox Browser REST/health API. The interactive
-        browser viewer is upstream Camofox's on-demand noVNC helper: switch an
-        existing user session to `headless: "virtual"` with
-        `POST /sessions/:userId/toggle-display`, then open the returned
-        `vncUrl` under this same HTTPS host. noVNC is short-lived and stops
-        when the display is returned to headless mode or when its timeout
-        expires.
+        The root path is the persistent KasmVNC-backed operator surface. The
+        Camofox Browser REST API is served on the companion API host
+        https://%{lookup('api_fqdn')}/ and on /api/ below https://%{lookup('operator_fqdn')}/.
+        Camofox is started with CAMOFOX_HEADLESS=false and DISPLAY pointed at
+        the KasmVNC-owned X display, so operator-visible contexts render in the
+        persistent remote desktop instead of launching an on-demand fixed Xvfb
+        framebuffer through upstream toggle-display/noVNC. KasmVNC keeps remote
+        resize enabled so desktop/mobile clients resize the remote display
+        rather than only scaling a 1920x1080 framebuffer.
 
   profile-storage:
     apiVersion: v1
@@ -170,6 +177,44 @@ resources:
           securityContext:
             fsGroup: 1000
           containers:
+            - name: kasm-operator
+              image: "%{lookup('operator_image')}"
+              env:
+                - name: VNC_PW
+                  value: unused
+                - name: VNCOPTIONS
+                  value: "%{lookup('operator_vnc_options')}"
+                - name: LAUNCH_URL
+                  value: about:blank
+                - name: KASM_RESTRICTED_FILE_CHOOSER
+                  value: '1'
+              ports:
+                - name: operator
+                  containerPort: "%{alias('operator_port')}"
+              readinessProbe:
+                exec:
+                  command:
+                    - /bin/sh
+                    - -ec
+                    - >-
+                      fmt='%'; fmt="${fmt}{http_code}";
+                      code=$(curl -ks -o /dev/null -w "${fmt}" https://127.0.0.1:%{lookup('operator_port')}/ || true);
+                      test "${code}" -ge 200 -a "${code}" -lt 400
+                periodSeconds: 5
+                timeoutSeconds: 2
+                failureThreshold: 24
+              livenessProbe:
+                tcpSocket:
+                  port: operator
+                periodSeconds: 20
+                timeoutSeconds: 2
+              volumeMounts:
+                - name: operator-home
+                  mountPath: "%{lookup('operator_home')}"
+                - name: x11-socket
+                  mountPath: /tmp/.X11-unix
+                - name: dshm
+                  mountPath: /dev/shm
             - name: camofox
               image: "%{lookup('image')}"
               imagePullPolicy: Always
@@ -224,21 +269,14 @@ resources:
                   }
                   JS
                   fi
-                  if [ -n "${CAMOFOX_VNC_EXTERNAL_BASE_URL:-}" ]; then
-                    node <<'JS'
-                  const fs = require('node:fs');
-                  const path = '/usr/lib64/node_modules/camofox-browser/dist/src/services/vnc.js';
-                  if (fs.existsSync(path)) {
-                    let text = fs.readFileSync(path, 'utf8');
-                    const oldReturn = 'return `http://${VNC_HOST}:${wsPort}/vnc.html?autoconnect=true&resize=scale&token=${token}`;';
-                    const newReturn = "const externalBase = process.env.CAMOFOX_VNC_EXTERNAL_BASE_URL;\n    if (externalBase) {\n        return `${externalBase.replace(/\\/$/, '')}/vnc.html?autoconnect=true&resize=scale&token=${token}`;\n    }\n    return `http://${VNC_HOST}:${wsPort}/vnc.html?autoconnect=true&resize=scale&token=${token}`;";
-                    if (text.includes(oldReturn) && !text.includes('CAMOFOX_VNC_EXTERNAL_BASE_URL')) {
-                      text = text.replace(oldReturn, newReturn);
-                      fs.writeFileSync(path, text);
-                      console.warn('[nest] Camofox VNC URLs use the HTTPS ingress base for this pod');
-                    }
-                  }
-                  JS
+                  if [ -n "${DISPLAY:-}" ]; then
+                    display_number="${DISPLAY#:}";
+                    display_number="${display_number%%.*}";
+                    for i in $(seq 1 120); do
+                      [ -S "/tmp/.X11-unix/X${display_number}" ] && break;
+                      sleep 1;
+                    done;
+                    test -S "/tmp/.X11-unix/X${display_number}";
                   fi
                   exec /usr/local/bin/nest-camofox-browser
               env:
@@ -267,12 +305,12 @@ resources:
                   value: "%{lookup('camofox_allow_private_network')}"
                 - name: CAMOFOX_IGNORE_HTTPS_ERRORS
                   value: "%{lookup('camofox_ignore_https_errors')}"
-                - name: CAMOFOX_VNC_BASE_PORT
-                  value: "%{lookup('vnc_port')}"
-                - name: CAMOFOX_VNC_EXTERNAL_BASE_URL
-                  value: "%{lookup('vnc_public_url_base')}"
-                - name: CAMOFOX_VNC_TIMEOUT_MS
-                  value: "%{lookup('vnc_timeout_ms')}"
+                - name: CAMOFOX_HEADLESS
+                  value: 'false'
+                - name: DISPLAY
+                  value: "%{lookup('operator_display')}"
+                - name: XAUTHORITY
+                  value: "%{lookup('operator_home')}/.Xauthority"
                 - name: CAMOFOX_AUTH_MODE
                   value: disabled
                 - name: CAMOFOX_SERVICE_INSTANCE
@@ -296,8 +334,6 @@ resources:
               ports:
                 - name: http
                   containerPort: "%{alias('camofox_port')}"
-                - name: vnc
-                  containerPort: "%{alias('vnc_port')}"
               readinessProbe:
                 httpGet:
                   path: /health
@@ -314,12 +350,20 @@ resources:
               volumeMounts:
                 - name: profile
                   mountPath: /home/node/.camofox
+                - name: operator-home
+                  mountPath: "%{lookup('operator_home')}"
+                - name: x11-socket
+                  mountPath: /tmp/.X11-unix
                 - name: dshm
                   mountPath: /dev/shm
           volumes:
             - name: profile
               persistentVolumeClaim:
                 claimName: "%{nest::kubernetes::service}-profile"
+            - name: operator-home
+              emptyDir: {}
+            - name: x11-socket
+              emptyDir: {}
             - name: dshm
               emptyDir:
                 medium: Memory
@@ -331,6 +375,8 @@ resources:
     metadata:
       name: "%{nest::kubernetes::service}"
       namespace: "%{nest::kubernetes::namespace}"
+      annotations:
+        projectcontour.io/upstream-protocol.tls: "%{lookup('operator_port')}"
     spec:
       type: ClusterIP
       selector:
@@ -339,9 +385,9 @@ resources:
         - name: http
           port: 9377
           targetPort: http
-        - name: vnc
-          port: "%{alias('vnc_port')}"
-          targetPort: vnc
+        - name: operator
+          port: "%{alias('operator_port')}"
+          targetPort: operator
 
   ingress:
     apiVersion: projectcontour.io/v1
@@ -352,43 +398,53 @@ resources:
     spec:
       ingressClassName: "%{lookup('ingress_class')}"
       virtualhost:
-        fqdn: "%{nest::kubernetes::fqdn}"
+        fqdn: "%{lookup('operator_fqdn')}"
         tls:
           secretName: "%{nest::kubernetes::service}-certs"
       routes:
-        # On-demand noVNC helper. The root path stays the Camofox REST API;
-        # `/sessions/:userId/toggle-display` returns a short-lived vncUrl under
-        # this same HTTPS host when a session switches to virtual display mode.
+        # API compatibility path for callers that prefer the operator hostname.
+        # The companion %{lookup('api_fqdn')} host below remains the preferred
+        # REST endpoint so the stable root URL can belong to KasmVNC.
         - conditions:
-            - prefix: /vnc.html
+            - prefix: /api/
+          pathRewritePolicy:
+            replacePrefix:
+              - prefix: /api/
+                replacement: /
           enableWebsockets: true
           services:
             - name: "%{nest::kubernetes::service}"
-              port: "%{alias('vnc_port')}"
+              port: 9377
         - conditions:
-            - prefix: /app/
+            - prefix: /api
+          pathRewritePolicy:
+            replacePrefix:
+              - prefix: /api
+                replacement: /
           enableWebsockets: true
           services:
             - name: "%{nest::kubernetes::service}"
-              port: "%{alias('vnc_port')}"
+              port: 9377
         - conditions:
-            - prefix: /core/
+            - prefix: /
           enableWebsockets: true
           services:
             - name: "%{nest::kubernetes::service}"
-              port: "%{alias('vnc_port')}"
-        - conditions:
-            - prefix: /vendor/
-          enableWebsockets: true
-          services:
-            - name: "%{nest::kubernetes::service}"
-              port: "%{alias('vnc_port')}"
-        - conditions:
-            - prefix: /websockify
-          enableWebsockets: true
-          services:
-            - name: "%{nest::kubernetes::service}"
-              port: "%{alias('vnc_port')}"
+              port: "%{alias('operator_port')}"
+
+  api-ingress:
+    apiVersion: projectcontour.io/v1
+    kind: HTTPProxy
+    metadata:
+      name: "%{nest::kubernetes::service}-api"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      ingressClassName: "%{lookup('ingress_class')}"
+      virtualhost:
+        fqdn: "%{lookup('api_fqdn')}"
+        tls:
+          secretName: "%{nest::kubernetes::service}-certs"
+      routes:
         - conditions:
             - prefix: /
           enableWebsockets: true
