@@ -16,6 +16,7 @@ camofox_port: 9377
 camofox_data_dir: /home/node/.camofox
 camofox_log_level: info
 camofox_telemetry_disabled: '1'
+camofox_allow_private_network: 'false'
 final_purchase_gate_required: true
 
 .affinity: &affinity
@@ -78,6 +79,11 @@ resources:
         canary for Joy-operated login/session continuity and may use a persistent
         profile plus Bitwarden extension policy once reviewed.
 
+        Private-network navigation is disabled by default. Only trusted internal
+        Nest instances such as camofox-general may opt in so Hermes browser tools
+        can reach `.eyrie` sites; this is not a secure-browser cutover and does
+        not authorize cloud metadata or credential-service access.
+
   profile-storage:
     apiVersion: v1
     kind: PersistentVolumeClaim
@@ -91,6 +97,33 @@ resources:
         requests:
           storage: "%{lookup('profile_storage_size')}"
       storageClassName: owl-crypt
+
+  metadata-egress-guard:
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: "%{nest::kubernetes::service}-metadata-egress-guard"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      podSelector:
+        matchLabels:
+          app: "%{nest::kubernetes::service}"
+      policyTypes:
+        - Egress
+      egress:
+        # Allow normal browsing, including trusted internal Nest private ranges,
+        # but keep the common cloud/link-local metadata space unavailable even
+        # when a service instance opts into Camofox private-network navigation.
+        - to:
+            - ipBlock:
+                cidr: '0.0.0.0/0'
+                except:
+                  - '169.254.0.0/16'
+        - to:
+            - ipBlock:
+                cidr: '::/0'
+                except:
+                  - 'fe80::/10'
 
   deployment:
     apiVersion: apps/v1
@@ -145,6 +178,11 @@ resources:
                   value: "%{lookup('camofox_log_level')}"
                 - name: CAMOFOX_TELEMETRY_DISABLED
                   value: "%{lookup('camofox_telemetry_disabled')}"
+                # Camofox blocks loopback/private/link-local targets when bound
+                # beyond localhost. Keep the default false, and opt in only for
+                # trusted internal Nest instances that must open `.eyrie` sites.
+                - name: CAMOFOX_ALLOW_PRIVATE_NETWORK
+                  value: "%{lookup('camofox_allow_private_network')}"
                 - name: CAMOFOX_AUTH_MODE
                   value: disabled
                 - name: CAMOFOX_SERVICE_INSTANCE
