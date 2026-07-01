@@ -60,6 +60,13 @@ class nest::tool::camofox (
     require => File['/opt/nest/camofox/bin'],
   }
 
+  file { '/opt/nest/camofox/bin/nest-camofox-browser.sh':
+    ensure  => file,
+    mode    => '0755',
+    source  => 'puppet:///modules/nest/camofox-browser/nest-camofox-browser.sh',
+    require => File['/opt/nest/camofox/bin'],
+  }
+
   # Camofox Browser's VNC helper expects the noVNC web root at /opt/noVNC.
   # Gentoo installs the package-managed assets under /usr/share/novnc.
   file { '/opt/noVNC':
@@ -96,26 +103,12 @@ class nest::tool::camofox (
   }
 
   file { '/usr/local/bin/nest-camofox-browser':
-    ensure  => file,
-    mode    => '0755',
-    content => [
-      '#!/bin/sh',
-      'set -eu',
-      '',
-      'export CAMOFOX_HOST="${CAMOFOX_HOST:-0.0.0.0}"',
-      'export CAMOFOX_PORT="${CAMOFOX_PORT:-9377}"',
-      'export CAMOFOX_DATA_DIR="${CAMOFOX_DATA_DIR:-/home/node/.camofox}"',
-      'export CAMOFOX_AUTH_MODE="${CAMOFOX_AUTH_MODE:-disabled}"',
-      'export HOME="${HOME:-/home/node}"',
-      '',
-      'mkdir -p "${CAMOFOX_DATA_DIR}" "${HOME}"',
-      '',
-      'exec camofox-browser "$@"',
-      '',
-    ].join("\n"),
+    ensure  => link,
+    target  => '/opt/nest/camofox/bin/nest-camofox-browser.sh',
     require => [
       Exec['install_camofox_browser'],
       Exec['install_camofox_bitwarden_extension'],
+      File['/opt/nest/camofox/bin/nest-camofox-browser.sh'],
     ],
   }
 }

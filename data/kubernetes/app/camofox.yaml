@@ -20,6 +20,7 @@ camofox_auth_mode: disabled
 camofox_screen_width: '1365'
 camofox_screen_height: '768'
 camofox_vnc_resolution: '1365x768x24'
+camofox_context_close_timeout_ms: '10000'
 fqdn: camofox.eyrie
 
 .affinity: &affinity
@@ -82,9 +83,17 @@ resources:
 
         Default desktop automation is pinned to a 1365x768 Camofox fingerprint
         screen and matching virtual-display fallback so page layout metrics,
-        screen metrics, and viewport screenshots agree. CAMOFOX_SCREEN_* is a
-        generation-time Camofox control, so replacing this emptyDir-backed pod
-        regenerates fingerprints under the managed dimensions.
+        screen metrics, and viewport screenshots agree. Per-session viewport
+        overrides also update the fingerprint screen before launch so mobile
+        REST tabs render responsive layouts instead of cropped desktop pages.
+        CAMOFOX_SCREEN_* is a generation-time Camofox control, so replacing this
+        emptyDir-backed pod regenerates fingerprints under the managed
+        dimensions.
+
+        Session close is bounded by CAMOFOX_CONTEXT_CLOSE_TIMEOUT_MS because
+        Playwright/Camoufox context close can take about 30s after the browser
+        has emitted its close event. Cleanup still runs, but DELETE /sessions
+        should return before the internal ingress times out.
 
   metadata-egress-guard:
     apiVersion: networking.k8s.io/v1
@@ -201,8 +210,9 @@ resources:
                     let text = fs.readFileSync(path, 'utf8');
                     const marker = '            const opts = await (0, camoufox_js_1.launchOptions)({';
                     const shim = [
-                      '            if (CONFIG.fingerprintDefaults.screen && fingerprint && fingerprint.screen) {',
-                      '                const { width, height } = CONFIG.fingerprintDefaults.screen;',
+                      '            const requestedScreen = (contextOptions && contextOptions.viewport) ? contextOptions.viewport : CONFIG.fingerprintDefaults.screen;',
+                      '            if (requestedScreen && fingerprint && fingerprint.screen) {',
+                      '                const { width, height } = requestedScreen;',
                       '                Object.assign(fingerprint.screen, {',
                       '                    width,',
                       '                    height,',
@@ -218,10 +228,38 @@ resources:
                       '            }',
                       '',
                     ].join('\n');
-                    if (text.includes(marker) && !text.includes('outerHeight: height + 61,')) {
+                    if (text.includes(marker) && !text.includes('const requestedScreen = (contextOptions && contextOptions.viewport)')) {
                       text = text.replace(marker, `${shim}${marker}`);
                       fs.writeFileSync(path, text);
                       console.warn('[nest] Camofox fingerprint screen metrics pinned for this pod');
+                    }
+                  }
+                  JS
+                  fi
+                  if [ -n "${CAMOFOX_CONTEXT_CLOSE_TIMEOUT_MS:-}" ]; then
+                    node <<'JS'
+                  const fs = require('node:fs');
+                  const path = '/usr/lib64/node_modules/camofox-browser/dist/src/services/context-pool.js';
+                  if (fs.existsSync(path)) {
+                    let text = fs.readFileSync(path, 'utf8');
+                    const marker = '            await entry.context?.close().catch(() => { });';
+                    const shim = [
+                      '            const closeTimeoutMs = Number(process.env.CAMOFOX_CONTEXT_CLOSE_TIMEOUT_MS || 10000);',
+                      '            const closePromise = entry.context?.close().catch(() => { });',
+                      '            if (closePromise && Number.isFinite(closeTimeoutMs) && closeTimeoutMs > 0) {',
+                      '                let timeout;',
+                      '                await Promise.race([',
+                      '                    closePromise.finally(() => clearTimeout(timeout)),',
+                      '                    new Promise((resolve) => { timeout = setTimeout(resolve, closeTimeoutMs); }),',
+                      '                ]);',
+                      '            } else {',
+                      '                await closePromise;',
+                      '            }',
+                    ].join('\n');
+                    if (text.includes(marker) && !text.includes('CAMOFOX_CONTEXT_CLOSE_TIMEOUT_MS')) {
+                      text = text.replace(marker, shim);
+                      fs.writeFileSync(path, text);
+                      console.warn('[nest] Camofox context close timeout bounded for this pod');
                     }
                   }
                   JS
@@ -260,6 +298,8 @@ resources:
                   value: "%{lookup('camofox_screen_height')}"
                 - name: CAMOFOX_VNC_RESOLUTION
                   value: "%{lookup('camofox_vnc_resolution')}"
+                - name: CAMOFOX_CONTEXT_CLOSE_TIMEOUT_MS
+                  value: "%{lookup('camofox_context_close_timeout_ms')}"
                 # Kubernetes blocks Firefox's content-process user namespace
                 # sandbox in this container; disable the Linux Firefox sandboxes
                 # explicitly for the trusted internal automation service.
