@@ -193,6 +193,39 @@ resources:
                   }
                   JS
                   fi
+                  if [ -n "${CAMOFOX_SCREEN_WIDTH:-}" ] && [ -n "${CAMOFOX_SCREEN_HEIGHT:-}" ]; then
+                    node <<'JS'
+                  const fs = require('node:fs');
+                  const path = '/usr/lib64/node_modules/camofox-browser/dist/src/services/context-pool.js';
+                  if (fs.existsSync(path)) {
+                    let text = fs.readFileSync(path, 'utf8');
+                    const marker = '            const opts = await (0, camoufox_js_1.launchOptions)({';
+                    const shim = [
+                      '            if (CONFIG.fingerprintDefaults.screen && fingerprint && fingerprint.screen) {',
+                      '                const { width, height } = CONFIG.fingerprintDefaults.screen;',
+                      '                Object.assign(fingerprint.screen, {',
+                      '                    width,',
+                      '                    height,',
+                      '                    availWidth: width,',
+                      '                    availHeight: height,',
+                      '                    outerWidth: width,',
+                      '                    outerHeight: height + 61,',
+                      '                    innerWidth: width,',
+                      '                    innerHeight: height,',
+                      '                    clientWidth: width,',
+                      '                    clientHeight: height,',
+                      '                });',
+                      '            }',
+                      '',
+                    ].join('\n');
+                    if (text.includes(marker) && !text.includes('outerHeight: height + 61,')) {
+                      text = text.replace(marker, `${shim}${marker}`);
+                      fs.writeFileSync(path, text);
+                      console.warn('[nest] Camofox fingerprint screen metrics pinned for this pod');
+                    }
+                  }
+                  JS
+                  fi
                   exec /usr/local/bin/nest-camofox-browser
               env:
                 - name: CAMOFOX_HOST

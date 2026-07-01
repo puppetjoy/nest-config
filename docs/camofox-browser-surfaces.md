@@ -53,9 +53,14 @@ Relevant files:
 The Camofox pod exposes the Camofox Browser REST API directly through Contour at
 `https://camofox.eyrie/`. It runs headless/default Camofox Browser behavior with
 a managed 1365x768 default fingerprint screen and matching 1365x768 virtual
-fallback display. The emptyDir `/home/node/.camofox` profile keeps automated
-sessions disposable across pod replacement, which also forces Camofox to
-regenerate generation-time `CAMOFOX_SCREEN_*` fingerprints after a deploy.
+fallback display. The pod also carries a narrow 2.4.6 startup shim for the
+current Camofox package: after fingerprint generation/load, it pins the
+fingerprint sidecar's screen, window, and viewport-derived metrics back to the
+configured 1365x768 desktop shape so `window`, `screen`, document width, and
+viewport screenshot dimensions agree. The emptyDir `/home/node/.camofox` profile
+keeps automated sessions disposable across pod replacement, which also forces
+Camofox to regenerate generation-time `CAMOFOX_SCREEN_*` fingerprints after a
+deploy.
 
 ## Rollout knobs
 
