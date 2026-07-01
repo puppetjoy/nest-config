@@ -17,6 +17,7 @@ camofox_data_dir: /home/node/.camofox
 camofox_log_level: info
 camofox_telemetry_disabled: '1'
 camofox_allow_private_network: 'false'
+camofox_ignore_https_errors: 'false'
 final_purchase_gate_required: true
 
 .affinity: &affinity
@@ -83,7 +84,10 @@ resources:
         Nest instances such as camofox-general and camofox-secure may opt in so
         approved browser paths can reach `.eyrie` sites; this is not a
         secure-browser production cutover and does not authorize cloud metadata
-        or credential-service access.
+        or credential-service access. Those trusted internal instances may also
+        opt into HTTPS-error ignores until the Eyrie CA is imported into the
+        Camofox/Firefox trust store; keep that opt-in scoped to `.eyrie` Nest
+        services rather than making it a package default.
 
   profile-storage:
     apiVersion: v1
@@ -167,8 +171,9 @@ resources:
                   # These Nest instances are trusted internal `.eyrie` services,
                   # guarded by Kubernetes NetworkPolicy for metadata/link-local
                   # egress, and Hermes clients do not yet send Camofox bearer
-                  # tokens. Keep that trust boundary explicit and patch only the
-                  # startup assertion that would otherwise crash the service.
+                  # tokens. If a service also opts into HTTPS-error ignores for
+                  # the private Eyrie CA, patch the browser context option in the
+                  # same tightly-scoped startup shim.
                   if [ "${CAMOFOX_ALLOW_PRIVATE_NETWORK:-false}" = "true" ] && [ "${CAMOFOX_AUTH_MODE:-disabled}" = "disabled" ]; then
                     node <<'JS'
                   const fs = require('node:fs');
@@ -184,6 +189,25 @@ resources:
                       text = text.replace(oldGuard, 'if (false && exposesBeyondLoopback && config.authMode === \'disabled\' && config.allowPrivateNetworkTargets) {');
                       fs.writeFileSync(path, text);
                       console.warn('[nest] Camofox trusted-internal private-network assertion disabled for this pod');
+                      break;
+                    }
+                  }
+                  JS
+                  fi
+                  if [ "${CAMOFOX_IGNORE_HTTPS_ERRORS:-false}" = "true" ]; then
+                    node <<'JS'
+                  const fs = require('node:fs');
+                  const candidates = [
+                    '/usr/lib64/node_modules/camofox-browser/dist/src/services/context-pool.js',
+                  ];
+                  for (const path of candidates) {
+                    if (!fs.existsSync(path)) continue;
+                    let text = fs.readFileSync(path, 'utf8');
+                    const marker = 'downloadsPath: CONFIG.downloadsDir,';
+                    if (text.includes(marker) && !text.includes('ignoreHTTPSErrors: true,')) {
+                      text = text.replace(marker, `${marker}\n                ignoreHTTPSErrors: true,`);
+                      fs.writeFileSync(path, text);
+                      console.warn('[nest] Camofox trusted-internal HTTPS errors ignored for this pod');
                       break;
                     }
                   }
@@ -214,6 +238,8 @@ resources:
                 # trusted internal Nest instances that must open `.eyrie` sites.
                 - name: CAMOFOX_ALLOW_PRIVATE_NETWORK
                   value: "%{lookup('camofox_allow_private_network')}"
+                - name: CAMOFOX_IGNORE_HTTPS_ERRORS
+                  value: "%{lookup('camofox_ignore_https_errors')}"
                 - name: CAMOFOX_AUTH_MODE
                   value: disabled
                 - name: CAMOFOX_SERVICE_INSTANCE

@@ -4,7 +4,10 @@ service_instance: general
 # Trusted internal Nest automation endpoint: regular Hermes browser tools need
 # to open `.eyrie` sites such as Flight Deck through this Camofox service.
 # Metadata/link-local egress remains constrained by the app NetworkPolicy.
+# Ignore HTTPS errors only for this trusted internal `.eyrie` service until the
+# Eyrie CA is imported into the Camofox/Firefox trust store.
 camofox_allow_private_network: 'true'
+camofox_ignore_https_errors: 'true'
 profile_storage_size: 8Gi
 profile_storage_description: ephemeral emptyDir automation state
 bitwarden_extension_path: ''
