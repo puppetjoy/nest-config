@@ -69,6 +69,18 @@ migration, not the live shopping/final-purchase path. It keeps a persistent
 pod replacement, and it carries the Bitwarden Firefox extension preinstall
 intent separately from any active final-purchase authority.
 
+The public root of each Camofox host is the Camofox Browser REST/health API,
+so `https://camofox-general.eyrie/` and `https://camofox-secure.eyrie/` returning
+JSON is expected. The interactive noVNC viewer is on-demand, because upstream
+Camofox starts `x11vnc` and `websockify` only after a user session is switched to
+virtual display mode. Create or reuse a Camofox user session, call
+`POST /sessions/:userId/toggle-display` with `{"headless":"virtual"}`, then
+open the returned `vncUrl` on the same HTTPS host. The source-managed ingress
+routes noVNC assets and the WebSocket endpoint (`/vnc.html`, `/app/`, `/core/`,
+`/vendor/`, and `/websockify`) to the VNC helper while preserving `/` and the
+REST API on port 9377. The viewer is intentionally short-lived; switch the
+session back to `{"headless":true}` when finished.
+
 The top-level `nest::eyrie::ai::deploy` plan has a `camofox` switch defaulting to
 `false`. This keeps normal AI deploys from silently introducing the new browser
 surface before review. To render without applying:
@@ -136,6 +148,8 @@ Canary checks after image publication and review approval:
 - verify `/health` through the private Eyrie endpoint
 - create/navigate/snapshot/click/type/screenshot through Camofox Browser's REST
   API
+- switch an existing user session to `headless: "virtual"`, verify the returned
+  `vncUrl` loads noVNC through the Eyrie host, then switch back to headless
 - restart the general pod and verify its profile behaves as disposable state
 - only then test `camofox-secure`; verify profile persistence and Bitwarden
   extension availability, while keeping Star's active

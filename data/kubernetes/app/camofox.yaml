@@ -18,6 +18,9 @@ camofox_log_level: info
 camofox_telemetry_disabled: '1'
 camofox_allow_private_network: 'false'
 camofox_ignore_https_errors: 'false'
+vnc_port: 6080
+vnc_public_url_base: "https://%{nest::kubernetes::fqdn}"
+vnc_timeout_ms: 300000
 final_purchase_gate_required: true
 
 .affinity: &affinity
@@ -88,6 +91,14 @@ resources:
         opt into HTTPS-error ignores until the Eyrie CA is imported into the
         Camofox/Firefox trust store; keep that opt-in scoped to `.eyrie` Nest
         services rather than making it a package default.
+
+        The root path is the Camofox Browser REST/health API. The interactive
+        browser viewer is upstream Camofox's on-demand noVNC helper: switch an
+        existing user session to `headless: "virtual"` with
+        `POST /sessions/:userId/toggle-display`, then open the returned
+        `vncUrl` under this same HTTPS host. noVNC is short-lived and stops
+        when the display is returned to headless mode or when its timeout
+        expires.
 
   profile-storage:
     apiVersion: v1
@@ -213,6 +224,22 @@ resources:
                   }
                   JS
                   fi
+                  if [ -n "${CAMOFOX_VNC_EXTERNAL_BASE_URL:-}" ]; then
+                    node <<'JS'
+                  const fs = require('node:fs');
+                  const path = '/usr/lib64/node_modules/camofox-browser/dist/src/services/vnc.js';
+                  if (fs.existsSync(path)) {
+                    let text = fs.readFileSync(path, 'utf8');
+                    const oldReturn = 'return `http://${VNC_HOST}:${wsPort}/vnc.html?autoconnect=true&resize=scale&token=${token}`;';
+                    const newReturn = "const externalBase = process.env.CAMOFOX_VNC_EXTERNAL_BASE_URL;\n    if (externalBase) {\n        return `${externalBase.replace(/\\/$/, '')}/vnc.html?autoconnect=true&resize=scale&token=${token}`;\n    }\n    return `http://${VNC_HOST}:${wsPort}/vnc.html?autoconnect=true&resize=scale&token=${token}`;";
+                    if (text.includes(oldReturn) && !text.includes('CAMOFOX_VNC_EXTERNAL_BASE_URL')) {
+                      text = text.replace(oldReturn, newReturn);
+                      fs.writeFileSync(path, text);
+                      console.warn('[nest] Camofox VNC URLs use the HTTPS ingress base for this pod');
+                    }
+                  }
+                  JS
+                  fi
                   exec /usr/local/bin/nest-camofox-browser
               env:
                 - name: CAMOFOX_HOST
@@ -240,6 +267,12 @@ resources:
                   value: "%{lookup('camofox_allow_private_network')}"
                 - name: CAMOFOX_IGNORE_HTTPS_ERRORS
                   value: "%{lookup('camofox_ignore_https_errors')}"
+                - name: CAMOFOX_VNC_BASE_PORT
+                  value: "%{lookup('vnc_port')}"
+                - name: CAMOFOX_VNC_EXTERNAL_BASE_URL
+                  value: "%{lookup('vnc_public_url_base')}"
+                - name: CAMOFOX_VNC_TIMEOUT_MS
+                  value: "%{lookup('vnc_timeout_ms')}"
                 - name: CAMOFOX_AUTH_MODE
                   value: disabled
                 - name: CAMOFOX_SERVICE_INSTANCE
@@ -263,6 +296,8 @@ resources:
               ports:
                 - name: http
                   containerPort: "%{alias('camofox_port')}"
+                - name: vnc
+                  containerPort: "%{alias('vnc_port')}"
               readinessProbe:
                 httpGet:
                   path: /health
@@ -304,6 +339,9 @@ resources:
         - name: http
           port: 9377
           targetPort: http
+        - name: vnc
+          port: "%{alias('vnc_port')}"
+          targetPort: vnc
 
   ingress:
     apiVersion: projectcontour.io/v1
@@ -318,6 +356,39 @@ resources:
         tls:
           secretName: "%{nest::kubernetes::service}-certs"
       routes:
+        # On-demand noVNC helper. The root path stays the Camofox REST API;
+        # `/sessions/:userId/toggle-display` returns a short-lived vncUrl under
+        # this same HTTPS host when a session switches to virtual display mode.
+        - conditions:
+            - prefix: /vnc.html
+          enableWebsockets: true
+          services:
+            - name: "%{nest::kubernetes::service}"
+              port: "%{lookup('vnc_port')}"
+        - conditions:
+            - prefix: /app/
+          enableWebsockets: true
+          services:
+            - name: "%{nest::kubernetes::service}"
+              port: "%{lookup('vnc_port')}"
+        - conditions:
+            - prefix: /core/
+          enableWebsockets: true
+          services:
+            - name: "%{nest::kubernetes::service}"
+              port: "%{lookup('vnc_port')}"
+        - conditions:
+            - prefix: /vendor/
+          enableWebsockets: true
+          services:
+            - name: "%{nest::kubernetes::service}"
+              port: "%{lookup('vnc_port')}"
+        - conditions:
+            - prefix: /websockify
+          enableWebsockets: true
+          services:
+            - name: "%{nest::kubernetes::service}"
+              port: "%{lookup('vnc_port')}"
         - conditions:
             - prefix: /
           enableWebsockets: true

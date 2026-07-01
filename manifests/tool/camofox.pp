@@ -12,10 +12,13 @@ class nest::tool::camofox (
   include 'nodejs'
 
   nest::lib::package { [
+    'dev-python/websockify',
     'media-fonts/noto',
     'media-libs/alsa-lib',
     'net-misc/curl',
+    'www-apps/novnc',
     'x11-libs/gtk+',
+    'x11-misc/x11vnc',
   ]:
     ensure => installed,
     before => Exec['install_camofox_browser'],
@@ -55,6 +58,14 @@ class nest::tool::camofox (
     mode    => '0755',
     source  => 'puppet:///modules/nest/camofox-browser/smoke-tabs.sh',
     require => File['/opt/nest/camofox/bin'],
+  }
+
+  # Camofox Browser's VNC helper expects the noVNC web root at /opt/noVNC.
+  # Gentoo installs the package-managed assets under /usr/share/novnc.
+  file { '/opt/noVNC':
+    ensure  => link,
+    target  => '/usr/share/novnc',
+    require => Nest::Lib::Package['www-apps/novnc'],
   }
 
   exec { 'install_camofox_bitwarden_extension':
