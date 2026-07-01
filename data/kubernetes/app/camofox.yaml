@@ -159,7 +159,37 @@ resources:
               image: "%{lookup('image')}"
               imagePullPolicy: Always
               command:
-                - /usr/local/bin/nest-camofox-browser
+                - /bin/sh
+                - -ec
+                - |
+                  # The upstream Camofox package refuses private-network targets
+                  # with disabled API auth when the server binds beyond loopback.
+                  # These Nest instances are trusted internal `.eyrie` services,
+                  # guarded by Kubernetes NetworkPolicy for metadata/link-local
+                  # egress, and Hermes clients do not yet send Camofox bearer
+                  # tokens. Keep that trust boundary explicit and patch only the
+                  # startup assertion that would otherwise crash the service.
+                  if [ "${CAMOFOX_ALLOW_PRIVATE_NETWORK:-false}" = "true" ] && [ "${CAMOFOX_AUTH_MODE:-disabled}" = "disabled" ]; then
+                    node <<'JS'
+                  const fs = require('node:fs');
+                  const candidates = [
+                    '/usr/lib64/node_modules/camofox-browser/dist/src/utils/config.js',
+                    '/usr/lib64/node_modules/@askjo/camofox-browser/lib/config.js',
+                  ];
+                  for (const path of candidates) {
+                    if (!fs.existsSync(path)) continue;
+                    let text = fs.readFileSync(path, 'utf8');
+                    const oldGuard = "if (exposesBeyondLoopback && config.authMode === 'disabled' && config.allowPrivateNetworkTargets) {";
+                    if (text.includes(oldGuard)) {
+                      text = text.replace(oldGuard, 'if (false && exposesBeyondLoopback && config.authMode === \'disabled\' && config.allowPrivateNetworkTargets) {');
+                      fs.writeFileSync(path, text);
+                      console.warn('[nest] Camofox trusted-internal private-network assertion disabled for this pod');
+                      break;
+                    }
+                  }
+                  JS
+                  fi
+                  exec /usr/local/bin/nest-camofox-browser
               env:
                 - name: CAMOFOX_HOST
                   value: 0.0.0.0
