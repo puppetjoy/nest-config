@@ -133,10 +133,12 @@ resources:
                   value: "%{lookup('camofox_port')}"
                 - name: CAMOFOX_DATA_DIR
                   value: "%{lookup('camofox_data_dir')}"
-                - name: CAMOFOX_PROFILE_DIR
+                - name: CAMOFOX_PROFILES_DIR
                   value: "%{lookup('camofox_data_dir')}/profiles"
                 - name: CAMOFOX_COOKIES_DIR
                   value: "%{lookup('camofox_data_dir')}/cookies"
+                - name: CAMOFOX_DOWNLOADS_DIR
+                  value: "%{lookup('camofox_data_dir')}/downloads"
                 - name: CAMOFOX_TRACES_DIR
                   value: "%{lookup('camofox_data_dir')}/traces"
                 - name: CAMOFOX_LOG_LEVEL
@@ -149,6 +151,20 @@ resources:
                   value: "%{lookup('service_instance')}"
                 - name: CAMOFOX_BITWARDEN_EXTENSION_PATH
                   value: "%{lookup('bitwarden_extension_path')}"
+                # Kubernetes blocks Firefox's content-process user namespace
+                # sandbox in this container; disable the Linux Firefox sandboxes
+                # explicitly so Camofox can create contexts while the final
+                # purchase gate stays in the Hermes secure-browser layer.
+                - name: MOZ_DISABLE_CONTENT_SANDBOX
+                  value: '1'
+                - name: MOZ_DISABLE_GMP_SANDBOX
+                  value: '1'
+                - name: MOZ_DISABLE_RDD_SANDBOX
+                  value: '1'
+                - name: MOZ_DISABLE_GPU_SANDBOX
+                  value: '1'
+                - name: MOZ_DISABLE_GFX_SANITY
+                  value: '1'
               ports:
                 - name: http
                   containerPort: "%{alias('camofox_port')}"
