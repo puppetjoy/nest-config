@@ -12,6 +12,12 @@ if [ ! -f "$SERVER_JS" ]; then
   exit 0
 fi
 
+# Idempotency guard: skip if already patched
+if /bin/grep -q "delete contextOptions.viewport.isMobile" "$SERVER_JS"; then
+  echo "INFO: $SERVER_JS already patched, skipping"
+  exit 0
+fi
+
 # Strip isMobile from contextOptions.viewport before newContext()
 sed -i '/b\.newContext(contextOptions)/i\
   if (contextOptions.viewport) delete contextOptions.viewport.isMobile;' "$SERVER_JS"
