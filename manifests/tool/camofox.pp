@@ -80,10 +80,10 @@ class nest::tool::camofox (
   # into a Browser.setDefaultViewport message that includes isMobile: false,
   # which the Camoufox CDP scheme rejects (ar-20260630-233757-a80b42).
   exec { 'patch_camofox_viewport_isMobile':
-    command  => '/bin/bash /opt/nest/camofox/bin/patch-camofox-viewport-isMobile.sh',
-    unless   => '/bin/grep -q "delete contextOptions.viewport.isMobile" /usr/lib64/node_modules/@askjo/camofox-browser/server.js 2>/dev/null',
-    require  => Exec['install_camofox_browser'],
-    timeout  => 30,
+    command => '/bin/bash /opt/nest/camofox/bin/patch-camofox-viewport-isMobile.sh',
+    unless  => '/bin/grep -q "delete contextOptions.viewport.isMobile" /usr/lib64/node_modules/@askjo/camofox-browser/server.js 2>/dev/null',
+    require => Exec['install_camofox_browser'],
+    timeout => 30,
   }
 
   file { '/usr/local/bin/nest-camofox-browser':
