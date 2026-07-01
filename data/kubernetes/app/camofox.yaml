@@ -17,6 +17,9 @@ camofox_telemetry_disabled: '1'
 camofox_allow_private_network: 'true'
 camofox_ignore_https_errors: 'true'
 camofox_auth_mode: disabled
+camofox_screen_width: '1365'
+camofox_screen_height: '768'
+camofox_vnc_resolution: '1365x768x24'
 fqdn: camofox.eyrie
 
 .affinity: &affinity
@@ -76,6 +79,12 @@ resources:
         only because this trusted internal Nest endpoint must open `.eyrie`
         sites such as Flight Deck. Metadata/link-local egress remains blocked by
         NetworkPolicy; do not reuse this policy for public multi-tenant Camofox.
+
+        Default desktop automation is pinned to a 1365x768 Camofox fingerprint
+        screen and matching virtual-display fallback so page layout metrics,
+        screen metrics, and viewport screenshots agree. CAMOFOX_SCREEN_* is a
+        generation-time Camofox control, so replacing this emptyDir-backed pod
+        regenerates fingerprints under the managed dimensions.
 
   metadata-egress-guard:
     apiVersion: networking.k8s.io/v1
@@ -212,6 +221,12 @@ resources:
                   value: "%{lookup('camofox_auth_mode')}"
                 - name: CAMOFOX_SERVICE_INSTANCE
                   value: "%{lookup('service_instance')}"
+                - name: CAMOFOX_SCREEN_WIDTH
+                  value: "%{lookup('camofox_screen_width')}"
+                - name: CAMOFOX_SCREEN_HEIGHT
+                  value: "%{lookup('camofox_screen_height')}"
+                - name: CAMOFOX_VNC_RESOLUTION
+                  value: "%{lookup('camofox_vnc_resolution')}"
                 # Kubernetes blocks Firefox's content-process user namespace
                 # sandbox in this container; disable the Linux Firefox sandboxes
                 # explicitly for the trusted internal automation service.
