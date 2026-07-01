@@ -1,6 +1,11 @@
 ---
 service_name: camofox-secure
 service_instance: secure
+# Trusted internal Nest canary endpoint: approved secure Camofox paths need
+# the same `.eyrie` reachability as camofox-general while final-purchase
+# authority stays in Hermes secure-browser approval gates.
+# Metadata/link-local egress remains constrained by the app NetworkPolicy.
+camofox_allow_private_network: 'true'
 profile_storage_size: 12Gi
 profile_storage_description: persistent secure-browser session/profile state
 bitwarden_extension_path: /opt/nest/camofox/extensions/bitwarden.xpi

@@ -80,9 +80,10 @@ resources:
         profile plus Bitwarden extension policy once reviewed.
 
         Private-network navigation is disabled by default. Only trusted internal
-        Nest instances such as camofox-general may opt in so Hermes browser tools
-        can reach `.eyrie` sites; this is not a secure-browser cutover and does
-        not authorize cloud metadata or credential-service access.
+        Nest instances such as camofox-general and camofox-secure may opt in so
+        approved browser paths can reach `.eyrie` sites; this is not a
+        secure-browser production cutover and does not authorize cloud metadata
+        or credential-service access.
 
   profile-storage:
     apiVersion: v1
