@@ -364,31 +364,31 @@ resources:
           enableWebsockets: true
           services:
             - name: "%{nest::kubernetes::service}"
-              port: "%{lookup('vnc_port')}"
+              port: "%{alias('vnc_port')}"
         - conditions:
             - prefix: /app/
           enableWebsockets: true
           services:
             - name: "%{nest::kubernetes::service}"
-              port: "%{lookup('vnc_port')}"
+              port: "%{alias('vnc_port')}"
         - conditions:
             - prefix: /core/
           enableWebsockets: true
           services:
             - name: "%{nest::kubernetes::service}"
-              port: "%{lookup('vnc_port')}"
+              port: "%{alias('vnc_port')}"
         - conditions:
             - prefix: /vendor/
           enableWebsockets: true
           services:
             - name: "%{nest::kubernetes::service}"
-              port: "%{lookup('vnc_port')}"
+              port: "%{alias('vnc_port')}"
         - conditions:
             - prefix: /websockify
           enableWebsockets: true
           services:
             - name: "%{nest::kubernetes::service}"
-              port: "%{lookup('vnc_port')}"
+              port: "%{alias('vnc_port')}"
         - conditions:
             - prefix: /
           enableWebsockets: true
