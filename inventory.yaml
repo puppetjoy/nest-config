@@ -14,12 +14,12 @@ groups:
   - name: 'puppet-server'
     config:
       ssh:
-        # Legacy Puppet code deploy still connects to the puppet-server host
-        # as root. Keep this first because Bolt merges duplicate PuppetDB
-        # target names in inventory order; later Gentoo/workstation group
-        # membership must not override this deploy-only bootstrap path.
-        user: 'root'
-        private-key: '~/.ssh/id_ed25519'
+        # Legacy Puppet code deploy connects over the same worker-safe
+        # unprivileged SSH transport as other Nest hosts, then uses Bolt
+        # _run_as/root escalation for r10k on the target. Keep this group
+        # before Gentoo because Bolt merges duplicate PuppetDB target names
+        # in inventory order.
+        user: 'joy'
     targets:
       - _plugin: puppetdb
         query: "resources[certname] { type = 'Class' and title = 'Nest::Service::Puppet' limit 1 }"
