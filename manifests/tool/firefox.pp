@@ -6,9 +6,13 @@
 # contract.  Persistent profile/session state remains a Kubernetes PVC mounted
 # by the workload, not baked into the image.
 class nest::tool::firefox {
-  contain nest::base::certs
   contain nest::gui::firefox
+  contain nest::base::certs
   contain nest::gui::fonts
+
+  # Firefox owns libnssckbi.so in the image; apply the p11-kit trust-store
+  # replacement after the package so Firefox uses the Eyrie/Nest CA bundle.
+  Class['nest::gui::firefox'] -> Class['nest::base::certs']
 
   nest::lib::package { [
     'dev-libs/openssl',
