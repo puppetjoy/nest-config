@@ -12,15 +12,26 @@ the same visible Firefox session Joy sees.
 - deploy plan: `plans/eyrie/ai/deploy_firefox.yaml`
 - service marker: `manifests/service/firefox.pp`
 - public operator URL: `https://browser.eyrie/`
-- upstream image: `docker.io/kasmweb/firefox:1.18.0`
+- Nest image: `registry.gitlab.joyfullee.me/nest/tools/firefox:latest`
+- build recipe: `manifests/tool/firefox.pp`, `plans/build/firefox.pp`, and
+  `data/build/Gentoo/firefox/firefox.yaml`
 - private automation attachment: Firefox Remote Debugging on the in-cluster
   `firefox` Service port `9222`, with no public CDP/automation ingress
 
-The app exposes the KasmVNC/noVNC Firefox UI through a Contour `HTTPProxy` with
-websocket support. It deliberately exposes no Camofox REST API, public CDP,
-WebDriver, Marionette, raw VNC credentials, cookies, storage, request headers,
-screenshots of secret pages, vault data, payment/address details, or direct
-final-purchase authority to models.
+The app exposes a browser-accessible noVNC Firefox UI through a Contour
+`HTTPProxy` with websocket support. It deliberately exposes no Camofox REST API,
+public CDP, WebDriver, Marionette, raw VNC credentials, cookies, storage,
+request headers, screenshots of secret pages, vault data, payment/address
+details, or direct final-purchase authority to models.
+
+The Nest image uses Portage Firefox via `nest::gui::firefox`, Eyrie/Nest trust
+roots via `nest::base::certs`, and Joy's font set via `nest::gui::fonts`. Gentoo
+does not currently provide a packaged KasmVNC ebuild in the local Portage tree,
+so this first Nest-owned image uses the closest source-managed equivalent:
+package-managed noVNC + websockify + x11vnc on the same public 6901 HTTPS
+operator port. The TODO for a later image iteration is a proper source-built
+KasmVNC component if parity testing shows the noVNC/x11vnc equivalent is not
+sufficient.
 
 State lives in a durable `firefox-profile` PVC mounted at `/home/kasm-user` so
 Joy login state, Firefox profile state, and Bitwarden extension state can survive
@@ -36,8 +47,8 @@ or credentials.
 The existing Chrome/Kasm `secure-browser` workload and `secure-browser-cdp.eyrie`
 remain source-managed for rollback only. When the product target is
 `browser.eyrie` Firefox, Hermes secure-browser tools must bind to
-`deployment/firefox`, verify the live workload is `kasmweb/firefox`, and fail
-closed if they are pointed at `deployment/secure-browser` or
+`deployment/firefox`, verify the live workload is the Nest Firefox image, and
+fail closed if they are pointed at `deployment/secure-browser` or
 `secure-browser-cdp.eyrie`.
 
 ## Automation bridge options
@@ -89,7 +100,7 @@ port-forward`. The tool refuses to operate unless all requested `browser.eyrie`
 identity checks pass:
 
 - configured workload is `deployment/firefox`
-- live image matches `kasmweb/firefox`
+- live image starts with `registry.gitlab.joyfullee.me/nest/tools/firefox`
 - app label identifies `firefox`
 - configured workload/URL is not legacy `deployment/secure-browser` or
   `secure-browser-cdp.eyrie`
@@ -143,9 +154,41 @@ narrow private bridge/sidecar with backend-neutral primitives:
 This bridge should be private to the cluster/profile runtime, not a public
 `browser.eyrie` route. `browser.eyrie` should remain the visible Kasm UI.
 
+## Image build and validation
+
+The Firefox image follows the existing Nest tool-image pattern:
+
+- `manifests/tool/firefox.pp` applies `nest::gui::firefox`, `nest::gui::fonts`,
+  `nest::base::certs`, and the package-managed noVNC/websockify/x11vnc wrapper
+- `data/build/Gentoo/firefox/firefox.yaml` selects the build class for
+  `build firefox zen5 ...`
+- `plans/build/firefox.pp` wraps `nest::build::tool`, commits the image with
+  `CMD=/usr/local/bin/nest-firefox-browser`, and runs a headless Firefox smoke
+  test inside the build container
+- `files/firefox-browser/nest-firefox-browser.sh` starts Xvfb, x11vnc,
+  websockify/noVNC on 6901, and Portage Firefox with the existing `APP_ARGS` and
+  `LAUNCH_URL` workload environment contract
+
+Build/deploy should happen before the KubeCM cutover is accepted:
+
+```sh
+bin/build firefox zen5 deploy=true registry="$CI_REGISTRY" \
+  registry_username="$CI_REGISTRY_USER" \
+  registry_password_var=CI_REGISTRY_PASSWORD
+bolt plan run nest::eyrie::ai::deploy_firefox
+```
+
+After rollout, rerun the ^1364 browser.eyrie matrix and compare each row against
+the validated upstream `docker.io/kasmweb/firefox:1.18.0` baseline. A regression
+in operator reachability, persistent profile state, Bitwarden/Joy takeover,
+sanitized secure-browser actions, owner-only evidence routing, or final-purchase
+negative gates blocks declaring parity.
+
 ## Future image milestone
 
-The upstream `kasmweb/firefox:1.18.0` canary is intentionally narrow. A future
-`nest/tools/firefox` image can use Joy's Portage Firefox, fonts, CA trust,
-KasmVNC integration, and extension/native-helper packaging once the upstream
-canary proves the product shape and bridge contract.
+The upstream `kasmweb/firefox:1.18.0` canary proved the product shape. The first
+Nest `nest/tools/firefox` image now supplies Joy's Portage Firefox, fonts, and CA
+trust with a source-managed noVNC/websockify/x11vnc equivalent for KasmVNC's
+observable web-VNC role. If parity is not sufficient, replace that wrapper with a
+source-built KasmVNC component in a later image revision rather than returning to
+the upstream image as the final state.

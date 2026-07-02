@@ -1,0 +1,16 @@
+---
+nest::classes:
+  - 'nest::tool::firefox'
+
+# The authority-free tool-image catalog still instantiates class nest, whose
+# eyaml key parameter is required even though this image does not manage secret
+# material. Use a build-local placeholder rather than requiring private key data
+# in the browser image build.
+nest::eyaml_public_key: 'tool-image-build-placeholder'
+
+# Firefox secure-browser tool image for browser.eyrie.
+#
+# The image is intentionally authority-free: no Joy profile state, cookies,
+# Bitwarden vault data, checkout/payment details, SSH keys, kubeconfigs, or
+# tokens are baked into the image.  Kubernetes mounts the persistent browser
+# profile separately at runtime.

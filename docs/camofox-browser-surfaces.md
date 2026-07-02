@@ -33,9 +33,12 @@ packages expose the same `camofox-browser` executable and stale refreshed images
 can otherwise keep serving the old scoped runtime.
 
 The image remains authority-free: no cookies, profile state, kubeconfigs, SSH
-keys, tokens, or Joy browser data are baked into it. It may still carry the
-public Bitwarden XPI cache for future experiments, but the singleton Camofox API
-does not enable a persistent secure-browser profile or final-purchase authority.
+keys, tokens, or Joy browser data are baked into it. It includes Joy's managed
+Nest font set through `nest::gui::fonts` so standard-browser screenshots render
+with the same baseline fonts as the Firefox secure-browser image. It may still
+carry the public Bitwarden XPI cache for future experiments, but the singleton
+Camofox API does not enable a persistent secure-browser profile or final-purchase
+authority.
 
 ## KubeCM app model
 

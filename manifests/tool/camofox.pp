@@ -9,6 +9,7 @@ class nest::tool::camofox (
   String $bitwarden_extension_url  = 'https://addons.mozilla.org/firefox/downloads/latest/bitwarden-password-manager/latest.xpi',
   String $bitwarden_extension_path = '/opt/nest/camofox/extensions/bitwarden.xpi',
 ) {
+  include nest::gui::fonts
   include 'nodejs'
 
   nest::lib::package { [
