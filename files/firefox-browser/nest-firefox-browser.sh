@@ -110,14 +110,13 @@ resize_firefox_windows_once() {
     target_height="$fallback_height"
   fi
 
-  window_ids=$(xdotool search --onlyvisible --class firefox 2>/dev/null || true)
+  window_ids=$(xdotool search --onlyvisible --classname Navigator 2>/dev/null || true)
   [ -n "$window_ids" ] || return 1
 
-  # Firefox extension panels and other chrome popups can also have the firefox
-  # WM_CLASS.  Resizing every visible firefox-class window makes the extensions
-  # menu flash closed before Joy can move the pointer into it.  Pick the largest
-  # visible Firefox window as the browser surface, then skip no-op resizes so
-  # the steady-state watcher does not disturb open chrome popups.
+  # Firefox extension panels and other chrome popups use WM_CLASS firefox but not
+  # WM_CLASS Navigator.  Only inspect Navigator top-level browser windows; even
+  # enumerating the transient popup windows from the steady-state watcher can
+  # make the extensions menu collapse before Joy can move the pointer into it.
   browser_window_id=
   browser_window_area=0
   for window_id in $window_ids; do
