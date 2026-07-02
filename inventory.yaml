@@ -11,6 +11,22 @@ features:
   - puppet-agent
 
 groups:
+  - name: 'puppet-server'
+    config:
+      ssh:
+        # Legacy Puppet code deploy still connects to the puppet-server host
+        # as root. Keep this first because Bolt merges duplicate PuppetDB
+        # target names in inventory order; later Gentoo/workstation group
+        # membership must not override this deploy-only bootstrap path.
+        user: 'root'
+        private-key: '~/.ssh/id_ed25519'
+    targets:
+      - _plugin: puppetdb
+        query: "resources[certname] { type = 'Class' and title = 'Nest::Service::Puppet' limit 1 }"
+        target_mapping:
+          name: certname
+          uri: facts.fqdn
+
   - name: 'gentoo'
     config:
       ssh:
@@ -48,21 +64,6 @@ groups:
     targets:
       - _plugin: puppetdb
         query: "inventory[certname] { facts.osfamily = 'windows' }"
-        target_mapping:
-          name: certname
-          uri: facts.fqdn
-
-  - name: 'puppet-server'
-    config:
-      ssh:
-        # Legacy Puppet code deploy still connects to the puppet-server host
-        # as root. Keep that exception target-scoped so normal Nest host
-        # Puppet runs use the worker-safe joy+ssh-agent transport above.
-        user: 'root'
-        private-key: '~/.ssh/id_ed25519'
-    targets:
-      - _plugin: puppetdb
-        query: "resources[certname] { type = 'Class' and title = 'Nest::Service::Puppet' limit 1 }"
         target_mapping:
           name: certname
           uri: facts.fqdn
