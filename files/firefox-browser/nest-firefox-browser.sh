@@ -85,21 +85,58 @@ firefox \
   "$LAUNCH_URL" &
 firefox_pid=$!
 
+resize_firefox_windows_once() {
+  fallback_width="$1"
+  fallback_height="$2"
+
+  display_geometry=$(xdotool getdisplaygeometry 2>/dev/null || true)
+  if [ -n "$display_geometry" ]; then
+    # shellcheck disable=SC2086
+    set -- $display_geometry
+    target_width="$1"
+    target_height="$2"
+
+    # KasmVNC/Xvnc can report the initial width one pixel smaller than the
+    # requested geometry. Keep the launch size for that off-by-one startup case,
+    # but honor real client resize events in either direction.
+    if [ "$target_width" -lt "$FIREFOX_WIDTH" ] && [ $((FIREFOX_WIDTH - target_width)) -le 1 ]; then
+      target_width="$FIREFOX_WIDTH"
+    fi
+    if [ "$target_height" -lt "$FIREFOX_HEIGHT" ] && [ $((FIREFOX_HEIGHT - target_height)) -le 1 ]; then
+      target_height="$FIREFOX_HEIGHT"
+    fi
+  else
+    target_width="$fallback_width"
+    target_height="$fallback_height"
+  fi
+
+  window_ids=$(xdotool search --onlyvisible --class firefox 2>/dev/null || true)
+  [ -n "$window_ids" ] || return 1
+  for window_id in $window_ids; do
+    xdotool windowmove "$window_id" 0 0 windowsize "$window_id" "$target_width" "$target_height" 2>/dev/null || true
+  done
+}
+
 # Without a full desktop session/window manager, Firefox may keep its default
-# first-run window geometry.  Resize the top-level window to the KasmVNC
-# framebuffer. KasmVNC, not noVNC scaling, owns browser-window resizing from
-# there so Joy sees the same unscaled surface as the upstream kasmweb image.
+# first-run window geometry and will not automatically grow when KasmVNC accepts
+# a client-side SetDesktopSize resize. Keep the top-level Firefox window pinned
+# to the current KasmVNC framebuffer so both shrink and grow browser-window
+# resizes behave like the upstream kasmweb image instead of leaving black unused
+# desktop area after the viewport is expanded.
 if command -v xdotool >/dev/null 2>&1; then
   for _ in 1 2 3 4 5 6 7 8 9 10; do
-    window_ids=$(xdotool search --onlyvisible --class firefox 2>/dev/null || true)
-    if [ -n "$window_ids" ]; then
-      for window_id in $window_ids; do
-        xdotool windowmove "$window_id" 0 0 windowsize "$window_id" "$FIREFOX_WIDTH" "$FIREFOX_HEIGHT" 2>/dev/null || true
-      done
+    if resize_firefox_windows_once "$FIREFOX_WIDTH" "$FIREFOX_HEIGHT"; then
       break
     fi
     sleep 1
   done
+
+  (
+    while kill -0 "$firefox_pid" 2>/dev/null; do
+      resize_firefox_windows_once "$FIREFOX_WIDTH" "$FIREFOX_HEIGHT" || true
+      sleep "${FIREFOX_RESIZE_POLL_SECONDS:-1}"
+    done
+  ) &
 fi
 
 wait "$firefox_pid"

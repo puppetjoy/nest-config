@@ -79,3 +79,17 @@ install -m 0755 "$src_dir/xorg.build/bin/Xvnc" /opt/kasmweb/bin/Xvnc
 rm -rf /opt/kasmweb/share/kasmvnc/www
 mkdir -p /opt/kasmweb/share/kasmvnc
 cp -a "$src_dir/kasmweb/dist" /opt/kasmweb/share/kasmvnc/www
+
+# `browser.eyrie` should behave like the KasmVNC baseline even for clients that
+# have old noVNC/KasmVNC origin settings cached from earlier experiments. Force
+# remote framebuffer resizing before the bundled client module starts so a stale
+# `resize=scale` localStorage value cannot reintroduce client-side enlargement.
+if [ -f /opt/kasmweb/share/kasmvnc/www/index.html ] && ! grep -q 'nestResizeDefault' /opt/kasmweb/share/kasmvnc/www/index.html; then
+  python3 - <<'PY'
+from pathlib import Path
+path = Path('/opt/kasmweb/share/kasmvnc/www/index.html')
+text = path.read_text()
+script = """<script id=\"nestResizeDefault\">try{localStorage.setItem('resize','remote')}catch(e){}</script>"""
+path.write_text(text.replace('<script type="module"', script + '<script type="module"', 1))
+PY
+fi
