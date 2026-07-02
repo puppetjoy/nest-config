@@ -11,11 +11,11 @@ Task: `t_7a68ae00` / Agent Request `^1367`.
 
 ## Source and rollout summary
 
-- Nest config `origin/main` is at `e1edca05` for the final evidence commit in this validation pass.
+- Nest config `origin/main` contains the Firefox cutover commits and this evidence document; the latest Puppet code deployment verified `fd15c390` before this wording-only cleanup.
 - `browser.eyrie` now uses `registry.gitlab.joyfullee.me/nest/tools/firefox:latest` with `imagePullPolicy: Always`.
 - The live Firefox pod image is `registry.gitlab.joyfullee.me/nest/tools/firefox@sha256:8fa99968a238cd61bf0fa92fc9a943d26038c2d8a4d99d5b2914a1489143a5e3`.
 - The live Camofox deployment uses `registry.gitlab.joyfullee.me/nest/tools/camofox:latest` with `imagePullPolicy: Always`.
-- Puppet code deploy succeeded to legacy/test/prod OpenVox at `e1edca05`; owl applied the runtime catalog at `d2ef5c09` before the final evidence-only documentation commit.
+- Puppet code deploy succeeded to legacy/test/prod OpenVox at `fd15c390`; owl applied the runtime catalog at `d2ef5c09` before the final evidence-only documentation commits.
 
 ## Findings fixed during validation
 
@@ -30,7 +30,7 @@ Task: `t_7a68ae00` / Agent Request `^1367`.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Static validation | Verify source syntax/lint | `sh -n files/firefox-browser/nest-firefox-browser.sh`; `pdk validate`; `git diff --check` | All pass | All passed before each commit | PASS | task run output | No live browser access |
 | Build and publish Firefox image | Build Nest-owned Portage Firefox/noVNC image | `./bin/build firefox zen5 emerge_default_opts="--jobs=4 --load-average=12" makeopts="-j8" deploy=true` | Build, smoke test, commit, and registry push succeed | Build applied catalog, smoke-tested Firefox 140.9.0esr, committed image config `1a64d79e...`, and pushed `registry.gitlab.joyfullee.me/nest/tools/firefox:latest` | PASS | task run output | No browser secrets in image |
-| Puppet code deploy | Deploy source to legacy/test/prod Puppet/OpenVox and owl | `./bin/bolt-wrapper plan run nest::puppet::deploy --stream`; `./bin/bolt-wrapper plan run nest::puppet::run targets=owl --stream` | Code servers and owl converge to latest commit | legacy/test/prod verified `d2ef5c09`; owl applied `d2ef5c09` with 0 failures | PASS | task run output | Inventory-backed Bolt path |
+| Puppet code deploy | Deploy source to legacy/test/prod Puppet/OpenVox and owl | `./bin/bolt-wrapper plan run nest::puppet::deploy --stream`; `./bin/bolt-wrapper plan run nest::puppet::run targets=owl --stream` | Code servers and owl converge to latest commit | legacy/test/prod verified `fd15c390`; owl applied runtime cutover catalog `d2ef5c09` with 0 failures before the evidence-only docs commits | PASS | task run output | Inventory-backed Bolt path |
 | KubeCM Firefox deploy | Deploy browser.eyrie app from source | `./bin/bolt-wrapper plan run nest::eyrie::ai::deploy_firefox --stream`; `kubectl rollout status deploy/firefox` | Helm upgrade succeeds and pod ready | Helm revision 10 deployed; deployment ready 1/1 | PASS | task run output | Source-managed KubeCM path |
 | Deployment identity | Prove secure browser binds to Nest Firefox workload | `secure_browser_status`; `kubectl -n ai get deploy/firefox` | `deployment/firefox`, `nest/tools/firefox`, backend identity ok | `backend_identity.ok=true`, expected image regex `nest/tools/firefox`, workload `deployment/firefox`, ready replicas 1/1 | PASS | secure_browser_status result | No raw CDP URL returned |
 | Camofox font-bearing image | Verify Camofox remains on Nest image with font support | `kubectl -n ai get deploy/camofox`; prior build/deploy evidence in task run | Camofox on Nest image and ready | `deployment/camofox` ready 1/1, image `registry.gitlab.joyfullee.me/nest/tools/camofox:latest`, pull policy Always | PASS | task run output | No browser secrets |
