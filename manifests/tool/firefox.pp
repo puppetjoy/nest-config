@@ -43,6 +43,7 @@ class nest::tool::firefox (
     'net-misc/wget',
     'sys-libs/pam',
     'x11-apps/xauth',
+    'x11-wm/openbox',
     'x11-apps/xkbcomp',
     'x11-libs/libICE',
     'x11-libs/libSM',
