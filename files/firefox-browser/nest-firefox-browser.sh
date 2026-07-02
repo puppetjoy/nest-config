@@ -2,7 +2,7 @@
 set -eu
 
 export DISPLAY="${DISPLAY:-:1}"
-export HOME="${HOME:-/home/kasm-user}"
+export HOME="${FIREFOX_HOME:-/home/kasm-user}"
 export LAUNCH_URL="${LAUNCH_URL:-about:blank}"
 export APP_ARGS="${APP_ARGS:-}"
 # KubeCM still sets the historical VNCOPTIONS variable from the upstream Kasm
