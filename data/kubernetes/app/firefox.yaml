@@ -265,7 +265,7 @@ resources:
         - conditions:
             - exact: /
           requestRedirectPolicy:
-            path: /index.html
+            path: /vnc.html
             statusCode: 302
         - conditions:
             - prefix: /
