@@ -75,7 +75,7 @@ resources:
       namespace: "%{nest::kubernetes::namespace}"
     data:
       README.txt: |-
-        Firefox/noVNC policy for the persistent browser.eyrie secure-browser
+        Firefox/KasmVNC policy for the persistent browser.eyrie secure-browser
         canary. The public Bitwarden Firefox extension is force-installed via
         AMO using Firefox enterprise policy; this ConfigMap does not contain
         Joy vault state, browser profile state, credentials, payment/address
@@ -90,13 +90,13 @@ resources:
       namespace: "%{nest::kubernetes::namespace}"
     data:
       README.txt: |-
-        Reset/revoke procedure for the browser.eyrie Firefox/noVNC profile:
+        Reset/revoke procedure for the browser.eyrie Firefox/KasmVNC profile:
         1. Stop the live session: kubectl -n %{nest::kubernetes::namespace} scale deployment/%{nest::kubernetes::service} --replicas=0
-        2. Wipe persistent Firefox/noVNC user state: kubectl -n %{nest::kubernetes::namespace} delete pvc %{nest::kubernetes::service}-profile
+        2. Wipe persistent Firefox/KasmVNC user state: kubectl -n %{nest::kubernetes::namespace} delete pvc %{nest::kubernetes::service}-profile
         3. Recreate managed resources: bolt plan run nest::eyrie::ai::deploy_firefox
         4. Joy should re-enter any required login and Bitwarden state directly in the visible browser UI.
 
-        This canary exposes only the Nest Firefox/noVNC operator UI at
+        This canary exposes only the Nest Firefox/KasmVNC operator UI at
         https://%{lookup('operator_fqdn')}/ plus an in-cluster Firefox Remote
         Debugging port for the reviewed Hermes secure-browser bridge. It does
         not expose raw automation endpoints on public ingress, raw VNC

@@ -18,20 +18,18 @@ the same visible Firefox session Joy sees.
 - private automation attachment: Firefox Remote Debugging on the in-cluster
   `firefox` Service port `9222`, with no public CDP/automation ingress
 
-The app exposes a browser-accessible noVNC Firefox UI through a Contour
+The app exposes a browser-accessible KasmVNC Firefox UI through a Contour
 `HTTPProxy` with websocket support. It deliberately exposes no Camofox REST API,
 public CDP, WebDriver, Marionette, raw VNC credentials, cookies, storage,
 request headers, screenshots of secret pages, vault data, payment/address
 details, or direct final-purchase authority to models.
 
 The Nest image uses Portage Firefox via `nest::gui::firefox`, Eyrie/Nest trust
-roots via `nest::base::certs`, and Joy's font set via `nest::gui::fonts`. Gentoo
-does not currently provide a packaged KasmVNC ebuild in the local Portage tree,
-so this first Nest-owned image uses the closest source-managed equivalent:
-package-managed noVNC + websockify + x11vnc on the same public 6901 HTTPS
-operator port. The TODO for a later image iteration is a proper source-built
-KasmVNC component if parity testing shows the noVNC/x11vnc equivalent is not
-sufficient.
+roots via `nest::base::certs`, Joy's font set via `nest::gui::fonts`, and
+source-built KasmVNC from the pinned upstream `kasmtech/KasmVNC` revision. The
+KasmVNC checkout and build are source-managed with `nest::lib::src_repo` and
+`nest::lib::build`; native Puppet file resources install the resulting `Xvnc`
+binary and built web client into `/opt/kasmweb` after the build completes.
 
 The startup wrapper disables Firefox's Linux process sandboxes inside this
 Kubernetes container because Portage Firefox's content processes otherwise
@@ -166,14 +164,17 @@ This bridge should be private to the cluster/profile runtime, not a public
 The Firefox image follows the existing Nest tool-image pattern:
 
 - `manifests/tool/firefox.pp` applies `nest::gui::firefox`, `nest::gui::fonts`,
-  `nest::base::certs`, and the package-managed noVNC/websockify/x11vnc wrapper
+  `nest::base::certs`, and source-built KasmVNC via `nest::lib::src_repo` and
+  `nest::lib::build`
 - `data/build/Gentoo/firefox/firefox.yaml` selects the build class for
   `build firefox zen5 ...`
 - `plans/build/firefox.pp` wraps `nest::build::tool`, commits the image with
   `CMD=/usr/local/bin/nest-firefox-browser`, and runs a headless Firefox smoke
   test inside the build container
-- `files/firefox-browser/nest-firefox-browser.sh` starts Xvfb, x11vnc,
-  websockify/noVNC on 6901, and Portage Firefox with the existing `APP_ARGS` and
+- `files/firefox-browser/build-kasmvnc.sh` builds the pinned KasmVNC checkout
+  and its web client into `/opt/kasmweb` from the source-managed checkout
+- `files/firefox-browser/nest-firefox-browser.sh` starts source-built KasmVNC
+  `Xvnc` on 6901 and Portage Firefox with the existing `APP_ARGS` and
   `LAUNCH_URL` workload environment contract
 
 Build/deploy should happen before the KubeCM cutover is accepted:
@@ -191,11 +192,12 @@ in operator reachability, persistent profile state, Bitwarden/Joy takeover,
 sanitized secure-browser actions, owner-only evidence routing, or final-purchase
 negative gates blocks declaring parity.
 
-## Future image milestone
+## KasmVNC source-build notes
 
-The upstream `kasmweb/firefox:1.18.0` canary proved the product shape. The first
-Nest `nest/tools/firefox` image now supplies Joy's Portage Firefox, fonts, and CA
-trust with a source-managed noVNC/websockify/x11vnc equivalent for KasmVNC's
-observable web-VNC role. If parity is not sufficient, replace that wrapper with a
-source-built KasmVNC component in a later image revision rather than returning to
-the upstream image as the final state.
+The upstream `kasmweb/firefox:1.18.0` canary proved the product shape. The Nest
+`nest/tools/firefox` image now supplies Joy's Portage Firefox, fonts, CA trust,
+Bitwarden extension policy, and a pinned source-built KasmVNC component. KasmVNC
+continues to own browser-window/framebuffer behavior rather than relying on
+noVNC client scaling. Any future parity regression should be fixed in this
+source-managed KasmVNC/image path rather than returning to the upstream image as
+the final state.

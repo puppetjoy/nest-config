@@ -12,5 +12,7 @@ nest::eyaml_public_key: 'tool-image-build-placeholder'
 #
 # The image is intentionally authority-free: no Joy profile state, cookies,
 # Bitwarden vault data, checkout/payment details, SSH keys, kubeconfigs, or
-# tokens are baked into the image.  Kubernetes mounts the persistent browser
+# tokens are baked into the image. Kubernetes mounts the persistent browser
 # profile separately at runtime.
+nest::tool::firefox::kasmvnc_revision: 'v1.4.0'
+nest::tool::firefox::kasmvnc_xorg_version: '1.20.14'

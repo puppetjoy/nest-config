@@ -1,4 +1,4 @@
-# @summary Build Firefox/noVNC browser.eyrie tool image
+# @summary Build Firefox/KasmVNC browser.eyrie tool image
 #
 # Use bin/build script to run this plan.
 #
@@ -44,12 +44,12 @@ plan nest::build::firefox (
     init                => $init,
     makeopts            => $makeopts,
     qemu_user_targets   => $qemu_user_targets,
-    refresh               => $refresh,
-    registry              => $registry,
-    registry_username     => $registry_username,
-    registry_password     => $registry_password,
+    refresh             => $refresh,
+    registry            => $registry,
+    registry_username   => $registry_username,
+    registry_password   => $registry_password,
     registry_password_var => $registry_password_var,
-    image_changes         => [
+    image_changes       => [
       'CMD=/usr/local/bin/nest-firefox-browser',
       'WORKDIR=/home/kasm-user',
     ],
