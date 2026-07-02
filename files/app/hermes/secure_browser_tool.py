@@ -129,6 +129,7 @@ POST_PURCHASE_CONFIRMATION_RE = re.compile(r"thank\s*you|order\s+(?:confirmation
 AMAZON_ORDERS_RE = re.compile(r"/gp/(?:css/)?order-history|/gp/your-account/order|/your-orders|/order-details|orderID=", re.IGNORECASE)
 SAFE_CHECKOUT_SENSITIVE_LABEL_RE = re.compile(r"shipping\s+(speed|option|method)|delivery\s+(option|date|window)|gift(?!\s*card\s*(number|code))|gift\s+card\s+balance|use\s+a\s+gift\s+card|coupon|promo|promotion|claim\s+code|payment\s+(summary|method|option)|paying\s+with|quantity|qty|delete|remove|one[-\s]?time|subscribe|subscription|cart", re.IGNORECASE)
 MUTATING_QUERY_RE = re.compile(r"\b(click|submit|fetch|XMLHttpRequest|sendBeacon|localStorage|sessionStorage|indexedDB|cookie|setAttribute|removeAttribute|appendChild|removeChild|innerHTML\s*=|location\s*=|open\s*\()\b", re.IGNORECASE)
+MUTATING_ASSIGNMENT_RE = re.compile(r"(?<![=!<>])(?:\+\+|--|[-+*/%&|^]?=(?![=>]))")
 
 
 FINAL_PURCHASE_CLICK_JS = r"""
@@ -2606,7 +2607,7 @@ def _safe_read_only_query(value: Any) -> str:
         raise ValueError("expression is required")
     if len(expression) > 2000:
         raise ValueError("expression is too long")
-    if MUTATING_QUERY_RE.search(expression):
+    if MUTATING_QUERY_RE.search(expression) or MUTATING_ASSIGNMENT_RE.search(expression):
         raise ValueError("expression contains mutating, network, storage, cookie, or navigation tokens")
     return expression
 
