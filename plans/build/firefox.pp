@@ -18,7 +18,7 @@
 # @param registry_password_var Environment variable for registry password
 plan nest::build::firefox (
   String            $container,
-  String            $cpu                   = 'zen5',
+  String            $cpu                   = 'haswell',
   Boolean           $build                 = true,
   Boolean           $deploy                = false,
   Optional[String]  $emerge_default_opts   = undef,
@@ -37,6 +37,7 @@ plan nest::build::firefox (
     cpu                 => $cpu,
     tool                => 'firefox',
     tag                 => 'latest',
+    base_variant        => 'workstation',
     build               => $build,
     deploy              => $deploy,
     emerge_default_opts => $emerge_default_opts,

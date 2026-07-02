@@ -8,7 +8,10 @@ nest::classes:
 # in the browser image build.
 nest::eyaml_public_key: 'tool-image-build-placeholder'
 
-# Firefox secure-browser tool image for browser.eyrie.
+# Firefox secure-browser tool image for browser.eyrie. The build plan starts
+# from nest/stage1/workstation:haswell so the image inherits Nest's Portage
+# Firefox, xmonad, fonts, and GTK theme stack before this class adds the
+# browser.eyrie-specific KasmVNC/runtime glue.
 #
 # The image is intentionally authority-free: no Joy profile state, cookies,
 # Bitwarden vault data, checkout/payment details, SSH keys, kubeconfigs, or

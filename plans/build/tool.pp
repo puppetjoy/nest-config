@@ -20,6 +20,7 @@
 # @param registry_username Username for registry
 # @param registry_password Password for registry
 # @param registry_password_var Environment variable for registry password
+# @param base_variant Stage1 variant used for a fresh tool image
 plan nest::build::tool (
   String            $container,
   String            $cpu,
@@ -39,6 +40,7 @@ plan nest::build::tool (
   Optional[String]  $registry_username     = lookup('nest::build::registry_username', default_value => undef),
   Optional[String]  $registry_password     = lookup('nest::build::registry_password', default_value => undef),
   String            $registry_password_var = 'NEST_REGISTRY_PASSWORD',
+  String            $base_variant          = 'server',
 ) {
   if ($emerge_default_opts and $emerge_default_opts =~ /\$/) or ($makeopts and $makeopts =~ /\$/) {
     fail('Build options must be passed already-expanded; literal shell substitutions such as $(nproc) are written to make.conf and break Portage')
@@ -73,7 +75,7 @@ plan nest::build::tool (
     if $refresh {
       $from_image = "${registry}/nest/tools/${tool}:${image_tag}"
     } else {
-      $from_image = "nest/stage1/server:${cpu}"
+      $from_image = "nest/stage1/${base_variant}:${cpu}"
     }
 
     run_command("podman rm -f ${container}", 'localhost', 'Stop and remove existing build container')

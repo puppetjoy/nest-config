@@ -32,7 +32,7 @@ mkdir -p \
 chmod 700 "$XDG_RUNTIME_DIR" "$HOME/.mozilla/firefox/nest-secure-browser" "$HOME/.vnc" || true
 
 kasmvnc_pid=
-openbox_pid=
+xmonad_pid=
 firefox_pid=
 
 if [ ! -f "$HOME/.vnc/self.pem" ]; then
@@ -48,7 +48,7 @@ if [ ! -f "$HOME/.vnc/self.pem" ]; then
 fi
 
 cleanup() {
-  kill "$firefox_pid" "$openbox_pid" "$kasmvnc_pid" 2>/dev/null || true
+  kill "$firefox_pid" "$xmonad_pid" "$kasmvnc_pid" 2>/dev/null || true
 }
 trap cleanup INT TERM EXIT
 
@@ -75,22 +75,15 @@ for _ in 1 2 3 4 5 6 7 8 9 10; do
   sleep 1
 done
 
-# Run a tiny window manager so Firefox chrome popups (including the extensions
-# panel/Bitwarden entry point) get normal transient-window focus semantics.
-# Without a WM, the extension menu can collapse as soon as the pointer enters it.
-if command -v openbox >/dev/null 2>&1; then
-  mkdir -p /tmp/nest-firefox/openbox
-  cat > /tmp/nest-firefox/openbox/rc.xml <<'EOF'
-<openbox_config xmlns="http://openbox.org/3.4/rc">
-  <applications>
-    <application class="firefox">
-      <decor>no</decor>
-    </application>
-  </applications>
-</openbox_config>
-EOF
-  openbox --config-file /tmp/nest-firefox/openbox/rc.xml >/tmp/nest-firefox/openbox.log 2>&1 &
-  openbox_pid=$!
+# Run xmonad from the workstation base image so Firefox chrome popups (including
+# the extensions panel/Bitwarden entry point) get normal transient-window focus
+# semantics without introducing decorated window chrome.
+if command -v xmonad >/dev/null 2>&1; then
+  mkdir -p "$HOME/.xmonad" "${XDG_CONFIG_HOME:-$HOME/.config}/xmonad"
+  cp /opt/nest/firefox/xmonad.hs "$HOME/.xmonad/xmonad.hs"
+  cp /opt/nest/firefox/xmonad.hs "${XDG_CONFIG_HOME:-$HOME/.config}/xmonad/xmonad.hs"
+  xmonad >/tmp/nest-firefox/xmonad.log 2>&1 &
+  xmonad_pid=$!
   sleep 1
 fi
 

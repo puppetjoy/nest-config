@@ -1,8 +1,9 @@
 # Nest-owned Firefox/KasmVNC secure-browser tool image
 #
 # This image intentionally keeps Joy authority out of the image. It provides a
-# Portage Firefox runtime, source-built KasmVNC, Eyrie CA trust, Nest fonts, and
-# the web-VNC endpoint that matches the browser.eyrie service contract.
+# workstation-derived Portage Firefox/xmonad runtime, source-built KasmVNC, Eyrie
+# CA trust, Nest fonts, and the web-VNC endpoint that matches the browser.eyrie
+# service contract.
 # Persistent profile/session state remains a Kubernetes PVC mounted by the
 # workload, not baked into the image.
 class nest::tool::firefox (
@@ -12,14 +13,14 @@ class nest::tool::firefox (
   String $kasmvnc_revision         = 'v1.4.0',
   String $kasmvnc_xorg_version     = '1.20.14',
 ) {
-  contain nest::gui::firefox
   contain nest::base::certs
-  contain nest::gui::fonts
   include nodejs
 
-  # Firefox owns libnssckbi.so in the image; apply the p11-kit trust-store
-  # replacement after the package so Firefox uses the Eyrie/Nest CA bundle.
-  Class['nest::gui::firefox'] -> Class['nest::base::certs']
+  # The Firefox tool image is built from nest/stage1/workstation:haswell, which
+  # already carries Portage Firefox, xmonad, and the Nest font collection. Keep
+  # this class focused on browser.eyrie-specific KasmVNC glue, CA trust refresh,
+  # Bitwarden extension policy material, and the minimal fullscreen xmonad
+  # application config.
 
   nest::lib::package { [
     'dev-build/autoconf',
@@ -43,7 +44,6 @@ class nest::tool::firefox (
     'net-misc/wget',
     'sys-libs/pam',
     'x11-apps/xauth',
-    'x11-wm/openbox',
     'x11-apps/xkbcomp',
     'x11-libs/libICE',
     'x11-libs/libSM',
@@ -131,6 +131,13 @@ class nest::tool::firefox (
     require => File['/opt/nest/firefox/bin'],
   }
 
+  file { '/opt/nest/firefox/xmonad.hs':
+    ensure  => file,
+    mode    => '0644',
+    source  => 'puppet:///modules/nest/firefox-browser/xmonad.hs',
+    require => File['/opt/nest/firefox'],
+  }
+
   exec { 'install_firefox_bitwarden_extension':
     command => "/usr/bin/curl --fail --location --show-error --output ${bitwarden_extension_path} ${bitwarden_extension_url}",
     creates => $bitwarden_extension_path,
@@ -142,9 +149,8 @@ class nest::tool::firefox (
   }
 
   file { '/usr/lib64/firefox/distribution/extensions':
-    ensure  => directory,
-    mode    => '0755',
-    require => Class['nest::gui::firefox'],
+    ensure => directory,
+    mode   => '0755',
   }
 
   file { "/usr/lib64/firefox/distribution/extensions/${bitwarden_extension_id}.xpi":
