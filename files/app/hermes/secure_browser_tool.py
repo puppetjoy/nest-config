@@ -4154,6 +4154,11 @@ def _page_snapshot(max_text_chars: int = MAX_TEXT_CHARS, max_links: int = MAX_LI
         session_id = _attach(browser, target_id)
         url = str(_evaluate(browser, session_id, "location.href") or "")
         title = str(_evaluate(browser, session_id, "document.title") or "")
+        if _is_amazon_post_purchase_page(url, title):
+            result = _post_purchase_summary_from_browser(browser, session_id)
+            result["operation"] = "post_purchase_snapshot"
+            result["snapshot_note"] = "Amazon post-purchase/order-history pages return sanitized proof fields instead of raw visible text or interactive controls to avoid order, item, address, payment, and account disclosure. Complete visual proof remains owner-only to Joy."
+            return result
         if re.search(r"checkout|buy|payselect|ship|spc|review|ordering", " ".join([url, title]), re.IGNORECASE):
             result = _checkout_summary_from_browser(browser, session_id, max_controls=max_links)
             result["operation"] = "checkout_prep_snapshot"
@@ -4180,6 +4185,12 @@ def _query(expression: str) -> dict[str, Any]:
         session_id = _attach(browser, str(target_id))
         url = str(_evaluate(browser, session_id, "location.href") or page_info.get("url") or "")
         title = str(_evaluate(browser, session_id, "document.title") or page_info.get("title") or "")
+        if _is_amazon_post_purchase_page(url, title):
+            post_purchase = _post_purchase_summary_from_browser(browser, session_id)
+            post_purchase["operation"] = "post_purchase_query_summary"
+            post_purchase["query_policy"] = "secure_browser_query returns only sanitized post-purchase/order-history proof fields on Amazon order pages; raw page text, DOM, interactive controls, cookies, storage, request headers, order numbers, item titles, address, payment, and account details are not exposed."
+            post_purchase["requested_expression_blocked"] = True
+            return post_purchase
         if _is_amazon_checkoutish_page(url, title):
             checkout_review = _checkout_summary_from_browser(browser, session_id)
             return _checkout_query_summary_response(checkout_review, safe_expression, url=url, title=title)
