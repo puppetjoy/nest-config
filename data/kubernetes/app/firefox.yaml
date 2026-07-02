@@ -12,6 +12,9 @@ ingress_class: contour-compute
 node_role: compute
 image: docker.io/kasmweb/firefox:1.18.0
 launch_url: about:blank
+app_args: >-
+  --remote-debugging-address=0.0.0.0
+  --remote-debugging-port=9222
 vnc_options: '-disableBasicAuth'
 storage_class: owl-crypt
 profile_storage_size: 12Gi
@@ -93,14 +96,14 @@ resources:
         3. Recreate managed resources: bolt plan run nest::eyrie::ai::deploy_firefox
         4. Joy should re-enter any required login and Bitwarden state directly in the visible browser UI.
 
-        This canary intentionally exposes only the KasmVNC/noVNC operator UI at
-        https://%{lookup('operator_fqdn')}/. It does not expose CDP, WebDriver,
-        Marionette, raw VNC credentials, cookies, storage, request headers,
-        screenshots of secret pages, vault data, payment/address details, or
-        direct final-purchase authority to models. Current Hermes
-        secure_browser_* execution remains on the existing Chrome/Kasm CDP
-        backend until a narrow Firefox bridge is separately implemented,
-        reviewed, and parity-tested.
+        This canary exposes only the KasmVNC/noVNC operator UI at
+        https://%{lookup('operator_fqdn')}/ plus an in-cluster Firefox Remote
+        Debugging port for the reviewed Hermes secure-browser bridge. It does
+        not expose raw automation endpoints on public ingress, raw VNC
+        credentials, cookies, storage, request headers, screenshots of secret
+        pages, vault data, payment/address details, or direct final-purchase
+        authority to models. Hermes secure_browser_* execution must pass the
+        backend identity guard before it may attach to this Firefox workload.
 
   profile-storage:
     apiVersion: v1
@@ -178,9 +181,13 @@ resources:
                   value: "%{lookup('launch_url')}"
                 - name: KASM_RESTRICTED_FILE_CHOOSER
                   value: '1'
+                - name: APP_ARGS
+                  value: "%{lookup('app_args')}"
               ports:
                 - name: https
                   containerPort: 6901
+                - name: cdp
+                  containerPort: 9222
               readinessProbe:
                 exec:
                   command:
@@ -235,6 +242,9 @@ resources:
         - name: https
           port: 6901
           targetPort: https
+        - name: cdp
+          port: 9222
+          targetPort: cdp
 
   ingress:
     apiVersion: projectcontour.io/v1

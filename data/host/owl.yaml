@@ -204,6 +204,14 @@ nest::app::hermes::instances:
       CAMOFOX_URL: 'https://camofox.eyrie'
       CAMOFOX_GENERAL_URL: 'https://camofox.eyrie'
       CAMOFOX_GENERAL_OPERATOR_URL: 'https://camofox.eyrie'
+      SECURE_BROWSER_TARGET: 'browser.eyrie-firefox'
+      SECURE_BROWSER_WORKLOAD: 'deployment/firefox'
+      SECURE_BROWSER_EXPECTED_WORKLOAD: 'deployment/firefox'
+      SECURE_BROWSER_EXPECTED_IMAGE_RE: 'kasmweb/firefox'
+      SECURE_BROWSER_EXPECTED_APP_LABEL: 'firefox'
+      SECURE_BROWSER_FORBIDDEN_WORKLOAD_RE: 'deployment/secure-browser'
+      SECURE_BROWSER_FORBIDDEN_IMAGE_RE: 'kasmweb/chrome'
+      SECURE_BROWSER_PUBLIC_URL: 'https://browser.eyrie/'
       SECURE_BROWSER_OPERATOR_URL: 'https://browser.eyrie'
     voice_auto_tts: true
     stt_enabled: true
@@ -314,10 +322,17 @@ nest::app::hermes::instances:
     dashboard_theme: 'rose'
     google_workspace_enabled: true
     environment:
-      SECURE_BROWSER_CDP_URL: 'https://secure-browser-cdp.eyrie'
       CAMOFOX_URL: 'https://camofox.eyrie'
       CAMOFOX_GENERAL_URL: 'https://camofox.eyrie'
       CAMOFOX_GENERAL_OPERATOR_URL: 'https://camofox.eyrie'
+      SECURE_BROWSER_TARGET: 'browser.eyrie-firefox'
+      SECURE_BROWSER_WORKLOAD: 'deployment/firefox'
+      SECURE_BROWSER_EXPECTED_WORKLOAD: 'deployment/firefox'
+      SECURE_BROWSER_EXPECTED_IMAGE_RE: 'kasmweb/firefox'
+      SECURE_BROWSER_EXPECTED_APP_LABEL: 'firefox'
+      SECURE_BROWSER_FORBIDDEN_WORKLOAD_RE: 'deployment/secure-browser'
+      SECURE_BROWSER_FORBIDDEN_IMAGE_RE: 'kasmweb/chrome'
+      SECURE_BROWSER_PUBLIC_URL: 'https://browser.eyrie/'
       SECURE_BROWSER_OPERATOR_URL: 'https://browser.eyrie'
     voice_auto_tts: true
     stt_enabled: true

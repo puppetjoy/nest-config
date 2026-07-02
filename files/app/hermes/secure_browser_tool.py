@@ -35,7 +35,13 @@ from tools.registry import registry
 
 TOOLSET = "secure_browser"
 NAMESPACE = os.environ.get("SECURE_BROWSER_NAMESPACE", "ai")
-WORKLOAD = os.environ.get("SECURE_BROWSER_WORKLOAD", "deployment/secure-browser")
+SECURE_BROWSER_TARGET = os.environ.get("SECURE_BROWSER_TARGET", "browser.eyrie-firefox")
+WORKLOAD = os.environ.get("SECURE_BROWSER_WORKLOAD", "deployment/firefox")
+EXPECTED_WORKLOAD = os.environ.get("SECURE_BROWSER_EXPECTED_WORKLOAD", "deployment/firefox")
+EXPECTED_IMAGE_RE = os.environ.get("SECURE_BROWSER_EXPECTED_IMAGE_RE", r"kasmweb/firefox")
+EXPECTED_APP_LABEL = os.environ.get("SECURE_BROWSER_EXPECTED_APP_LABEL", "firefox")
+FORBIDDEN_WORKLOAD_RE = os.environ.get("SECURE_BROWSER_FORBIDDEN_WORKLOAD_RE", r"deployment/secure-browser")
+FORBIDDEN_IMAGE_RE = os.environ.get("SECURE_BROWSER_FORBIDDEN_IMAGE_RE", r"kasmweb/chrome")
 REMOTE_DEBUG_PORT = int(os.environ.get("SECURE_BROWSER_CDP_PORT", "9222"))
 CDP_ENDPOINT_URL = os.environ.get("SECURE_BROWSER_CDP_URL", "").rstrip("/")
 BROWSER_OWNER = os.environ.get("SECURE_BROWSER_OWNER", "shopping")
@@ -3227,6 +3233,87 @@ def _check_secure_browser() -> bool:
     return bool(CDP_ENDPOINT_URL) or shutil.which("kubectl") is not None
 
 
+def _kubectl_get_json(resource: str) -> dict[str, Any]:
+    cmd = ["kubectl", "-n", NAMESPACE, "get", resource, "-o", "json"]
+    env = os.environ.copy()
+    env.setdefault("HOME", "/home/joy")
+    proc = subprocess.run(cmd, check=False, text=True, capture_output=True, timeout=10, env=env)
+    if proc.returncode != 0:
+        raise RuntimeError(f"kubectl identity check failed for {resource}: {proc.stderr[-500:]}")
+    return json.loads(proc.stdout)
+
+
+def _backend_identity_from_deployment(data: dict[str, Any]) -> dict[str, Any]:
+    template = data.get("spec", {}).get("template", {})
+    metadata = template.get("metadata", {})
+    pod_spec = template.get("spec", {})
+    containers = pod_spec.get("containers") or []
+    images = [str(container.get("image") or "") for container in containers if isinstance(container, dict)]
+    return {
+        "name": str(data.get("metadata", {}).get("name") or ""),
+        "namespace": str(data.get("metadata", {}).get("namespace") or NAMESPACE),
+        "workload": WORKLOAD,
+        "images": images,
+        "labels": metadata.get("labels") or {},
+        "ready_replicas": data.get("status", {}).get("readyReplicas", 0),
+        "replicas": data.get("status", {}).get("replicas", 0),
+        "observed_generation": data.get("status", {}).get("observedGeneration"),
+    }
+
+
+def _backend_identity_status() -> dict[str, Any]:
+    status: dict[str, Any] = {
+        "target": SECURE_BROWSER_TARGET,
+        "namespace": NAMESPACE,
+        "workload": WORKLOAD,
+        "expected_workload": EXPECTED_WORKLOAD,
+        "expected_image_re": EXPECTED_IMAGE_RE,
+        "expected_app_label": EXPECTED_APP_LABEL,
+        "forbidden_workload_re": FORBIDDEN_WORKLOAD_RE,
+        "forbidden_image_re": FORBIDDEN_IMAGE_RE,
+        "cdp_endpoint_url_configured": bool(CDP_ENDPOINT_URL),
+    }
+    if "browser.eyrie" in SECURE_BROWSER_TARGET or "firefox" in SECURE_BROWSER_TARGET:
+        if CDP_ENDPOINT_URL and re.search(r"secure-browser(?:-cdp)?\.eyrie", CDP_ENDPOINT_URL, re.IGNORECASE):
+            status.update({"ok": False, "reason": "configured CDP endpoint points at legacy secure-browser ingress"})
+            return status
+        if re.search(FORBIDDEN_WORKLOAD_RE, WORKLOAD, re.IGNORECASE):
+            status.update({"ok": False, "reason": "configured workload matches forbidden legacy secure-browser workload"})
+            return status
+        if WORKLOAD != EXPECTED_WORKLOAD:
+            status.update({"ok": False, "reason": "configured workload does not match requested browser.eyrie Firefox target"})
+            return status
+    if CDP_ENDPOINT_URL:
+        status.update({"ok": True, "reason": "service endpoint configured; URL-level legacy guard passed"})
+        return status
+    if shutil.which("kubectl") is None:
+        status.update({"ok": False, "reason": "kubectl is unavailable for backend identity check"})
+        return status
+    try:
+        identity = _backend_identity_from_deployment(_kubectl_get_json(WORKLOAD))
+    except Exception as exc:
+        status.update({"ok": False, "reason": str(exc)[:500]})
+        return status
+    status["identity"] = identity
+    image_text = " ".join(identity.get("images") or [])
+    app_label = str((identity.get("labels") or {}).get("browser.joyfullee.me/app") or (identity.get("labels") or {}).get("app") or "")
+    if re.search(FORBIDDEN_IMAGE_RE, image_text, re.IGNORECASE):
+        status.update({"ok": False, "reason": "live workload image matches forbidden legacy Chrome/Kasm backend"})
+    elif EXPECTED_IMAGE_RE and not re.search(EXPECTED_IMAGE_RE, image_text, re.IGNORECASE):
+        status.update({"ok": False, "reason": "live workload image does not match expected Firefox/Kasm backend"})
+    elif EXPECTED_APP_LABEL and app_label != EXPECTED_APP_LABEL:
+        status.update({"ok": False, "reason": "live workload labels do not identify the expected Firefox browser app"})
+    else:
+        status.update({"ok": True, "reason": "backend identity matches requested browser.eyrie Firefox target"})
+    return status
+
+
+def _enforce_backend_identity() -> None:
+    status = _backend_identity_status()
+    if not status.get("ok"):
+        raise RuntimeError(f"secure browser backend identity check failed: {status.get('reason')}; target={SECURE_BROWSER_TARGET}; workload={WORKLOAD}")
+
+
 def _sanitize_url(value: str) -> str:
     parsed = urlparse(value)
     return urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", "", ""))
@@ -3738,6 +3825,7 @@ class CdpBridge:
         self.cdp_url = CDP_ENDPOINT_URL
 
     def __enter__(self) -> str:
+        _enforce_backend_identity()
         if self.cdp_url:
             self._wait_for_endpoint(self.cdp_url, "secure browser CDP endpoint")
             return self.cdp_url
@@ -4637,7 +4725,9 @@ def secure_browser_status_tool(args: dict[str, Any], **_kw: Any) -> str:
     status = {
         "toolset": TOOLSET,
         "namespace": NAMESPACE,
+        "target": SECURE_BROWSER_TARGET,
         "workload": WORKLOAD,
+        "backend_identity": _backend_identity_status(),
         "kubectl_available": shutil.which("kubectl") is not None,
         "cdp_endpoint_configured": bool(CDP_ENDPOINT_URL),
         "cdp_access_mode": "service_endpoint" if CDP_ENDPOINT_URL else "kubectl_port_forward",

@@ -33,9 +33,15 @@ from tools.registry import registry
 
 TOOLSET = "secure_browser"
 NAMESPACE = os.environ.get("SECURE_BROWSER_NAMESPACE", os.environ.get("SECURE_BROWSER_OAUTH_NAMESPACE", "ai"))
-WORKLOAD = os.environ.get("SECURE_BROWSER_WORKLOAD", os.environ.get("SECURE_BROWSER_OAUTH_WORKLOAD", "deployment/secure-browser"))
+SECURE_BROWSER_TARGET = os.environ.get("SECURE_BROWSER_TARGET", "browser.eyrie-firefox")
+WORKLOAD = os.environ.get("SECURE_BROWSER_WORKLOAD", os.environ.get("SECURE_BROWSER_OAUTH_WORKLOAD", "deployment/firefox"))
+EXPECTED_WORKLOAD = os.environ.get("SECURE_BROWSER_EXPECTED_WORKLOAD", "deployment/firefox")
+EXPECTED_IMAGE_RE = os.environ.get("SECURE_BROWSER_EXPECTED_IMAGE_RE", r"kasmweb/firefox")
+EXPECTED_APP_LABEL = os.environ.get("SECURE_BROWSER_EXPECTED_APP_LABEL", "firefox")
+FORBIDDEN_WORKLOAD_RE = os.environ.get("SECURE_BROWSER_FORBIDDEN_WORKLOAD_RE", r"deployment/secure-browser")
+FORBIDDEN_IMAGE_RE = os.environ.get("SECURE_BROWSER_FORBIDDEN_IMAGE_RE", r"kasmweb/chrome")
 REMOTE_DEBUG_PORT = int(os.environ.get("SECURE_BROWSER_CDP_PORT", os.environ.get("SECURE_BROWSER_OAUTH_CDP_PORT", "9222")))
-PUBLIC_URL = os.environ.get("SECURE_BROWSER_PUBLIC_URL", os.environ.get("SECURE_BROWSER_OAUTH_PUBLIC_URL", "https://secure-browser.eyrie/"))
+PUBLIC_URL = os.environ.get("SECURE_BROWSER_PUBLIC_URL", os.environ.get("SECURE_BROWSER_OAUTH_PUBLIC_URL", "https://browser.eyrie/"))
 BROWSER_OWNER = os.environ.get("SECURE_BROWSER_OWNER", os.environ.get("SECURE_BROWSER_OAUTH_OWNER", "oauth"))
 OWNERSHIP_STATE_PATH = os.environ.get("SECURE_BROWSER_OWNERSHIP_STATE", os.path.expanduser("~/.hermes/secure-browser-tabs.json"))
 AUDIT_LOG = os.environ.get("SECURE_BROWSER_AUDIT_LOG", os.environ.get("SECURE_BROWSER_OAUTH_AUDIT_LOG", os.path.expanduser("~/.hermes/profiles/talon/secure-browser-oauth-audit.log")))
@@ -57,6 +63,73 @@ def _json(data: dict[str, Any]) -> str:
 
 def _check_secure_browser_oauth() -> bool:
     return shutil.which("kubectl") is not None
+
+
+def _kubectl_get_json(resource: str) -> dict[str, Any]:
+    cmd = ["kubectl", "-n", NAMESPACE, "get", resource, "-o", "json"]
+    env = os.environ.copy()
+    env.setdefault("HOME", "/home/joy")
+    proc = subprocess.run(cmd, check=False, text=True, capture_output=True, timeout=10, env=env)
+    if proc.returncode != 0:
+        raise RuntimeError(f"kubectl identity check failed for {resource}: {proc.stderr[-500:]}")
+    return json.loads(proc.stdout)
+
+
+def _backend_identity_status() -> dict[str, Any]:
+    status: dict[str, Any] = {
+        "target": SECURE_BROWSER_TARGET,
+        "namespace": NAMESPACE,
+        "workload": WORKLOAD,
+        "expected_workload": EXPECTED_WORKLOAD,
+        "expected_image_re": EXPECTED_IMAGE_RE,
+        "expected_app_label": EXPECTED_APP_LABEL,
+        "forbidden_workload_re": FORBIDDEN_WORKLOAD_RE,
+        "forbidden_image_re": FORBIDDEN_IMAGE_RE,
+    }
+    if "browser.eyrie" in SECURE_BROWSER_TARGET or "firefox" in SECURE_BROWSER_TARGET:
+        if re.search(FORBIDDEN_WORKLOAD_RE, WORKLOAD, re.IGNORECASE):
+            status.update({"ok": False, "reason": "configured workload matches forbidden legacy secure-browser workload"})
+            return status
+        if WORKLOAD != EXPECTED_WORKLOAD:
+            status.update({"ok": False, "reason": "configured workload does not match requested browser.eyrie Firefox target"})
+            return status
+    if shutil.which("kubectl") is None:
+        status.update({"ok": False, "reason": "kubectl is unavailable for backend identity check"})
+        return status
+    try:
+        data = _kubectl_get_json(WORKLOAD)
+        template = data.get("spec", {}).get("template", {})
+        containers = template.get("spec", {}).get("containers") or []
+        images = [str(container.get("image") or "") for container in containers if isinstance(container, dict)]
+        labels = template.get("metadata", {}).get("labels") or {}
+        app_label = str(labels.get("browser.joyfullee.me/app") or labels.get("app") or "")
+        identity = {
+            "name": str(data.get("metadata", {}).get("name") or ""),
+            "images": images,
+            "labels": labels,
+            "ready_replicas": data.get("status", {}).get("readyReplicas", 0),
+            "replicas": data.get("status", {}).get("replicas", 0),
+        }
+    except Exception as exc:
+        status.update({"ok": False, "reason": str(exc)[:500]})
+        return status
+    status["identity"] = identity
+    image_text = " ".join(images)
+    if re.search(FORBIDDEN_IMAGE_RE, image_text, re.IGNORECASE):
+        status.update({"ok": False, "reason": "live workload image matches forbidden legacy Chrome/Kasm backend"})
+    elif EXPECTED_IMAGE_RE and not re.search(EXPECTED_IMAGE_RE, image_text, re.IGNORECASE):
+        status.update({"ok": False, "reason": "live workload image does not match expected Firefox/Kasm backend"})
+    elif EXPECTED_APP_LABEL and app_label != EXPECTED_APP_LABEL:
+        status.update({"ok": False, "reason": "live workload labels do not identify the expected Firefox browser app"})
+    else:
+        status.update({"ok": True, "reason": "backend identity matches requested browser.eyrie Firefox target"})
+    return status
+
+
+def _enforce_backend_identity() -> None:
+    status = _backend_identity_status()
+    if not status.get("ok"):
+        raise RuntimeError(f"secure browser backend identity check failed: {status.get('reason')}; target={SECURE_BROWSER_TARGET}; workload={WORKLOAD}")
 
 
 def _audit(action: str, payload: dict[str, Any]) -> None:
@@ -130,6 +203,7 @@ class PortForward:
         self.process: subprocess.Popen[str] | None = None
 
     def __enter__(self) -> int:
+        _enforce_backend_identity()
         cmd = [
             "kubectl",
             "-n",
@@ -353,7 +427,9 @@ def _readiness_status() -> dict[str, Any]:
     base = {
         "toolset": TOOLSET,
         "namespace": NAMESPACE,
+        "target": SECURE_BROWSER_TARGET,
         "workload": WORKLOAD,
+        "backend_identity": _backend_identity_status(),
         "remote_debug_port": REMOTE_DEBUG_PORT,
         "secure_browser_owner": BROWSER_OWNER,
         "ownership_state_path": OWNERSHIP_STATE_PATH,

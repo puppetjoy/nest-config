@@ -13,12 +13,14 @@ the same visible Firefox session Joy sees.
 - service marker: `manifests/service/firefox.pp`
 - public operator URL: `https://browser.eyrie/`
 - upstream image: `docker.io/kasmweb/firefox:1.18.0`
+- private automation attachment: Firefox Remote Debugging on the in-cluster
+  `firefox` Service port `9222`, with no public CDP/automation ingress
 
 The app exposes the KasmVNC/noVNC Firefox UI through a Contour `HTTPProxy` with
-websocket support. It deliberately exposes no Camofox REST API, CDP, WebDriver,
-Marionette, raw VNC credentials, cookies, storage, request headers, screenshots
-of secret pages, vault data, payment/address details, or direct final-purchase
-authority to models.
+websocket support. It deliberately exposes no Camofox REST API, public CDP,
+WebDriver, Marionette, raw VNC credentials, cookies, storage, request headers,
+screenshots of secret pages, vault data, payment/address details, or direct
+final-purchase authority to models.
 
 State lives in a durable `firefox-profile` PVC mounted at `/home/kasm-user` so
 Joy login state, Firefox profile state, and Bitwarden extension state can survive
@@ -32,8 +34,11 @@ ConfigMap is public-extension metadata only; it does not contain Joy vault data
 or credentials.
 
 The existing Chrome/Kasm `secure-browser` workload and `secure-browser-cdp.eyrie`
-remain source-managed for rollback and for the current Hermes secure-browser
-backend until the Firefox bridge below is implemented and parity-tested.
+remain source-managed for rollback only. When the product target is
+`browser.eyrie` Firefox, Hermes secure-browser tools must bind to
+`deployment/firefox`, verify the live workload is `kasmweb/firefox`, and fail
+closed if they are pointed at `deployment/secure-browser` or
+`secure-browser-cdp.eyrie`.
 
 ## Automation bridge options
 
@@ -45,8 +50,9 @@ endpoint swap safe. Exposing a raw CDP-like endpoint would also make cookies,
 storage, network events, screenshots, and final controls too easy to leak or
 misuse.
 
-Verdict: do not expose raw CDP from `browser.eyrie`. Keep Chrome/Kasm CDP as the
-rollback/current backend until a narrow Firefox bridge exists.
+Verdict: do not expose raw CDP from `browser.eyrie` on public ingress. The first
+bridge uses Firefox Remote Debugging only through `kubectl port-forward` from
+the guarded Hermes tool runtime after a Kubernetes backend identity check.
 
 ### WebDriver / Marionette
 
@@ -71,6 +77,27 @@ boundaries explicit.
 Verdict: preferred future direction when moving beyond the upstream Kasm image.
 It may pair with a private sidecar for screenshot capture, health, and operator
 session binding.
+
+### Guarded Firefox Remote Debugging bridge
+
+The first cutover keeps the public `secure_browser_*` contract in the Hermes
+tool wrappers and changes their backend binding to `deployment/firefox`. The
+Firefox workload enables `--remote-debugging-address=0.0.0.0` and
+`--remote-debugging-port=9222`, but Nest publishes that port only on the
+in-cluster Service so the tool can reach it by localhost-only `kubectl
+port-forward`. The tool refuses to operate unless all requested `browser.eyrie`
+identity checks pass:
+
+- configured workload is `deployment/firefox`
+- live image matches `kasmweb/firefox`
+- app label identifies `firefox`
+- configured workload/URL is not legacy `deployment/secure-browser` or
+  `secure-browser-cdp.eyrie`
+
+This is intentionally not a general raw-debugging API for agents; the existing
+tool guardrails still own URL allowlists, query rejection, sensitive screenshot
+refusal/redaction, owner-only review delivery, and final-purchase approval
+gating.
 
 ### Sidecar/custom service using WebDriver internally
 

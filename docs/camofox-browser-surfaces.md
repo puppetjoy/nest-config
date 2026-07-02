@@ -70,10 +70,12 @@ API:
 - `nest::app::hermes::browser_camofox_url=https://camofox.eyrie`
 - `CAMOFOX_URL=https://camofox.eyrie`
 
-Star keeps `SECURE_BROWSER_CDP_URL=https://secure-browser-cdp.eyrie`; secure
-browser operations do not cut over to Camofox in this change. `browser.eyrie`
-remains represented by `SECURE_BROWSER_OPERATOR_URL` and the separate
-Firefox/Kasm app.
+Star secure-browser operations bind to the separate persistent Firefox/Kasm
+`browser.eyrie` app, not to Camofox. The legacy
+`secure-browser-cdp.eyrie` Chrome/Kasm endpoint remains source-managed only for
+rollback diagnostics and is guarded against when the requested target is
+browser.eyrie Firefox.
+
 
 ## Secure-browser boundary
 
