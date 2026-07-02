@@ -6,13 +6,20 @@ config:
   ssh:
     interpreters:
       rb: ['/usr/bin/ruby', '-r', 'puppet']
-    private-key: '~/.ssh/id_ed25519'
 
 features:
   - puppet-agent
 
 groups:
   - name: 'gentoo'
+    config:
+      ssh:
+        # Nest hosts authenticate normal SSH transport as the unprivileged
+        # nest::user account, then Bolt escalates per plan/task with _run_as.
+        # Keep key selection with OpenSSH/ssh-agent/default identity handling:
+        # Agent Request workers may have only the user ssh-agent socket mounted,
+        # while in-cluster Bolt callers may still have /root/.ssh/id_ed25519.
+        user: 'joy'
     groups:
     - name: 'servers'
       targets:

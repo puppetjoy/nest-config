@@ -86,4 +86,7 @@
 
 ## Security & Configuration Tips
 - Do not commit plaintext secrets in `data/`, `inventory.yaml`, or plan inputs; use encrypted/CI-managed values.
+
+## Safety & Operational Boundaries
 - Review Bolt plans/scripts before execution; tasks mutate hosts/resources.
+- For Nest host Puppet follow-through from Agent Request/Kanban workers, use the inventory-backed Bolt path and smoke it before claiming a transport blocker: `bolt inventory show owl --detail --format json` plus `bolt command run 'id -un && hostname -f' --targets owl --stream`. The expected SSH transport for Gentoo Nest hosts is `joy@<host>` with Bolt escalation for root actions; do not fall back to direct SSH or ad-hoc Puppet as the deployment strategy. See `docs/nest-bolt-worker-transport.md`.

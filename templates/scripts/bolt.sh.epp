@@ -65,6 +65,12 @@ if [[ -S "$PODMAN_SOCK" ]]; then
 fi
 
 ssh_auth_sock_args=()
+if [[ -z "${SSH_AUTH_SOCK:-}" ]]; then
+    default_ssh_auth_sock="/run/user/$(id -u)/ssh-agent.socket"
+    if [[ -S "$default_ssh_auth_sock" ]]; then
+        export SSH_AUTH_SOCK="$default_ssh_auth_sock"
+    fi
+fi
 if [[ -n "${SSH_AUTH_SOCK:-}" && -S "${SSH_AUTH_SOCK}" ]]; then
     ssh_auth_sock_args=(-e SSH_AUTH_SOCK -v "${SSH_AUTH_SOCK}:${SSH_AUTH_SOCK}:ro")
 fi
