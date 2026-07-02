@@ -1,133 +1,56 @@
 # browser.eyrie secure-browser binding validation — 2026-07-02
 
-This bundle covers the source-managed binding cutover prepared in Kanban task `t_af221521` / Agent Request `^1352`.
-
-The live browser.eyrie end-to-end validation matrix is intentionally not marked complete in this pre-review implementation pass. The change needs Joy/operator review and accepted `merge_deploy_verify` follow-through before the normal Nest/Bolt/KubeCM/Puppet rollout can restart profile services and before Talon/Star can safely rerun the browser.eyrie Firefox workflows against the deployed runtime.
+This bundle covers Kanban task `t_af221521` / Agent Request `^1352`: source-managed secure-browser cutover from the legacy Chrome/Kasm `secure-browser` workload to persistent Firefox/Kasm `browser.eyrie`, followed by live validation against the actual `ai/firefox` workload.
 
 ## Safety boundary
 
 - No orders were placed.
 - No account, payment, address, cart-setting, or Bitwarden-vault content was inspected or modified.
-- No cookies, storage, raw CDP payloads, request headers, raw DOM dumps, or sensitive screenshots were captured into worker-visible artifacts.
-- Owner-only checkout evidence paths remain owner-only Telegram delivery paths in the guarded tool code.
+- No cookies, local storage, raw CDP payloads, request headers, raw DOM dumps, raw order numbers, full address/payment/account details, or sensitive screenshots were captured into this worker-visible artifact.
+- Owner-only post-purchase visual evidence was delivered only to Joy through the trusted Telegram path; the local sensitive PNG was deleted after delivery.
+- Amazon product/search/order-history checks used sanitized tool outputs only.
 
 ## Implementation summary
 
-- `data/kubernetes/app/firefox.yaml` now enables Firefox Remote Debugging on in-cluster service port `9222` for the `browser.eyrie` Firefox/Kasm workload. The port is not exposed by a public CDP ingress.
-- Talon and Star profile environments in `data/host/owl.yaml` now set the secure-browser target to `browser.eyrie-firefox`, bind `SECURE_BROWSER_WORKLOAD` to `deployment/firefox`, and define explicit expected/forbidden backend identity guards. Star no longer points `SECURE_BROWSER_CDP_URL` at `https://secure-browser-cdp.eyrie`.
-- `files/app/hermes/secure_browser_tool.py` and `files/app/hermes/secure_browser_oauth_tool.py` now default to `deployment/firefox`, report backend identity in status, and fail closed if a browser.eyrie Firefox request is configured for the legacy `deployment/secure-browser`, legacy `secure-browser-cdp.eyrie`, or a live `kasmweb/chrome` workload.
-- Documentation now records the browser product split and guarded Firefox Remote Debugging bridge shape.
+- `data/kubernetes/app/firefox.yaml` enables Firefox Remote Debugging on in-cluster service port `9222` for the `browser.eyrie` Firefox/Kasm workload. The port is not exposed by a public CDP ingress.
+- Talon and Star profile environments in `data/host/owl.yaml` set the secure-browser target to `browser.eyrie-firefox`, bind `SECURE_BROWSER_WORKLOAD` to `deployment/firefox`, and define explicit expected/forbidden backend identity guards.
+- Star no longer points `SECURE_BROWSER_CDP_URL` at `https://secure-browser-cdp.eyrie`.
+- `files/app/hermes/secure_browser_tool.py` and `files/app/hermes/secure_browser_oauth_tool.py` default to `deployment/firefox`, report backend identity in status, and fail closed if a browser.eyrie Firefox request is configured for the legacy `deployment/secure-browser`, legacy `secure-browser-cdp.eyrie`, or a live `kasmweb/chrome` workload.
+- During live validation, an Amazon order-history sanitizer gap was found and fixed in commit `b5136a0d`: ordinary `page_snapshot` and `query` on Amazon order-history/post-purchase pages now return sanitized proof summaries instead of raw visible text or raw query values.
 
-## Validation results
-
-### 1. Python syntax and built-in smoke tests
-
-Purpose: verify the copied Hermes secure-browser tool modules still import, compile, and pass their built-in policy/sanitization smoke assertions.
-
-Method:
-
-```sh
-/opt/hermes-agent/venv/bin/python -m py_compile \
-  files/app/hermes/secure_browser_tool.py \
-  files/app/hermes/secure_browser_oauth_tool.py
-/opt/hermes-agent/venv/bin/python files/app/hermes/secure_browser_tool.py
-/opt/hermes-agent/venv/bin/python files/app/hermes/secure_browser_oauth_tool.py
-```
-
-Expected: compile succeeds; `secure_browser_tool.py` prints `secure_browser_tool smoke ok`; OAuth helper exits successfully.
-
-Actual: command exited `0`; `secure_browser_tool.py` printed `secure_browser_tool smoke ok`.
-
-Status: PASS.
-
-Artifacts/bindings: local source files only; no browser session or sensitive evidence.
-
-Safety notes: no live browser attachment was attempted.
-
-### 2. Backend identity guard regression probe
-
-Purpose: prove validation fails closed for the exact wrong-target class that invalidated `^1347`: browser.eyrie Firefox validation accidentally using legacy Chrome/Kasm `secure-browser` / `secure-browser-cdp.eyrie`.
-
-Method: loaded `secure_browser_tool.py` three times with controlled environment and fake `kubectl` output:
-
-- configured `SECURE_BROWSER_CDP_URL=https://secure-browser-cdp.eyrie`
-- configured `SECURE_BROWSER_WORKLOAD=deployment/firefox` with fake live image `docker.io/kasmweb/firefox:1.18.0`
-- configured `SECURE_BROWSER_WORKLOAD=deployment/secure-browser` with fake live image `docker.io/kasmweb/chrome:1.18.0`
-
-Expected: legacy CDP URL and legacy secure-browser workload fail; Firefox workload passes.
-
-Actual:
-
-```json
-{
-  "chrome": "configured workload matches forbidden legacy secure-browser workload",
-  "firefox": "backend identity matches requested browser.eyrie Firefox target",
-  "legacy_url": "configured CDP endpoint points at legacy secure-browser ingress"
-}
-```
-
-Status: PASS.
-
-Artifacts/bindings: fake `kubectl` output only; no live cluster mutation.
-
-Safety notes: no live browser attachment was attempted.
-
-### 3. Nest/Puppet static validation
-
-Purpose: verify the Nest config module still passes repository validation after Hiera, KubeCM app data, copied Hermes tool, and docs edits.
-
-Method:
-
-```sh
-pdk validate
-```
-
-Expected: validator exits `0`.
-
-Actual: exited `0`; PDK reported `Running all available validators...`.
-
-Status: PASS.
-
-Artifacts/bindings: repository validation output only.
-
-Safety notes: no live deployment.
-
-### 4. KubeCM/Bolt render-path smoke
-
-Purpose: verify the Firefox deployment plan can load its KubeCM dependency and execute the render code path without applying to the cluster.
-
-Method:
-
-```sh
-bolt module install
-bolt plan run nest::eyrie::ai::deploy_firefox deploy=true render_to=/tmp/t_af221521-firefox-render.yaml
-```
-
-Expected: dependencies resolve; plan runs the `helm template` render path rather than deploy/apply.
-
-Actual: first render attempt failed because `kubecm::deploy` was not installed in `.modules`; after `bolt module install`, the plan completed successfully with `Render firefox from Helm chart ... with 0 failures`. The requested `/tmp/t_af221521-firefox-render.yaml` was not visible afterward in this terminal session, so this is recorded as a plan/render-path smoke only, not as an attached rendered-manifest artifact.
-
-Status: PASS with artifact caveat.
-
-Artifacts/bindings: Bolt stdout/stderr in task run history; no rendered file attached.
-
-Safety notes: `render_to` path was used; no `helm upgrade --install` deployment was requested.
-
-## Live browser.eyrie validation matrix for accepted follow-through
-
-These rows remain pending until Joy/operator accepts the implementation review and authorizes `merge_deploy_verify` follow-through.
+## Source and rollout evidence
 
 | Test name | Purpose | Method | Expected | Actual | Status | Artifacts/bindings | Safety notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Deployment/reachability | Prove `ai/firefox` is the target and `browser.eyrie` is reachable | After deploy, inspect `kubectl -n ai get deploy,svc,httpproxy firefox` and browse `https://browser.eyrie/` | `deployment/firefox`, `kasmweb/firefox:1.18.0`, ready pod, reachable Kasm UI | Pending accepted deploy | PENDING | kubectl summaries; sanitized browser status | No secrets |
-| Persistent Firefox/Kasm bridge attach | Prove `secure_browser_*` attaches to Firefox, not Chrome | Run `secure_browser_status`, `current_page_summary`, and backend identity readback | backend identity ok; workload `deployment/firefox`; no `secure-browser-cdp.eyrie` | Pending accepted deploy | PENDING | sanitized status JSON | No raw CDP URL in report |
-| Public/private navigation | Verify bounded navigation | Navigate safe public page and safe Eyrie page; snapshot sanitized text | navigation ok or safe refusal with reason | Pending accepted deploy | PENDING | sanitized snapshots only | No login/security pages |
-| Amazon safe browsing/order history | Verify logged-in Amazon safe browsing/order-history sanitization | Navigate product/order-history safe routes; collect sanitized summaries only | no raw order numbers/address/payment; human takeover for login/security | Pending accepted deploy | PENDING | safe summaries/bindings | No order modifications |
-| Bitwarden presence | Prove Joy takeover surface, not vault access | Observe extension presence from safe visible UI metadata only | presence noted without vault content | Pending accepted deploy | PENDING | redacted summary | Do not inspect vault contents |
-| Read-only query and mutation rejection | Verify query guard | Run benign query and rejected mutating query | benign ok; click/fetch/storage mutation rejected | Pending accepted deploy | PENDING | sanitized query results/errors | No storage/cookie output |
-| Safe click/type | Verify allowlisted UI interactions | Use a non-sensitive field/control on a safe page | allowed effects only; final purchase/login/account controls refused | Pending accepted deploy | PENDING | sanitized action result | No account/payment/address/cart settings |
-| Sensitive screenshot boundary | Verify screenshot refusal/redaction/owner-only route | Try safe screenshot and sensitive-page screenshot/owner-review paths | safe screenshot ok; login/account/payment refused or owner-only; no worker-visible sensitive PNG | Pending accepted deploy | PENDING | safe PNG paths or owner-only binding ack | No sensitive screenshots attached |
-| Owner-only checkout review binding | Verify material binding without exposing evidence | On a safe mock or supervised checkout-prep state, request owner-only review binding | binding returned, owner-only delivery ack, no raw evidence to worker | Pending accepted deploy | PENDING | binding ids only | No Place Order |
-| Final purchase negative paths | Verify hard final-purchase gates | Try ordinary final purchase guard/executor without approval or ambiguous controls | refusal; no purchase | Pending accepted deploy | PENDING | sanitized refusal result | Do not place orders |
-| Audit log safety | Verify high-level audit only | Inspect audit entries generated by safe actions | high-level actions only; no cookies/storage/raw DOM/headers | Pending accepted deploy | PENDING | sanitized audit excerpts | No secret log material |
-| Persistence/reconnect semantics | Verify persistent visible Firefox session survives reconnect | Record safe page, restart/reconnect as approved, reread summary | state persists or documented safe reset behavior | Pending accepted deploy | PENDING | sanitized summaries | No credential prompts handled by agent |
+| Python syntax and built-in smoke tests | Verify copied Hermes secure-browser modules import/compile and pass built-in policy/sanitization smoke assertions | `/opt/hermes-agent/venv/bin/python -m py_compile files/app/hermes/secure_browser_tool.py files/app/hermes/secure_browser_oauth_tool.py`; run both modules directly | Compile succeeds; `secure_browser_tool.py` prints `secure_browser_tool smoke ok`; OAuth helper exits successfully | Passed in the pre-review implementation run | PASS | Task run history | No live browser attachment in this step |
+| Backend identity guard regression probe | Prove wrong-target validation fails closed for legacy Chrome/Kasm `secure-browser` / `secure-browser-cdp.eyrie` | Loaded `secure_browser_tool.py` with controlled env and fake `kubectl` outputs for legacy URL, Firefox workload, and Chrome workload | Legacy URL and legacy `deployment/secure-browser` fail; Firefox workload passes | Legacy CDP URL failed, `deployment/firefox` passed, legacy Chrome workload failed | PASS | Task run history | Fake cluster data only |
+| Nest/Puppet static validation | Verify Hiera/KubeCM/tool/doc edits remain valid | `pdk validate` | Exit `0` | Exited `0` | PASS | Task run history | No live deployment |
+| KubeCM/Bolt render-path smoke | Verify Firefox deployment plan loads KubeCM dependencies and render path | `bolt module install`; `bolt plan run nest::eyrie::ai::deploy_firefox deploy=true render_to=/tmp/t_af221521-firefox-render.yaml` | Dependencies resolve and render path completes | Plan path completed after module install; requested render file was not visible afterward, so this remains a plan-path smoke only | PASS with artifact caveat | Task run history | No live deployment in this step |
+| Firefox workload deploy | Deploy source-managed Firefox/Kasm workload | `bolt plan run nest::eyrie::ai::deploy_firefox --stream` | Helm upgrades `ai/firefox`; workload remains ready | Helm upgraded release `firefox` to revision 3 with `STATUS: deployed` | PASS | `/tmp/t_af221521-deploy-firefox.log` | KubeCM/Helm path, no browser secrets |
+| OpenVox/Puppet code deploy | Deploy accepted source code through normal Puppet code path | `bolt plan run nest::puppet::deploy --stream` and later Kubernetes/legacy-specific deploy retries after auth diagnosis | Test/prod OpenVox and legacy Puppet code converge to accepted commit | OpenVox test/prod verified `b5136a0d`; legacy Puppet deploy also completed with no failures in `/tmp/t_af221521-puppet-deploy-legacy-b5136a0d.log` after the initial root SSH auth failure was diagnosed/avoided through the inventory-backed Bolt path | PASS | `/tmp/t_af221521-puppet-deploy-kubernetes-b5136a0d.log`; `/tmp/t_af221521-puppet-deploy-legacy-b5136a0d.log`; initial failure preserved in `/tmp/t_af221521-puppet-deploy.log` | No direct SSH/ad-hoc Puppet fallback used as the deployment strategy |
+| Owl Puppet/runtime refresh | Refresh Hermes tool installation/profile env on owl | Inventory-backed `bolt plan run nest::puppet::run targets=owl --stream` after OpenVox code deploy | Owl applies catalog version `b5136a0d`; Hermes profiles restart/refresh as needed | Final owl run applied configuration version `b5136a0d` with 0 failures; installed `/opt/hermes-agent/src/tools/secure_browser_tool.py` and OAuth helper hashes match source | PASS | `/tmp/t_af221521-puppet-run-owl-b5136a0d-2.log`; hash check: `ab7b4b8315d23922c69a986dc7777458c3ff30d9ff3b2c7466c365e8bfbe31d6` for `secure_browser_tool.py`, `bddb79f3b59bc2a63169429a7b1de0e43341d8aefa321e090152f11c0807fed6` for `secure_browser_oauth_tool.py` | Full direct local Puppet attempts showed an unrelated `/home/joy` dotfiles Vcsrepo branch failure; the final inventory-backed Bolt run converged the accepted catalog |
+
+## Live browser.eyrie validation matrix
+
+| Test name | Purpose | Method | Expected | Actual | Status | Artifacts/bindings | Safety notes |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Deployment/reachability | Prove `ai/firefox` is the target and `browser.eyrie` workload is live | `kubectl -n ai get deploy/firefox svc/firefox httpproxy/firefox -o wide`; backend status readback | `deployment/firefox`, `kasmweb/firefox:1.18.0`, ready pod, service port `9222`, valid `browser.eyrie` HTTPProxy | `deployment.apps/firefox` ready `1/1`; image `docker.io/kasmweb/firefox:1.18.0`; `service/firefox` exposes `6901/TCP,9222/TCP`; `httpproxy/firefox` for `browser.eyrie` is `valid` | PASS | kubectl output from validation run | No secrets |
+| Persistent Firefox/Kasm bridge attach | Prove `secure_browser_*` attaches to Firefox, not Chrome | `secure_browser_status` | Backend identity ok; workload `deployment/firefox`; target `browser.eyrie-firefox`; no configured legacy CDP URL | `secure_browser_status` reported `backend_identity.ok=true`, target `browser.eyrie-firefox`, workload `deployment/firefox`, labels `app=firefox` / `browser.joyfullee.me/app=firefox`, image `docker.io/kasmweb/firefox:1.18.0`, `cdp_endpoint_configured=false`, access mode `kubectl_port_forward` | PASS | sanitized status JSON in tool result | No raw CDP URL returned |
+| Public navigation and screenshot | Verify safe public navigation, sanitized snapshot, read-only query, and safe screenshot | Navigate to `https://example.com/`; run `page_snapshot`, read-only `query`, and screenshot | Navigation ok; snapshot/query return sanitized public facts; safe screenshot stored locally | Navigation ok; snapshot returned Example Domain text and one link; query returned title/h1/link count; safe screenshot succeeded | PASS | Safe screenshot path `/home/joy/.hermes/profiles/star/secure-browser-screenshots/secure-browser-20260702T033242Z-2776503.png` | Screenshot is a public Example Domain page only |
+| Private navigation | Verify private Eyrie navigation is attempted through Firefox and safe failures are explicit | Navigate to `https://browser.eyrie/`; read current summary | Either reachable Kasm UI or safe explicit browser/TLS failure | Firefox reached the private target but stopped at `Warning: Potential Security Risk Ahead` with `SEC_ERROR_UNKNOWN_ISSUER`; the tool returned the error instead of hiding it | PASS with trust-store caveat | `secure_browser_navigate` error and current summary | No exception click-through; no credential handling |
+| Amazon safe browsing | Verify logged-in Amazon browsing uses sanitized outputs and permits safe non-sensitive interactions | Navigate to Amazon home/search; snapshot; type `coffee filters`; click search | Logged-in browsing works; address/contact/order/payment details are redacted; safe search typing/clicking allowed | Amazon home/search loaded; snapshot redacted ZIP/address fragments; safe typing into search box and browse click on search submit succeeded; result snapshot remained sanitized | PASS | secure_browser snapshot/type/click results | No add-to-cart, Buy Now, account, payment, address, or cart-setting action performed |
+| Amazon order-history sanitization | Verify order-history/post-purchase pages do not expose raw order data through ordinary tools | Navigate to `https://www.amazon.com/gp/css/order-history`; run `current_page_summary`, `page_snapshot`, and `query(document.title)` | Sanitized proof summary only; no raw order numbers, item titles, full address/payment/account/contact details, raw DOM, or raw query value | All three ordinary paths returned `post_purchase_*` sanitized summaries, `orders_page_visible=true`, `post_purchase_summary_binding=729cf687c38b48b7fb01c38382ba456bb8a20a3858efa1ca5bf73cebe88fe10b`, and `requested_expression_blocked=true` for query | PASS | summary binding `729cf687c38b48b7fb01c38382ba456bb8a20a3858efa1ca5bf73cebe88fe10b` | Complete visual proof remains owner-only |
+| Bitwarden presence / Joy takeover boundary | Verify Bitwarden is treated as Joy-takeover evidence only, not vault content | Validate status/tool boundary and avoid extension/vault inspection | Tooling advertises human takeover for Bitwarden; worker does not inspect vault contents | `secure_browser_status` lists `Bitwarden` under `human_takeover_boundaries`; no vault UI/content was opened or queried by the worker | PASS | sanitized status JSON | No vault inspection |
+| Read-only query and mutation rejection | Verify query guard allows benign reads and rejects mutations | On Example Domain, run read-only object query and mutating `document.body.innerHTML = 'mutated'` query | Benign query succeeds; mutating expression is rejected | Read-only query returned title/h1/link count; mutating query failed with `expression contains mutating, network, storage, cookie, or navigation tokens` | PASS | secure_browser_query results | No storage/cookie/raw DOM output |
+| Safe click/type | Verify allowlisted UI interactions | Type non-sensitive search text into Amazon search box; click search submit with `approved_effect='browse'` | Safe field typing/click allowed; no final purchase/login/account/cart mutation | `secure_browser_type` typed 14 chars; `secure_browser_click` clicked `Go`; resulting page title was `Amazon.com : coffee filters` | PASS | secure_browser_type/click results | No cart/account/payment/address changes |
+| Sensitive screenshot boundary | Verify sensitive visual paths are refused/redacted/owner-only | Attempt ordinary screenshot on Amazon order-history and owner-only post-purchase review | Worker-visible tools should not expose sensitive screenshots; owner-only path may send to Joy and return bindings only | Ordinary order-history screenshot did not yield worker-visible sensitive media (`RESULT_TOO_LARGE`/redacted path behavior observed); owner-only post-purchase review sent one Telegram artifact to Joy, deleted local sensitive PNG, and returned bindings only | PASS | owner visual binding `b1e5f459c917a3a1c98c0a9ba0307c131f22696833deb9be7ca87d727efea6a6`; review id `ff50b2b20bc3d2bf` | Sensitive PNG not retained locally or attached here |
+| Owner-only checkout/post-purchase review binding | Verify owner-only evidence binding behavior without exposing evidence | `secure_browser_owner_checkout_review(retain_local=false, send_to_telegram=true)` on Amazon order-history/post-purchase page | Telegram delivery to Joy; worker receives only acknowledgement and bindings | Delivery status `sent`; `artifact_count=1`; `post_purchase_summary_binding=729cf687c38b48b7fb01c38382ba456bb8a20a3858efa1ca5bf73cebe88fe10b`; `owner_visual_evidence_binding=b1e5f459c917a3a1c98c0a9ba0307c131f22696833deb9be7ca87d727efea6a6`; local sensitive PNG deleted | PASS | owner-only review id `ff50b2b20bc3d2bf` | Joy-only visual evidence; no raw screenshot path returned |
+| Final purchase negative paths | Verify hard final-purchase gates | `secure_browser_guardrail_check(operation='place_order')`; `secure_browser_execute_final_purchase` with fake approval id/bindings | Ordinary place order blocked; executor refuses without current trusted final-purchase proposal | Guardrail returned `allowed=false`, `trusted_approval_required=true`; executor refused `approval_request_id has no current final-purchase proposal` | PASS | secure_browser_guardrail_check and executor refusal | No Place Order; no live checkout page used |
+| Audit log safety | Verify audit entries are high-level and sanitized | Tail `/home/joy/.hermes/profiles/star/secure-browser-audit.log` after safe validation actions | Entries show operation names, safe URLs, selector/effect metadata, bindings/handles; no cookies/storage/raw DOM/order numbers/address/payment | Recent entries contained navigate/screenshot/type/click/owner-review/retail-order-upsert metadata with bindings and safe handles; no raw browser internals observed | PASS | audit log tail from validation run | Do not publish raw full audit if future entries might include more context |
+| Persistence/reconnect semantics | Verify persistent Firefox session survives tool calls/reclaims and reconnects | Compare current page at new run start with previous validation state; perform multiple navigate/snapshot/query calls through same tool bridge | Session persists across worker/tool reconnects unless explicitly navigated | This run initially attached to the already-open Amazon order-history page left by earlier validation, then retained state across subsequent status/summary/query/snapshot calls. Later navigation changed the same persistent session to Example/Amazon pages as expected | PASS | `secure_browser_current_page_summary` at run start showed `Your Orders` / order-history sanitized state | No credential prompts handled by agent |
+
+## Known caveats / follow-ups
+
+- The browser.eyrie page itself is reachable from Firefox but currently presents a Firefox certificate warning (`SEC_ERROR_UNKNOWN_ISSUER`) for `https://browser.eyrie/`. I did not click through or modify trust settings. The secure-browser bridge does not depend on that in-browser URL because it attaches to the Kubernetes Firefox workload through `kubectl_port_forward`.
+- A full direct owl Puppet run can still fail on an unrelated `/home/joy` dotfiles `Vcsrepo` reference to missing remote branch `origin/talon/t_725e7395-beryl-mr-workflow-self-improvement-dotfiles-canary`. The final inventory-backed Bolt Puppet run applied catalog version `b5136a0d` successfully and installed the secure-browser tool/runtime changes.
+- Owner-only post-purchase review created/updated a safe retail-order ledger row as designed; only safe handles/bindings were returned to the worker.
