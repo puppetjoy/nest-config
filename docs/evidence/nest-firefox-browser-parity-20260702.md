@@ -11,11 +11,11 @@ Task: `t_7a68ae00` / Agent Request `^1367`.
 
 ## Source and rollout summary
 
-- Nest config `origin/main` is at `d2ef5c09`.
+- Nest config `origin/main` is at `e1edca05` for the final evidence commit in this validation pass.
 - `browser.eyrie` now uses `registry.gitlab.joyfullee.me/nest/tools/firefox:latest` with `imagePullPolicy: Always`.
 - The live Firefox pod image is `registry.gitlab.joyfullee.me/nest/tools/firefox@sha256:8fa99968a238cd61bf0fa92fc9a943d26038c2d8a4d99d5b2914a1489143a5e3`.
 - The live Camofox deployment uses `registry.gitlab.joyfullee.me/nest/tools/camofox:latest` with `imagePullPolicy: Always`.
-- Puppet code deploy succeeded to legacy/test/prod OpenVox and owl applied catalog version `d2ef5c09` with 0 failures.
+- Puppet code deploy succeeded to legacy/test/prod OpenVox at `e1edca05`; owl applied the runtime catalog at `d2ef5c09` before the final evidence-only documentation commit.
 
 ## Findings fixed during validation
 
