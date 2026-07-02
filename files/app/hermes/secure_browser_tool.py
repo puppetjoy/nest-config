@@ -3617,6 +3617,11 @@ def _target_page_info(cdp_url: str) -> dict[str, str]:
     return pages[0] if pages else {"id": "", "url": "about:blank", "title": ""}
 
 
+def _is_blank_page_url(value: str) -> bool:
+    url = str(value or "").strip().lower()
+    return not url or url in ("about:blank", "about:srcdoc")
+
+
 def _normalize_product_images(result: dict[str, Any]) -> None:
     candidates = result.pop("image_url_candidates", None) or []
     image_urls: list[str] = []
@@ -3936,7 +3941,16 @@ class CdpSession:
         return None
 
     def _bidi_contexts(self) -> list[dict[str, Any]]:
-        return list(self._bidi("browsingContext.getTree", {}).get("contexts") or [])
+        def flatten(contexts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+            collected: list[dict[str, Any]] = []
+            for context in contexts:
+                collected.append(context)
+                children = context.get("children")
+                if isinstance(children, list):
+                    collected.extend(flatten([child for child in children if isinstance(child, dict)]))
+            return collected
+
+        return flatten([context for context in (self._bidi("browsingContext.getTree", {}).get("contexts") or []) if isinstance(context, dict)])
 
     def call(self, method: str, params: dict[str, Any] | None = None, session_id: str | None = None) -> dict[str, Any]:
         params = params or {}
@@ -4007,15 +4021,35 @@ def _browser_ws_url(cdp_url: str) -> str:
     return urlunparse((scheme, endpoint.netloc, parsed.path, "", parsed.query, parsed.fragment))
 
 
-def _current_page_ids(browser: CdpSession) -> set[str]:
-    ids: set[str] = set()
+def _page_candidates(browser: CdpSession) -> list[dict[str, str]]:
+    pages: list[dict[str, str]] = []
+    seen: set[str] = set()
+
+    def add_page(target_id: Any, url: Any = "", title: Any = "") -> None:
+        page_id = str(target_id or "")
+        if not page_id or page_id in seen:
+            return
+        seen.add(page_id)
+        pages.append({"id": page_id, "url": str(url or ""), "title": str(title or "")})
+
+    if getattr(browser, "protocol", "cdp") == "bidi":
+        with contextlib.suppress(Exception):
+            for context in browser._bidi_contexts():
+                add_page(context.get("context"), context.get("url"), context.get("title"))
     if browser.cdp_url is not None:
         with contextlib.suppress(Exception):
-            ids.update(str(target["id"]) for target in _page_targets_from_http(browser.cdp_url) if target.get("id"))
+            for target in _page_targets_from_http(browser.cdp_url):
+                add_page(target.get("id"), target.get("url"), target.get("title"))
     with contextlib.suppress(Exception):
         targets = browser.call("Target.getTargets").get("targetInfos") or []
-        ids.update(str(target["targetId"]) for target in targets if target.get("type") == "page" and target.get("targetId"))
-    return ids
+        for target in targets:
+            if target.get("type") == "page":
+                add_page(target.get("targetId"), target.get("url"), target.get("title"))
+    return pages
+
+
+def _current_page_ids(browser: CdpSession) -> set[str]:
+    return {page["id"] for page in _page_candidates(browser) if page.get("id")}
 
 
 def _load_owner_state(handle: Any) -> dict[str, Any]:
@@ -4044,6 +4078,55 @@ def _store_owner_state(handle: Any, state: dict[str, Any]) -> None:
     os.fsync(handle.fileno())
 
 
+def _owner_state_entry(target_id: str, url: str = "", title: str = "") -> dict[str, Any]:
+    entry: dict[str, Any] = {
+        "target_id": target_id,
+        "toolset": TOOLSET,
+        "workload": WORKLOAD,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if url:
+        entry["url"] = _sanitize_url(url)
+    if title:
+        entry["title"] = _sanitize_shopping_text(title)
+    return entry
+
+
+def _store_owner_target(target_id: str, url: str = "", title: str = "") -> None:
+    os.makedirs(os.path.dirname(OWNERSHIP_STATE_PATH) or ".", exist_ok=True)
+    with open(OWNERSHIP_STATE_PATH, "a+", encoding="utf-8") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            state = _load_owner_state(handle)
+            owners = state.setdefault("owners", {})
+            owners[BROWSER_OWNER] = _owner_state_entry(target_id, url, title)
+            _store_owner_state(handle, state)
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
+def _page_matching_stored_owner(pages: list[dict[str, str]], owner: dict[str, Any]) -> dict[str, str] | None:
+    stored_url = str(owner.get("url") or "")
+    if not stored_url or _is_blank_page_url(stored_url):
+        return None
+    for page in pages:
+        if _sanitize_url(str(page.get("url") or "")) == stored_url:
+            return page
+    return None
+
+
+def _deterministic_current_page(pages: list[dict[str, str]]) -> dict[str, str] | None:
+    # Firefox BiDi context ids can be session-scoped, so a target id saved by a
+    # previous tool call is not always enough to find the visible tab again.
+    # Prefer the last non-blank page in the deterministic browser enumeration;
+    # this matches the tab most recently opened/navigated by secure_browser and
+    # avoids manufacturing a fresh about:blank tab for read-only follow-up tools.
+    non_blank = [page for page in pages if not _is_blank_page_url(str(page.get("url") or ""))]
+    if non_blank:
+        return non_blank[-1]
+    return pages[-1] if pages else None
+
+
 def _claim_owner_target(browser: CdpSession, create: bool = False) -> str:
     os.makedirs(os.path.dirname(OWNERSHIP_STATE_PATH) or ".", exist_ok=True)
     with open(OWNERSHIP_STATE_PATH, "a+", encoding="utf-8") as handle:
@@ -4051,17 +4134,22 @@ def _claim_owner_target(browser: CdpSession, create: bool = False) -> str:
         try:
             state = _load_owner_state(handle)
             owners = state.setdefault("owners", {})
-            live_ids = _current_page_ids(browser)
-            existing = str(owners.get(BROWSER_OWNER, {}).get("target_id") or "")
-            if existing and existing in live_ids and not create:
+            owner = owners.get(BROWSER_OWNER, {}) if isinstance(owners.get(BROWSER_OWNER), dict) else {}
+            pages = _page_candidates(browser)
+            live_by_id = {page["id"]: page for page in pages if page.get("id")}
+            existing = str(owner.get("target_id") or "")
+            if existing and existing in live_by_id and not create:
                 return existing
+            matched = None if create else _page_matching_stored_owner(pages, owner)
+            if matched is None and not create:
+                matched = _deterministic_current_page(pages)
+            if matched is not None and matched.get("id"):
+                target_id = str(matched["id"])
+                owners[BROWSER_OWNER] = _owner_state_entry(target_id, str(matched.get("url") or ""), str(matched.get("title") or ""))
+                _store_owner_state(handle, state)
+                return target_id
             target_id = str(browser.call("Target.createTarget", {"url": "about:blank"})["targetId"])
-            owners[BROWSER_OWNER] = {
-                "target_id": target_id,
-                "toolset": TOOLSET,
-                "workload": WORKLOAD,
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            }
+            owners[BROWSER_OWNER] = _owner_state_entry(target_id)
             _store_owner_state(handle, state)
             return target_id
         finally:
@@ -4074,11 +4162,9 @@ def _first_page_target(browser: CdpSession) -> str:
 
 def _owned_page_info(browser: CdpSession) -> dict[str, str]:
     target_id = _first_page_target(browser)
-    if getattr(browser, "protocol", "cdp") == "bidi":
-        with contextlib.suppress(Exception):
-            for context in browser._bidi_contexts():
-                if str(context.get("context") or "") == target_id:
-                    return {"id": target_id, "url": str(context.get("url") or "about:blank"), "title": ""}
+    for page in _page_candidates(browser):
+        if str(page.get("id") or "") == target_id:
+            return {"id": target_id, "url": str(page.get("url") or "about:blank"), "title": str(page.get("title") or "")}
     if browser.cdp_url is not None:
         with contextlib.suppress(Exception):
             return _page_info_for_id(browser.cdp_url, target_id)
@@ -4131,12 +4217,15 @@ def _navigate(url: str, new_page: bool) -> dict[str, Any]:
         target_id = _claim_owner_target(browser, create=True) if new_page else _first_page_target(browser)
         session_id = _attach(browser, target_id)
         _navigate_and_wait(browser, session_id, safe_url)
+        current_url = str(_evaluate(browser, session_id, "location.href") or safe_url)
+        current_title = str(_evaluate(browser, session_id, "document.title") or "")
+        _store_owner_target(target_id, current_url, current_title)
         result = {
             "operation": "navigate",
             "status": "ok",
             "secure_browser_owner": BROWSER_OWNER,
-            "url": _sanitize_url(str(_evaluate(browser, session_id, "location.href") or safe_url)),
-            "page_title": _sanitize_shopping_text(str(_evaluate(browser, session_id, "document.title") or "")),
+            "url": _sanitize_url(current_url),
+            "page_title": _sanitize_shopping_text(current_title),
         }
         _audit("navigate", {"url": result["url"], "page_title": result["page_title"], "new_page": new_page})
         return result
