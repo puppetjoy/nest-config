@@ -53,6 +53,13 @@ groups:
           uri: facts.fqdn
 
   - name: 'puppet-server'
+    config:
+      ssh:
+        # Legacy Puppet code deploy still connects to the puppet-server host
+        # as root. Keep that exception target-scoped so normal Nest host
+        # Puppet runs use the worker-safe joy+ssh-agent transport above.
+        user: 'root'
+        private-key: '~/.ssh/id_ed25519'
     targets:
       - _plugin: puppetdb
         query: "resources[certname] { type = 'Class' and title = 'Nest::Service::Puppet' limit 1 }"
