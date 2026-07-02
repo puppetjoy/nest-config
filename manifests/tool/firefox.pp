@@ -22,9 +22,13 @@ class nest::tool::firefox (
   # Bitwarden extension policy material, and the minimal fullscreen xmonad
   # application config.  Do not restate the workstation image's broad GUI/build
   # dependency set here: Firefox, xmonad, fonts, curl, xdotool, Xorg headers,
-  # and KasmVNC's build toolchain dependencies are inherited from the base;
-  # KasmVNC's helper scripts build their bundled TBB/libjpeg/webp/cpuid pieces
-  # as part of the pinned source build.
+  # and most KasmVNC build toolchain dependencies are inherited from the base.
+  # KasmVNC's helper scripts build their bundled libjpeg/webp/cpuid pieces; TBB
+  # remains a real system header/library dependency for the Xvnc build.
+  nest::lib::package { 'dev-cpp/tbb':
+    ensure => installed,
+    before => Nest::Lib::Build['kasmvnc'],
+  }
 
   nest::lib::src_repo { '/usr/src/KasmVNC':
     url => 'https://github.com/kasmtech/KasmVNC.git',
