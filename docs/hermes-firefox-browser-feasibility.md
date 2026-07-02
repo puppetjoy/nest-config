@@ -5,7 +5,7 @@ Joy's current product split:
 
 - `camofox.eyrie` is the ordinary Camofox/Camoufox REST browser API for standard
   Hermes browser tools.
-- `browser.eyrie` is the persistent secure browser: a singleton Firefox/noVNC app
+- `browser.eyrie` is the persistent secure browser: a singleton Firefox/KasmVNC app
   using the Nest-owned `registry.gitlab.joyfullee.me/nest/tools/firefox:latest`
   image for the current cutover work.
 - Current Firefox/Kasm implementation and bridge guidance lives in
