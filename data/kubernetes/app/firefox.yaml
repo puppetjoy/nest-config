@@ -11,6 +11,7 @@ cert_issuer_kind: ClusterIssuer
 ingress_class: contour-compute
 node_role: compute
 image: registry.gitlab.joyfullee.me/nest/tools/firefox:latest
+image_revision: '34b454fa'
 launch_url: about:blank
 app_args: >-
   --remote-debugging-address=0.0.0.0
@@ -180,6 +181,8 @@ resources:
                   value: unused
                 - name: VNCOPTIONS
                   value: "%{lookup('vnc_options')}"
+                - name: NEST_FIREFOX_IMAGE_REVISION
+                  value: "%{lookup('image_revision')}"
                 - name: LAUNCH_URL
                   value: "%{lookup('launch_url')}"
                 - name: KASM_RESTRICTED_FILE_CHOOSER
