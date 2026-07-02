@@ -3849,6 +3849,7 @@ class CdpBridge:
 
     def _wait_for_endpoint(self, cdp_url: str, label: str) -> None:
         deadline = time.time() + PORT_FORWARD_TIMEOUT_SECONDS
+        endpoint = urlparse(cdp_url)
         version_url = f"{cdp_url}/json/version"
         last_error = ""
         while time.time() < deadline:
@@ -3856,6 +3857,9 @@ class CdpBridge:
                 stderr = (self.process.stderr.read() if self.process.stderr else "").strip()
                 raise RuntimeError(f"kubectl port-forward failed: {stderr[:800]}")
             try:
+                if "browser.eyrie" in SECURE_BROWSER_TARGET or "firefox" in SECURE_BROWSER_TARGET:
+                    with socket.create_connection((endpoint.hostname or "127.0.0.1", endpoint.port or REMOTE_DEBUG_PORT), timeout=1):
+                        return
                 with urlopen(version_url, timeout=1) as response:
                     json.loads(response.read().decode("utf-8"))
                 return
@@ -3876,14 +3880,101 @@ class CdpBridge:
 
 class CdpSession:
     def __init__(self, websocket_url: str, cdp_url: str | None = None) -> None:
-        self.ws = websockets.sync.client.connect(websocket_url, open_timeout=5, close_timeout=2, max_size=CDP_MAX_MESSAGE_BYTES)
         self.next_id = 1
         self.cdp_url = cdp_url
+        self.protocol = "bidi" if websocket_url.startswith("bidi+") else "cdp"
+        self._bidi_session_created = False
+        if self.protocol == "bidi":
+            parsed = urlparse(websocket_url[len("bidi+") :])
+            if parsed.hostname is None or parsed.port is None:
+                raise RuntimeError("secure browser BiDi endpoint is missing host or port")
+            sock = socket.create_connection((parsed.hostname, parsed.port), timeout=5)
+            # Firefox validates the WebSocket Host header against its own
+            # loopback listener.  Kubernetes port-forward uses an arbitrary
+            # local port, so connect the TCP socket to that local port while
+            # sending the browser's real loopback endpoint in the handshake.
+            browser_ws_url = f"ws://127.0.0.1:{REMOTE_DEBUG_PORT}/session"
+            self.ws = websockets.sync.client.connect(browser_ws_url, sock=sock, open_timeout=5, close_timeout=2, max_size=CDP_MAX_MESSAGE_BYTES, compression=None)
+            self._bidi("session.new", {"capabilities": {"alwaysMatch": {}}})
+            self._bidi_session_created = True
+        else:
+            self.ws = websockets.sync.client.connect(websocket_url, open_timeout=5, close_timeout=2, max_size=CDP_MAX_MESSAGE_BYTES)
 
     def close(self) -> None:
+        if self.protocol == "bidi" and self._bidi_session_created:
+            with contextlib.suppress(Exception):
+                self._bidi("session.end", {})
         self.ws.close()
 
+    def _bidi(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        msg: dict[str, Any] = {"id": self.next_id, "method": method, "params": params or {}}
+        call_id = self.next_id
+        self.next_id += 1
+        self.ws.send(json.dumps(msg))
+        while True:
+            raw = self.ws.recv(timeout=10)
+            data = json.loads(raw)
+            if data.get("id") == call_id:
+                if data.get("type") == "error" or "error" in data:
+                    message = data.get("message") or data.get("error") or "unknown error"
+                    raise RuntimeError(f"BiDi {method} failed: {message}")
+                return data.get("result") or {}
+
+    @staticmethod
+    def _bidi_value(value: dict[str, Any]) -> Any:
+        value_type = value.get("type")
+        if "value" in value:
+            raw = value.get("value")
+            if value_type == "array" and isinstance(raw, list):
+                return [CdpSession._bidi_value(item) if isinstance(item, dict) else item for item in raw]
+            if value_type == "object" and isinstance(raw, list):
+                return {str(item[0].get("value") if isinstance(item[0], dict) else item[0]): CdpSession._bidi_value(item[1]) if isinstance(item[1], dict) else item[1] for item in raw if isinstance(item, list) and len(item) == 2}
+            return raw
+        if value_type in ("undefined", "null"):
+            return None
+        return None
+
+    def _bidi_contexts(self) -> list[dict[str, Any]]:
+        return list(self._bidi("browsingContext.getTree", {}).get("contexts") or [])
+
     def call(self, method: str, params: dict[str, Any] | None = None, session_id: str | None = None) -> dict[str, Any]:
+        params = params or {}
+        if self.protocol == "bidi":
+            if method == "Target.getTargets":
+                return {"targetInfos": [{"targetId": str(context.get("context")), "type": "page", "url": str(context.get("url") or ""), "title": ""} for context in self._bidi_contexts() if context.get("context")]}
+            if method == "Target.createTarget":
+                result = self._bidi("browsingContext.create", {"type": "tab"})
+                context_id = str(result.get("context") or "")
+                url = str(params.get("url") or "")
+                if url:
+                    self._bidi("browsingContext.navigate", {"context": context_id, "url": url, "wait": "complete"})
+                return {"targetId": context_id}
+            if method == "Target.attachToTarget":
+                return {"sessionId": str(params.get("targetId") or "")}
+            if method in ("Runtime.enable", "Page.enable"):
+                return {}
+            if method == "Page.navigate":
+                self._bidi("browsingContext.navigate", {"context": str(session_id or ""), "url": str(params.get("url") or "about:blank"), "wait": "complete"})
+                return {}
+            if method == "Runtime.evaluate":
+                result = self._bidi(
+                    "script.evaluate",
+                    {
+                        "expression": str(params.get("expression") or "undefined"),
+                        "target": {"context": str(session_id or "")},
+                        "awaitPromise": bool(params.get("awaitPromise", True)),
+                        "resultOwnership": "none",
+                    },
+                )
+                return {"result": {"value": self._bidi_value(result.get("result") or {})}}
+            if method == "Page.captureScreenshot":
+                result = self._bidi("browsingContext.captureScreenshot", {"context": str(session_id or ""), "origin": "viewport"})
+                return {"data": str(result.get("data") or "")}
+            if method == "Target.closeTarget":
+                self._bidi("browsingContext.close", {"context": str(params.get("targetId") or ""), "promptUnload": False})
+                return {}
+            raise RuntimeError(f"Firefox BiDi bridge does not implement CDP method {method}")
+
         msg: dict[str, Any] = {"id": self.next_id, "method": method}
         call_id = self.next_id
         self.next_id += 1
@@ -3902,12 +3993,14 @@ class CdpSession:
 
 
 def _browser_ws_url(cdp_url: str) -> str:
+    endpoint = urlparse(cdp_url)
+    if "browser.eyrie" in SECURE_BROWSER_TARGET or "firefox" in SECURE_BROWSER_TARGET:
+        return f"bidi+ws://{endpoint.hostname or '127.0.0.1'}:{endpoint.port or REMOTE_DEBUG_PORT}/session"
     with urlopen(f"{cdp_url}/json/version", timeout=3) as response:
         version = json.loads(response.read().decode("utf-8"))
     url = str(version.get("webSocketDebuggerUrl") or "")
     if not url:
         raise RuntimeError("secure browser CDP endpoint did not report a browser websocket")
-    endpoint = urlparse(cdp_url)
     parsed = urlparse(url)
     scheme = "wss" if endpoint.scheme == "https" else "ws"
     return urlunparse((scheme, endpoint.netloc, parsed.path, "", parsed.query, parsed.fragment))
@@ -3980,6 +4073,11 @@ def _first_page_target(browser: CdpSession) -> str:
 
 def _owned_page_info(browser: CdpSession) -> dict[str, str]:
     target_id = _first_page_target(browser)
+    if getattr(browser, "protocol", "cdp") == "bidi":
+        with contextlib.suppress(Exception):
+            for context in browser._bidi_contexts():
+                if str(context.get("context") or "") == target_id:
+                    return {"id": target_id, "url": str(context.get("url") or "about:blank"), "title": ""}
     if browser.cdp_url is not None:
         with contextlib.suppress(Exception):
             return _page_info_for_id(browser.cdp_url, target_id)
