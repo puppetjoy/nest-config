@@ -11,7 +11,7 @@ cert_issuer_kind: ClusterIssuer
 ingress_class: contour-compute
 node_role: compute
 image: registry.gitlab.joyfullee.me/nest/tools/firefox:latest
-image_revision: '1081cfbc'
+image_revision: '51963460'
 launch_url: about:blank
 app_args: >-
   --remote-debugging-address=0.0.0.0
