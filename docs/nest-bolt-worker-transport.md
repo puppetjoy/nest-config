@@ -19,6 +19,7 @@ This distinction matters for Hermes/Agent Request workers. The Bolt wrapper runs
 The source-managed fix is deliberately split:
 
 1. `inventory.yaml` sets Gentoo host SSH user to `joy` and stops forcing a global private-key path. Kube/pod targets can still rely on their own root-key mount/default identity behavior, while Gentoo host Puppet runs connect as `joy` and escalate through Bolt.
-2. `templates/scripts/bolt.sh.epp` exports `/run/user/$(id -u)/ssh-agent.socket` when `SSH_AUTH_SOCK` is absent but that standard user agent socket exists, then mounts it into the Bolt container.
+2. The `puppet-server` inventory group is intentionally listed before the broader Gentoo groups. Falcon can appear in both PuppetDB-derived groups, and Bolt merges duplicate target names in inventory order; the legacy r10k deploy target must keep the same unprivileged `joy` transport instead of inheriting an old root/private-key bootstrap shape.
+3. `templates/scripts/bolt.sh.epp` exports `/run/user/$(id -u)/ssh-agent.socket` when `SSH_AUTH_SOCK` is absent but that standard user agent socket exists, then mounts it into the Bolt container.
 
 If the smoke command fails, preserve the exact Bolt command, working directory, inventory file, target detail, and stderr/stdout. Do not switch the final deployment strategy to direct SSH or ad-hoc Puppet; diagnose why the inventory-backed Bolt path cannot authenticate or escalate.
