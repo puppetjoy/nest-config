@@ -33,6 +33,13 @@ operator port. The TODO for a later image iteration is a proper source-built
 KasmVNC component if parity testing shows the noVNC/x11vnc equivalent is not
 sufficient.
 
+The startup wrapper disables Firefox's Linux process sandboxes inside this
+Kubernetes container because Portage Firefox's content processes otherwise
+crash when user namespaces are unavailable. That is not a model/tool permission
+relaxation: the browser remains isolated by the pod, NetworkPolicy, guarded
+Remote Debugging attachment, and the secure-browser tool's sanitization/final
+purchase gates.
+
 State lives in a durable `firefox-profile` PVC mounted at `/home/kasm-user` so
 Joy login state, Firefox profile state, and Bitwarden extension state can survive
 pod replacement. The `firefox-reset-procedure` ConfigMap records the reset and

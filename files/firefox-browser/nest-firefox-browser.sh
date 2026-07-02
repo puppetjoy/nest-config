@@ -9,8 +9,22 @@ export APP_ARGS="${APP_ARGS:-}"
 # canary. The Nest noVNC wrapper owns the no-password setting directly.
 # Keep the value for compatibility, but do not pass it to x11vnc.
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/runtime-firefox}"
+# Firefox's Linux content sandbox expects user namespaces that are not
+# available in this Kubernetes container.  Disable the process sandboxes so
+# Portage Firefox can load pages instead of repeatedly crashing content
+# processes with EPERM while the pod-level/Kubernetes boundary remains the
+# workload isolation layer.
+export MOZ_DISABLE_CONTENT_SANDBOX="${MOZ_DISABLE_CONTENT_SANDBOX:-1}"
+export MOZ_DISABLE_RDD_SANDBOX="${MOZ_DISABLE_RDD_SANDBOX:-1}"
+export MOZ_DISABLE_GMP_SANDBOX="${MOZ_DISABLE_GMP_SANDBOX:-1}"
+export MOZ_DISABLE_GPU_SANDBOX="${MOZ_DISABLE_GPU_SANDBOX:-1}"
 
-mkdir -p "$HOME" "$HOME/.mozilla/firefox/nest-secure-browser" "$XDG_RUNTIME_DIR" /tmp/nest-firefox
+mkdir -p \
+  "$HOME" \
+  "$HOME/.mozilla/firefox/nest-secure-browser" \
+  "$HOME/.mozilla/firefox/nest-secure-browser/thumbnails" \
+  "$XDG_RUNTIME_DIR" \
+  /tmp/nest-firefox
 chmod 700 "$XDG_RUNTIME_DIR" "$HOME/.mozilla/firefox/nest-secure-browser" || true
 
 xvfb_pid=
