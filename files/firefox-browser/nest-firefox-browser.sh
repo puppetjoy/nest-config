@@ -83,7 +83,7 @@ if command -v openbox >/dev/null 2>&1; then
   cat > /tmp/nest-firefox/openbox/rc.xml <<'EOF'
 <openbox_config xmlns="http://openbox.org/3.4/rc">
   <applications>
-    <application class="Navigator">
+    <application class="firefox">
       <decor>no</decor>
     </application>
   </applications>
