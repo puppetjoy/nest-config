@@ -112,9 +112,34 @@ resize_firefox_windows_once() {
 
   window_ids=$(xdotool search --onlyvisible --class firefox 2>/dev/null || true)
   [ -n "$window_ids" ] || return 1
+
+  # Firefox extension panels and other chrome popups can also have the firefox
+  # WM_CLASS.  Resizing every visible firefox-class window makes the extensions
+  # menu flash closed before Joy can move the pointer into it.  Pick the largest
+  # visible Firefox window as the browser surface, then skip no-op resizes so
+  # the steady-state watcher does not disturb open chrome popups.
+  browser_window_id=
+  browser_window_area=0
   for window_id in $window_ids; do
-    xdotool windowmove "$window_id" 0 0 windowsize "$window_id" "$target_width" "$target_height" 2>/dev/null || true
+    window_geometry=$(xdotool getwindowgeometry --shell "$window_id" 2>/dev/null || true)
+    [ -n "$window_geometry" ] || continue
+    eval "$window_geometry"
+    window_area=$((WIDTH * HEIGHT))
+    if [ "$window_area" -gt "$browser_window_area" ]; then
+      browser_window_id="$window_id"
+      browser_window_area="$window_area"
+      browser_window_x="$X"
+      browser_window_y="$Y"
+      browser_window_width="$WIDTH"
+      browser_window_height="$HEIGHT"
+    fi
   done
+
+  [ -n "$browser_window_id" ] || return 1
+  if [ "$browser_window_x" -eq 0 ] && [ "$browser_window_y" -eq 0 ] && [ "$browser_window_width" -eq "$target_width" ] && [ "$browser_window_height" -eq "$target_height" ]; then
+    return 0
+  fi
+  xdotool windowmove "$browser_window_id" 0 0 windowsize "$browser_window_id" "$target_width" "$target_height" 2>/dev/null || true
 }
 
 # Without a full desktop session/window manager, Firefox may keep its default
