@@ -20,54 +20,11 @@ class nest::tool::firefox (
   # already carries Portage Firefox, xmonad, and the Nest font collection. Keep
   # this class focused on browser.eyrie-specific KasmVNC glue, CA trust refresh,
   # Bitwarden extension policy material, and the minimal fullscreen xmonad
-  # application config.
-
-  nest::lib::package { [
-    'dev-build/autoconf',
-    'dev-build/automake',
-    'dev-build/cmake',
-    'dev-build/libtool',
-    'dev-build/ninja',
-    'dev-cpp/tbb',
-    'dev-libs/openssl',
-    'dev-lang/nasm',
-    'dev-util/sccache',
-    'dev-vcs/git',
-    'media-libs/flac',
-    'media-libs/freetype',
-    'media-libs/libjpeg-turbo',
-    'media-libs/libpng',
-    'media-libs/libva',
-    'media-fonts/font-util',
-    'media-video/ffmpeg',
-    'net-misc/curl',
-    'net-misc/wget',
-    'sys-libs/pam',
-    'x11-apps/xauth',
-    'x11-apps/xkbcomp',
-    'x11-libs/libICE',
-    'x11-libs/libSM',
-    'x11-libs/libX11',
-    'x11-libs/libXau',
-    'x11-libs/libXdmcp',
-    'x11-libs/libXext',
-    'x11-libs/libXfont2',
-    'x11-libs/libXrender',
-    'x11-libs/libXtst',
-    'x11-libs/libdrm',
-    'net-libs/libtirpc',
-    'x11-libs/libxkbfile',
-    'x11-libs/pixman',
-    'x11-misc/util-macros',
-    'x11-misc/xdotool',
-    'x11-misc/xkeyboard-config',
-  ]:
-    ensure => installed,
-    before => [
-      Nest::Lib::Build['kasmvnc'],
-      Exec['install_firefox_bitwarden_extension'],
-    ],
-  }
+  # application config.  Do not restate the workstation image's broad GUI/build
+  # dependency set here: Firefox, xmonad, fonts, curl, xdotool, Xorg headers,
+  # and KasmVNC's build toolchain dependencies are inherited from the base;
+  # KasmVNC's helper scripts build their bundled TBB/libjpeg/webp/cpuid pieces
+  # as part of the pinned source build.
 
   nest::lib::src_repo { '/usr/src/KasmVNC':
     url => 'https://github.com/kasmtech/KasmVNC.git',
@@ -142,7 +99,6 @@ class nest::tool::firefox (
     command => "/usr/bin/curl --fail --location --show-error --output ${bitwarden_extension_path} ${bitwarden_extension_url}",
     creates => $bitwarden_extension_path,
     require => [
-      Nest::Lib::Package['net-misc/curl'],
       File['/opt/nest/firefox/extensions'],
     ],
     timeout => 0,

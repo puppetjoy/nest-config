@@ -12,15 +12,10 @@ vnc_height_depth="${vnc_geometry#*x}"
 vnc_height="${vnc_height_depth%%x*}"
 export FIREFOX_WIDTH="${FIREFOX_WIDTH:-${vnc_width}}"
 export FIREFOX_HEIGHT="${FIREFOX_HEIGHT:-${vnc_height}}"
-# Firefox's Linux content sandbox expects user namespaces that are not
-# available in this Kubernetes container.  Disable the process sandboxes so
-# Portage Firefox can load pages instead of repeatedly crashing content
-# processes with EPERM while the pod-level/Kubernetes boundary remains the
-# workload isolation layer.
-export MOZ_DISABLE_CONTENT_SANDBOX="${MOZ_DISABLE_CONTENT_SANDBOX:-1}"
-export MOZ_DISABLE_RDD_SANDBOX="${MOZ_DISABLE_RDD_SANDBOX:-1}"
-export MOZ_DISABLE_GMP_SANDBOX="${MOZ_DISABLE_GMP_SANDBOX:-1}"
-export MOZ_DISABLE_GPU_SANDBOX="${MOZ_DISABLE_GPU_SANDBOX:-1}"
+# Keep Firefox's process sandboxes enabled.  The Kubernetes workload grants the
+# narrow SETFCAP capability Firefox needs to create its user namespace instead
+# of suppressing the sandbox and showing a visible unsupported-configuration
+# warning in the browser chrome.
 
 mkdir -p \
   "$HOME" \

@@ -176,6 +176,14 @@ resources:
             - name: kasm-firefox
               image: "%{lookup('image')}"
               imagePullPolicy: Always
+              securityContext:
+                capabilities:
+                  add:
+                    # Firefox's content sandbox needs this to create a root
+                    # user namespace inside the container. Without it,
+                    # Firefox requires MOZ_DISABLE_*_SANDBOX and displays a
+                    # persistent "security sandbox is disabled" warning.
+                    - SETFCAP
               env:
                 - name: VNC_PW
                   value: unused
