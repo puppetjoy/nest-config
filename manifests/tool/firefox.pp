@@ -5,7 +5,11 @@
 # framebuffer, and a web noVNC endpoint that matches the browser.eyrie service
 # contract.  Persistent profile/session state remains a Kubernetes PVC mounted
 # by the workload, not baked into the image.
-class nest::tool::firefox {
+class nest::tool::firefox (
+  String $bitwarden_extension_id   = '{446900e4-71c2-419f-a6a7-df9c091e268b}',
+  String $bitwarden_extension_url  = 'https://addons.mozilla.org/firefox/downloads/latest/bitwarden-password-manager/latest.xpi',
+  String $bitwarden_extension_path = '/opt/nest/firefox/extensions/bitwarden.xpi',
+) {
   contain nest::gui::firefox
   contain nest::base::certs
   contain nest::gui::fonts
@@ -19,6 +23,7 @@ class nest::tool::firefox {
     'dev-python/websockify',
     'net-misc/curl',
     'www-apps/novnc',
+    'x11-misc/xdotool',
     'x11-misc/x11vnc',
   ]:
     ensure => installed,
@@ -46,6 +51,12 @@ class nest::tool::firefox {
     require => File['/opt/nest/firefox'],
   }
 
+  file { '/opt/nest/firefox/extensions':
+    ensure  => directory,
+    mode    => '0755',
+    require => File['/opt/nest/firefox'],
+  }
+
   file { '/opt/nest/firefox/bin/nest-firefox-browser.sh':
     ensure  => file,
     mode    => '0755',
@@ -60,6 +71,38 @@ class nest::tool::firefox {
     require => File['/opt/nest/firefox/bin'],
   }
 
+  file { '/opt/nest/firefox/novnc-index.html':
+    ensure  => file,
+    mode    => '0644',
+    source  => 'puppet:///modules/nest/firefox-browser/novnc-index.html',
+    require => File['/opt/nest/firefox'],
+  }
+
+  exec { 'install_firefox_bitwarden_extension':
+    command => "/usr/bin/curl --fail --location --show-error --output ${bitwarden_extension_path} ${bitwarden_extension_url}",
+    creates => $bitwarden_extension_path,
+    require => [
+      Nest::Lib::Package['net-misc/curl'],
+      File['/opt/nest/firefox/extensions'],
+    ],
+    timeout => 0,
+  }
+
+  file { '/usr/lib64/firefox/distribution/extensions':
+    ensure  => directory,
+    mode    => '0755',
+    require => Class['nest::gui::firefox'],
+  }
+
+  file { "/usr/lib64/firefox/distribution/extensions/${bitwarden_extension_id}.xpi":
+    ensure  => link,
+    target  => $bitwarden_extension_path,
+    require => [
+      Exec['install_firefox_bitwarden_extension'],
+      File['/usr/lib64/firefox/distribution/extensions'],
+    ],
+  }
+
   # The browser.eyrie app consumes a Kasm-style HTTPS noVNC endpoint on 6901.
   # Gentoo does not package KasmVNC today, so the first Nest-owned image uses
   # package-managed noVNC + websockify + x11vnc as the observable web-VNC
@@ -68,6 +111,15 @@ class nest::tool::firefox {
     ensure  => link,
     target  => '/usr/share/novnc',
     require => Nest::Lib::Package['www-apps/novnc'],
+  }
+
+  file { '/usr/share/novnc/index.html':
+    ensure  => link,
+    target  => '/opt/nest/firefox/novnc-index.html',
+    require => [
+      File['/opt/nest/firefox/novnc-index.html'],
+      Nest::Lib::Package['www-apps/novnc'],
+    ],
   }
 
   file { '/usr/local/bin/nest-firefox-browser':

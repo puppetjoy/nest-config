@@ -19,7 +19,7 @@ vnc_options: '-disableBasicAuth'
 storage_class: owl-crypt
 profile_storage_size: 12Gi
 bitwarden_extension_id: '{446900e4-71c2-419f-a6a7-df9c091e268b}'
-bitwarden_extension_install_url: https://addons.mozilla.org/firefox/downloads/latest/bitwarden-password-manager/latest.xpi
+bitwarden_extension_install_url: file:///opt/nest/firefox/extensions/bitwarden.xpi
 
 .affinity: &affinity
   nodeAffinity:
@@ -184,6 +184,10 @@ resources:
                   value: "%{lookup('launch_url')}"
                 - name: KASM_RESTRICTED_FILE_CHOOSER
                   value: '1'
+                - name: FIREFOX_WIDTH
+                  value: '1365'
+                - name: FIREFOX_HEIGHT
+                  value: '768'
                 - name: APP_ARGS
                   value: "%{lookup('app_args')}"
               ports:
@@ -212,7 +216,7 @@ resources:
                 - name: profile
                   mountPath: /home/kasm-user
                 - name: browser-policy
-                  mountPath: /usr/lib/firefox/distribution/policies.json
+                  mountPath: /usr/lib64/firefox/distribution/policies.json
                   subPath: policies.json
                   readOnly: true
                 - name: dshm
@@ -262,11 +266,6 @@ resources:
         tls:
           secretName: "%{nest::kubernetes::service}-certs"
       routes:
-        - conditions:
-            - exact: /
-          requestRedirectPolicy:
-            path: /vnc.html
-            statusCode: 302
         - conditions:
             - prefix: /
           enableWebsockets: true

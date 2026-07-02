@@ -9,6 +9,12 @@ export APP_ARGS="${APP_ARGS:-}"
 # canary. The Nest noVNC wrapper owns the no-password setting directly.
 # Keep the value for compatibility, but do not pass it to x11vnc.
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/runtime-firefox}"
+vnc_geometry="${VNC_RESOLUTION:-1365x768x24}"
+vnc_width="${vnc_geometry%%x*}"
+vnc_height_depth="${vnc_geometry#*x}"
+vnc_height="${vnc_height_depth%%x*}"
+export FIREFOX_WIDTH="${FIREFOX_WIDTH:-${vnc_width}}"
+export FIREFOX_HEIGHT="${FIREFOX_HEIGHT:-${vnc_height}}"
 # Firefox's Linux content sandbox expects user namespaces that are not
 # available in this Kubernetes container.  Disable the process sandboxes so
 # Portage Firefox can load pages instead of repeatedly crashing content
@@ -44,7 +50,7 @@ if [ ! -f /tmp/nest-firefox/websockify.pem ]; then
   chmod 600 /tmp/nest-firefox/websockify.pem
 fi
 
-Xvfb "$DISPLAY" -screen 0 "${VNC_RESOLUTION:-1365x768x24}" -nolisten tcp &
+Xvfb "$DISPLAY" -screen 0 "$vnc_geometry" -nolisten tcp &
 xvfb_pid=$!
 
 cleanup() {
@@ -79,8 +85,28 @@ firefox \
   --no-remote \
   --new-instance \
   --profile "$HOME/.mozilla/firefox/nest-secure-browser" \
+  --width "$FIREFOX_WIDTH" \
+  --height "$FIREFOX_HEIGHT" \
   $APP_ARGS \
   "$LAUNCH_URL" &
 firefox_pid=$!
+
+# Without a full desktop session/window manager, Firefox may keep its default
+# first-run window geometry.  Resize the top-level window to the Xvfb
+# framebuffer so Joy does not land in a small browser surrounded by black VNC
+# canvas.  This changes only window geometry; it does not inspect page content
+# or profile data.
+if command -v xdotool >/dev/null 2>&1; then
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    window_ids=$(xdotool search --onlyvisible --class firefox 2>/dev/null || true)
+    if [ -n "$window_ids" ]; then
+      for window_id in $window_ids; do
+        xdotool windowmove "$window_id" 0 0 windowsize "$window_id" "$FIREFOX_WIDTH" "$FIREFOX_HEIGHT" 2>/dev/null || true
+      done
+      break
+    fi
+    sleep 1
+  done
+fi
 
 wait "$firefox_pid"
