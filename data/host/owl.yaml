@@ -321,6 +321,10 @@ nest::app::hermes::instances:
     dashboard_public_url: 'https://star.eyrie'
     dashboard_theme: 'rose'
     google_workspace_enabled: true
+    # secure_browser uses kubectl for backend identity checks and CDP
+    # port-forwarding. Star must receive a managed kubeconfig path in her own
+    # runtime environment instead of inheriting Talon's shell-only KUBECONFIG.
+    kubeconfig_path: '/home/joy/.hermes/profiles/talon/kubeconfigs/eyrie.conf'
     environment:
       CAMOFOX_URL: 'https://camofox.eyrie'
       CAMOFOX_GENERAL_URL: 'https://camofox.eyrie'
