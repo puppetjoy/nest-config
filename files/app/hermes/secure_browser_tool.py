@@ -3864,7 +3864,8 @@ class CdpBridge:
                 raise RuntimeError(f"kubectl port-forward failed: {stderr[:800]}")
             try:
                 if "browser.eyrie" in SECURE_BROWSER_TARGET or "firefox" in SECURE_BROWSER_TARGET:
-                    with socket.create_connection((endpoint.hostname or "127.0.0.1", endpoint.port or REMOTE_DEBUG_PORT), timeout=1):
+                    default_port = 443 if endpoint.scheme == "https" else REMOTE_DEBUG_PORT
+                    with socket.create_connection((endpoint.hostname or "127.0.0.1", endpoint.port or default_port), timeout=1):
                         return
                 with urlopen(version_url, timeout=1) as response:
                     json.loads(response.read().decode("utf-8"))
