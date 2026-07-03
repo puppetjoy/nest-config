@@ -4,7 +4,8 @@ This custom Hermes toolset exposes browser-like control of the Puppet/KubeCM
 managed Kasm secure browser while keeping the raw Chrome DevTools endpoint,
 cookies, local storage, request headers, downloads, and credential material out
 of model-visible tool results.  Screenshots are scoped to the persistent
-secure browser viewport and returned only as local media artifacts.  Policy
+secure browser page, with full-document capture when safe and explicit
+downgrade metadata when capture must fall back to the visible viewport. Policy
 lives in the tool descriptions, bounded argument schemas, lightweight runtime
 guardrails, and a high-level audit log rather than in one-off helpers for every
 shopping action.
@@ -3513,6 +3514,69 @@ def _png_dimensions(path: str) -> tuple[int, int]:
     return int.from_bytes(header[16:20], "big"), int.from_bytes(header[20:24], "big")
 
 
+def _capture_layout_metrics(browser: Any, session_id: str) -> dict[str, float]:
+    metrics = _evaluate(
+        browser,
+        session_id,
+        "(() => ({"
+        "width: Math.max(document.documentElement.scrollWidth, document.body ? document.body.scrollWidth : 0, window.innerWidth),"
+        "height: Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0, window.innerHeight),"
+        "viewport_width: window.innerWidth,"
+        "viewport_height: window.innerHeight,"
+        "device_scale_factor: window.devicePixelRatio || 1,"
+        "original_x: window.scrollX,"
+        "original_y: window.scrollY"
+        "}))()",
+    ) or {}
+    result: dict[str, float] = {}
+    for key in ("width", "height", "viewport_width", "viewport_height", "device_scale_factor", "original_x", "original_y"):
+        try:
+            result[key] = float(metrics.get(key) or 0)
+        except (AttributeError, TypeError, ValueError):
+            result[key] = 0.0
+    result["viewport_width"] = max(1.0, result.get("viewport_width") or 1.0)
+    result["viewport_height"] = max(1.0, result.get("viewport_height") or 1.0)
+    result["width"] = max(result["viewport_width"], result.get("width") or result["viewport_width"])
+    result["height"] = max(result["viewport_height"], result.get("height") or result["viewport_height"])
+    result["device_scale_factor"] = max(0.1, result.get("device_scale_factor") or 1.0)
+    return result
+
+
+def _image_covers_document(image_width: int, image_height: int, layout: dict[str, float]) -> bool:
+    document_height = float(layout.get("height") or 0)
+    viewport_height = float(layout.get("viewport_height") or 0)
+    if document_height <= 0 or viewport_height <= 0:
+        return True
+    if document_height <= viewport_height + 2:
+        return True
+    scale = float(layout.get("device_scale_factor") or 1.0)
+    viewport_width = float(layout.get("viewport_width") or 0)
+    if viewport_width > 0 and image_width > 0:
+        scale = max(0.1, image_width / viewport_width)
+    return image_height >= int(document_height * scale * 0.95)
+
+
+def _owner_review_scroll_positions(layout: dict[str, float]) -> list[int]:
+    viewport_height = max(1, int(layout.get("viewport_height") or 900))
+    document_height = max(viewport_height, int(layout.get("height") or viewport_height))
+    bottom = max(0, document_height - viewport_height)
+    positions = list(range(0, bottom + 1, viewport_height))
+    if bottom not in positions:
+        positions.append(bottom)
+    positions = sorted(set(positions))
+    if len(positions) <= MAX_OWNER_REVIEW_VIEWPORTS:
+        return positions
+    if MAX_OWNER_REVIEW_VIEWPORTS <= 1:
+        return [0]
+    # Preserve top and bottom evidence when an unusually tall checkout/order
+    # page exceeds the owner-only Telegram artifact cap. Interior positions are
+    # spread through the document instead of silently omitting below-the-fold
+    # material such as totals, delivery details, or confirmation sections.
+    step = (len(positions) - 1) / float(MAX_OWNER_REVIEW_VIEWPORTS - 1)
+    selected = [positions[round(index * step)] for index in range(MAX_OWNER_REVIEW_VIEWPORTS)]
+    return sorted(set(selected))
+
+
 def _bounded_crop_rect(rect: dict[str, Any], image_width: int, image_height: int, scale_x: float, scale_y: float, padding: int) -> dict[str, int]:
     try:
         x = float(rect.get("x", 0)) * scale_x
@@ -3987,7 +4051,8 @@ class CdpSession:
                 )
                 return {"result": {"value": self._bidi_value(result.get("result") or {})}}
             if method == "Page.captureScreenshot":
-                result = self._bidi("browsingContext.captureScreenshot", {"context": str(session_id or ""), "origin": "viewport"})
+                origin = "document" if bool(params.get("captureBeyondViewport")) else "viewport"
+                result = self._bidi("browsingContext.captureScreenshot", {"context": str(session_id or ""), "origin": origin})
                 return {"data": str(result.get("data") or "")}
             if method == "Target.closeTarget":
                 self._bidi("browsingContext.close", {"context": str(params.get("targetId") or ""), "promptUnload": False})
@@ -4308,6 +4373,7 @@ def _screenshot(full_page: bool = False) -> dict[str, Any]:
         policy = _screenshot_policy(url, title)
         target_id = page_info.get("id") or _first_page_target(browser)
         session_id = _attach(browser, str(target_id))
+        layout = _capture_layout_metrics(browser, session_id)
         checkout_review: dict[str, Any] | None = None
         redaction: dict[str, Any] = {}
         if policy["redaction_required"]:
@@ -4342,6 +4408,9 @@ def _screenshot(full_page: bool = False) -> dict[str, Any]:
                     _evaluate(browser, session_id, CHECKOUT_SCREENSHOT_REDACTION_CLEANUP_JS)
         output_path = _safe_screenshot_path()
         _write_screenshot(output_path, png_data)
+        image_width, image_height = _png_dimensions(output_path)
+        full_page_captured = bool(full_page) and capture_method == "cdp" and not policy["redaction_required"] and _image_covers_document(image_width, image_height, layout)
+        full_page_downgraded = bool(full_page) and not full_page_captured
         result = {
             "operation": "screenshot",
             "status": "ok",
@@ -4349,9 +4418,13 @@ def _screenshot(full_page: bool = False) -> dict[str, Any]:
             "media": f"MEDIA:{output_path}",
             "url": _sanitize_url(url),
             "page_title": title,
-            "full_page": bool(full_page) and capture_method == "cdp" and not policy["redaction_required"],
+            "full_page": full_page_captured,
+            "requested_full_page": bool(full_page),
+            "full_page_downgraded": full_page_downgraded,
             "capture_method": capture_method,
             "screenshot_mode": policy["mode"],
+            "image_dimensions": {"width": image_width, "height": image_height},
+            "document_dimensions": {"width": int(layout.get("width") or 0), "height": int(layout.get("height") or 0), "viewport_width": int(layout.get("viewport_width") or 0), "viewport_height": int(layout.get("viewport_height") or 0)},
             "safety_boundary": "Captured only the persistent secure browser page as a local PNG artifact. No raw CDP endpoint, cookies, local storage, request headers, vault contents, passwords, passkeys, 2FA/CAPTCHA data, or account/payment/address secrets were returned as structured text.",
         }
         if policy["redaction_required"]:
@@ -4367,8 +4440,15 @@ def _screenshot(full_page: bool = False) -> dict[str, Any]:
         if capture_method == "kasm_x11":
             result["fallback_reason"] = cdp_error
             result["full_page_note"] = "Kasm X11 fallback captures the visible browser display only."
+            result["downgrade_reason"] = "CDP/BiDi full-document screenshot failed; Kasm X11 fallback is display-bound."
         if policy["redaction_required"] and full_page:
             result["full_page_note"] = "Full-page capture was downgraded to the visible viewport because checkout-prep redaction is viewport-bound."
+            result["downgrade_reason"] = "Checkout/order-review redaction overlays are applied only to visible material sections; blind off-viewport capture could include sensitive address/payment/account text without overlays."
+        elif full_page_downgraded and capture_method == "cdp":
+            result["full_page_note"] = "The browser returned an image that did not cover the measured document height, so the artifact is reported as viewport/partial evidence instead of full-page evidence."
+            result["downgrade_reason"] = "Browser screenshot protocol accepted full_page but returned less than the measured document height."
+        if full_page_downgraded:
+            result["suggested_next_capture"] = "Use secure_browser_visual_evidence with focused crops or secure_browser_owner_checkout_review for owner-only full material-section coverage."
         _audit("screenshot", {"url": result["url"], "page_title": title, "path": output_path, "full_page": result["full_page"], "capture_method": capture_method, "screenshot_mode": result["screenshot_mode"], "checkout_binding": result.get("material_summary_binding"), "redaction_rects_hash": (result.get("redaction") or {}).get("redaction_rects_hash")})
         return result
 
@@ -4396,13 +4476,9 @@ def _capture_owner_visual_artifacts(browser: CdpSession, session_id: str, review
         artifacts.append(("full-page", _capture_cdp_png(browser, session_id, full_page=True), "full-page"))
     except Exception:
         capture_mode = "viewport-sequence"
-        layout = _evaluate(browser, session_id, "(() => ({width: Math.max(document.documentElement.scrollWidth, document.body ? document.body.scrollWidth : 0, window.innerWidth), height: Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0, window.innerHeight), viewport_width: window.innerWidth, viewport_height: window.innerHeight, original_x: window.scrollX, original_y: window.scrollY}))()") or {}
-        viewport_height = max(1, int(layout.get("viewport_height") or 900))
-        document_height = max(viewport_height, int(layout.get("height") or viewport_height))
-        positions = list(range(0, document_height, viewport_height))[:MAX_OWNER_REVIEW_VIEWPORTS]
-        if positions and positions[-1] + viewport_height < document_height:
-            positions.append(max(0, document_height - viewport_height))
-        for seq, y in enumerate(positions[:MAX_OWNER_REVIEW_VIEWPORTS], 1):
+        layout = _capture_layout_metrics(browser, session_id)
+        positions = _owner_review_scroll_positions(layout)
+        for seq, y in enumerate(positions, 1):
             _evaluate(browser, session_id, f"window.scrollTo(0, {int(y)})")
             time.sleep(0.2)
             artifacts.append((f"viewport-{seq:02d}", _capture_cdp_png(browser, session_id, full_page=False), "viewport"))
@@ -4677,9 +4753,15 @@ def _visual_evidence(full_page: bool, include_full_page: bool, crops: list[Any])
             "screenshot_mode": screenshot.get("screenshot_mode"),
             "capture_method": screenshot.get("capture_method"),
             "full_page_captured": screenshot.get("full_page"),
+            "requested_full_page": screenshot.get("requested_full_page"),
+            "full_page_downgraded": screenshot.get("full_page_downgraded"),
             "full_page_path": screenshot.get("path"),
             "full_page_media": screenshot.get("media") if include_full_page else None,
             "full_page_note": screenshot.get("full_page_note"),
+            "downgrade_reason": screenshot.get("downgrade_reason"),
+            "suggested_next_capture": screenshot.get("suggested_next_capture"),
+            "image_dimensions": screenshot.get("image_dimensions"),
+            "document_dimensions": screenshot.get("document_dimensions"),
             "suggested_regions": regions.get("regions") or [],
             "crops": crop_results,
             "redaction": screenshot.get("redaction"),
@@ -5254,11 +5336,11 @@ QUERY_SCHEMA = {
 
 SCREENSHOT_SCHEMA = {
     "name": "secure_browser_screenshot",
-    "description": "Capture the current visible persistent secure browser page as a local PNG media artifact for delivery. Refuses obvious login, account, payment, address, order, passkey, CAPTCHA, and verification URLs; Amazon checkout-prep pages are captured only with browser-side redaction and viewport bounds. Logs the high-level capture in the audit log. Returns only a local file path/media handle plus sanitized page metadata, not raw CDP data, cookies, storage, headers, or secrets.",
+    "description": "Capture the current persistent secure browser page as a local PNG media artifact for delivery. Requests full-document capture when safe and supported, and reports explicit downgrade metadata if it must fall back to visible-viewport capture. Refuses obvious login, account, payment, address, order, passkey, CAPTCHA, and verification URLs; Amazon checkout-prep pages are captured only with browser-side redaction and viewport bounds. Logs the high-level capture in the audit log. Returns only a local file path/media handle plus sanitized page metadata, not raw CDP data, cookies, storage, headers, or secrets.",
     "parameters": {
         "type": "object",
         "properties": {
-            "full_page": {"type": "boolean", "description": "Capture beyond the current viewport when Chromium supports it. Redacted checkout-prep evidence is always downgraded to viewport capture.", "default": False},
+            "full_page": {"type": "boolean", "description": "Capture beyond the current viewport when the browser protocol safely supports it. Redacted checkout-prep evidence is always downgraded to viewport capture with downgrade metadata.", "default": False},
         },
         "required": [],
     },
@@ -5266,11 +5348,11 @@ SCREENSHOT_SCHEMA = {
 
 VISUAL_EVIDENCE_SCHEMA = {
     "name": "secure_browser_visual_evidence",
-    "description": "Capture retailer-agnostic visual evidence from the current secure browser page: a local PNG screenshot, sanitized suggested regions, and optional focused crops. Crops may reference a suggested region_id/category/text_anchor, a safe CSS selector, or an explicit bounding rect. Amazon checkout-prep pages are captured only with redaction and viewport bounds; login/account/payment/address/security pages remain Joy-only. Returns PNG paths/media handles plus sanitized metadata, never raw DOM, cookies, storage, request headers, credentials, CDP endpoints, payment/address secrets, or browser internals.",
+    "description": "Capture retailer-agnostic visual evidence from the current secure browser page: a local PNG full-document screenshot when safe, explicit downgrade metadata when viewport-only capture is required, sanitized suggested regions, and optional focused crops. Crops may reference a suggested region_id/category/text_anchor, a safe CSS selector, or an explicit bounding rect. Amazon checkout-prep pages are captured only with redaction and viewport bounds; login/account/payment/address/security pages remain Joy-only. Returns PNG paths/media handles plus sanitized metadata, never raw DOM, cookies, storage, request headers, credentials, CDP endpoints, payment/address secrets, or browser internals.",
     "parameters": {
         "type": "object",
         "properties": {
-            "full_page": {"type": "boolean", "description": "Capture beyond the current viewport when safe and supported. Redacted checkout-prep evidence is always downgraded to viewport capture.", "default": True},
+            "full_page": {"type": "boolean", "description": "Capture beyond the current viewport when safe and supported. Redacted checkout-prep evidence is always downgraded to viewport capture with downgrade metadata.", "default": True},
             "include_full_page": {"type": "boolean", "description": "Include a MEDIA handle for the full screenshot in addition to the local path. Crop media handles are always returned.", "default": False},
             "crops": {
                 "type": "array",
@@ -5380,7 +5462,7 @@ CURRENT_PAGE_SUMMARY_SCHEMA = {
 
 OWNER_CHECKOUT_REVIEW_SCHEMA = {
     "name": "secure_browser_owner_checkout_review",
-    "description": "Send complete sensitive checkout/order-review or post-purchase confirmation/order-verification visual evidence directly to Joy's configured Telegram destination for owner-only review. For pre-purchase checkout, intended for verification of address, payment, item, delivery, tax/total, discounts, and final controls. For post-purchase pages, intended for thank-you/confirmation and Your Orders delivery proof. Returns only a redacted acknowledgement, bindings, and sanitized summary to Star; it never returns image paths, MEDIA handles, raw DOM, cookies, storage, request headers, CDP endpoints, credentials, passkeys, 2FA/CAPTCHA data, raw order numbers, or structured address/payment details. Final Place Order remains blocked pending trusted approval before purchase.",
+    "description": "Send complete sensitive checkout/order-review or post-purchase confirmation/order-verification visual evidence directly to Joy's configured Telegram destination for owner-only review. It first attempts full-document capture; if that is unavailable, it sends an ordered viewport sequence covering the page from top through below-the-fold material sections. For pre-purchase checkout, intended for verification of address, payment, item, delivery, tax/total, discounts, and final controls. For post-purchase pages, intended for thank-you/confirmation and Your Orders delivery proof. Returns only a redacted acknowledgement, bindings, and sanitized summary to Star; it never returns image paths, MEDIA handles, raw DOM, cookies, storage, request headers, CDP endpoints, credentials, passkeys, 2FA/CAPTCHA data, raw order numbers, or structured address/payment details. Final Place Order remains blocked pending trusted approval before purchase.",
     "parameters": {
         "type": "object",
         "properties": {
