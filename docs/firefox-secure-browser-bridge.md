@@ -50,20 +50,16 @@ Bitwarden is seeded with Firefox enterprise policy using the AMO extension id
 ConfigMap is public-extension metadata only; it does not contain Joy vault data
 or credentials.
 
-The existing Chrome/Kasm `secure-browser` workload and `secure-browser-cdp.eyrie`
-remain source-managed for rollback only. When the product target is
-`browser.eyrie` Firefox, Hermes secure-browser tools must bind to
-`deployment/firefox`, verify the live workload is the Nest Firefox image, and
-fail closed if they are pointed at `deployment/secure-browser` or
-`secure-browser-cdp.eyrie`.
+Hermes secure-browser tools bind to `deployment/firefox`, verify the live
+workload is the Nest Firefox image, and fail closed when configuration points
+at a retired browser workload or a non-Firefox image.
 
 ## Automation bridge options
 
 ### CDP
 
-Firefox CDP support is incomplete compared with Chrome and does not match the
-existing Star secure-browser implementation closely enough to make a blind
-endpoint swap safe. Exposing a raw CDP-like endpoint would also make cookies,
+Firefox Remote Debugging is a broad browser-control surface and should not be
+exposed directly to models. Exposing a raw CDP-like endpoint would make cookies,
 storage, network events, screenshots, and final controls too easy to leak or
 misuse.
 
@@ -109,8 +105,7 @@ unless all requested `browser.eyrie` identity/configuration checks pass:
 - configured workload is `deployment/firefox`
 - live image starts with `registry.gitlab.joyfullee.me/nest/tools/firefox`
 - app label identifies `firefox`
-- configured workload/URL is not legacy `deployment/secure-browser` or
-  `secure-browser-cdp.eyrie`
+- configured workload and image match the Firefox secure-browser surface
 
 This is intentionally not a general raw-debugging API for agents; the existing
 tool guardrails still own URL allowlists, query rejection, sensitive screenshot

@@ -73,8 +73,8 @@ resources:
 
         This service is not Joy's persistent secure browser. Operator/login,
         Bitwarden, checkout, and final-purchase flows belong to the separate
-        secure-browser/Kasm surface at https://browser.eyrie and stay governed
-        by the existing owner-only approval gates.
+        Firefox/Kasm secure-browser surface at https://browser.eyrie and stay
+        governed by the existing owner-only approval gates.
 
         Private-network navigation and temporary HTTPS-error ignores are enabled
         only because this trusted internal Nest endpoint must open `.eyrie`

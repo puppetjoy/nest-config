@@ -74,10 +74,7 @@ API:
 - `CAMOFOX_URL=https://camofox.eyrie`
 
 Star secure-browser operations bind to the separate persistent Firefox/Kasm
-`browser.eyrie` app, not to Camofox. The legacy
-`secure-browser-cdp.eyrie` Chrome/Kasm endpoint remains source-managed only for
-rollback diagnostics and is guarded against when the requested target is
-browser.eyrie Firefox.
+`browser.eyrie` app, not to Camofox.
 
 
 ## Secure-browser boundary
@@ -117,7 +114,7 @@ Render checks:
 - confirm the rendered HTTPProxy routes `/` directly to the REST API service
 - confirm no `camofox-general`, `camofox-secure`, or `*-api.eyrie` resources are
   rendered
-- confirm no resources mutate the current `secure-browser` Chrome/Kasm workload
+- confirm no resources mutate the Firefox/Kasm secure-browser workload
 
 Canary checks after review approval:
 

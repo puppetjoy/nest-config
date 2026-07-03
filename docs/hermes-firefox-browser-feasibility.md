@@ -15,7 +15,5 @@ Joy's current product split:
 The old recommendation to make the secure browser a Camofox/noVNC service is no
 longer active guidance. Do not use this historical plan to add a Camofox REST API
 at `browser.eyrie`, to expose raw CDP/WebDriver/VNC endpoints to models, or to
-repoint final-purchase execution to an unproven Firefox backend. The existing
-Chrome/Kasm CDP backend remains available for rollback/current secure-browser
-execution until the narrow private Firefox bridge is implemented, reviewed, and
-parity-tested.
+repoint final-purchase execution away from the reviewed Firefox secure-browser
+bridge.

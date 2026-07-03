@@ -37,10 +37,6 @@ parameters:
     type: Boolean
     default: true
 
-  secure_browser:
-    description: 'Deploy rollback Chrome/Kasm secure-browser backend'
-    type: Boolean
-    default: true
 
   firefox:
     description: 'Deploy Firefox/Kasm browser.eyrie secure-browser canary'
@@ -95,11 +91,6 @@ steps:
     plan: nest::eyrie::ai::deploy_beryl
     parameters:
       deploy: $deploy and $beryl
-
-  - description: 'Deploy rollback Chrome/Kasm secure-browser backend'
-    plan: nest::eyrie::ai::deploy_secure_browser
-    parameters:
-      deploy: $deploy and $secure_browser
 
   - description: 'Deploy Firefox/Kasm browser.eyrie secure-browser canary'
     plan: nest::eyrie::ai::deploy_firefox

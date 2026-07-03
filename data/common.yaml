@@ -125,8 +125,6 @@ nest::cnames:
   camofox.eyrie: 'ingress-compute.eyrie'
   browser.eyrie: 'ingress-compute.eyrie'
   browser-cdp.eyrie: 'ingress-compute.eyrie'
-  secure-browser.eyrie: 'ingress-compute.eyrie'
-  secure-browser-cdp.eyrie: 'ingress-compute.eyrie'
   voice-speech.eyrie: 'ingress-compute.eyrie'
   llama-util.nest: 'kestrel.nest'
 
