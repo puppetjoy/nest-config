@@ -50,7 +50,7 @@ class FakeBiDiBrowser:
     protocol = "bidi"
     cdp_url = None
 
-    def __init__(self, contexts: list[dict[str, str]]) -> None:
+    def __init__(self, contexts: list[dict[str, Any]]) -> None:
         self.contexts = contexts
         self.created_targets: list[str] = []
 
@@ -162,8 +162,41 @@ def test_browser_ws_url_uses_wss_for_private_https_firefox_route() -> None:
         assert module._browser_ws_url("http://127.0.0.1:54321") == "bidi+ws://127.0.0.1:54321/session"
 
 
+def test_bidi_page_candidates_ignore_child_iframe_contexts() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        state_path = Path(tmpdir) / "secure-browser-tabs.json"
+        module = load_tool_module(state_path)
+        browser = FakeBiDiBrowser(
+            [
+                {
+                    "context": "top-level-tab",
+                    "url": "https://photos.google.com/",
+                    "title": "Photos",
+                    "children": [
+                        {
+                            "context": "child-frame",
+                            "url": "https://ogs.google.com/u/0/widget/app",
+                            "title": "",
+                        }
+                    ],
+                },
+                {"context": "current-visible-tab", "url": "https://example.com/", "title": "Example Domain"},
+            ]
+        )
+
+        pages = module._page_candidates(browser)
+        page_ids = {page["id"] for page in pages}
+        target_id = module._claim_owner_target(browser, create=False)
+
+        assert "top-level-tab" in page_ids
+        assert "current-visible-tab" in page_ids
+        assert "child-frame" not in page_ids
+        assert target_id == "current-visible-tab"
+
+
 if __name__ == "__main__":
     test_stale_bidi_context_id_resolves_by_stored_sanitized_url()
     test_no_owner_match_uses_existing_non_blank_page_instead_of_creating_about_blank()
     test_create_still_opens_a_new_owned_tab_for_explicit_new_page_navigation()
     test_browser_ws_url_uses_wss_for_private_https_firefox_route()
+    test_bidi_page_candidates_ignore_child_iframe_contexts()

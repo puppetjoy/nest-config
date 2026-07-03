@@ -3947,16 +3947,14 @@ class CdpSession:
         return None
 
     def _bidi_contexts(self) -> list[dict[str, Any]]:
-        def flatten(contexts: list[dict[str, Any]]) -> list[dict[str, Any]]:
-            collected: list[dict[str, Any]] = []
-            for context in contexts:
-                collected.append(context)
-                children = context.get("children")
-                if isinstance(children, list):
-                    collected.extend(flatten([child for child in children if isinstance(child, dict)]))
-            return collected
-
-        return flatten([context for context in (self._bidi("browsingContext.getTree", {}).get("contexts") or []) if isinstance(context, dict)])
+        # `browsingContext.getTree` returns top-level tabs with nested child
+        # browsing contexts for iframes. Secure-browser ownership and
+        # navigation must bind to visible tabs only: if a child iframe is saved
+        # as the owner target, later top-level navigations can fail with Firefox
+        # errors such as NS_ERROR_XFO_VIOLATION and snapshots inspect the wrong
+        # frame. CDP `Target.getTargets` exposes page targets, not iframes, so
+        # keep the BiDi compatibility layer at the same top-level-tab boundary.
+        return [context for context in (self._bidi("browsingContext.getTree", {}).get("contexts") or []) if isinstance(context, dict)]
 
     def call(self, method: str, params: dict[str, Any] | None = None, session_id: str | None = None) -> dict[str, Any]:
         params = params or {}
