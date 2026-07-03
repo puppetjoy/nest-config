@@ -147,8 +147,59 @@ def test_full_page_dimensions_detect_viewport_only_downgrade() -> None:
         assert not module._image_covers_document(1200, 1000, layout)
 
 
+def test_visual_evidence_does_not_nest_bidi_sessions() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        module = load_tool_module(Path(tmpdir) / "secure-browser-tabs.json")
+        image_path = Path(tmpdir) / "full.png"
+        image_path.write_bytes(TINY_PNG)
+        active_sessions = 0
+
+        def fake_screenshot(_full_page: bool) -> dict[str, Any]:
+            nonlocal active_sessions
+            assert active_sessions == 0
+            active_sessions += 1
+            active_sessions -= 1
+            return {
+                "path": str(image_path),
+                "url": "https://example.test/product",
+                "page_title": "Example product",
+                "full_page": True,
+                "requested_full_page": True,
+                "full_page_downgraded": False,
+                "capture_method": "cdp",
+                "screenshot_mode": "standard",
+                "media": f"MEDIA:{image_path}",
+                "image_dimensions": {"width": 1, "height": 1},
+                "document_dimensions": {"width": 1, "height": 1},
+            }
+
+        def fake_with_browser(fn: Any) -> dict[str, Any]:
+            nonlocal active_sessions
+            assert active_sessions == 0
+            active_sessions += 1
+            try:
+                return fn(object())
+            finally:
+                active_sessions -= 1
+
+        setattr(module, "_screenshot", fake_screenshot)
+        setattr(module, "_with_browser", fake_with_browser)
+        setattr(module, "_owned_page_info", lambda _browser: {"id": "tab-1", "url": "https://example.test/product", "title": "Example product"})
+        setattr(module, "_screenshot_policy", lambda _url, _title: {"redaction_required": False, "mode": "standard"})
+        setattr(module, "_attach", lambda _browser, target: target)
+        setattr(module, "_visual_regions", lambda _browser, _session_id: {"document": {"width": 1, "height": 1}, "viewport": {"width": 1, "height": 1}, "regions": []})
+        setattr(module, "_png_dimensions", lambda _path: (1, 1))
+
+        result = module._visual_evidence(True, True, [])
+
+        assert result["status"] == "ok"
+        assert result["full_page_captured"] is True
+        assert result["full_page_media"] == f"MEDIA:{image_path}"
+
+
 if __name__ == "__main__":
     test_bidi_capture_screenshot_uses_document_origin_for_full_page()
     test_owner_review_falls_back_to_viewport_sequence_covering_below_fold()
     test_owner_review_scroll_positions_include_bottom_when_capped()
     test_full_page_dimensions_detect_viewport_only_downgrade()
+    test_visual_evidence_does_not_nest_bidi_sessions()

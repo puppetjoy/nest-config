@@ -4689,15 +4689,20 @@ def _visual_evidence(full_page: bool, include_full_page: bool, crops: list[Any])
     if len(crops) > MAX_VISUAL_CROPS:
         raise ValueError(f"at most {MAX_VISUAL_CROPS} crops may be requested at once")
 
+    # Capture the page image before opening the region-inspection session.
+    # Firefox's BiDi endpoint allows only one active session; nesting
+    # _screenshot() inside _with_browser() makes visual_evidence fail with
+    # "Maximum number of active sessions" even though screenshot alone works.
+    screenshot = _screenshot(full_page)
+
     def run(browser: CdpSession) -> dict[str, Any]:
         page_info = _owned_page_info(browser)
-        url = str(page_info.get("url") or "")
-        title = str(page_info.get("title") or "")
+        url = str(screenshot.get("url") or page_info.get("url") or "")
+        title = str(screenshot.get("page_title") or page_info.get("title") or "")
         policy = _screenshot_policy(url, title)
         target_id = page_info.get("id") or _first_page_target(browser)
         session_id = _attach(browser, str(target_id))
         regions = _visual_regions(browser, session_id)
-        screenshot = _screenshot(full_page)
         image_width, image_height = _png_dimensions(str(screenshot["path"]))
         document = regions.get("document") or {}
         viewport = regions.get("viewport") or {}
