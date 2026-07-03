@@ -3894,6 +3894,11 @@ class CdpSession:
             parsed = urlparse(websocket_url[len("bidi+") :])
             if parsed.hostname is None or parsed.port is None:
                 raise RuntimeError("secure browser BiDi endpoint is missing host or port")
+            if parsed.scheme == "wss":
+                self.ws = websockets.sync.client.connect(parsed.geturl(), open_timeout=5, close_timeout=2, max_size=CDP_MAX_MESSAGE_BYTES, compression=None, proxy=None)
+                self._bidi("session.new", {"capabilities": {"alwaysMatch": {}}})
+                self._bidi_session_created = True
+                return
             sock = socket.create_connection((parsed.hostname, parsed.port), timeout=5)
             # Firefox validates the WebSocket Host header against its own
             # loopback listener.  Kubernetes port-forward uses an arbitrary
@@ -4010,7 +4015,9 @@ class CdpSession:
 def _browser_ws_url(cdp_url: str) -> str:
     endpoint = urlparse(cdp_url)
     if "browser.eyrie" in SECURE_BROWSER_TARGET or "firefox" in SECURE_BROWSER_TARGET:
-        return f"bidi+ws://{endpoint.hostname or '127.0.0.1'}:{endpoint.port or REMOTE_DEBUG_PORT}/session"
+        scheme = "wss" if endpoint.scheme == "https" else "ws"
+        default_port = 443 if scheme == "wss" else REMOTE_DEBUG_PORT
+        return f"bidi+{scheme}://{endpoint.hostname or '127.0.0.1'}:{endpoint.port or default_port}/session"
     with urlopen(f"{cdp_url}/json/version", timeout=3) as response:
         version = json.loads(response.read().decode("utf-8"))
     url = str(version.get("webSocketDebuggerUrl") or "")

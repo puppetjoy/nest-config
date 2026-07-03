@@ -152,7 +152,18 @@ def test_create_still_opens_a_new_owned_tab_for_explicit_new_page_navigation() -
         assert browser.created_targets == ["created-1"]
 
 
+def test_browser_ws_url_uses_wss_for_private_https_firefox_route() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        state_path = Path(tmpdir) / "secure-browser-tabs.json"
+        module = load_tool_module(state_path)
+        setattr(module, "SECURE_BROWSER_TARGET", "browser.eyrie-firefox")
+
+        assert module._browser_ws_url("https://browser-cdp.eyrie") == "bidi+wss://browser-cdp.eyrie:443/session"
+        assert module._browser_ws_url("http://127.0.0.1:54321") == "bidi+ws://127.0.0.1:54321/session"
+
+
 if __name__ == "__main__":
     test_stale_bidi_context_id_resolves_by_stored_sanitized_url()
     test_no_owner_match_uses_existing_non_blank_page_instead_of_creating_about_blank()
     test_create_still_opens_a_new_owned_tab_for_explicit_new_page_navigation()
+    test_browser_ws_url_uses_wss_for_private_https_firefox_route()

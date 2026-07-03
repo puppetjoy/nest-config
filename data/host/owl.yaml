@@ -213,6 +213,7 @@ nest::app::hermes::instances:
       SECURE_BROWSER_FORBIDDEN_IMAGE_RE: 'kasmweb/chrome'
       SECURE_BROWSER_PUBLIC_URL: 'https://browser.eyrie/'
       SECURE_BROWSER_OPERATOR_URL: 'https://browser.eyrie'
+      SECURE_BROWSER_CDP_URL: 'https://browser-cdp.eyrie'
     voice_auto_tts: true
     stt_enabled: true
     stt_provider: 'voice-speech'
@@ -321,10 +322,6 @@ nest::app::hermes::instances:
     dashboard_public_url: 'https://star.eyrie'
     dashboard_theme: 'rose'
     google_workspace_enabled: true
-    # secure_browser uses kubectl for backend identity checks and CDP
-    # port-forwarding. Star must receive a managed kubeconfig path in her own
-    # runtime environment instead of inheriting Talon's shell-only KUBECONFIG.
-    kubeconfig_path: '/home/joy/.hermes/profiles/talon/kubeconfigs/eyrie.conf'
     environment:
       CAMOFOX_URL: 'https://camofox.eyrie'
       CAMOFOX_GENERAL_URL: 'https://camofox.eyrie'
@@ -338,6 +335,7 @@ nest::app::hermes::instances:
       SECURE_BROWSER_FORBIDDEN_IMAGE_RE: 'kasmweb/chrome'
       SECURE_BROWSER_PUBLIC_URL: 'https://browser.eyrie/'
       SECURE_BROWSER_OPERATOR_URL: 'https://browser.eyrie'
+      SECURE_BROWSER_CDP_URL: 'https://browser-cdp.eyrie'
     voice_auto_tts: true
     stt_enabled: true
     stt_provider: 'voice-speech'

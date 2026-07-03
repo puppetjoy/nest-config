@@ -124,6 +124,7 @@ nest::cnames:
   searxng.eyrie: 'ingress-compute.eyrie'
   camofox.eyrie: 'ingress-compute.eyrie'
   browser.eyrie: 'ingress-compute.eyrie'
+  browser-cdp.eyrie: 'ingress-compute.eyrie'
   secure-browser.eyrie: 'ingress-compute.eyrie'
   secure-browser-cdp.eyrie: 'ingress-compute.eyrie'
   voice-speech.eyrie: 'ingress-compute.eyrie'

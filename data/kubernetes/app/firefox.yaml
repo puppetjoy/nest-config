@@ -5,6 +5,7 @@ include:
 plan_base: 'nest::eyrie::ai::firefox'
 service_name: firefox
 operator_fqdn: browser.eyrie
+cdp_fqdn: browser-cdp.eyrie
 
 cert_issuer: eyrie-ca
 cert_issuer_kind: ClusterIssuer
@@ -67,6 +68,7 @@ resources:
         kind: "%{lookup('cert_issuer_kind')}"
       dnsNames:
         - "%{lookup('operator_fqdn')}"
+        - "%{lookup('cdp_fqdn')}"
 
   browser-policy:
     apiVersion: v1
@@ -98,13 +100,15 @@ resources:
         4. Joy should re-enter any required login and Bitwarden state directly in the visible browser UI.
 
         This canary exposes only the Nest Firefox/KasmVNC operator UI at
-        https://%{lookup('operator_fqdn')}/ plus an in-cluster Firefox Remote
-        Debugging port for the reviewed Hermes secure-browser bridge. It does
-        not expose raw automation endpoints on public ingress, raw VNC
-        credentials, cookies, storage, request headers, screenshots of secret
-        pages, vault data, payment/address details, or direct final-purchase
-        authority to models. Hermes secure_browser_* execution must pass the
-        backend identity guard before it may attach to this Firefox workload.
+        https://%{lookup('operator_fqdn')}/ plus a private Eyrie Remote
+        Debugging websocket route at %{lookup('cdp_fqdn')} for the reviewed
+        Hermes secure-browser bridge. The route is consumed only through the
+        guarded tool wrappers and does not expose raw automation endpoint URLs,
+        raw VNC credentials, cookies, storage, request headers, screenshots of
+        secret pages, vault data, payment/address details, or direct
+        final-purchase authority to models. Hermes secure_browser_* execution
+        must pass the backend identity guard before it may attach to this
+        Firefox workload.
 
   profile-storage:
     apiVersion: v1
@@ -283,5 +287,29 @@ resources:
           services:
             - name: "%{nest::kubernetes::service}"
               port: 6901
+
+  cdp-ingress:
+    apiVersion: projectcontour.io/v1
+    kind: HTTPProxy
+    metadata:
+      name: "%{nest::kubernetes::service}-cdp"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      ingressClassName: "%{lookup('ingress_class')}"
+      virtualhost:
+        fqdn: "%{lookup('cdp_fqdn')}"
+        tls:
+          secretName: "%{nest::kubernetes::service}-certs"
+      routes:
+        - conditions:
+            - prefix: /
+          enableWebsockets: true
+          services:
+            - name: "%{nest::kubernetes::service}"
+              port: 9222
+              requestHeadersPolicy:
+                set:
+                  - name: Host
+                    value: 127.0.0.1:9222
 
 values: {}

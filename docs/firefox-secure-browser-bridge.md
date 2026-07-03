@@ -15,8 +15,9 @@ the same visible Firefox session Joy sees.
 - Nest image: `registry.gitlab.joyfullee.me/nest/tools/firefox:latest`
 - build recipe: `manifests/tool/firefox.pp`, `plans/build/firefox.pp`, and
   `data/build/Gentoo/firefox/firefox.yaml`
-- private automation attachment: Firefox Remote Debugging on the in-cluster
-  `firefox` Service port `9222`, with no public CDP/automation ingress
+- private automation attachment: Firefox Remote Debugging through the private
+  `browser-cdp.eyrie` Contour route to Service port `9222`, consumed only by
+  the guarded Hermes secure-browser tool wrappers
 
 The app exposes a browser-accessible KasmVNC Firefox UI through a Contour
 `HTTPProxy` with websocket support. It deliberately exposes no Camofox REST API,
@@ -66,9 +67,10 @@ endpoint swap safe. Exposing a raw CDP-like endpoint would also make cookies,
 storage, network events, screenshots, and final controls too easy to leak or
 misuse.
 
-Verdict: do not expose raw CDP from `browser.eyrie` on public ingress. The first
-bridge uses Firefox Remote Debugging only through `kubectl port-forward` from
-the guarded Hermes tool runtime after a Kubernetes backend identity check.
+Verdict: do not expose raw CDP from `browser.eyrie` or give profile runtimes
+Kubernetes credentials just to reach it. The production bridge uses a private
+Eyrie `browser-cdp.eyrie` websocket route owned by the Firefox KubeCM app and
+still keeps all model-visible authority inside the guarded Hermes tool wrapper.
 
 ### WebDriver / Marionette
 
@@ -99,10 +101,10 @@ session binding.
 The first cutover keeps the public `secure_browser_*` contract in the Hermes
 tool wrappers and changes their backend binding to `deployment/firefox`. The
 Firefox workload enables `--remote-debugging-address=0.0.0.0` and
-`--remote-debugging-port=9222`, but Nest publishes that port only on the
-in-cluster Service so the tool can reach it by localhost-only `kubectl
-port-forward`. The tool refuses to operate unless all requested `browser.eyrie`
-identity checks pass:
+`--remote-debugging-port=9222`; Nest publishes that port through the private
+`browser-cdp.eyrie` HTTPProxy so Star/Talon profile runtimes can attach without
+`kubectl port-forward` or profile-local kubeconfigs. The tool refuses to operate
+unless all requested `browser.eyrie` identity/configuration checks pass:
 
 - configured workload is `deployment/firefox`
 - live image starts with `registry.gitlab.joyfullee.me/nest/tools/firefox`
