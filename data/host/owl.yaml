@@ -313,6 +313,13 @@ nest::app::hermes::instances:
     honcho_workspace: 'hermes'
     honcho_user_peer: 'joy'
     honcho_ai_peer: 'star'
+    ssh_config_content: |
+      Host gitlab.joyfullee.me
+          HostName ssh.gitlab.eyrie
+          User git
+          IdentityFile /home/joy/.hermes/profiles/star/.ssh/id_ed25519
+          IdentitiesOnly yes
+          AddKeysToAgent no
     gateway_enabled: true
     kanban_dispatch_in_gateway: true
     dashboard_enabled: true
@@ -332,6 +339,9 @@ nest::app::hermes::instances:
       SECURE_BROWSER_PUBLIC_URL: 'https://browser.eyrie/'
       SECURE_BROWSER_OPERATOR_URL: 'https://browser.eyrie'
       SECURE_BROWSER_CDP_URL: 'https://browser-cdp.eyrie'
+      GITLAB_HOST: 'gitlab.joyfullee.me'
+      GITLAB_URL: 'https://gitlab.joyfullee.me'
+      GIT_SSH_COMMAND: 'ssh -F /home/joy/.hermes/profiles/star/.ssh/config -o ControlMaster=no -o ControlPath=none'
     voice_auto_tts: true
     stt_enabled: true
     stt_provider: 'voice-speech'
