@@ -46,6 +46,7 @@ FORBIDDEN_IMAGE_RE = os.environ.get("SECURE_BROWSER_FORBIDDEN_IMAGE_RE", r"kasmw
 REMOTE_DEBUG_PORT = int(os.environ.get("SECURE_BROWSER_CDP_PORT", "9222"))
 CDP_ENDPOINT_URL = os.environ.get("SECURE_BROWSER_CDP_URL", "").rstrip("/")
 BROWSER_OWNER = os.environ.get("SECURE_BROWSER_OWNER", "shopping")
+SECURE_BROWSER_MAX_AGENT_TABS = max(1, int(os.environ.get("SECURE_BROWSER_MAX_AGENT_TABS", "2")))
 OWNERSHIP_STATE_PATH = os.environ.get("SECURE_BROWSER_OWNERSHIP_STATE", os.path.expanduser("~/.hermes/secure-browser-tabs.json"))
 BROWSER_DISPLAY = os.environ.get("SECURE_BROWSER_DISPLAY", ":1")
 XWD_TIMEOUT_SECONDS = float(os.environ.get("SECURE_BROWSER_XWD_TIMEOUT_SECONDS", "15"))
@@ -4123,20 +4124,189 @@ def _current_page_ids(browser: CdpSession) -> set[str]:
     return {page["id"] for page in _page_candidates(browser) if page.get("id")}
 
 
+def _iso_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _parse_iso_timestamp(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    raw = value.strip()
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+    with contextlib.suppress(ValueError):
+        parsed = datetime.fromisoformat(raw)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    return None
+
+
+def _tab_age_seconds(entry: dict[str, Any], now: datetime | None = None) -> int | None:
+    stamp = _parse_iso_timestamp(entry.get("updated_at") or entry.get("created_at"))
+    if stamp is None:
+        return None
+    current = now or datetime.now(timezone.utc)
+    return max(0, int((current - stamp).total_seconds()))
+
+
+def _current_agent_tab_context() -> dict[str, str]:
+    return {
+        "owner": BROWSER_OWNER,
+        "profile": os.environ.get("HERMES_PROFILE") or os.environ.get("HERMES_PROFILE_NAME") or "",
+        "task_id": os.environ.get("HERMES_KANBAN_TASK") or os.environ.get("HERMES_TASK_ID") or "",
+        "run_id": os.environ.get("HERMES_KANBAN_RUN_ID") or os.environ.get("HERMES_RUN_ID") or "",
+    }
+
+
+def _owner_tabs(state: dict[str, Any], owner: str = BROWSER_OWNER) -> dict[str, Any]:
+    tabs_by_owner = state.setdefault("owner_tabs", {})
+    if not isinstance(tabs_by_owner, dict):
+        state["owner_tabs"] = tabs_by_owner = {}
+    tabs = tabs_by_owner.setdefault(owner, {})
+    if not isinstance(tabs, dict):
+        tabs_by_owner[owner] = tabs = {}
+    return tabs
+
+
+def _merge_existing_keep_fields(entry: dict[str, Any], existing: dict[str, Any] | None) -> dict[str, Any]:
+    if isinstance(existing, dict):
+        if existing.get("created_at"):
+            entry["created_at"] = existing["created_at"]
+        if existing.get("keep_open"):
+            entry["keep_open"] = True
+            if existing.get("keep_reason"):
+                entry["keep_reason"] = _sanitize_shopping_text(existing.get("keep_reason"))[:240]
+    return entry
+
+
+def _known_agent_tab_entry(target_id: str, url: str = "", title: str = "", existing: dict[str, Any] | None = None) -> dict[str, Any]:
+    now = _iso_now()
+    context = _current_agent_tab_context()
+    entry: dict[str, Any] = {
+        "target_id": target_id,
+        "toolset": TOOLSET,
+        "owner": context["owner"],
+        "profile": context["profile"],
+        "task_id": context["task_id"],
+        "run_id": context["run_id"],
+        "workload": WORKLOAD,
+        "created_at": now,
+        "updated_at": now,
+        "keep_open": False,
+    }
+    if url:
+        entry["url"] = _sanitize_url(url)
+    if title:
+        entry["title"] = _sanitize_shopping_text(title)[:240]
+    return _merge_existing_keep_fields(entry, existing)
+
+
+def _tab_public_summary(entry: dict[str, Any], *, reason: str = "") -> dict[str, Any]:
+    summary = {
+        "target_id": str(entry.get("target_id") or ""),
+        "owner": str(entry.get("owner") or BROWSER_OWNER),
+        "profile": str(entry.get("profile") or ""),
+        "task_id": str(entry.get("task_id") or ""),
+        "run_id": str(entry.get("run_id") or ""),
+        "url": _sanitize_url(str(entry.get("url") or "")) if entry.get("url") else "",
+        "title": _sanitize_shopping_text(entry.get("title") or "")[:240],
+        "created_at": str(entry.get("created_at") or ""),
+        "updated_at": str(entry.get("updated_at") or ""),
+        "age_seconds": _tab_age_seconds(entry),
+        "keep_open": bool(entry.get("keep_open")),
+    }
+    if entry.get("keep_reason"):
+        summary["keep_reason"] = _sanitize_shopping_text(entry.get("keep_reason"))[:240]
+    if reason:
+        summary["reason"] = reason
+    return summary
+
+
+def _sync_known_agent_tabs(browser: CdpSession, state: dict[str, Any], owner: str = BROWSER_OWNER) -> dict[str, Any]:
+    live = {page["id"]: page for page in _page_candidates(browser) if page.get("id")}
+    tabs = _owner_tabs(state, owner)
+    for target_id in list(tabs):
+        if target_id not in live:
+            tabs.pop(target_id, None)
+    for target_id, entry in list(tabs.items()):
+        page = live.get(target_id)
+        if page and isinstance(entry, dict):
+            refreshed = dict(entry)
+            refreshed["target_id"] = target_id
+            refreshed.setdefault("toolset", TOOLSET)
+            refreshed.setdefault("owner", owner)
+            refreshed.setdefault("workload", WORKLOAD)
+            if page.get("url"):
+                refreshed["url"] = _sanitize_url(str(page.get("url") or ""))
+            if page.get("title"):
+                refreshed["title"] = _sanitize_shopping_text(page.get("title") or "")[:240]
+            tabs[target_id] = refreshed
+    return live
+
+
+def _cleanup_candidates_from_state(state: dict[str, Any], live_ids: set[str], max_age_seconds: int = 0, owner: str = BROWSER_OWNER) -> list[dict[str, Any]]:
+    now = datetime.now(timezone.utc)
+    candidates: list[dict[str, Any]] = []
+    for target_id, entry in _owner_tabs(state, owner).items():
+        if target_id not in live_ids or not isinstance(entry, dict):
+            continue
+        if entry.get("keep_open"):
+            continue
+        age = _tab_age_seconds(entry, now)
+        if max_age_seconds > 0 and (age is None or age < max_age_seconds):
+            continue
+        enriched = dict(entry)
+        enriched["target_id"] = target_id
+        candidates.append(enriched)
+    candidates.sort(key=lambda item: (_parse_iso_timestamp(item.get("updated_at")) or datetime.min.replace(tzinfo=timezone.utc), str(item.get("target_id") or "")))
+    return candidates
+
+
+def _close_agent_owned_tabs(
+    browser: CdpSession,
+    state: dict[str, Any],
+    candidates: list[dict[str, Any]],
+    *,
+    dry_run: bool,
+    reason: str,
+    owner: str = BROWSER_OWNER,
+) -> list[dict[str, Any]]:
+    tabs = _owner_tabs(state, owner)
+    closed: list[dict[str, Any]] = []
+    for entry in candidates:
+        target_id = str(entry.get("target_id") or "")
+        if not target_id:
+            continue
+        public = _tab_public_summary(entry, reason=reason)
+        if not dry_run:
+            browser.call("Target.closeTarget", {"targetId": target_id})
+            tabs.pop(target_id, None)
+            owners = state.setdefault("owners", {})
+            current = owners.get(owner) if isinstance(owners, dict) else None
+            if isinstance(current, dict) and str(current.get("target_id") or "") == target_id:
+                owners.pop(owner, None)
+        closed.append(public)
+    return closed
+
+
 def _load_owner_state(handle: Any) -> dict[str, Any]:
     handle.seek(0)
     raw = handle.read()
     if not raw.strip():
-        return {"owners": {}}
+        return {"owners": {}, "owner_tabs": {}}
     try:
         data = json.loads(raw)
     except json.JSONDecodeError:
-        return {"owners": {}}
+        return {"owners": {}, "owner_tabs": {}}
     if not isinstance(data, dict):
-        return {"owners": {}}
+        return {"owners": {}, "owner_tabs": {}}
     owners = data.get("owners")
     if not isinstance(owners, dict):
         data["owners"] = {}
+    owner_tabs = data.get("owner_tabs")
+    if not isinstance(owner_tabs, dict):
+        data["owner_tabs"] = {}
     return data
 
 
@@ -4150,17 +4320,7 @@ def _store_owner_state(handle: Any, state: dict[str, Any]) -> None:
 
 
 def _owner_state_entry(target_id: str, url: str = "", title: str = "") -> dict[str, Any]:
-    entry: dict[str, Any] = {
-        "target_id": target_id,
-        "toolset": TOOLSET,
-        "workload": WORKLOAD,
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-    }
-    if url:
-        entry["url"] = _sanitize_url(url)
-    if title:
-        entry["title"] = _sanitize_shopping_text(title)
-    return entry
+    return _known_agent_tab_entry(target_id, url, title)
 
 
 def _store_owner_target(target_id: str, url: str = "", title: str = "") -> None:
@@ -4170,7 +4330,11 @@ def _store_owner_target(target_id: str, url: str = "", title: str = "") -> None:
         try:
             state = _load_owner_state(handle)
             owners = state.setdefault("owners", {})
-            owners[BROWSER_OWNER] = _owner_state_entry(target_id, url, title)
+            tabs = _owner_tabs(state)
+            existing = tabs.get(target_id) if isinstance(tabs.get(target_id), dict) else None
+            entry = _known_agent_tab_entry(target_id, url, title, existing)
+            owners[BROWSER_OWNER] = entry
+            tabs[target_id] = entry
             _store_owner_state(handle, state)
         finally:
             fcntl.flock(handle, fcntl.LOCK_UN)
@@ -4206,21 +4370,38 @@ def _claim_owner_target(browser: CdpSession, create: bool = False) -> str:
             state = _load_owner_state(handle)
             owners = state.setdefault("owners", {})
             owner = owners.get(BROWSER_OWNER, {}) if isinstance(owners.get(BROWSER_OWNER), dict) else {}
-            pages = _page_candidates(browser)
-            live_by_id = {page["id"]: page for page in pages if page.get("id")}
+            live_by_id = _sync_known_agent_tabs(browser, state)
             existing = str(owner.get("target_id") or "")
             if existing and existing in live_by_id and not create:
+                page = live_by_id[existing]
+                entry = _known_agent_tab_entry(existing, str(page.get("url") or ""), str(page.get("title") or ""), owner)
+                owners[BROWSER_OWNER] = entry
+                _owner_tabs(state)[existing] = entry
+                _store_owner_state(handle, state)
                 return existing
+            pages = list(live_by_id.values())
             matched = None if create else _page_matching_stored_owner(pages, owner)
-            if matched is None and not create:
-                matched = _deterministic_current_page(pages)
             if matched is not None and matched.get("id"):
                 target_id = str(matched["id"])
-                owners[BROWSER_OWNER] = _owner_state_entry(target_id, str(matched.get("url") or ""), str(matched.get("title") or ""))
+                existing_tab = _owner_tabs(state).get(target_id) if isinstance(_owner_tabs(state).get(target_id), dict) else None
+                entry = _known_agent_tab_entry(target_id, str(matched.get("url") or ""), str(matched.get("title") or ""), existing_tab)
+                owners[BROWSER_OWNER] = entry
+                _owner_tabs(state)[target_id] = entry
                 _store_owner_state(handle, state)
                 return target_id
             target_id = str(browser.call("Target.createTarget", {"url": "about:blank"})["targetId"])
-            owners[BROWSER_OWNER] = _owner_state_entry(target_id)
+            entry = _owner_state_entry(target_id)
+            owners[BROWSER_OWNER] = entry
+            _owner_tabs(state)[target_id] = entry
+            overflow = _cleanup_candidates_from_state(state, _current_page_ids(browser), owner=BROWSER_OWNER)
+            if len(overflow) > SECURE_BROWSER_MAX_AGENT_TABS:
+                _close_agent_owned_tabs(
+                    browser,
+                    state,
+                    overflow[: len(overflow) - SECURE_BROWSER_MAX_AGENT_TABS],
+                    dry_run=False,
+                    reason="bounded_agent_tab_reuse",
+                )
             _store_owner_state(handle, state)
             return target_id
         finally:
@@ -4300,6 +4481,102 @@ def _navigate(url: str, new_page: bool) -> dict[str, Any]:
         }
         _audit("navigate", {"url": result["url"], "page_title": result["page_title"], "new_page": new_page})
         return result
+
+    return _with_browser(run)
+
+
+def _tab_lifecycle(action: str, max_age_seconds: int = 0, keep_reason: str = "") -> dict[str, Any]:
+    normalized_action = (action or "preview_cleanup").strip().lower().replace("-", "_")
+    max_age_seconds = max(0, int(max_age_seconds or 0))
+    allowed = {"list_owned", "preview_cleanup", "cleanup", "mark_keep_open", "release_keep_open"}
+    if normalized_action not in allowed:
+        raise ValueError(f"unsupported secure browser tab lifecycle action: {action}")
+
+    def run(browser: CdpSession) -> dict[str, Any]:
+        os.makedirs(os.path.dirname(OWNERSHIP_STATE_PATH) or ".", exist_ok=True)
+        with open(OWNERSHIP_STATE_PATH, "a+", encoding="utf-8") as handle:
+            fcntl.flock(handle, fcntl.LOCK_EX)
+            try:
+                state = _load_owner_state(handle)
+                live_by_id = _sync_known_agent_tabs(browser, state)
+                tabs = _owner_tabs(state)
+                owners = state.setdefault("owners", {})
+
+                if normalized_action in {"mark_keep_open", "release_keep_open"}:
+                    owner = owners.get(BROWSER_OWNER, {}) if isinstance(owners.get(BROWSER_OWNER), dict) else {}
+                    target_id = str(owner.get("target_id") or "")
+                    page = live_by_id.get(target_id) if target_id else None
+                    if page is None:
+                        page = _deterministic_current_page(list(live_by_id.values()))
+                    if page is None or not page.get("id"):
+                        target_id = str(browser.call("Target.createTarget", {"url": "about:blank"})["targetId"])
+                        page = {"id": target_id, "url": "about:blank", "title": ""}
+                    else:
+                        target_id = str(page["id"])
+                    existing = tabs.get(target_id) if isinstance(tabs.get(target_id), dict) else None
+                    entry = _known_agent_tab_entry(
+                        target_id,
+                        str(page.get("url") or ""),
+                        str(page.get("title") or ""),
+                        existing,
+                    )
+                    if normalized_action == "mark_keep_open":
+                        entry["keep_open"] = True
+                        if keep_reason:
+                            entry["keep_reason"] = _sanitize_shopping_text(keep_reason)[:240]
+                    else:
+                        entry["keep_open"] = False
+                        entry.pop("keep_reason", None)
+                    tabs[target_id] = entry
+                    owners[BROWSER_OWNER] = entry
+                    _store_owner_state(handle, state)
+                    _audit("tab_lifecycle", {"action": normalized_action, "target_id": target_id, "keep_open": bool(entry.get("keep_open"))})
+                    return {
+                        "operation": "tab_lifecycle",
+                        "action": normalized_action,
+                        "status": "ok",
+                        "secure_browser_owner": BROWSER_OWNER,
+                        "tab": _tab_public_summary(entry, reason=normalized_action),
+                    }
+
+                live_ids = set(live_by_id)
+                candidates = _cleanup_candidates_from_state(state, live_ids, max_age_seconds=max_age_seconds)
+                if normalized_action == "list_owned":
+                    owned = [_tab_public_summary(dict(entry, target_id=target_id), reason="agent_owned") for target_id, entry in tabs.items() if target_id in live_ids and isinstance(entry, dict)]
+                    owned.sort(key=lambda item: (item.get("updated_at") or "", item.get("target_id") or ""))
+                    _store_owner_state(handle, state)
+                    return {
+                        "operation": "tab_lifecycle",
+                        "action": normalized_action,
+                        "status": "ok",
+                        "secure_browser_owner": BROWSER_OWNER,
+                        "owned_tab_count": len(owned),
+                        "owned_tabs": owned,
+                    }
+                dry_run = normalized_action == "preview_cleanup"
+                closed = _close_agent_owned_tabs(
+                    browser,
+                    state,
+                    candidates,
+                    dry_run=dry_run,
+                    reason="preview_cleanup" if dry_run else "agent_owned_cleanup",
+                )
+                _store_owner_state(handle, state)
+                _audit("tab_lifecycle", {"action": normalized_action, "candidate_count": len(candidates), "closed_count": 0 if dry_run else len(closed), "max_age_seconds": max_age_seconds})
+                return {
+                    "operation": "tab_lifecycle",
+                    "action": normalized_action,
+                    "status": "ok",
+                    "secure_browser_owner": BROWSER_OWNER,
+                    "dry_run": dry_run,
+                    "max_age_seconds": max_age_seconds,
+                    "candidate_count": len(candidates),
+                    "closed_count": 0 if dry_run else len(closed),
+                    "tabs": closed,
+                    "safety_note": "Only tabs previously recorded as secure_browser agent-owned for this owner are eligible. Unowned/manual Joy tabs and keep_open tabs are not closed.",
+                }
+            finally:
+                fcntl.flock(handle, fcntl.LOCK_UN)
 
     return _with_browser(run)
 
@@ -5029,6 +5306,12 @@ def secure_browser_status_tool(args: dict[str, Any], **_kw: Any) -> str:
         "browser_operations": ["navigate", "page_snapshot", "query", "click", "type", "screenshot", "visual_evidence", "current_page_summary", "owner_checkout_review"],
         "retail_order_operations": ["list", "read", "upsert", "close", "notification_preview", "mark_notified", "refresh_plan", "refresh_run"],
         "consumable_operations": ["list", "upsert", "suggest_from_order"],
+        "tab_lifecycle": {
+            "owner": BROWSER_OWNER,
+            "state_path": OWNERSHIP_STATE_PATH,
+            "max_agent_tabs": SECURE_BROWSER_MAX_AGENT_TABS,
+            "policy": "secure_browser navigation tracks agent-owned tabs by owner/profile/task/run, reuses the current owned tab by default, and cleanup tools preview or close only confidently agent-owned tabs. Human/unowned tabs are never closed by lifecycle cleanup. keep_open tabs survive cleanup for Joy review, final evidence, checkout/order confirmation, or handoff.",
+        },
         "trusted_assistant_access": {
             "status": "broad_browsing_available",
             "message": "Star may navigate and inspect ordinary shopping, account research surfaces, including Amazon order history, Buy Again, past-order details, and product links. The bridge gates capabilities and sanitizes outputs instead of blanket-blocking account/order-history URLs.",
@@ -5293,6 +5576,17 @@ def secure_browser_guardrail_check_tool(args: dict[str, Any], **_kw: Any) -> str
     if not operation:
         return _json({"error": "operation is required"})
     return _json(_reject_unsafe_operation(operation))
+
+
+def secure_browser_tab_lifecycle_tool(args: dict[str, Any], **_kw: Any) -> str:
+    try:
+        return _json(_tab_lifecycle(
+            str(args.get("action") or "preview_cleanup"),
+            int(args.get("max_age_seconds") or 0),
+            str(args.get("keep_reason") or ""),
+        ))
+    except Exception as exc:
+        return _json({"error": "TAB_LIFECYCLE_FAILED", "message": str(exc)[:1000], "operation": "tab_lifecycle"})
 
 
 STATUS_SCHEMA = {
@@ -5626,6 +5920,20 @@ GUARDRAIL_SCHEMA = {
     },
 }
 
+TAB_LIFECYCLE_SCHEMA = {
+    "name": "secure_browser_tab_lifecycle",
+    "description": "Preview or perform safe lifecycle cleanup for persistent secure-browser tabs. Only confidently agent-owned tabs tracked by secure_browser ownership metadata are eligible; Joy/manual/unowned tabs and keep-open tabs are preserved. Use preview_cleanup before cleanup when a human-readable report is desired, and mark_keep_open for checkout/order confirmation/evidence/handoff pages Joy should review.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "action": {"type": "string", "enum": ["list_owned", "preview_cleanup", "cleanup", "mark_keep_open", "release_keep_open"], "default": "preview_cleanup"},
+            "max_age_seconds": {"type": "integer", "description": "Only preview/close eligible agent-owned tabs at least this old; 0 means no age threshold", "minimum": 0, "default": 0},
+            "keep_reason": {"type": "string", "description": "Sanitized reason for mark_keep_open, e.g. Joy review, final evidence, checkout confirmation, or handoff"},
+        },
+        "required": [],
+    },
+}
+
 registry.register(
     name=STATUS_SCHEMA["name"],
     toolset=TOOLSET,
@@ -5778,6 +6086,16 @@ registry.register(
     check_fn=_check_secure_browser,
     description=GUARDRAIL_SCHEMA["description"],
     emoji="🚫",
+    max_result_size_chars=MAX_RESULT_CHARS,
+)
+registry.register(
+    name=TAB_LIFECYCLE_SCHEMA["name"],
+    toolset=TOOLSET,
+    schema=TAB_LIFECYCLE_SCHEMA,
+    handler=secure_browser_tab_lifecycle_tool,
+    check_fn=_check_secure_browser,
+    description=TAB_LIFECYCLE_SCHEMA["description"],
+    emoji="🧹",
     max_result_size_chars=MAX_RESULT_CHARS,
 )
 

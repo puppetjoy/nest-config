@@ -121,7 +121,7 @@ def test_stale_bidi_context_id_resolves_by_stored_sanitized_url() -> None:
         assert "ref_=" not in stored["url"]
 
 
-def test_no_owner_match_uses_existing_non_blank_page_instead_of_creating_about_blank() -> None:
+def test_no_owner_match_opens_agent_owned_tab_without_claiming_unowned_page() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         state_path = Path(tmpdir) / "secure-browser-tabs.json"
         module = load_tool_module(state_path)
@@ -134,8 +134,11 @@ def test_no_owner_match_uses_existing_non_blank_page_instead_of_creating_about_b
 
         target_id = module._claim_owner_target(browser, create=False)
 
-        assert target_id == "visible-session-context"
-        assert browser.created_targets == []
+        assert target_id == "created-1"
+        assert browser.created_targets == ["created-1"]
+        stored = json.loads(state_path.read_text(encoding="utf-8"))
+        assert stored["owners"][module.BROWSER_OWNER]["target_id"] == "created-1"
+        assert "visible-session-context" not in stored.get("owner_tabs", {}).get(module.BROWSER_OWNER, {})
 
 
 def test_create_still_opens_a_new_owned_tab_for_explicit_new_page_navigation() -> None:
@@ -191,12 +194,13 @@ def test_bidi_page_candidates_ignore_child_iframe_contexts() -> None:
         assert "top-level-tab" in page_ids
         assert "current-visible-tab" in page_ids
         assert "child-frame" not in page_ids
-        assert target_id == "current-visible-tab"
+        assert target_id == "created-1"
+        assert browser.created_targets == ["created-1"]
 
 
 if __name__ == "__main__":
     test_stale_bidi_context_id_resolves_by_stored_sanitized_url()
-    test_no_owner_match_uses_existing_non_blank_page_instead_of_creating_about_blank()
+    test_no_owner_match_opens_agent_owned_tab_without_claiming_unowned_page()
     test_create_still_opens_a_new_owned_tab_for_explicit_new_page_navigation()
     test_browser_ws_url_uses_wss_for_private_https_firefox_route()
     test_bidi_page_candidates_ignore_child_iframe_contexts()
