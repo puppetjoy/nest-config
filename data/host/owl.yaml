@@ -326,6 +326,8 @@ nest::app::hermes::instances:
     dashboard_port: 9121
     dashboard_public_url: 'https://star.eyrie'
     dashboard_theme: 'rose'
+    git_user_name: 'Star'
+    git_user_email: 'star@joyfullee.me'
     google_workspace_enabled: true
     environment:
       CAMOFOX_URL: 'https://camofox.eyrie'
