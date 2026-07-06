@@ -328,7 +328,8 @@ nest::app::hermes::instances:
     dashboard_theme: 'rose'
     git_user_name: 'Star'
     git_user_email: 'star@joyfullee.me'
-    git_commit_sign: false
+    git_signing_key: '/home/joy/.hermes/profiles/star/.ssh/id_ed25519'
+    git_commit_sign: true
     google_workspace_enabled: true
     environment:
       CAMOFOX_URL: 'https://camofox.eyrie'
