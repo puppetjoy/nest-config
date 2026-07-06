@@ -309,7 +309,7 @@ nest::app::hermes::instances:
         kanban: '📋'
     image_gen_provider: 'openai-codex'
     image_gen_model: 'gpt-image-2-medium'
-    gitlab_enabled: false
+    gitlab_enabled: true
     honcho_workspace: 'hermes'
     honcho_user_peer: 'joy'
     honcho_ai_peer: 'star'
