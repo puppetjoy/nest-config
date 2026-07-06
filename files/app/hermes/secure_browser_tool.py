@@ -4386,6 +4386,37 @@ def _deterministic_current_page(pages: list[dict[str, str]]) -> dict[str, str] |
     return pages[-1] if pages else None
 
 
+def _select_post_click_owner_page(browser: CdpSession, original_target_id: str, current_url: str = "", current_title: str = "", *, prefer_checkout: bool = False) -> dict[str, str]:
+    """Pick the page that should remain owned after an audited click.
+
+    Some third-party checkout buttons replace or detach the original cart
+    browsing context while opening the real checkout in a fresh context. If we
+    keep the stale pre-click target id, the next secure_browser tool call may
+    manufacture a new about:blank tab and lose the live checkout. Reconcile the
+    owner to a live checkout/order-review page first, falling back to the most
+    recent non-blank page when the click was ordinary browsing.
+    """
+    original_target_id = str(original_target_id or "")
+    deadline = time.time() + (5.0 if prefer_checkout else 0.0)
+    while True:
+        pages = _page_candidates(browser)
+        if prefer_checkout:
+            checkout_pages = [page for page in pages if _is_owner_checkout_review_page(str(page.get("url") or ""), str(page.get("title") or ""))]
+            if checkout_pages:
+                return checkout_pages[-1]
+        if current_url and not _is_blank_page_url(current_url) and (not prefer_checkout or time.time() >= deadline):
+            for page in pages:
+                if str(page.get("id") or "") == original_target_id:
+                    return {"id": original_target_id, "url": current_url, "title": current_title or str(page.get("title") or "")}
+            return {"id": original_target_id, "url": current_url, "title": current_title}
+        current_page = _deterministic_current_page(pages)
+        if current_page is not None and (not prefer_checkout or time.time() >= deadline):
+            return current_page
+        if time.time() >= deadline:
+            return {"id": original_target_id, "url": current_url or "about:blank", "title": current_title}
+        time.sleep(0.25)
+
+
 def _claim_owner_target(browser: CdpSession, create: bool = False) -> str:
     os.makedirs(os.path.dirname(OWNERSHIP_STATE_PATH) or ".", exist_ok=True)
     with open(OWNERSHIP_STATE_PATH, "a+", encoding="utf-8") as handle:
@@ -5117,9 +5148,23 @@ def _click(selector: str, reason: str, approved_effect: str) -> dict[str, Any]:
             _check_human_takeover_text(label)
         result = _evaluate(browser, session_id, CLICK_JS.replace("__SELECTOR__", _json_literal(safe_selector))) or {}
         time.sleep(1.0)
+        current_url = str(_evaluate(browser, session_id, "location.href") or "")
+        current_title = str(_evaluate(browser, session_id, "document.title") or "")
+        page = _select_post_click_owner_page(browser, target_id, current_url, current_title, prefer_checkout=effect in CHECKOUT_APPROVED_EFFECTS)
+        resolved_target_id = str(page.get("id") or target_id)
+        if resolved_target_id != target_id:
+            session_id = _attach(browser, resolved_target_id)
+            current_url = str(_evaluate(browser, session_id, "location.href") or page.get("url") or "")
+            current_title = str(_evaluate(browser, session_id, "document.title") or page.get("title") or "")
+        elif not current_url:
+            current_url = str(page.get("url") or "")
+            current_title = current_title or str(page.get("title") or "")
+        _store_owner_target(resolved_target_id, current_url, current_title)
         result["operation"] = "click"
         result["approved_effect"] = effect
-        result["url"] = _sanitize_url(str(result.get("url") or _evaluate(browser, session_id, "location.href") or ""))
+        result["url"] = _sanitize_url(str(current_url or result.get("url") or ""))
+        if current_title:
+            result["page_title"] = _sanitize_shopping_text(current_title)
         if effect in CHECKOUT_APPROVED_EFFECTS:
             result["checkout_review"] = _checkout_summary_from_browser(browser, session_id)
         _audit("click", {"selector": safe_selector, "effect": effect, "reason": str(reason or "")[:300], "element_text": result.get("element_text"), "url": result.get("url"), "checkout_binding": (result.get("checkout_review") or {}).get("material_summary_binding")})
