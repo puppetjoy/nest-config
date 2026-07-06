@@ -459,7 +459,13 @@ define nest::lib::hermes (
     default => "ssh -i ${ssh_private_key_path} -o IdentitiesOnly=yes -o ControlMaster=no -o ControlPath=none",
   }
   $git_config_signing_lines = $effective_git_signing_key ? {
-    undef   => [],
+    undef   => $git_commit_sign ? {
+      false   => [
+        'GIT_CONFIG_KEY_2=commit.gpgsign',
+        'GIT_CONFIG_VALUE_2=false',
+      ],
+      default => [],
+    },
     default => [
       'GIT_CONFIG_KEY_2=user.signingkey',
       "GIT_CONFIG_VALUE_2=${effective_git_signing_key}",
@@ -469,11 +475,12 @@ define nest::lib::hermes (
       "GIT_CONFIG_VALUE_4=${git_commit_sign}",
     ],
   }
+  $git_config_ssh_index = 2 + (length($git_config_signing_lines) / 2)
   $git_config_ssh_lines = $git_ssh_command ? {
     undef   => [],
     default => [
-      'GIT_CONFIG_KEY_5=core.sshCommand',
-      "GIT_CONFIG_VALUE_5=${git_ssh_command}",
+      "GIT_CONFIG_KEY_${git_config_ssh_index}=core.sshCommand",
+      "GIT_CONFIG_VALUE_${git_config_ssh_index}=${git_ssh_command}",
     ],
   }
   $git_config_count = 2 + (length($git_config_signing_lines) / 2) + (length($git_config_ssh_lines) / 2)

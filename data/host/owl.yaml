@@ -328,6 +328,7 @@ nest::app::hermes::instances:
     dashboard_theme: 'rose'
     git_user_name: 'Star'
     git_user_email: 'star@joyfullee.me'
+    git_commit_sign: false
     google_workspace_enabled: true
     environment:
       CAMOFOX_URL: 'https://camofox.eyrie'
