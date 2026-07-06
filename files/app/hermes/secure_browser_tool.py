@@ -4249,10 +4249,29 @@ def _tab_public_summary(entry: dict[str, Any], *, reason: str = "") -> dict[str,
 
 def _sync_known_agent_tabs(browser: CdpSession, state: dict[str, Any], owner: str = BROWSER_OWNER) -> dict[str, Any]:
     live = {page["id"]: page for page in _page_candidates(browser) if page.get("id")}
+    live_pages = list(live.values())
     tabs = _owner_tabs(state, owner)
+    owners = state.setdefault("owners", {})
     for target_id in list(tabs):
         if target_id not in live:
-            tabs.pop(target_id, None)
+            entry = tabs.get(target_id)
+            rematched = _page_matching_stored_tab(live_pages, entry) if isinstance(entry, dict) else None
+            if rematched is not None and rematched.get("id") and isinstance(entry, dict):
+                new_target_id = str(rematched["id"])
+                existing = tabs.get(new_target_id) if isinstance(tabs.get(new_target_id), dict) else None
+                refreshed = _known_agent_tab_entry(
+                    new_target_id,
+                    str(rematched.get("url") or entry.get("url") or ""),
+                    str(rematched.get("title") or entry.get("title") or ""),
+                    existing or entry,
+                )
+                tabs.pop(target_id, None)
+                tabs[new_target_id] = refreshed
+                current_owner = owners.get(owner) if isinstance(owners.get(owner), dict) else None
+                if isinstance(current_owner, dict) and str(current_owner.get("target_id") or "") == str(target_id):
+                    owners[owner] = refreshed
+            else:
+                tabs.pop(target_id, None)
     for target_id, entry in list(tabs.items()):
         page = live.get(target_id)
         if page and isinstance(entry, dict):
@@ -4370,6 +4389,18 @@ def _page_matching_stored_owner(pages: list[dict[str, str]], owner: dict[str, An
         return None
     for page in pages:
         if _sanitize_url(str(page.get("url") or "")) == stored_url:
+            return page
+    return None
+
+
+def _page_matching_stored_tab(pages: list[dict[str, str]], entry: dict[str, Any]) -> dict[str, str] | None:
+    stored_url = str(entry.get("url") or "")
+    if not stored_url or _is_blank_page_url(stored_url):
+        return None
+    for page in pages:
+        page_id = str(page.get("id") or "")
+        page_url = _sanitize_url(str(page.get("url") or ""))
+        if page_id and page_url == stored_url:
             return page
     return None
 
