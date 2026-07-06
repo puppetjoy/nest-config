@@ -2288,10 +2288,11 @@ def _request_id_from_submit_result(submit_result: dict[str, Any]) -> str:
     ).strip()
 
 
-def _submit_final_purchase_approval_request(summary: dict[str, Any], material_summary_binding: str, owner_visual_evidence_binding: str, owner_review_id: str, note: str) -> dict[str, Any]:
+def _submit_final_purchase_approval_request(summary: dict[str, Any], material_summary_binding: str, owner_visual_evidence_binding: str, owner_review_id: str, note: str = "") -> dict[str, Any]:
     facts = _minimal_owner_checkout_facts(summary)
     facts_json = json.dumps(facts, ensure_ascii=False, sort_keys=True)
     binding_key = _approval_request_binding_key(material_summary_binding, owner_visual_evidence_binding, owner_review_id)
+    retailer = _checkout_retailer_label(str(summary.get("url") or ""))
     now = datetime.now(timezone.utc).isoformat()
     with _final_purchase_state_lock() as handle:
         state = _load_final_purchase_state(handle)
@@ -2352,7 +2353,7 @@ def _submit_final_purchase_approval_request(summary: dict[str, Any], material_su
         "title": "🛒 Trusted final purchase approval for Star checkout",
         "request": request_body,
         "context": context,
-        "subject": "Joy approval to place the current Amazon order",
+        "subject": f"Joy approval to place the current {retailer} order",
         "target": "talon",
         "urgency": "urgent",
         "board": _agent_request_board(),
@@ -2366,7 +2367,7 @@ def _submit_final_purchase_approval_request(summary: dict[str, Any], material_su
             raise RuntimeError("Agent Request submission did not return a request_id or request.id")
 
         proposal_text = "\n".join([
-            "Approve exactly one final Amazon Place Order action for the current Star secure-browser checkout.",
+            f"Approve exactly one final {retailer} order-submission action for the current Star secure-browser checkout.",
             f"Bound material_summary_binding: {material_summary_binding}",
             f"Bound owner_visual_evidence_binding: {owner_visual_evidence_binding}",
             f"Owner checkout review id: {owner_review_id or 'not supplied'}",
@@ -2376,9 +2377,9 @@ def _submit_final_purchase_approval_request(summary: dict[str, Any], material_su
         ])
         propose_result = json.loads(agent_request_propose_tool({
             "request_id": request_id,
-            "summary": "approval-required: place current Amazon order exactly once if bound checkout summary still matches",
+            "summary": f"approval-required: place current {retailer} order exactly once if bound checkout summary still matches",
             "proposal": proposal_text,
-            "subject": "Final Amazon Place Order for current Star checkout",
+            "subject": f"Final {retailer} order submission for current Star checkout",
             "response_to_requester": "If approved, Talon will execute the bound final purchase exactly once after revalidating the live checkout summary.",
             "board": _agent_request_board(),
         }))
@@ -2443,8 +2444,8 @@ def _request_final_purchase_approval(material_summary_binding: str, owner_visual
         target_id = _first_page_target(browser)
         session_id = _attach(browser, target_id)
         summary = _checkout_summary_from_browser(browser, session_id)
-        if not _is_amazon_checkoutish_page(str(summary.get("url") or ""), str(summary.get("page_title") or "")):
-            raise ValueError("final-purchase approval/execution is currently limited to Amazon checkout/order-review pages")
+        if not _is_checkoutish_page(str(summary.get("url") or ""), str(summary.get("page_title") or "")):
+            raise ValueError("final-purchase approval/execution requires an HTTPS checkout/order-review page")
         live_binding = str(summary.get("material_summary_binding") or "")
         if live_binding != expected_binding:
             raise ValueError("live checkout material_summary_binding does not match the requested approval binding")
@@ -2492,8 +2493,8 @@ def _execute_final_purchase(approval_request_id: str, material_summary_binding: 
         target_id = _first_page_target(browser)
         session_id = _attach(browser, target_id)
         summary = _checkout_summary_from_browser(browser, session_id)
-        if not _is_amazon_checkoutish_page(str(summary.get("url") or ""), str(summary.get("page_title") or "")):
-            raise ValueError("final-purchase approval/execution is currently limited to Amazon checkout/order-review pages")
+        if not _is_checkoutish_page(str(summary.get("url") or ""), str(summary.get("page_title") or "")):
+            raise ValueError("final-purchase approval/execution requires an HTTPS checkout/order-review page")
         live_binding = str(summary.get("material_summary_binding") or "")
         if live_binding != expected_binding:
             raise ValueError("live checkout material_summary_binding changed since approval; refusing final purchase")
@@ -2635,7 +2636,29 @@ def _is_amazon_post_purchase_page(url: str, title: str = "") -> bool:
 def _is_checkoutish_page(url: str, title: str = "") -> bool:
     parsed = urlparse(str(url or ""))
     page_material = " ".join([parsed.path, parsed.query, str(title or "")])
-    return bool(CHECKOUT_QUERY_PAGE_RE.search(page_material))
+    return bool(parsed.scheme == "https" and CHECKOUT_QUERY_PAGE_RE.search(page_material))
+
+
+def _is_owner_checkout_review_page(url: str, title: str = "") -> bool:
+    """Return whether owner-only review can capture this page.
+
+    Generic non-Amazon support is intentionally limited to HTTPS checkout or
+    order-review pages.  Post-purchase/order-history proof remains Amazon-only
+    until those retailer-specific sanitizers exist, but owner-only checkout
+    evidence can be captured because the screenshots go directly to Joy and the
+    model-visible return is the existing sanitized checkout summary.
+    """
+    return _is_checkoutish_page(url, title) or _is_amazon_post_purchase_page(url, title)
+
+
+def _checkout_retailer_label(url: str) -> str:
+    parsed = urlparse(str(url or ""))
+    if AMAZON_HOST_RE.search(parsed.netloc):
+        return "Amazon"
+    host = parsed.netloc.lower().split(":", 1)[0]
+    if host.startswith("www."):
+        host = host[4:]
+    return host or "retailer"
 
 
 def _checkout_control_filter_from_expression(expression: str) -> str:
@@ -4374,6 +4397,16 @@ def _claim_owner_target(browser: CdpSession, create: bool = False) -> str:
             existing = str(owner.get("target_id") or "")
             if existing and existing in live_by_id and not create:
                 page = live_by_id[existing]
+                if _is_blank_page_url(str(page.get("url") or "")):
+                    current_page = _deterministic_current_page(list(live_by_id.values()))
+                    if current_page is not None and current_page.get("id") and str(current_page.get("id")) != existing:
+                        target_id = str(current_page["id"])
+                        existing_tab = _owner_tabs(state).get(target_id) if isinstance(_owner_tabs(state).get(target_id), dict) else None
+                        entry = _known_agent_tab_entry(target_id, str(current_page.get("url") or ""), str(current_page.get("title") or ""), existing_tab)
+                        owners[BROWSER_OWNER] = entry
+                        _owner_tabs(state)[target_id] = entry
+                        _store_owner_state(handle, state)
+                        return target_id
                 entry = _known_agent_tab_entry(existing, str(page.get("url") or ""), str(page.get("title") or ""), owner)
                 owners[BROWSER_OWNER] = entry
                 _owner_tabs(state)[existing] = entry
@@ -4632,7 +4665,10 @@ def _query(expression: str) -> dict[str, Any]:
             checkout_review = _checkout_summary_from_browser(browser, session_id)
             return _checkout_query_summary_response(checkout_review, safe_expression, url=url, title=title)
         if _is_checkoutish_page(url, title):
-            raise ValueError("generic secure_browser_query is unavailable on checkout/order-review pages outside the Amazon checkout-prep sanitizer boundary")
+            checkout_review = _checkout_summary_from_browser(browser, session_id)
+            response = _checkout_query_summary_response(checkout_review, safe_expression, url=url, title=title)
+            response["query_policy"] = "secure_browser_query returns only the sanitized checkout/order-review summary on non-Amazon checkout pages; the requested JavaScript result is blocked to avoid exposing address, payment, account, DOM, cookies, storage, or request-header data."
+            return response
         value = _sanitize_shopping_value(_evaluate(browser, session_id, wrapped))
         payload = json.dumps(value, ensure_ascii=False, sort_keys=True)
         if len(payload) > MAX_QUERY_RESULT_CHARS:
@@ -4867,8 +4903,8 @@ def _owner_checkout_review(send_to_telegram: bool = True, retain_local: bool = F
         parsed = urlparse(url)
         checkoutish = re.search(r"checkout|buy|payselect|ship|spc|review|ordering", " ".join([parsed.path, parsed.query, title]), re.IGNORECASE)
         post_purchase = _is_amazon_post_purchase_page(url, title)
-        if not (parsed.scheme == "https" and AMAZON_HOST_RE.search(parsed.netloc) and (checkoutish or post_purchase)):
-            raise ValueError("owner-only checkout review currently requires an Amazon checkout/order-review or post-purchase confirmation/orders page")
+        if not _is_owner_checkout_review_page(url, title):
+            raise ValueError("owner-only checkout review requires an HTTPS checkout/order-review page; post-purchase/order-history owner proof is currently Amazon-only")
         target_id = page_info.get("id") or _first_page_target(browser)
         session_id = _attach(browser, str(target_id))
         if post_purchase and not checkoutish:
@@ -5323,8 +5359,8 @@ def secure_browser_status_tool(args: dict[str, Any], **_kw: Any) -> str:
             "approved_type_effects": ["apply_checkout_option", "cart_line_adjustment"],
             "boundary": "Star may inspect sanitized checkout-prep controls and click/type into ordinary review-page controls under Joy's live supervision with explicit approved_effect values. Star must pause for login, Bitwarden, passkeys, 2FA, CAPTCHA, suspicious security prompts, payment/address/account edits, or sensitive-information prompts.",
             "sanitization": "Checkout-prep snapshots/current-page summaries return isolated structured item/totals/delivery/surprise fields plus destination city-state/abstract label and payment labels. Mixed blobs, sensitive redaction-marker text, and final purchase controls are removed from ordinary summary fields.",
-            "visual_confirmation": "secure_browser_visual_evidence returns a bounded visual proof bundle: a local PNG screenshot, sanitized suggested regions, and optional focused crops. Amazon checkout/order-review pages are allowed only as redacted checkout-prep viewport evidence; Amazon thank-you/post-purchase pages are labeled as post-purchase evidence; login/account/payment/address/security pages remain Joy-only.",
-            "owner_only_confirmation": "secure_browser_owner_checkout_review can send complete unredacted checkout screenshots directly to Joy's configured Telegram destination without returning paths, MEDIA handles, raw DOM, cookies, storage, request headers, CDP endpoints, or address/payment text to Star.",
+            "visual_confirmation": "secure_browser_visual_evidence returns a bounded visual proof bundle: a local PNG screenshot, sanitized suggested regions, and optional focused crops. Raw checkout/payment/address screenshots remain blocked except for browser-redacted Amazon checkout evidence; complete checkout evidence for any HTTPS checkout/order-review page uses owner-only Telegram delivery. Amazon thank-you/post-purchase pages are labeled as post-purchase evidence; login/account/payment/address/security pages remain Joy-only.",
+            "owner_only_confirmation": "secure_browser_owner_checkout_review can send complete unredacted checkout screenshots for HTTPS checkout/order-review pages directly to Joy's configured Telegram destination without returning paths, MEDIA handles, raw DOM, cookies, storage, request headers, CDP endpoints, or address/payment text to Star. Post-purchase/order-history proof is currently Amazon-only.",
         },
         "approval_gated_operations": {
             "add_to_cart": "available only through the broad secure_browser_click flow with approved_effect='add_to_cart' and a human-readable approval reference",
@@ -5790,7 +5826,7 @@ REQUEST_FINAL_PURCHASE_APPROVAL_SCHEMA = {
 
 EXECUTE_FINAL_PURCHASE_SCHEMA = {
     "name": "secure_browser_execute_final_purchase",
-    "description": "Trusted final purchase executor. Use only after Joy approved the bound Agent Request proposal. It verifies the current Agent Request approval, refuses reused approvals, re-reads the live checkout material summary, refuses if anything material changed or sensitive verification is visible, clicks exactly one final purchase control, then attempts owner-only post-purchase proof capture from the Amazon confirmation page. Not for ordinary Star browsing.",
+    "description": "Trusted final purchase executor. Use only after Joy approved the bound Agent Request proposal. It verifies the current Agent Request approval, refuses reused approvals, re-reads the live HTTPS checkout material summary, refuses if anything material changed or sensitive verification is visible, clicks exactly one final purchase control, then attempts owner-only post-purchase proof capture when the landing page is recognized as Amazon confirmation/order context. Not for ordinary Star browsing.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -6133,6 +6169,8 @@ if __name__ == "__main__":
     assert _is_amazon_checkoutish_page("https://www.amazon.com/gp/buy/spc/handlers/display.html", "Review your order") is True
     assert _is_amazon_checkoutish_page("https://www.amazon.com/product-reviews/B01J01XGPK", "Customer reviews") is False
     assert _is_checkoutish_page("https://shop.example.test/checkout/payment", "Payment") is True
+    assert _is_owner_checkout_review_page("https://www.bonobos.com/checkout/review", "Review order") is True
+    assert _is_owner_checkout_review_page("http://www.bonobos.com/checkout/review", "Review order") is False
     try:
         _screenshot_policy("https://shop.example.test/checkout/payment", "Payment")
         raise AssertionError("non-Amazon checkout/payment screenshot should be blocked")
@@ -6302,6 +6340,55 @@ if __name__ == "__main__":
     assert "12345" not in query_json
     assert "4111" not in query_json
     assert "Place Order" in query_json
+    original_with_browser = _with_browser
+    original_owned_page_info = _owned_page_info
+    original_attach = _attach
+    original_evaluate = _evaluate
+    original_checkout_summary_from_browser = _checkout_summary_from_browser
+    try:
+        globals()["_with_browser"] = lambda fn: fn(_FakeBrowser())
+        globals()["_owned_page_info"] = lambda _browser: {"id": "checkout-target", "url": "https://www.bonobos.com/checkout/review", "title": "Review order"}
+        globals()["_attach"] = lambda _browser, _target_id: "checkout-session"
+        globals()["_evaluate"] = lambda _browser, _session_id, expression: "https://www.bonobos.com/checkout/review" if expression == "location.href" else "Review order"
+        non_amazon_review = dict(generic_checkout_review)
+        non_amazon_review["url"] = "https://www.bonobos.com/checkout/review"
+        globals()["_checkout_summary_from_browser"] = lambda _browser, _session_id: non_amazon_review
+        non_amazon_query_result = _query("Array.from(document.querySelectorAll('button')).map((node) => node.innerText)")
+    finally:
+        globals()["_with_browser"] = original_with_browser
+        globals()["_owned_page_info"] = original_owned_page_info
+        globals()["_attach"] = original_attach
+        globals()["_evaluate"] = original_evaluate
+        globals()["_checkout_summary_from_browser"] = original_checkout_summary_from_browser
+    assert non_amazon_query_result["operation"] == "checkout_query_summary"
+    assert non_amazon_query_result["status"] == "ok"
+    assert non_amazon_query_result["url"] == "https://www.bonobos.com/checkout/review"
+    assert non_amazon_query_result["query_policy"].startswith("secure_browser_query returns only the sanitized checkout/order-review summary")
+    assert "value" not in non_amazon_query_result
+    original_with_browser = _with_browser
+    original_first_page_target = _first_page_target
+    original_attach = _attach
+    original_checkout_summary_from_browser = _checkout_summary_from_browser
+    original_submit_final_purchase_approval_request = _submit_final_purchase_approval_request
+    try:
+        globals()["_with_browser"] = lambda fn: fn(_FakeBrowser())
+        globals()["_first_page_target"] = lambda _browser: "checkout-target"
+        globals()["_attach"] = lambda _browser, _target_id: "checkout-session"
+        non_amazon_approval_summary = dict(generic_checkout_review)
+        non_amazon_approval_summary["url"] = "https://www.greats.com/checkout/review"
+        non_amazon_approval_summary["page_title"] = "Review order"
+        non_amazon_approval_summary["material_summary_binding"] = "c" * 64
+        globals()["_checkout_summary_from_browser"] = lambda _browser, _session_id: non_amazon_approval_summary
+        globals()["_submit_final_purchase_approval_request"] = lambda summary, material, evidence, review_id, note="": {"status": "approval_requested", "request_id": "ar-20260101-000000-deadbe", "submit_result": {"request": {"id": "ar-20260101-000000-deadbe"}}, "proposal_result": {"request": {"id": "ar-20260101-000000-deadbe"}}}
+        non_amazon_approval = _request_final_purchase_approval("c" * 64, "d" * 64, "review-test")
+    finally:
+        globals()["_with_browser"] = original_with_browser
+        globals()["_first_page_target"] = original_first_page_target
+        globals()["_attach"] = original_attach
+        globals()["_checkout_summary_from_browser"] = original_checkout_summary_from_browser
+        globals()["_submit_final_purchase_approval_request"] = original_submit_final_purchase_approval_request
+    assert non_amazon_approval["status"] == "approval_requested"
+    assert non_amazon_approval["request_id"] == "ar-20260101-000000-deadbe"
     try:
         _check_human_takeover_text("Proceed to checkout")
         raise AssertionError("ordinary browse click should block checkout-prep controls")
@@ -6327,6 +6414,40 @@ if __name__ == "__main__":
     disabled_owner_review = json.loads(secure_browser_owner_checkout_review_tool({"send_to_telegram": False}))
     assert disabled_owner_review["error"] == "OWNER_CHECKOUT_REVIEW_FAILED"
     assert disabled_owner_review["operation"] == "owner_checkout_review"
+    original_env_or_dotenv = _env_or_dotenv
+    original_telegram_owner_destination = _telegram_owner_destination
+    original_with_browser = _with_browser
+    original_owned_page_info = _owned_page_info
+    original_attach = _attach
+    original_evaluate = _evaluate
+    original_checkout_summary_from_browser = _checkout_summary_from_browser
+    original_capture_owner_visual_artifacts = _capture_owner_visual_artifacts
+    try:
+        globals()["_env_or_dotenv"] = lambda key: "dummy-token" if key == "TELEGRAM_BOT_TOKEN" else ""
+        globals()["_telegram_owner_destination"] = lambda: ("12345", None)
+        globals()["_with_browser"] = lambda fn: fn(_FakeBrowser())
+        globals()["_owned_page_info"] = lambda _browser: {"id": "checkout-target", "url": "https://www.woolandprince.com/checkout/review", "title": "Review order"}
+        globals()["_attach"] = lambda _browser, _target_id: "checkout-session"
+        globals()["_evaluate"] = lambda _browser, _session_id, expression: {} if expression == CHECKOUT_PAGE_SAFETY_JS else ""
+        non_amazon_review = dict(generic_checkout_review)
+        non_amazon_review["url"] = "https://www.woolandprince.com/checkout/review"
+        non_amazon_review["material_summary_binding"] = "a" * 64
+        globals()["_checkout_summary_from_browser"] = lambda _browser, _session_id: non_amazon_review
+        globals()["_capture_owner_visual_artifacts"] = lambda _browser, _session_id, _review_id, _retain_local, _caption_builder: ("full-page", [{"message_id": 67890}], ["b" * 64], 1)
+        non_amazon_owner_review = json.loads(secure_browser_owner_checkout_review_tool({"send_to_telegram": True}))
+    finally:
+        globals()["_env_or_dotenv"] = original_env_or_dotenv
+        globals()["_telegram_owner_destination"] = original_telegram_owner_destination
+        globals()["_with_browser"] = original_with_browser
+        globals()["_owned_page_info"] = original_owned_page_info
+        globals()["_attach"] = original_attach
+        globals()["_evaluate"] = original_evaluate
+        globals()["_checkout_summary_from_browser"] = original_checkout_summary_from_browser
+        globals()["_capture_owner_visual_artifacts"] = original_capture_owner_visual_artifacts
+    assert non_amazon_owner_review["status"] == "sent_owner_only"
+    assert non_amazon_owner_review["material_summary_binding"] == "a" * 64
+    assert non_amazon_owner_review["delivery"]["telegram"] is True
+    assert "checkout_review" not in non_amazon_owner_review
     huge_owner_review = {
         "operation": "owner_checkout_review",
         "status": "sent_owner_only",
