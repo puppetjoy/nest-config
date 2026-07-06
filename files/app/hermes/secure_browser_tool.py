@@ -3184,10 +3184,10 @@ def _checkoutish_page_text(metadata: dict[str, Any]) -> str:
 
 def _assert_checkout_page(metadata: dict[str, Any], effect: str) -> None:
     parsed = urlparse(str(metadata.get("url") or ""))
-    if parsed.scheme != "https" or not AMAZON_HOST_RE.search(parsed.netloc):
-        raise ValueError(f"{effect} actions are currently limited to https://*.amazon.* pages")
+    if parsed.scheme != "https":
+        raise ValueError(f"{effect} actions require an HTTPS checkout/order-review page")
     if not CHECKOUTISH_PAGE_RE.search(_checkoutish_page_text(metadata)):
-        raise ValueError(f"{effect} actions require the current page to be an Amazon checkout-prep/review page")
+        raise ValueError(f"{effect} actions require the current page to be an HTTPS checkout-prep/review page")
 
 
 def _assert_checkout_control_not_sensitive(control_text: str) -> None:
@@ -3205,15 +3205,16 @@ def _assert_checkout_click_allowed(metadata: dict[str, Any], effect: str, reason
     if not metadata.get("visible"):
         raise ValueError(f"{effect} selector must match a visible checkout-prep control")
     parsed = urlparse(str(metadata.get("url") or ""))
-    if parsed.scheme != "https" or not AMAZON_HOST_RE.search(parsed.netloc):
-        raise ValueError(f"{effect} clicks are currently limited to https://*.amazon.* pages")
+    if parsed.scheme != "https":
+        raise ValueError(f"{effect} clicks require an HTTPS shopping checkout/cart page")
+    page_text = _checkoutish_page_text(metadata)
     control_text = _checkout_metadata_text(metadata)
     control_identity_text = _checkout_control_identity_text(metadata)
     if FINAL_PURCHASE_RE.search(control_identity_text):
         raise ValueError("final purchase controls cannot be clicked by secure_browser_click; use the trusted Telegram approval path")
     if effect == "checkout_prep":
-        if not CART_URL_RE.search(parsed.path):
-            raise ValueError("checkout_prep clicks must start from an Amazon cart page")
+        if not (CART_URL_RE.search(parsed.path) or CHECKOUTISH_PAGE_RE.search(page_text)):
+            raise ValueError("checkout_prep clicks require the current page to be an HTTPS cart or checkout-prep page")
         if not CHECKOUT_PREP_RE.search(control_text):
             raise ValueError("checkout_prep selector must identify a visible checkout/proceed-to-checkout control")
         return
@@ -3870,7 +3871,7 @@ def _reject_unsafe_operation(operation: str) -> dict[str, Any]:
             "operation": op,
             "approval_required": False,
             "boundary": "supervised_checkout_prep",
-            "message": "Allowed only as an audited broad secure_browser_click approved_effect on visible Amazon checkout-prep controls. Final order submission and sensitive account/payment/address/login scopes are refused.",
+            "message": "Allowed only as an audited broad secure_browser_click approved_effect on visible HTTPS cart/checkout/order-review controls under Joy's live supervision. Final order submission and sensitive account/payment/address/login scopes are refused.",
         }
     if op == "remove_from_cart":
         return {
@@ -6365,6 +6366,65 @@ if __name__ == "__main__":
     assert non_amazon_query_result["url"] == "https://www.bonobos.com/checkout/review"
     assert non_amazon_query_result["query_policy"].startswith("secure_browser_query returns only the sanitized checkout/order-review summary")
     assert "value" not in non_amazon_query_result
+    wool_cart_checkout_button = {
+        "url": "https://www.woolandprince.com/cart",
+        "page_title": "Cart",
+        "exists": True,
+        "disabled": False,
+        "visible": True,
+        "text": "Checkout",
+        "tag": "BUTTON",
+    }
+    _assert_checkout_click_allowed(wool_cart_checkout_button, "checkout_prep", "Joy live supervised checkout prep")
+    bonobos_shipping_option = {
+        "url": "https://www.bonobos.com/checkout/review",
+        "page_title": "Review order",
+        "exists": True,
+        "disabled": False,
+        "visible": True,
+        "text": "Delivery option Monday",
+        "tag": "BUTTON",
+    }
+    _assert_checkout_click_allowed(bonobos_shipping_option, "select_delivery_option", "Joy live supervised checkout prep")
+    try:
+        _assert_checkout_click_allowed({**bonobos_shipping_option, "text": "Place order"}, "select_delivery_option", "Joy live supervised checkout prep")
+        raise AssertionError("final purchase control should remain blocked on non-Amazon checkout pages")
+    except ValueError as exc:
+        assert "final purchase controls cannot be clicked" in str(exc)
+    _assert_checkout_type_allowed(
+        {
+            "url": "https://www.woolandprince.com/checkout/review",
+            "page_title": "Review order",
+            "exists": True,
+            "disabled": False,
+            "visible": True,
+            "text": "Promo code",
+            "tag": "INPUT",
+            "type": "text",
+        },
+        "apply_checkout_option",
+        "Joy live supervised checkout prep",
+        "SAVE10",
+    )
+    try:
+        _assert_checkout_type_allowed(
+            {
+                "url": "https://www.woolandprince.com/checkout/review",
+                "page_title": "Review order",
+                "exists": True,
+                "disabled": False,
+                "visible": True,
+                "text": "Shipping address",
+                "tag": "INPUT",
+                "type": "text",
+            },
+            "apply_checkout_option",
+            "Joy live supervised checkout prep",
+            "123 Example Street",
+        )
+        raise AssertionError("sensitive checkout typing should remain blocked")
+    except ValueError as exc:
+        assert "sensitive" in str(exc) or "Joy must take over" in str(exc)
     original_with_browser = _with_browser
     original_first_page_target = _first_page_target
     original_attach = _attach
