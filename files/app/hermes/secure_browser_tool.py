@@ -1346,7 +1346,8 @@ def _compact_owner_checkout_review_result(data: dict[str, Any]) -> dict[str, Any
         "artifact_count": data.get("artifact_count"),
         "minimal_order_facts": _minimal_owner_checkout_facts(checkout_review),
         "retention": _bounded_checkout_scalar(data.get("retention"), 200),
-        "safety_boundary": "Complete checkout screenshots were sent only to Joy via the trusted Telegram path. This acknowledgement omits raw screenshots, file paths, DOM, cookies, storage, request headers, full address/payment/account text, and final purchase controls; final purchase remains blocked pending trusted approval.",
+        "checkout_handoff_default": "For ordinary non-Amazon/Shopify/Shop Pay checkout, Joy normally completes sensitive details and presses the final Pay/Buy button manually; this owner-only review is optional evidence, not a required approval ceremony.",
+        "safety_boundary": "Complete checkout screenshots were sent only to Joy via the trusted Telegram path. This acknowledgement omits raw screenshots, file paths, DOM, cookies, storage, request headers, full address/payment/account text, and final purchase controls; final purchase remains blocked from ordinary Star tools. Trusted final-purchase approval is exceptional, primarily for explicitly requested Amazon-style execution flows.",
     }
 
 
@@ -3022,7 +3023,7 @@ def _sanitize_checkout_summary(summary: dict[str, Any], safety: dict[str, Any], 
         "final_purchase_controls_visible": final_purchase_controls,
         "checkout_prep_safe_control_count": len(checkout_prep_controls),
         "sensitive_controls_suppressed_count": int(controls.get("sensitive_controls_suppressed_count") or 0),
-        "final_purchase_policy": "Final Buy Now, Place Order, or equivalent order-submission controls are blocked and must not be clicked through ordinary secure_browser tools.",
+        "final_purchase_policy": "Final Buy Now, Place Order, Pay, or equivalent order-submission controls are blocked from ordinary secure_browser tools. For ordinary non-Amazon checkouts, the default handoff is Joy manual final payment after Star prepares the cart and summarizes sanitized checkout facts; trusted final-purchase approval/execution is optional and exceptional, not the normal non-Amazon path.",
     }
     if safety.get("blocked_reason"):
         blocked_metadata["human_takeover_reason"] = _sanitize_checkout_text(str(safety.get("blocked_reason") or ""))
@@ -3047,7 +3048,7 @@ def _sanitize_checkout_summary(summary: dict[str, Any], safety: dict[str, Any], 
         "informational_flags": _sanitize_checkout_detail_list(summary.get("informational_flags"), limit=6),
         "surprise_flags": _sanitize_checkout_detail_list(summary.get("surprise_flags"), limit=10),
         "checkout_prep_controls": checkout_prep_controls,
-        "checkout_prep_control_policy": "Star may inspect and use sanitized selectors/labels for ordinary checkout-prep controls only with an explicit approved_effect. Final purchase controls and address/payment/account/security edits remain blocked or Joy-only.",
+        "checkout_prep_control_policy": "Star may inspect and use sanitized selectors/labels for ordinary checkout-prep controls only with an explicit approved_effect. Final purchase controls and address/payment/account/security edits remain blocked or Joy-only; ordinary non-Amazon payment completion is a Joy manual handoff rather than an approval-gated Star click.",
         "blocked_metadata": blocked_metadata,
         "policy": "Sanitized checkout-prep/order-review summary only: structured fields are isolated; street addresses, full payment/account/card numbers, emails, phone numbers, security-code text, raw DOM, cookies, storage, request headers, and ordinary final-purchase controls are not returned as summary fields.",
     }
@@ -3887,7 +3888,7 @@ def _reject_unsafe_operation(operation: str) -> dict[str, Any]:
             "approval_required": True,
             "trusted_approval_required": True,
             "boundary": "trusted_agent_request_telegram_approval",
-            "message": "Star may request a trusted Agent Request Telegram approval after owner-only checkout review. The request is bound to material_summary_binding and owner_visual_evidence_binding; final execution remains separate and approval-gated.",
+            "message": "Star may request a trusted Agent Request Telegram approval after owner-only checkout review when Joy explicitly wants Star to execute a final purchase. Ordinary non-Amazon/Shopify/Shop Pay checkout defaults to Joy taking over for sensitive details and pressing Pay/Buy manually, then Star records sanitized post-purchase tracking facts.",
         }
     if op in ("place_order", "execute_final_purchase"):
         return {
@@ -3895,14 +3896,14 @@ def _reject_unsafe_operation(operation: str) -> dict[str, Any]:
             "operation": op,
             "approval_required": True,
             "trusted_approval_required": True,
-            "message": "Final purchase remains blocked from ordinary chat/tool execution. It requires a trusted Telegram approval action bound to the exact material checkout summary hash and owner visual evidence, then a trusted executor must revalidate the live checkout page and consume the approval exactly once.",
+            "message": "Final purchase remains blocked from ordinary chat/tool execution. Amazon-style trusted execution requires Telegram approval bound to the exact material checkout summary hash and owner visual evidence, then a trusted executor must revalidate the live checkout page and consume the approval exactly once; ordinary non-Amazon checkout is normally a Joy manual Pay/Buy handoff instead.",
         }
     if op in UNSAFE_OPERATIONS:
         return {
             "allowed": False,
             "error": "OPERATION_NOT_ALLOWED",
             "operation": op,
-            "message": "Star's shopping bridge allows scoped browsing, visible-page inspection, safe queries, careful clicks/types, cart inspection, explicitly approved add-to-cart, and explicitly approved visible cart line-item removal. Joy handles login, Bitwarden, passkeys, 2FA, CAPTCHA, checkout, Buy Now, Place Order, account, address, and payment actions manually.",
+            "message": "Star's shopping bridge allows scoped browsing, visible-page inspection, safe queries, careful clicks/types, cart inspection, explicitly approved add-to-cart, checkout prep/handoff, and explicitly approved visible cart line-item removal. Joy handles login, Bitwarden, passkeys, 2FA, CAPTCHA, Buy Now, Place Order/Pay, account, address, and payment actions manually unless a separate trusted final-purchase flow is explicitly approved.",
         }
     return {"allowed": True, "operation": op}
 
@@ -5434,15 +5435,15 @@ def secure_browser_status_tool(args: dict[str, Any], **_kw: Any) -> str:
             "status": "available",
             "approved_click_effects": list(CHECKOUT_APPROVED_EFFECTS),
             "approved_type_effects": ["apply_checkout_option", "cart_line_adjustment"],
-            "boundary": "Star may inspect sanitized checkout-prep controls and click/type into ordinary review-page controls under Joy's live supervision with explicit approved_effect values. Star must pause for login, Bitwarden, passkeys, 2FA, CAPTCHA, suspicious security prompts, payment/address/account edits, or sensitive-information prompts.",
+            "boundary": "Star may inspect sanitized checkout-prep controls and click/type into ordinary review-page controls under Joy's live supervision with explicit approved_effect values. For ordinary non-Amazon/Shopify/Shop Pay retailers, Star should hand control to Joy for sensitive details and the final Pay/Buy click rather than launching an Amazon-style approval ceremony by default. Star must pause for login, Bitwarden, passkeys, 2FA, CAPTCHA, suspicious security prompts, payment/address/account edits, or sensitive-information prompts.",
             "sanitization": "Checkout-prep snapshots/current-page summaries return isolated structured item/totals/delivery/surprise fields plus destination city-state/abstract label and payment labels. Mixed blobs, sensitive redaction-marker text, and final purchase controls are removed from ordinary summary fields.",
             "visual_confirmation": "secure_browser_visual_evidence returns a bounded visual proof bundle: a local PNG screenshot, sanitized suggested regions, and optional focused crops. Raw checkout/payment/address screenshots remain blocked except for browser-redacted Amazon checkout evidence; complete checkout evidence for any HTTPS checkout/order-review page uses owner-only Telegram delivery. Amazon thank-you/post-purchase pages are labeled as post-purchase evidence; login/account/payment/address/security pages remain Joy-only.",
-            "owner_only_confirmation": "secure_browser_owner_checkout_review can send complete unredacted checkout screenshots for HTTPS checkout/order-review pages directly to Joy's configured Telegram destination without returning paths, MEDIA handles, raw DOM, cookies, storage, request headers, CDP endpoints, or address/payment text to Star. Post-purchase/order-history proof is currently Amazon-only.",
+            "owner_only_confirmation": "secure_browser_owner_checkout_review can send complete unredacted checkout screenshots for HTTPS checkout/order-review pages directly to Joy's configured Telegram destination without returning paths, MEDIA handles, raw DOM, cookies, storage, request headers, CDP endpoints, or address/payment text to Star. Use it when high-value, confusing, or nonstandard checkouts need owner-only evidence; ordinary non-Amazon checkout can simply be handed to Joy for manual Pay/Buy. Post-purchase/order-history proof is currently Amazon-only.",
         },
         "approval_gated_operations": {
             "add_to_cart": "available only through the broad secure_browser_click flow with approved_effect='add_to_cart' and a human-readable approval reference",
             "remove_from_cart": "available only through secure_browser_click with approved_effect='remove_from_cart', a human-readable approval reference, and a visible Delete/Remove cart line-item control on an Amazon cart page",
-            "request_final_purchase_approval": "Star-callable after owner_checkout_review; creates a trusted Agent Request Telegram approval proposal bound to material_summary_binding and owner_visual_evidence_binding",
+            "request_final_purchase_approval": "optional/exceptional after owner_checkout_review when Joy explicitly wants Star to execute the final purchase; ordinary non-Amazon checkout defaults to Joy manual Pay/Buy handoff",
             "place_order": "blocked from ordinary tool use; requires trusted Telegram approval plus secure_browser_execute_final_purchase live revalidation and exactly-once token consumption",
             "owner_checkout_review": "available only as owner-only Telegram delivery of complete checkout visual evidence tied to the same material_summary_binding; it does not expose sensitive evidence to Star",
         },
@@ -5874,7 +5875,7 @@ CURRENT_PAGE_SUMMARY_SCHEMA = {
 
 OWNER_CHECKOUT_REVIEW_SCHEMA = {
     "name": "secure_browser_owner_checkout_review",
-    "description": "Send complete sensitive checkout/order-review or post-purchase confirmation/order-verification visual evidence directly to Joy's configured Telegram destination for owner-only review. It first attempts full-document capture; if that is unavailable, it sends an ordered viewport sequence covering the page from top through below-the-fold material sections. For pre-purchase checkout, intended for verification of address, payment, item, delivery, tax/total, discounts, and final controls. For post-purchase pages, intended for thank-you/confirmation and Your Orders delivery proof. Returns only a redacted acknowledgement, bindings, and sanitized summary to Star; it never returns image paths, MEDIA handles, raw DOM, cookies, storage, request headers, CDP endpoints, credentials, passkeys, 2FA/CAPTCHA data, raw order numbers, or structured address/payment details. Final Place Order remains blocked pending trusted approval before purchase.",
+    "description": "Send complete sensitive checkout/order-review or post-purchase confirmation/order-verification visual evidence directly to Joy's configured Telegram destination for owner-only review. It first attempts full-document capture; if that is unavailable, it sends an ordered viewport sequence covering the page from top through below-the-fold material sections. For pre-purchase checkout, intended for verification of address, payment, item, delivery, tax/total, discounts, and final controls. For post-purchase pages, intended for thank-you/confirmation and Your Orders delivery proof. Returns only a redacted acknowledgement, bindings, and sanitized summary to Star; it never returns image paths, MEDIA handles, raw DOM, cookies, storage, request headers, CDP endpoints, credentials, passkeys, 2FA/CAPTCHA data, raw order numbers, or structured address/payment details. For ordinary non-Amazon checkout this is optional evidence before Joy manually completes Pay/Buy; final Place Order remains blocked from ordinary Star tools.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -5888,7 +5889,7 @@ OWNER_CHECKOUT_REVIEW_SCHEMA = {
 
 REQUEST_FINAL_PURCHASE_APPROVAL_SCHEMA = {
     "name": "secure_browser_request_final_purchase_approval",
-    "description": "Request Joy's trusted Telegram-native final purchase approval after owner-only checkout review. Re-reads the live checkout page, verifies material_summary_binding still matches, then creates an Agent Request proposal with actionable Telegram buttons. It does not click Place Order and does not expose raw checkout evidence, cookies, storage, CDP handles, or full payment/address details.",
+    "description": "Request Joy's trusted Telegram-native final purchase approval after owner-only checkout review. This is optional/exceptional, mainly for explicitly requested Amazon-style Star execution; ordinary non-Amazon/Shopify/Shop Pay checkout defaults to Star handing control to Joy for sensitive details and the final Pay/Buy click. Re-reads the live checkout page, verifies material_summary_binding still matches, then creates an Agent Request proposal with actionable Telegram buttons. It does not click Place Order and does not expose raw checkout evidence, cookies, storage, CDP handles, or full payment/address details.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -6325,6 +6326,7 @@ if __name__ == "__main__":
     assert mixed_checkout_summary["shipping_destination_city_state_or_label"] == ["Sampletown, NY"]
     assert mixed_checkout_summary["payment_method_label_last_four_only"] == ["Visa ending in 1234"]
     assert mixed_checkout_summary["blocked_metadata"]["final_purchase_controls_visible"] == ["Place Order"]
+    assert "Joy manual final payment" in mixed_checkout_summary["blocked_metadata"]["final_purchase_policy"]
     assert "Gift card" not in mixed_json
     assert "Change" not in mixed_json
     assert "Return policy" not in mixed_json
@@ -6540,6 +6542,7 @@ if __name__ == "__main__":
         pass
     assert json.loads(secure_browser_visual_evidence_tool({"crops": "not-a-list"}))["error"] == "INVALID_CROPS"
     assert _reject_unsafe_operation("request_final_purchase_approval")["trusted_approval_required"] is True
+    assert "Ordinary non-Amazon" in _reject_unsafe_operation("request_final_purchase_approval")["message"]
     assert _reject_unsafe_operation("execute_final_purchase")["allowed"] is False
     assert re.fullmatch(r"[0-9a-f]{64}", _approval_token_key("ar-20260101-000000-deadbe", "ap-test", "a" * 64, "b" * 64))
     try:
@@ -6731,6 +6734,7 @@ if __name__ == "__main__":
     assert "list" in status["retail_order_operations"]
     assert "upsert" in status["consumable_operations"]
     assert status["supervised_checkout_prep"]["status"] == "available"
+    assert "Joy for sensitive details and the final Pay/Buy click" in status["supervised_checkout_prep"]["boundary"]
     assert status["trusted_assistant_access"]["status"] == "broad_browsing_available"
     assert "owner_checkout_review" in status["approval_gated_operations"]
     assert "place_order" in status["approval_gated_operations"]
