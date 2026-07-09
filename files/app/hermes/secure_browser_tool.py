@@ -1225,10 +1225,45 @@ TYPE_JS = r"""
 """
 
 
+def _compact_checkout_review_for_tool_result(checkout_review: dict[str, Any], max_controls: int = 8) -> dict[str, Any]:
+    """Return compact, safe checkout facts for Star-visible tool results.
+
+    Full checkout summaries can include dozens of safe controls and long
+    redacted text fragments.  Keep enough state for the next deterministic
+    Star action while avoiding RESULT_TOO_LARGE fallbacks that hide whether a
+    checkout-prep click actually advanced.
+    """
+    controls = checkout_review.get("checkout_prep_controls")
+    control_count = len(controls) if isinstance(controls, list) else 0
+    compact: dict[str, Any] = {
+        "url": _bounded_checkout_scalar(checkout_review.get("url"), 500),
+        "page_title": _bounded_checkout_scalar(checkout_review.get("page_title"), 200),
+        "material_summary_binding": _bounded_checkout_scalar(checkout_review.get("material_summary_binding"), 128),
+        "checkout_prep_state": _bounded_checkout_scalar(checkout_review.get("checkout_prep_state"), 100),
+        "final_purchase_state": "blocked_pending_trusted_approval",
+        "minimal_order_facts": _minimal_owner_checkout_facts(checkout_review),
+        "checkout_prep_controls_returned": min(control_count, max_controls),
+        "checkout_prep_controls_truncated_from": control_count,
+        "checkout_prep_controls": controls[:max_controls] if isinstance(controls, list) else [],
+        "next_read_back": "If navigation state is unclear, call secure_browser_current_page_summary or secure_browser_page_snapshot before clicking another checkout-prep control.",
+    }
+    blocked_metadata = checkout_review.get("blocked_metadata")
+    if isinstance(blocked_metadata, dict):
+        compact["blocked_metadata"] = {
+            "final_purchase_controls_visible_count": len(blocked_metadata.get("final_purchase_controls_visible") or []),
+            "sensitive_controls_skipped_count": len(blocked_metadata.get("sensitive_controls_skipped") or []),
+            "checkout_prep_controls_total": blocked_metadata.get("checkout_prep_controls_total", control_count),
+        }
+    return compact
+
+
 def _compact_large_result(data: dict[str, Any]) -> dict[str, Any]:
     compact = dict(data)
     if compact.get("operation") == "owner_checkout_review":
         compact = _compact_owner_checkout_review_result(compact)
+    checkout_review = compact.get("checkout_review")
+    if isinstance(checkout_review, dict) and compact.get("operation") in {"click", "type", "current_page_summary", "query"}:
+        compact["checkout_review"] = _compact_checkout_review_for_tool_result(checkout_review)
     controls = compact.get("checkout_prep_controls")
     if isinstance(controls, list) and len(controls) > 12:
         metadata = dict(compact.get("blocked_metadata") or {})
@@ -2638,6 +2673,24 @@ def _is_checkoutish_page(url: str, title: str = "") -> bool:
     parsed = urlparse(str(url or ""))
     page_material = " ".join([parsed.path, parsed.query, str(title or "")])
     return bool(parsed.scheme == "https" and CHECKOUT_QUERY_PAGE_RE.search(page_material))
+
+
+def _is_checkout_upsell_interstitial_page(url: str, title: str = "") -> bool:
+    parsed = urlparse(str(url or ""))
+    page_material = " ".join([parsed.path, parsed.query, str(title or "")])
+    return bool(
+        parsed.scheme == "https"
+        and AMAZON_HOST_RE.search(parsed.netloc)
+        and re.search(r"/checkout/byg|need\s+anything\s+else|continue\s+to\s+checkout", page_material, re.IGNORECASE)
+    )
+
+
+def _checkout_review_page_rank(page: dict[str, Any]) -> tuple[int, str]:
+    url = str(page.get("url") or "")
+    title = str(page.get("title") or "")
+    # Checkout-review/order-entry pages should win over Amazon's "Need
+    # anything else?" upsell interstitial when both are live after a click.
+    return (0 if _is_checkout_upsell_interstitial_page(url, title) else 1, url)
 
 
 def _is_owner_checkout_review_page(url: str, title: str = "") -> bool:
@@ -4435,6 +4488,7 @@ def _select_post_click_owner_page(browser: CdpSession, original_target_id: str, 
         if prefer_checkout:
             checkout_pages = [page for page in pages if _is_owner_checkout_review_page(str(page.get("url") or ""), str(page.get("title") or ""))]
             if checkout_pages:
+                checkout_pages.sort(key=_checkout_review_page_rank)
                 return checkout_pages[-1]
         if current_url and not _is_blank_page_url(current_url) and (not prefer_checkout or time.time() >= deadline):
             for page in pages:
@@ -4518,6 +4572,50 @@ def _owned_page_info(browser: CdpSession) -> dict[str, str]:
         with contextlib.suppress(Exception):
             return _page_info_for_id(browser.cdp_url, target_id)
     return {"id": target_id, "url": "about:blank", "title": ""}
+
+
+def _owner_checkout_review_page_info(browser: CdpSession) -> dict[str, str]:
+    """Return the best live page for owner-only checkout review.
+
+    A checkout-prep click can replace/detach the cart tab or leave the stored
+    owner target on a transient about:blank context while the real checkout
+    review exists in another browser context.  Owner review should recover to
+    that live HTTPS checkout/order-review page rather than failing against the
+    stale owner tab.
+    """
+    page_info = _owned_page_info(browser)
+    page_url = str(page_info.get("url") or "")
+    page_title = str(page_info.get("title") or "")
+    if _is_owner_checkout_review_page(page_url, page_title) and not _is_checkout_upsell_interstitial_page(page_url, page_title):
+        return page_info
+    candidates = [
+        page
+        for page in _page_candidates(browser)
+        if _is_owner_checkout_review_page(str(page.get("url") or ""), str(page.get("title") or ""))
+    ]
+    if candidates:
+        candidates.sort(key=_checkout_review_page_rank)
+        page = candidates[-1]
+        target_id = str(page.get("id") or "")
+        if target_id:
+            _store_owner_target(target_id, str(page.get("url") or ""), str(page.get("title") or ""))
+            return {"id": target_id, "url": str(page.get("url") or ""), "title": str(page.get("title") or "")}
+    return page_info
+
+
+def _owner_checkout_review_page_error(url: str, title: str) -> str:
+    sanitized_url = _sanitize_url(str(url or "")) or "about:blank"
+    sanitized_title = _sanitize_shopping_text(title)[:200]
+    return (
+        "owner-only checkout review requires the live owner tab to be an HTTPS "
+        "checkout/order-review page, or an Amazon post-purchase/order-history "
+        f"proof page; current safe page is {sanitized_url!r} titled "
+        f"{sanitized_title!r}. Next safe action: call "
+        "secure_browser_current_page_summary to re-read the visible page; if it "
+        "is an upsell/interstitial, click the exposed checkout-prep Continue/"
+        "Secure checkout control, then retry owner review. Final purchase "
+        "controls remain blocked from ordinary Star tools."
+    )
 
 
 def _attach(browser: CdpSession, target_id: str) -> str:
@@ -4961,14 +5059,14 @@ def _owner_checkout_review(send_to_telegram: bool = True, retain_local: bool = F
     _telegram_owner_destination()
 
     def run(browser: CdpSession) -> dict[str, Any]:
-        page_info = _owned_page_info(browser)
+        page_info = _owner_checkout_review_page_info(browser)
         url = str(page_info.get("url") or "")
         title = str(page_info.get("title") or "")
         parsed = urlparse(url)
         checkoutish = re.search(r"checkout|buy|payselect|ship|spc|review|ordering", " ".join([parsed.path, parsed.query, title]), re.IGNORECASE)
         post_purchase = _is_amazon_post_purchase_page(url, title)
         if not _is_owner_checkout_review_page(url, title):
-            raise ValueError("owner-only checkout review requires an HTTPS checkout/order-review page; post-purchase/order-history owner proof is currently Amazon-only")
+            raise ValueError(_owner_checkout_review_page_error(url, title))
         target_id = page_info.get("id") or _first_page_target(browser)
         session_id = _attach(browser, str(target_id))
         if post_purchase and not checkoutish:
@@ -4979,7 +5077,18 @@ def _owner_checkout_review(send_to_telegram: bool = True, retain_local: bool = F
         checkout_review = _checkout_summary_from_browser(browser, session_id)
         binding = str(checkout_review.get("material_summary_binding") or "")
         if not binding:
-            raise RuntimeError("checkout review did not produce a material summary binding")
+            safe_url = _sanitize_url(url) or "about:blank"
+            safe_title = _sanitize_shopping_text(title)[:200]
+            raise RuntimeError(
+                "owner-only checkout review reached a checkout-adjacent page "
+                "but did not find a material summary binding; current safe "
+                f"page is {safe_url!r} titled {safe_title!r}. Next safe "
+                "action: call secure_browser_current_page_summary or "
+                "secure_browser_page_snapshot, use a visible checkout-prep "
+                "Continue/Secure checkout control if present, then retry owner "
+                "review on the order-review page. Final purchase controls "
+                "remain blocked from ordinary Star tools."
+            )
         review_id = hashlib.sha256(f"{binding}:{time.time_ns()}".encode("utf-8")).hexdigest()[:16]
         def caption_builder(index: int, count: int, mode: str) -> str:
             return _owner_checkout_review_caption(review_id, index, count, binding, mode, checkout_review)
@@ -6633,6 +6742,54 @@ if __name__ == "__main__":
     assert "selector" not in compact_owner_json
     assert "Place Order" not in compact_owner_json
     assert len(compact_owner_json) <= MAX_RESULT_CHARS
+
+    huge_checkout_click = {
+        "operation": "click",
+        "approved_effect": "checkout_prep",
+        "status": "ok",
+        "url": "https://www.amazon.com/checkout/entry/cart",
+        "checkout_review": {
+            "url": "https://www.amazon.com/checkout/entry/cart",
+            "page_title": "Checkout",
+            "material_summary_binding": "f" * 64,
+            "items": ["Baleaf shorts Qty 1"] * 40,
+            "totals": ["Order total $33.78"] * 40,
+            "delivery": ["Delivery Thursday"] * 40,
+            "payment_method_label_last_four_only": ["Visa ending in 5252"] * 10,
+            "checkout_prep_state": "checkout_prep_visible",
+            "checkout_prep_controls": [{"selector": f"#control-{idx}", "label": "Continue to checkout", "approved_effect_hints": ["checkout_prep"]} for idx in range(800)],
+            "blocked_metadata": {"final_purchase_controls_visible": ["Place order"], "sensitive_controls_skipped": ["CVV"], "checkout_prep_controls_total": 800},
+        },
+    }
+    compact_click = json.loads(_json(huge_checkout_click))
+    compact_click_json = json.dumps(compact_click, ensure_ascii=False)
+    assert compact_click["operation"] == "click"
+    assert compact_click["checkout_review"]["material_summary_binding"] == "f" * 64
+    assert compact_click["checkout_review"]["checkout_prep_controls_returned"] == 8
+    assert compact_click["checkout_review"]["checkout_prep_controls_truncated_from"] == 800
+    assert compact_click["checkout_review"]["blocked_metadata"]["final_purchase_controls_visible_count"] == 1
+    assert "Place order" not in compact_click_json
+    assert len(compact_click_json) <= MAX_RESULT_CHARS
+
+    original_owned_page_info_for_review = _owned_page_info
+    original_page_candidates_for_review = _page_candidates
+    original_store_owner_target_for_review = _store_owner_target
+    recovered_owner_targets = []
+    try:
+        globals()["_owned_page_info"] = lambda _browser: {"id": "blank-target", "url": "about:blank", "title": ""}
+        globals()["_page_candidates"] = lambda _browser: [
+            {"id": "blank-target", "url": "about:blank", "title": ""},
+            {"id": "checkout-target", "url": "https://www.amazon.com/checkout/entry/cart", "title": "Amazon checkout"},
+        ]
+        globals()["_store_owner_target"] = lambda target_id, url="", title="": recovered_owner_targets.append((target_id, url, title))
+        recovered_page = _owner_checkout_review_page_info(_FakeBrowser())
+    finally:
+        globals()["_owned_page_info"] = original_owned_page_info_for_review
+        globals()["_page_candidates"] = original_page_candidates_for_review
+        globals()["_store_owner_target"] = original_store_owner_target_for_review
+    assert recovered_page["id"] == "checkout-target"
+    assert recovered_page["url"] == "https://www.amazon.com/checkout/entry/cart"
+    assert recovered_owner_targets == [("checkout-target", "https://www.amazon.com/checkout/entry/cart", "Amazon checkout")]
     import tempfile
 
     original_ledger_path = SECURE_BROWSER_ORDER_LEDGER_PATH
