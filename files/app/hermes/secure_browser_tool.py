@@ -46,7 +46,7 @@ FORBIDDEN_IMAGE_RE = os.environ.get("SECURE_BROWSER_FORBIDDEN_IMAGE_RE", r"kasmw
 REMOTE_DEBUG_PORT = int(os.environ.get("SECURE_BROWSER_CDP_PORT", "9222"))
 CDP_ENDPOINT_URL = os.environ.get("SECURE_BROWSER_CDP_URL", "").rstrip("/")
 BROWSER_OWNER = os.environ.get("SECURE_BROWSER_OWNER", "shopping")
-SECURE_BROWSER_MAX_AGENT_TABS = max(1, int(os.environ.get("SECURE_BROWSER_MAX_AGENT_TABS", "2")))
+SECURE_BROWSER_MAX_AGENT_TABS = max(1, int(os.environ.get("SECURE_BROWSER_MAX_AGENT_TABS", "1")))
 OWNERSHIP_STATE_PATH = os.environ.get("SECURE_BROWSER_OWNERSHIP_STATE", os.path.expanduser("~/.hermes/secure-browser-tabs.json"))
 BROWSER_DISPLAY = os.environ.get("SECURE_BROWSER_DISPLAY", ":1")
 XWD_TIMEOUT_SECONDS = float(os.environ.get("SECURE_BROWSER_XWD_TIMEOUT_SECONDS", "15"))
@@ -117,7 +117,7 @@ FINAL_PURCHASE_RE = re.compile(r"\b(place\s+(?:your\s+)?order|buy\s+now|submit\s
 HUMAN_TAKEOVER_RE = re.compile(r"\b(sign\s*in|login|bitwarden|passkey|password|two[- ]?factor|2fa|otp|verification\s+code|captcha|security\s+check|suspicious|payment|wallet|card|cvv|cvc|billing|address|phone|email)\b", re.IGNORECASE)
 CART_URL_RE = re.compile(r"/(gp/)?cart(/|$)", re.IGNORECASE)
 CART_REMOVE_TEXT_RE = re.compile(r"\b(delete|remove)\b", re.IGNORECASE)
-CHECKOUT_APPROVED_EFFECTS = ("checkout_prep", "select_shipping_option", "select_delivery_option", "apply_checkout_option", "fix_purchase_mode", "cart_line_adjustment")
+CHECKOUT_APPROVED_EFFECTS = ("checkout_prep", "select_shipping_option", "select_delivery_option", "select_packaging_option", "apply_checkout_option", "fix_purchase_mode", "cart_line_adjustment")
 APPROVED_CLICK_EFFECTS = ("browse", "select_option", "apply_visible_coupon", "add_to_cart", "remove_from_cart") + CHECKOUT_APPROVED_EFFECTS
 APPROVED_TYPE_EFFECTS = ("type", "apply_checkout_option", "cart_line_adjustment")
 SENSITIVE_FIELD_RE = re.compile(r"(password|passkey|otp|verification|card|cvv|cvc|security.?code|address|phone|email)", re.IGNORECASE)
@@ -129,7 +129,7 @@ CHECKOUTISH_PAGE_RE = re.compile(r"checkout|buy|payselect|ship|spc|review|orderi
 CHECKOUT_QUERY_PAGE_RE = re.compile(r"checkout|payselect|spc|ordering|place[-\s]?order|review\s+your\s+order|order\s+review|/gp/buy|/buy|shipping\s+(address|option|speed|method)|delivery\s+(option|date|window)", re.IGNORECASE)
 POST_PURCHASE_CONFIRMATION_RE = re.compile(r"thank\s*you|order\s+(?:confirmation|confirmed|placed|received)|purchase\s+(?:complete|completed|confirmed)|/gp/buy/thankyou|thankyou|order-confirmation", re.IGNORECASE)
 AMAZON_ORDERS_RE = re.compile(r"/gp/(?:css/)?order-history|/gp/your-account/order|/your-orders|/order-details|orderID=", re.IGNORECASE)
-SAFE_CHECKOUT_SENSITIVE_LABEL_RE = re.compile(r"shipping\s+(speed|option|method)|delivery\s+(option|date|window)|gift(?!\s*card\s*(number|code))|gift\s+card\s+balance|use\s+a\s+gift\s+card|coupon|promo|promotion|claim\s+code|payment\s+(summary|method|option)|paying\s+with|quantity|qty|delete|remove|one[-\s]?time|subscribe|subscription|cart", re.IGNORECASE)
+SAFE_CHECKOUT_SENSITIVE_LABEL_RE = re.compile(r"shipping\s+(speed|option|method|packag(?:e|ing))|delivery\s+(option|date|window|packag(?:e|ing))|packag(?:e|ing)\s+(option|preference)|ship\s+in\s+(?:amazon|manufacturer|original)\s+packag(?:e|ing)|gift(?!\s*card\s*(number|code))|gift\s+card\s+balance|use\s+a\s+gift\s+card|coupon|promo|promotion|claim\s+code|payment\s+(summary|method|option)|paying\s+with|quantity|qty|delete|remove|one[-\s]?time|subscribe|subscription|cart", re.IGNORECASE)
 MUTATING_QUERY_RE = re.compile(r"\b(click|submit|fetch|XMLHttpRequest|sendBeacon|localStorage|sessionStorage|indexedDB|cookie|setAttribute|removeAttribute|appendChild|removeChild|innerHTML\s*=|location\s*=|open\s*\()\b", re.IGNORECASE)
 MUTATING_ASSIGNMENT_RE = re.compile(r"(?<![=!<>])(?:\+\+|--|[-+*/%&|^]?=(?![=>]))")
 
@@ -813,7 +813,7 @@ CHECKOUT_PREP_CONTROLS_JS = r"""
   };
   const regionFor = (label) => {
     if (/subscribe|subscription|delivery every|one[-\s]?time|purchase option/i.test(label)) return 'purchase_mode';
-    if (/shipping speed|shipping option|shipping method|delivery option|delivery date|delivery day|arrives|ship/i.test(label)) return 'shipping_delivery';
+    if (/shipping speed|shipping option|shipping method|shipping packaging|delivery option|delivery date|delivery day|delivery packaging|packaging option|ship in (amazon|manufacturer|original) packaging|arrives|ship/i.test(label)) return 'shipping_delivery';
     if (/payment\s+(summary|method|option)|paying\s+with|gift\s*card|coupon|promo|promotion|claim\s+code|apply|\b(?:visa|mastercard|amex|american express|discover)\b/i.test(label)) return 'payment_gift_card';
     if (/this is a gift|gift option/i.test(label)) return 'gift_options';
     if (/qty|quantity|delete|remove|item|cart/i.test(label)) return 'cart_line_item';
@@ -825,6 +825,7 @@ CHECKOUT_PREP_CONTROLS_JS = r"""
     const hints = [];
     if (/shipping speed|shipping option|shipping method/i.test(label)) hints.push('select_shipping_option');
     if (/delivery option|delivery date|delivery day|arrives/i.test(label)) hints.push('select_delivery_option');
+    if (/packaging option|shipping packaging|delivery packaging|ship in (amazon|manufacturer|original) packaging/i.test(label)) hints.push('select_packaging_option');
     if (/subscribe|subscription|delivery every|one[-\s]?time|purchase option/i.test(label)) hints.push('fix_purchase_mode');
     if (/qty|quantity|delete|remove|item|cart/i.test(label) || (tag === 'SELECT' && /quantity/i.test(label))) hints.push('cart_line_adjustment');
     if (/payment\s+(summary|method|option)|paying\s+with|gift|coupon|promo|promotion|gift card|claim code|apply|change|\b(?:visa|mastercard|amex|american express|discover)\b/i.test(label)) hints.push('apply_checkout_option');
@@ -852,7 +853,7 @@ CHECKOUT_PREP_CONTROLS_JS = r"""
       finalPurchaseControls.push(redact(label || rawBits).slice(0, 120));
       continue;
     }
-    if (sensitiveControl.test(rawBits) && !/(shipping|delivery|payment\s+(summary|method|option)|paying\s+with|\b(?:visa|mastercard|amex|american express|discover)\b|gift|coupon|promo|claim code|quantity|qty|delete|remove|one[-\s]?time|subscribe|subscription)/i.test(rawBits)) {
+    if (sensitiveControl.test(rawBits) && !/(shipping|delivery|packag(?:e|ing)|payment\s+(summary|method|option)|paying\s+with|\b(?:visa|mastercard|amex|american express|discover)\b|gift|coupon|promo|claim code|quantity|qty|delete|remove|one[-\s]?time|subscribe|subscription)/i.test(rawBits)) {
       skippedSensitiveControls.push(redact(label || rawBits).slice(0, 120));
       continue;
     }
@@ -2324,6 +2325,145 @@ def _request_id_from_submit_result(submit_result: dict[str, Any]) -> str:
     ).strip()
 
 
+ACTIVE_FINAL_PURCHASE_APPROVAL_REQUEST_STATUSES = {"submitting", "approval_requested", "superseding", "supersede_failed"}
+TERMINAL_AGENT_REQUEST_STATUSES = {"completed", "completed_with_followup", "cancelled", "denied", "failed_probe", "invalid_proposal", "superseded"}
+
+
+def _valid_agent_request_id(value: Any) -> str:
+    text = str(value or "").strip()
+    if not re.fullmatch(r"ar-\d{8}-\d{6}-[0-9a-f]{6}", text):
+        return ""
+    return text
+
+
+def _supersede_agent_request_disposition(request_id: str, replacement_request_id: str, reason: str) -> dict[str, Any]:
+    request_id = _valid_agent_request_id(request_id)
+    replacement_request_id = _valid_agent_request_id(replacement_request_id)
+    if not request_id or not replacement_request_id or request_id == replacement_request_id:
+        raise ValueError("valid distinct Agent Request ids are required to supersede stale final-purchase approvals")
+    try:
+        from agent_request_broker import kanban_backend
+    except Exception as exc:  # pragma: no cover - depends on Hermes runtime wiring
+        raise RuntimeError(f"Agent Request maintenance backend is unavailable: {exc}") from exc
+    with kanban_backend.scoped_board(_agent_request_board()):
+        conn = kanban_backend.connect()
+        try:
+            result = kanban_backend.disposition({
+                "request_id": request_id,
+                "disposition": "superseded",
+                "reason": reason,
+                "superseded_by": replacement_request_id,
+                "archive": True,
+            }, actor="talon")
+        finally:
+            conn.close()
+    if isinstance(result, dict) and result.get("error"):
+        raise RuntimeError(str(result.get("error")))
+    return result if isinstance(result, dict) else {"status": "ok"}
+
+
+def _retire_prior_final_purchase_approval_requests(new_binding_key: str, new_request_id: str, reason: str) -> list[dict[str, Any]]:
+    """Supersede older active Star final-purchase approval requests.
+
+    The secure browser represents one supervised checkout lane.  When Star
+    requests a fresh final-purchase binding, any older active prompt from this
+    lane is stale: approving it would either fail live-binding validation or,
+    worse, keep a completed purchase actionable in Telegram.  Retire the older
+    Agent Requests through the broker maintenance path so inline actions are
+    also resolved, while mirroring the disposition in the profile-local state
+    file for exactly-once diagnostics.
+    """
+    new_request_id = _valid_agent_request_id(new_request_id)
+    if not new_binding_key or not new_request_id:
+        return []
+    now = datetime.now(timezone.utc).isoformat()
+    candidates: list[tuple[str, str]] = []
+    with _final_purchase_state_lock() as handle:
+        state = _load_final_purchase_state(handle)
+        approval_requests = state.setdefault("approval_requests", {})
+        for binding_key, existing in list(approval_requests.items()):
+            if binding_key == new_binding_key or not isinstance(existing, dict):
+                continue
+            old_request_id = _valid_agent_request_id(existing.get("request_id"))
+            if not old_request_id or old_request_id == new_request_id:
+                continue
+            if str(existing.get("status") or "") not in ACTIVE_FINAL_PURCHASE_APPROVAL_REQUEST_STATUSES:
+                continue
+            existing["status"] = "superseding"
+            existing["superseded_by"] = new_request_id
+            existing["supersede_reason"] = reason
+            existing["updated_at"] = now
+            candidates.append((str(binding_key), old_request_id))
+        if candidates:
+            _store_final_purchase_state(handle, state)
+    retirements: list[dict[str, Any]] = []
+    for binding_key, old_request_id in candidates:
+        record: dict[str, Any] = {"request_id": old_request_id, "binding_key": binding_key, "superseded_by": new_request_id}
+        try:
+            disposition = _supersede_agent_request_disposition(old_request_id, new_request_id, reason)
+            record["status"] = "superseded"
+            request_obj = disposition.get("request") if isinstance(disposition, dict) else None
+            if isinstance(request_obj, dict):
+                record["request_status"] = request_obj.get("status")
+                record["kanban_status"] = request_obj.get("kanban_status")
+            action_resolution = disposition.get("action_resolution") if isinstance(disposition, dict) else None
+            if isinstance(action_resolution, dict):
+                record["action_resolution"] = {
+                    "attempted": action_resolution.get("attempted"),
+                    "edited": action_resolution.get("edited"),
+                    "marked_resolved": action_resolution.get("marked_resolved"),
+                }
+        except Exception as exc:
+            record["status"] = "supersede_failed"
+            record["error"] = str(exc)[:500]
+        retirements.append(record)
+    if retirements:
+        with _final_purchase_state_lock() as handle:
+            state = _load_final_purchase_state(handle)
+            approval_requests = state.setdefault("approval_requests", {})
+            for retirement in retirements:
+                existing = approval_requests.get(retirement["binding_key"])
+                if not isinstance(existing, dict):
+                    continue
+                existing["status"] = retirement["status"]
+                existing["superseded_by"] = new_request_id
+                existing["supersede_reason"] = reason
+                existing["superseded_at"] = datetime.now(timezone.utc).isoformat()
+                if retirement.get("error"):
+                    existing["supersede_error"] = retirement["error"]
+                elif "supersede_error" in existing:
+                    existing.pop("supersede_error", None)
+            _store_final_purchase_state(handle, state)
+        _audit("final_purchase_stale_approval_requests_retired", {"new_request_id": new_request_id, "retirements": retirements})
+    return retirements
+
+
+def _mark_final_purchase_request_executed(request_id: str, approval_id: str, material_summary_binding: str, owner_visual_evidence_binding: str, final_url: str, final_title: str) -> list[dict[str, Any]]:
+    request_id = _valid_agent_request_id(request_id)
+    if not request_id:
+        return []
+    executed_at = datetime.now(timezone.utc).isoformat()
+    executed_binding_key = ""
+    with _final_purchase_state_lock() as handle:
+        state = _load_final_purchase_state(handle)
+        approval_requests = state.setdefault("approval_requests", {})
+        for binding_key, existing in approval_requests.items():
+            if isinstance(existing, dict) and _valid_agent_request_id(existing.get("request_id")) == request_id:
+                executed_binding_key = str(binding_key)
+                existing["status"] = "executed"
+                existing["approval_id"] = approval_id
+                existing["material_summary_binding"] = material_summary_binding
+                existing["owner_visual_evidence_binding"] = owner_visual_evidence_binding
+                existing["final_url"] = final_url
+                existing["final_title"] = final_title
+                existing["executed_at"] = executed_at
+                existing["updated_at"] = executed_at
+                break
+        _store_final_purchase_state(handle, state)
+    reason = "Superseded by a refreshed final-purchase approval that was approved and executed exactly once; stale earlier checkout binding must not remain actionable."
+    return _retire_prior_final_purchase_approval_requests(executed_binding_key, request_id, reason)
+
+
 def _submit_final_purchase_approval_request(summary: dict[str, Any], material_summary_binding: str, owner_visual_evidence_binding: str, owner_review_id: str, note: str = "") -> dict[str, Any]:
     facts = _minimal_owner_checkout_facts(summary)
     facts_json = json.dumps(facts, ensure_ascii=False, sort_keys=True)
@@ -2450,7 +2590,9 @@ def _submit_final_purchase_approval_request(summary: dict[str, Any], material_su
         approval_requests = state.setdefault("approval_requests", {})
         approval_requests[binding_key] = stored_request
         _store_final_purchase_state(handle, state)
-    return {"status": "approval_requested", "submit_result": submit_result, "proposal_result": propose_result, "request_id": request_id, "binding_key": binding_key}
+    supersede_reason = "Superseded by a refreshed final-purchase approval request for the same Star secure-browser checkout lane; only the newest bound checkout approval should remain actionable."
+    stale_retirements = _retire_prior_final_purchase_approval_requests(binding_key, request_id, supersede_reason)
+    return {"status": "approval_requested", "submit_result": submit_result, "proposal_result": propose_result, "request_id": request_id, "binding_key": binding_key, "stale_approval_retirements": stale_retirements}
 
 
 def _current_agent_request_approval(request_id: str) -> dict[str, Any]:
@@ -2461,10 +2603,16 @@ def _current_agent_request_approval(request_id: str) -> dict[str, Any]:
     with kanban_backend.scoped_board(_agent_request_board()):
         conn = kanban_backend.connect()
         try:
+            item = kanban_backend.index_for_request(conn, request_id)
             approval = kanban_backend.current_approval(conn, request_id)
             proposal = kanban_backend.latest_proposal(conn, request_id)
         finally:
             conn.close()
+    if not item:
+        raise ValueError("approval_request_id is not a known Agent Request")
+    request_status = str(getattr(item, "status", "") or "").strip().lower()
+    if request_status in TERMINAL_AGENT_REQUEST_STATUSES:
+        raise ValueError(f"approval_request_id is {request_status}; refusing stale final-purchase execution")
     if not proposal:
         raise ValueError("approval_request_id has no current final-purchase proposal")
     if not approval:
@@ -2502,7 +2650,8 @@ def _request_final_purchase_approval(material_summary_binding: str, owner_visual
             "owner_visual_evidence_binding": evidence_binding,
             "owner_review_id": owner_review_id,
             "minimal_order_facts": _minimal_owner_checkout_facts(summary),
-            "safety_boundary": "Joy approval is requested through the trusted Agent Request Telegram action path. Final purchase remains blocked until that exact proposal is approved, then secure_browser_execute_final_purchase must revalidate the live material summary and consume the approval exactly once.",
+            "stale_approval_retirements": ar_result.get("stale_approval_retirements", []),
+            "safety_boundary": "Joy approval is requested through the trusted Agent Request Telegram action path. Final purchase remains blocked until that exact proposal is approved, then secure_browser_execute_final_purchase must revalidate the live material summary, reject superseded/cancelled approval requests, and consume the approval exactly once.",
         }
         if result_status == "approval_requested":
             response["agent_request"] = ar_result["proposal_result"].get("request") or ar_result["submit_result"].get("request")
@@ -2583,7 +2732,8 @@ def _execute_final_purchase(approval_request_id: str, material_summary_binding: 
                 "post_purchase_proof_status": post_purchase_proof.get("status") if post_purchase_proof else "not_attempted",
             }
             _store_final_purchase_state(handle, state)
-        _audit("final_purchase_executed", {"request_id": request_id, "approval_id": approval_id, "material_summary_binding": expected_binding, "owner_visual_evidence_binding": evidence_binding, "final_url": final_url, "final_title": final_title})
+        stale_retirements = _mark_final_purchase_request_executed(request_id, approval_id, expected_binding, evidence_binding, final_url, final_title)
+        _audit("final_purchase_executed", {"request_id": request_id, "approval_id": approval_id, "material_summary_binding": expected_binding, "owner_visual_evidence_binding": evidence_binding, "final_url": final_url, "final_title": final_title, "stale_approval_retirements": stale_retirements})
         result = {
             "operation": "execute_final_purchase",
             "status": "clicked",
@@ -2596,7 +2746,8 @@ def _execute_final_purchase(approval_request_id: str, material_summary_binding: 
             "control_label": _sanitize_checkout_text(str(click_result.get("control_label") or ""))[:120],
             "post_purchase_proof": post_purchase_proof or {"status": "not_attempted", "reason": "landing page was not recognized as an Amazon post-purchase confirmation/orders page"},
             "exactly_once_token": token_key,
-            "safety_boundary": "Final purchase was executed only after a trusted Agent Request approval, live material-summary revalidation, and exactly-once token consumption. Post-purchase proof is owner-only when captured. The result does not expose cookies, storage, raw DOM, order references, full payment/address details, screenshots, or CDP handles.",
+            "stale_approval_retirements": stale_retirements,
+            "safety_boundary": "Final purchase was executed only after a trusted Agent Request approval, live material-summary revalidation, stale/superseded request rejection, and exactly-once token consumption. Post-purchase proof is owner-only when captured. The result does not expose cookies, storage, raw DOM, order references, full payment/address details, screenshots, or CDP handles.",
         }
         try:
             result["shopping_order_tracking"] = _order_entry_from_final_purchase_result(result, summary)
@@ -3181,6 +3332,39 @@ def _post_purchase_summary_from_browser(browser: CdpSession, session_id: str) ->
     return _sanitize_post_purchase_summary(summary)
 
 
+def _post_purchase_summary_is_meaningful(summary: dict[str, Any]) -> bool:
+    if summary.get("confirmation_visible") or summary.get("orders_page_visible"):
+        return True
+    for key in ("order_presence", "delivery_status", "item_clues"):
+        if summary.get(key):
+            return True
+    state = str(summary.get("post_purchase_state") or "")
+    return state in {"post_purchase_confirmation_visible", "post_purchase_orders_visible"}
+
+
+def _wait_for_post_purchase_readiness(browser: CdpSession, session_id: str, timeout_seconds: float = 20.0) -> dict[str, Any]:
+    """Wait until post-purchase pages expose non-blank proof content."""
+    deadline = time.time() + max(0.0, float(timeout_seconds))
+    last_summary: dict[str, Any] = {}
+    while True:
+        ready_state = str(_evaluate(browser, session_id, "document.readyState") or "")
+        last_summary = _post_purchase_summary_from_browser(browser, session_id)
+        if ready_state in {"interactive", "complete"} and _post_purchase_summary_is_meaningful(last_summary):
+            return last_summary
+        if time.time() >= deadline:
+            details = {
+                "ready_state": ready_state,
+                "post_purchase_state": last_summary.get("post_purchase_state"),
+                "confirmation_visible": bool(last_summary.get("confirmation_visible")),
+                "orders_page_visible": bool(last_summary.get("orders_page_visible")),
+                "order_presence_count": len(last_summary.get("order_presence") or []),
+                "delivery_status_count": len(last_summary.get("delivery_status") or []),
+                "item_clue_count": len(last_summary.get("item_clues") or []),
+            }
+            raise RuntimeError(f"post-purchase proof page did not expose meaningful loaded content before capture: {json.dumps(details, sort_keys=True)}")
+        time.sleep(0.5)
+
+
 def _check_human_takeover_text(text: str) -> None:
     if SENSITIVE_ACTION_RE.search(text) or CHECKOUT_PREP_RE.search(text) or FINAL_PURCHASE_RE.search(text):
         raise ValueError("matched element appears to involve checkout/payment/address/login challenge scope; Joy must take over or use an explicit supervised checkout-prep effect")
@@ -3188,10 +3372,8 @@ def _check_human_takeover_text(text: str) -> None:
 
 def _check_cart_remove_url(url: str, title: str) -> None:
     parsed = urlparse(url)
-    if parsed.scheme != "https" or not AMAZON_HOST_RE.search(parsed.netloc):
-        raise ValueError("remove_from_cart clicks are currently limited to https://*.amazon.* cart pages")
-    if not CART_URL_RE.search(parsed.path):
-        raise ValueError("remove_from_cart clicks require the current page to be an Amazon cart page")
+    if parsed.scheme != "https":
+        raise ValueError("remove_from_cart clicks require an HTTPS shopping/cart page")
     blocked_text = " ".join([parsed.query, title]).lower()
     if SENSITIVE_ACTION_RE.search(blocked_text):
         raise ValueError("current cart page metadata appears to involve checkout/payment/address/login challenge scope; Joy must take over")
@@ -3261,18 +3443,14 @@ def _assert_checkout_click_allowed(metadata: dict[str, Any], effect: str, reason
     parsed = urlparse(str(metadata.get("url") or ""))
     if parsed.scheme != "https":
         raise ValueError(f"{effect} clicks require an HTTPS shopping checkout/cart page")
-    page_text = _checkoutish_page_text(metadata)
     control_text = _checkout_metadata_text(metadata)
     control_identity_text = _checkout_control_identity_text(metadata)
     if FINAL_PURCHASE_RE.search(control_identity_text):
         raise ValueError("final purchase controls cannot be clicked by secure_browser_click; use the trusted Telegram approval path")
     if effect == "checkout_prep":
-        if not (CART_URL_RE.search(parsed.path) or CHECKOUTISH_PAGE_RE.search(page_text)):
-            raise ValueError("checkout_prep clicks require the current page to be an HTTPS cart or checkout-prep page")
         if not CHECKOUT_PREP_RE.search(control_text):
             raise ValueError("checkout_prep selector must identify a visible checkout/proceed-to-checkout control")
         return
-    _assert_checkout_page(metadata, effect)
     _assert_checkout_control_not_sensitive(control_text)
 
 
@@ -3295,7 +3473,6 @@ def _assert_checkout_type_allowed(metadata: dict[str, Any], effect: str, reason:
     control_text = _checkout_metadata_text(metadata)
     if FINAL_PURCHASE_RE.search(_checkout_control_identity_text(metadata)):
         raise ValueError("final purchase controls cannot be modified by secure_browser_type; use the trusted Telegram approval path")
-    _assert_checkout_page(metadata, effect)
     _assert_checkout_control_not_sensitive(control_text)
     if SENSITIVE_FIELD_RE.search(control_text) and not SAFE_CHECKOUT_SENSITIVE_LABEL_RE.search(control_text):
         raise ValueError("matched field appears sensitive; Joy must take over")
@@ -3917,22 +4094,22 @@ def _reject_unsafe_operation(operation: str) -> dict[str, Any]:
             "operation": op,
             "approval_required": False,
             "boundary": "checkout_prep_only",
-            "message": "Checkout prep is allowed under Joy's live supervision only through broad secure-browser clicks with approved_effect='checkout_prep', 'select_shipping_option', or 'apply_checkout_option'. Star must pause for login, Bitwarden, passkeys, 2FA, CAPTCHA, suspicious security prompts, payment/address/account edits, or sensitive-information prompts. Final Buy Now/Place Order remains blocked.",
+            "message": "Checkout prep is allowed for owner-directed shopping through audited secure-browser clicks/types. Star may drive ordinary cart, variant, delivery, shipping, packaging, coupon, and review-page controls. Star must pause for login, Bitwarden, passkeys, 2FA, CAPTCHA, suspicious security prompts, payment/address/account edits, or sensitive-information prompts. Final Buy Now/Place Order remains blocked.",
         }
-    if op in ("checkout_prep", "select_shipping_option", "apply_checkout_option"):
+    if op in ("checkout_prep", "select_shipping_option", "select_delivery_option", "select_packaging_option", "apply_checkout_option", "fix_purchase_mode", "cart_line_adjustment"):
         return {
             "allowed": True,
             "operation": op,
             "approval_required": False,
             "boundary": "supervised_checkout_prep",
-            "message": "Allowed only as an audited broad secure_browser_click approved_effect on visible HTTPS cart/checkout/order-review controls under Joy's live supervision. Final order submission and sensitive account/payment/address/login scopes are refused.",
+            "message": "Allowed as an audited broad secure_browser_click/secure_browser_type approved_effect on visible HTTPS shopping/cart/checkout/order-review controls. Final order submission and sensitive account/payment/address/login scopes are refused.",
         }
     if op == "remove_from_cart":
         return {
             "allowed": True,
             "operation": op,
             "approval_required": True,
-            "message": "Allowed only through secure_browser_click with approved_effect='remove_from_cart', a human-readable reason/approval reference, and a visible Delete/Remove cart line-item control on an Amazon cart page.",
+            "message": "Allowed through secure_browser_click with approved_effect='remove_from_cart', a human-readable reason/approval reference, and a visible Delete/Remove cart line-item control on an HTTPS shopping/cart page.",
         }
     if op in ("request_final_purchase_approval", "final_purchase_approval"):
         return {
@@ -4387,6 +4564,23 @@ def _close_agent_owned_tabs(
     return closed
 
 
+def _enforce_agent_tab_budget(browser: CdpSession, state: dict[str, Any], *, owner: str = BROWSER_OWNER, reason: str = "bounded_agent_tab_reuse") -> list[dict[str, Any]]:
+    """Close oldest non-kept agent-owned tabs until this owner is within budget."""
+    live_ids = _current_page_ids(browser)
+    candidates = _cleanup_candidates_from_state(state, live_ids, owner=owner)
+    overflow_count = max(0, len(candidates) - SECURE_BROWSER_MAX_AGENT_TABS)
+    if overflow_count <= 0:
+        return []
+    return _close_agent_owned_tabs(
+        browser,
+        state,
+        candidates[:overflow_count],
+        dry_run=False,
+        reason=reason,
+        owner=owner,
+    )
+
+
 def _load_owner_state(handle: Any) -> dict[str, Any]:
     handle.seek(0)
     raw = handle.read()
@@ -4471,7 +4665,32 @@ def _deterministic_current_page(pages: list[dict[str, str]]) -> dict[str, str] |
     return pages[-1] if pages else None
 
 
-def _select_post_click_owner_page(browser: CdpSession, original_target_id: str, current_url: str = "", current_title: str = "", *, prefer_checkout: bool = False) -> dict[str, str]:
+def _checkout_candidate_allowed_for_source(page: dict[str, Any], source_url: str) -> bool:
+    """Return whether a checkout candidate can belong to a checkout-prep click.
+
+    Amazon post-purchase/order-history pages are owner-review proof surfaces, not
+    generic checkout-prep destinations for an unrelated retailer.  A non-Amazon
+    cart click must not let a stale Amazon order-history tab win ownership just
+    because it is also considered owner-review-capable.
+    """
+    source_host = urlparse(str(source_url or "")).netloc
+    page_url = str(page.get("url") or "")
+    page_title = str(page.get("title") or "")
+    if _is_amazon_post_purchase_page(page_url, page_title) and not AMAZON_HOST_RE.search(source_host):
+        return False
+    return True
+
+
+def _select_post_click_owner_page(
+    browser: CdpSession,
+    original_target_id: str,
+    current_url: str = "",
+    current_title: str = "",
+    *,
+    prefer_checkout: bool = False,
+    source_url: str = "",
+    pre_click_target_ids: set[str] | None = None,
+) -> dict[str, str]:
     """Pick the page that should remain owned after an audited click.
 
     Some third-party checkout buttons replace or detach the original cart
@@ -4480,14 +4699,34 @@ def _select_post_click_owner_page(browser: CdpSession, original_target_id: str, 
     manufacture a new about:blank tab and lose the live checkout. Reconcile the
     owner to a live checkout/order-review page first, falling back to the most
     recent non-blank page when the click was ordinary browsing.
+
+    Checkout-prep reconciliation is scoped to the click. Prefer checkout pages
+    opened by the click, then the original tab if it navigated into checkout.
+    Do not steal ownership from an older checkout/order-history tab belonging to
+    another retailer, especially Amazon order-history proof pages.
     """
     original_target_id = str(original_target_id or "")
+    pre_click_target_ids = {str(target_id) for target_id in pre_click_target_ids or set() if str(target_id)}
     deadline = time.time() + (5.0 if prefer_checkout else 0.0)
     while True:
         pages = _page_candidates(browser)
         if prefer_checkout:
-            checkout_pages = [page for page in pages if _is_owner_checkout_review_page(str(page.get("url") or ""), str(page.get("title") or ""))]
-            if checkout_pages:
+            checkout_pages = [
+                page
+                for page in pages
+                if _is_owner_checkout_review_page(str(page.get("url") or ""), str(page.get("title") or ""))
+                and _checkout_candidate_allowed_for_source(page, source_url or current_url)
+            ]
+            if pre_click_target_ids:
+                new_checkout_pages = [page for page in checkout_pages if str(page.get("id") or "") not in pre_click_target_ids]
+                if new_checkout_pages:
+                    new_checkout_pages.sort(key=_checkout_review_page_rank)
+                    return new_checkout_pages[-1]
+                original_checkout_pages = [page for page in checkout_pages if str(page.get("id") or "") == original_target_id]
+                if original_checkout_pages:
+                    original_checkout_pages.sort(key=_checkout_review_page_rank)
+                    return original_checkout_pages[-1]
+            elif checkout_pages:
                 checkout_pages.sort(key=_checkout_review_page_rank)
                 return checkout_pages[-1]
         if current_url and not _is_blank_page_url(current_url) and (not prefer_checkout or time.time() >= deadline):
@@ -4523,11 +4762,13 @@ def _claim_owner_target(browser: CdpSession, create: bool = False) -> str:
                         entry = _known_agent_tab_entry(target_id, str(current_page.get("url") or ""), str(current_page.get("title") or ""), existing_tab)
                         owners[BROWSER_OWNER] = entry
                         _owner_tabs(state)[target_id] = entry
+                        _enforce_agent_tab_budget(browser, state)
                         _store_owner_state(handle, state)
                         return target_id
                 entry = _known_agent_tab_entry(existing, str(page.get("url") or ""), str(page.get("title") or ""), owner)
                 owners[BROWSER_OWNER] = entry
                 _owner_tabs(state)[existing] = entry
+                _enforce_agent_tab_budget(browser, state)
                 _store_owner_state(handle, state)
                 return existing
             pages = list(live_by_id.values())
@@ -4538,21 +4779,14 @@ def _claim_owner_target(browser: CdpSession, create: bool = False) -> str:
                 entry = _known_agent_tab_entry(target_id, str(matched.get("url") or ""), str(matched.get("title") or ""), existing_tab)
                 owners[BROWSER_OWNER] = entry
                 _owner_tabs(state)[target_id] = entry
+                _enforce_agent_tab_budget(browser, state)
                 _store_owner_state(handle, state)
                 return target_id
             target_id = str(browser.call("Target.createTarget", {"url": "about:blank"})["targetId"])
             entry = _owner_state_entry(target_id)
             owners[BROWSER_OWNER] = entry
             _owner_tabs(state)[target_id] = entry
-            overflow = _cleanup_candidates_from_state(state, _current_page_ids(browser), owner=BROWSER_OWNER)
-            if len(overflow) > SECURE_BROWSER_MAX_AGENT_TABS:
-                _close_agent_owned_tabs(
-                    browser,
-                    state,
-                    overflow[: len(overflow) - SECURE_BROWSER_MAX_AGENT_TABS],
-                    dry_run=False,
-                    reason="bounded_agent_tab_reuse",
-                )
+            _enforce_agent_tab_budget(browser, state)
             _store_owner_state(handle, state)
             return target_id
         finally:
@@ -4998,7 +5232,14 @@ def _owner_post_purchase_review_caption(review_id: str, index: int, count: int, 
 
 
 def _owner_post_purchase_review_from_attached(browser: CdpSession, session_id: str, url: str, title: str, retain_local: bool = False) -> dict[str, Any]:
-    post_purchase = _post_purchase_summary_from_browser(browser, session_id)
+    post_purchase = _wait_for_post_purchase_readiness(browser, session_id)
+    url = str(_evaluate(browser, session_id, "location.href") or url)
+    title = str(_evaluate(browser, session_id, "document.title") or title)
+    if url:
+        post_purchase["url"] = _sanitize_url(url)
+    if title:
+        post_purchase["page_title"] = _sanitize_shopping_text(title)
+    post_purchase = _sanitize_post_purchase_summary(post_purchase)
     binding = str(post_purchase.get("post_purchase_summary_binding") or "")
     if not binding:
         raise RuntimeError("post-purchase review did not produce a summary binding")
@@ -5276,14 +5517,17 @@ def _click(selector: str, reason: str, approved_effect: str) -> dict[str, Any]:
 
     def run(browser: CdpSession) -> dict[str, Any]:
         target_id = _first_page_target(browser)
+        pre_click_target_ids = {str(page.get("id") or "") for page in _page_candidates(browser)}
         session_id = _attach(browser, target_id)
         label_expr = f"(() => {{ const n = document.querySelector({_json_literal(safe_selector)}); return n ? ((n.innerText || n.value || n.getAttribute('aria-label') || n.textContent || '').replace(/\\s+/g, ' ').trim()) : ''; }})()"
         label = str(_evaluate(browser, session_id, label_expr) or "")
+        source_url = str(_evaluate(browser, session_id, "location.href") or "")
         if effect == "remove_from_cart":
             remove_metadata = _evaluate(browser, session_id, CART_REMOVE_CONTROL_JS.replace("__SELECTOR__", _json_literal(safe_selector))) or {}
             _assert_cart_remove_click_allowed(remove_metadata, reason)
         elif effect in CHECKOUT_APPROVED_EFFECTS:
             checkout_metadata = _evaluate(browser, session_id, CHECKOUT_CONTROL_JS.replace("__SELECTOR__", _json_literal(safe_selector))) or {}
+            source_url = str(checkout_metadata.get("url") or source_url)
             _assert_checkout_click_allowed(checkout_metadata, effect, reason)
         elif effect != "add_to_cart":
             _check_human_takeover_text(label)
@@ -5291,7 +5535,15 @@ def _click(selector: str, reason: str, approved_effect: str) -> dict[str, Any]:
         time.sleep(1.0)
         current_url = str(_evaluate(browser, session_id, "location.href") or "")
         current_title = str(_evaluate(browser, session_id, "document.title") or "")
-        page = _select_post_click_owner_page(browser, target_id, current_url, current_title, prefer_checkout=effect in CHECKOUT_APPROVED_EFFECTS)
+        page = _select_post_click_owner_page(
+            browser,
+            target_id,
+            current_url,
+            current_title,
+            prefer_checkout=effect in CHECKOUT_APPROVED_EFFECTS,
+            source_url=source_url,
+            pre_click_target_ids=pre_click_target_ids,
+        )
         resolved_target_id = str(page.get("id") or target_id)
         if resolved_target_id != target_id:
             session_id = _attach(browser, resolved_target_id)
@@ -5544,14 +5796,14 @@ def secure_browser_status_tool(args: dict[str, Any], **_kw: Any) -> str:
             "status": "available",
             "approved_click_effects": list(CHECKOUT_APPROVED_EFFECTS),
             "approved_type_effects": ["apply_checkout_option", "cart_line_adjustment"],
-            "boundary": "Star may inspect sanitized checkout-prep controls and click/type into ordinary review-page controls under Joy's live supervision with explicit approved_effect values. For ordinary non-Amazon/Shopify/Shop Pay retailers, Star should hand control to Joy for sensitive details and the final Pay/Buy click rather than launching an Amazon-style approval ceremony by default. Star must pause for login, Bitwarden, passkeys, 2FA, CAPTCHA, suspicious security prompts, payment/address/account edits, or sensitive-information prompts.",
+            "boundary": "Star may inspect sanitized checkout-prep controls and click/type into ordinary review-page controls under Joy's live supervision with explicit approved_effect values, including shipping, delivery, packaging, purchase-mode, coupon/gift, and cart-line options. For ordinary non-Amazon/Shopify/Shop Pay retailers, Star should hand control to Joy for sensitive details and the final Pay/Buy click rather than launching an Amazon-style approval ceremony by default. Star must pause for login, Bitwarden, passkeys, 2FA, CAPTCHA, suspicious security prompts, payment/address/account edits, or sensitive-information prompts.",
             "sanitization": "Checkout-prep snapshots/current-page summaries return isolated structured item/totals/delivery/surprise fields plus destination city-state/abstract label and payment labels. Mixed blobs, sensitive redaction-marker text, and final purchase controls are removed from ordinary summary fields.",
             "visual_confirmation": "secure_browser_visual_evidence returns a bounded visual proof bundle: a local PNG screenshot, sanitized suggested regions, and optional focused crops. Raw checkout/payment/address screenshots remain blocked except for browser-redacted Amazon checkout evidence; complete checkout evidence for any HTTPS checkout/order-review page uses owner-only Telegram delivery. Amazon thank-you/post-purchase pages are labeled as post-purchase evidence; login/account/payment/address/security pages remain Joy-only.",
             "owner_only_confirmation": "secure_browser_owner_checkout_review can send complete unredacted checkout screenshots for HTTPS checkout/order-review pages directly to Joy's configured Telegram destination without returning paths, MEDIA handles, raw DOM, cookies, storage, request headers, CDP endpoints, or address/payment text to Star. Use it when high-value, confusing, or nonstandard checkouts need owner-only evidence; ordinary non-Amazon checkout can simply be handed to Joy for manual Pay/Buy. Post-purchase/order-history proof is currently Amazon-only.",
         },
         "approval_gated_operations": {
             "add_to_cart": "available only through the broad secure_browser_click flow with approved_effect='add_to_cart' and a human-readable approval reference",
-            "remove_from_cart": "available only through secure_browser_click with approved_effect='remove_from_cart', a human-readable approval reference, and a visible Delete/Remove cart line-item control on an Amazon cart page",
+            "remove_from_cart": "available through secure_browser_click with approved_effect='remove_from_cart', a human-readable approval reference, and a visible Delete/Remove cart line-item control on an HTTPS shopping/cart page",
             "request_final_purchase_approval": "optional/exceptional after owner_checkout_review when Joy explicitly wants Star to execute the final purchase; ordinary non-Amazon checkout defaults to Joy manual Pay/Buy handoff",
             "place_order": "blocked from ordinary tool use; requires trusted Telegram approval plus secure_browser_execute_final_purchase live revalidation and exactly-once token consumption",
             "owner_checkout_review": "available only as owner-only Telegram delivery of complete checkout visual evidence tied to the same material_summary_binding; it does not expose sensitive evidence to Star",
@@ -5902,7 +6154,7 @@ VISUAL_EVIDENCE_SCHEMA = {
 
 CLICK_SCHEMA = {
     "name": "secure_browser_click",
-    "description": "Click a visible element in the persistent secure browser by CSS selector. Use for browsing, selecting variants/options, applying visible coupons, explicitly approved add-to-cart/removal, and supervised checkout-prep controls. Checkout prep requires an explicit checkout approved_effect such as checkout_prep, select_shipping_option, select_delivery_option, apply_checkout_option, fix_purchase_mode, or cart_line_adjustment plus Joy live supervision; it returns a refreshed sanitized order-review summary/material_summary_binding and refuses final purchase controls. Never use for Buy Now, Place Order, account/payment/address edits, login, passkeys, 2FA, or CAPTCHA.",
+    "description": "Click a visible element in the persistent secure browser by CSS selector. Use for browsing, selecting variants/options, applying visible coupons, explicitly approved add-to-cart/removal, and supervised checkout-prep controls. Checkout prep requires an explicit checkout approved_effect such as checkout_prep, select_shipping_option, select_delivery_option, select_packaging_option, apply_checkout_option, fix_purchase_mode, or cart_line_adjustment plus Joy live supervision; it returns a refreshed sanitized order-review summary/material_summary_binding and refuses final purchase controls. Never use for Buy Now, Place Order, account/payment/address edits, login, passkeys, 2FA, or CAPTCHA.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -6654,6 +6906,46 @@ if __name__ == "__main__":
     assert "Ordinary non-Amazon" in _reject_unsafe_operation("request_final_purchase_approval")["message"]
     assert _reject_unsafe_operation("execute_final_purchase")["allowed"] is False
     assert re.fullmatch(r"[0-9a-f]{64}", _approval_token_key("ar-20260101-000000-deadbe", "ap-test", "a" * 64, "b" * 64))
+    import tempfile
+    original_final_purchase_state_path = FINAL_PURCHASE_STATE_PATH
+    original_supersede_agent_request_disposition = _supersede_agent_request_disposition
+    with tempfile.TemporaryDirectory() as tmpdir:
+        globals()["FINAL_PURCHASE_STATE_PATH"] = os.path.join(tmpdir, "final-purchase-state.json")
+        supersede_calls = []
+        globals()["_supersede_agent_request_disposition"] = lambda request_id, replacement_request_id, reason: supersede_calls.append((request_id, replacement_request_id, reason)) or {"request": {"status": "superseded", "kanban_status": "archived"}, "action_resolution": {"attempted": 2, "edited": 2, "marked_resolved": 2}}
+        old_key = _approval_request_binding_key("1" * 64, "2" * 64, "old-review")
+        new_key = _approval_request_binding_key("3" * 64, "4" * 64, "new-review")
+        with _final_purchase_state_lock() as handle:
+            _store_final_purchase_state(handle, {"tokens": {}, "approval_requests": {
+                old_key: {"status": "approval_requested", "request_id": "ar-20260101-000000-aaaaaa", "material_summary_binding": "1" * 64, "owner_visual_evidence_binding": "2" * 64},
+                new_key: {"status": "approval_requested", "request_id": "ar-20260101-000100-bbbbbb", "material_summary_binding": "3" * 64, "owner_visual_evidence_binding": "4" * 64},
+            }})
+        retirements = _retire_prior_final_purchase_approval_requests(new_key, "ar-20260101-000100-bbbbbb", "fresh binding supersedes stale prompt")
+        assert supersede_calls == [("ar-20260101-000000-aaaaaa", "ar-20260101-000100-bbbbbb", "fresh binding supersedes stale prompt")]
+        assert retirements[0]["status"] == "superseded"
+        with _final_purchase_state_lock() as handle:
+            retired_state = _load_final_purchase_state(handle)
+        assert retired_state["approval_requests"][old_key]["status"] == "superseded"
+        assert retired_state["approval_requests"][old_key]["superseded_by"] == "ar-20260101-000100-bbbbbb"
+        assert retired_state["approval_requests"][new_key]["status"] == "approval_requested"
+        globals()["FINAL_PURCHASE_STATE_PATH"] = os.path.join(tmpdir, "final-purchase-state-executed.json")
+        executed_key = _approval_request_binding_key("5" * 64, "6" * 64, "executed-review")
+        stale_key = _approval_request_binding_key("7" * 64, "8" * 64, "stale-review")
+        supersede_calls.clear()
+        with _final_purchase_state_lock() as handle:
+            _store_final_purchase_state(handle, {"tokens": {}, "approval_requests": {
+                executed_key: {"status": "approval_requested", "request_id": "ar-20260101-000200-cccccc"},
+                stale_key: {"status": "approval_requested", "request_id": "ar-20260101-000300-dddddd"},
+            }})
+        executed_retirements = _mark_final_purchase_request_executed("ar-20260101-000200-cccccc", "apr-test", "5" * 64, "6" * 64, "https://www.amazon.com/gp/buy/thankyou", "Thank you")
+        assert supersede_calls == [("ar-20260101-000300-dddddd", "ar-20260101-000200-cccccc", "Superseded by a refreshed final-purchase approval that was approved and executed exactly once; stale earlier checkout binding must not remain actionable.")]
+        assert executed_retirements[0]["status"] == "superseded"
+        with _final_purchase_state_lock() as handle:
+            executed_state = _load_final_purchase_state(handle)
+        assert executed_state["approval_requests"][executed_key]["status"] == "executed"
+        assert executed_state["approval_requests"][stale_key]["status"] == "superseded"
+    globals()["FINAL_PURCHASE_STATE_PATH"] = original_final_purchase_state_path
+    globals()["_supersede_agent_request_disposition"] = original_supersede_agent_request_disposition
     try:
         _assert_hex_binding("not-a-binding", "material_summary_binding")
         raise AssertionError("invalid binding should be blocked")
