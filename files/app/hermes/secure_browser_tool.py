@@ -577,6 +577,10 @@ PAGE_SNAPSHOT_JS = r"""
     const rect = el.getBoundingClientRect();
     return style && style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0;
   };
+  const selectorMatchesElement = (selector, el) => {
+    try { return document.querySelector(selector) === el; }
+    catch (_) { return false; }
+  };
   const describe = (el) => {
     const parts = [];
     if (el.tagName) parts.push(el.tagName.toLowerCase());
@@ -594,11 +598,15 @@ PAGE_SNAPSHOT_JS = r"""
     .slice(0, maxLinks)
     .map((el, idx) => ({index: idx + 1, selector: uniqueSelector(el), description: describe(el).slice(0, 260)}));
   function uniqueSelector(el) {
-    if (el.id) return `#${CSS.escape(el.id)}`;
+    const candidates = [];
+    if (el.id) candidates.push(`#${CSS.escape(el.id)}`);
     const name = el.getAttribute('name');
-    if (name && el.tagName) return `${el.tagName.toLowerCase()}[name="${CSS.escape(name)}"]`;
+    if (name && el.tagName) candidates.push(`${el.tagName.toLowerCase()}[name="${CSS.escape(name)}"]`);
     const aria = el.getAttribute('aria-label');
-    if (aria && el.tagName) return `${el.tagName.toLowerCase()}[aria-label="${CSS.escape(aria)}"]`;
+    if (aria && el.tagName) candidates.push(`${el.tagName.toLowerCase()}[aria-label="${CSS.escape(aria)}"]`);
+    for (const candidate of candidates) {
+      if (selectorMatchesElement(candidate, el)) return candidate;
+    }
     const path = [];
     let cur = el;
     while (cur && cur.nodeType === Node.ELEMENT_NODE && path.length < 5) {
@@ -627,12 +635,37 @@ PAGE_SNAPSHOT_JS = r"""
 CLICK_JS = r"""
 (() => {
   const selector = __SELECTOR__;
-  const node = document.querySelector(selector);
+  const initialNode = document.querySelector(selector);
   const clean = (value) => (value || '').replace(/\s+/g, ' ').trim();
+  const visible = (el) => {
+    if (!el) return false;
+    const style = window.getComputedStyle(el);
+    const rect = el.getBoundingClientRect();
+    return Boolean(style && style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0);
+  };
+  const nodeLabel = (el) => clean(el.innerText || el.value || el.getAttribute('aria-label') || el.textContent || '');
+  const equivalentVisibleNode = (node) => {
+    if (!node || visible(node)) return node;
+    const tag = clean(node.tagName || '').toLowerCase();
+    const aria = node.getAttribute('aria-label') || '';
+    const name = node.getAttribute('name') || '';
+    const id = node.getAttribute('id') || '';
+    const selectors = [];
+    if (id) selectors.push(`#${CSS.escape(id)}`);
+    if (name && tag) selectors.push(`${tag}[name="${CSS.escape(name)}"]`);
+    if (aria && tag) selectors.push(`${tag}[aria-label="${CSS.escape(aria)}"]`);
+    for (const candidateSelector of selectors) {
+      for (const candidate of Array.from(document.querySelectorAll(candidateSelector))) {
+        if (visible(candidate)) return candidate;
+      }
+    }
+    return node;
+  };
+  const node = equivalentVisibleNode(initialNode);
   if (!node) return {clicked: false, reason: 'selector did not match any element'};
   if (node.disabled || node.getAttribute('aria-disabled') === 'true') return {clicked: false, reason: 'matched element is disabled'};
   node.scrollIntoView({block: 'center', inline: 'center'});
-  const text = clean(node.innerText || node.value || node.getAttribute('aria-label') || node.textContent || '');
+  const text = nodeLabel(node);
   node.click();
   return {clicked: true, element_text: text.slice(0, 240), page_title: document.title || '', url: location.href || ''};
 })()
@@ -684,8 +717,33 @@ CART_REMOVE_CONTROL_JS = r"""
 CHECKOUT_CONTROL_JS = r"""
 (() => {
   const selector = __SELECTOR__;
-  const node = document.querySelector(selector);
+  const initialNode = document.querySelector(selector);
   const clean = (value) => (value || '').replace(/\s+/g, ' ').trim();
+  const visible = (el) => {
+    if (!el) return false;
+    const style = window.getComputedStyle(el);
+    const rect = el.getBoundingClientRect();
+    return Boolean(style && style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0);
+  };
+  const nodeLabel = (el) => clean(el.innerText || el.value || el.getAttribute('aria-label') || el.textContent || '');
+  const equivalentVisibleNode = (node) => {
+    if (!node || visible(node)) return node;
+    const tag = clean(node.tagName || '').toLowerCase();
+    const aria = node.getAttribute('aria-label') || '';
+    const name = node.getAttribute('name') || '';
+    const id = node.getAttribute('id') || '';
+    const selectors = [];
+    if (id) selectors.push(`#${CSS.escape(id)}`);
+    if (name && tag) selectors.push(`${tag}[name="${CSS.escape(name)}"]`);
+    if (aria && tag) selectors.push(`${tag}[aria-label="${CSS.escape(aria)}"]`);
+    for (const candidateSelector of selectors) {
+      for (const candidate of Array.from(document.querySelectorAll(candidateSelector))) {
+        if (visible(candidate)) return candidate;
+      }
+    }
+    return node;
+  };
+  const node = equivalentVisibleNode(initialNode);
   if (!node) return {exists: false};
   const style = window.getComputedStyle(node);
   const rect = node.getBoundingClientRect();
