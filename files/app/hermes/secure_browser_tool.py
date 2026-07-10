@@ -114,17 +114,14 @@ HUMAN_TAKEOVER_URL_RE = re.compile(
 )
 CHECKOUT_PREP_RE = re.compile(r"\b(proceed\s+to\s+checkout|checkout|review\s+your\s+order|shipping\s+(?:option|speed|method)|delivery\s+(?:option|date|window)|continue)\b", re.IGNORECASE)
 FINAL_PURCHASE_RE = re.compile(r"\b(place\s+(?:your\s+)?order|buy\s+now|submit\s+order|complete\s+purchase|purchase\s+now|confirm\s+(?:purchase|order))\b", re.IGNORECASE)
-HUMAN_TAKEOVER_RE = re.compile(r"\b(sign\s*in|login|bitwarden|passkey|password|two[- ]?factor|2fa|otp|verification\s+code|captcha|security\s+check|suspicious|payment|wallet|card|cvv|cvc|billing|address|phone|email)\b", re.IGNORECASE)
+HUMAN_TAKEOVER_RE = re.compile(r"\b(sign\s*in|login|bitwarden|passkey|password|two[- ]?factor|2fa|otp|verification\s+code|captcha|security\s+check|suspicious|card|cvv|cvc)\b", re.IGNORECASE)
 CART_URL_RE = re.compile(r"/(gp/)?cart(/|$)", re.IGNORECASE)
 CART_REMOVE_TEXT_RE = re.compile(r"\b(delete|remove)\b", re.IGNORECASE)
 CHECKOUT_APPROVED_EFFECTS = ("checkout_prep", "select_shipping_option", "select_delivery_option", "select_packaging_option", "apply_checkout_option", "fix_purchase_mode", "cart_line_adjustment")
 APPROVED_CLICK_EFFECTS = ("browse", "select_option", "apply_visible_coupon", "add_to_cart", "remove_from_cart") + CHECKOUT_APPROVED_EFFECTS
 APPROVED_TYPE_EFFECTS = ("type", "apply_checkout_option", "cart_line_adjustment")
-SENSITIVE_FIELD_RE = re.compile(r"(password|passkey|otp|verification|card|cvv|cvc|security.?code|address|phone|email)", re.IGNORECASE)
-SENSITIVE_TYPED_TEXT_RE = re.compile(
-    r"([\w.+-]+@[\w.-]+\.[A-Za-z]{2,}|\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b|\b(?:\d[ -]*?){12,19}\b|\b(?:cvv|cvc|security code)\s*[:#-]?\s*\d+\b|\b\d{1,6}\s+[^\n,]{2,60}\b\s+(?:Apt|Apartment|Unit|Ste|Suite|Road|Rd|Street|St|Avenue|Ave|Lane|Ln|Drive|Dr|Court|Ct|Way|Blvd|Boulevard)\b)",
-    re.IGNORECASE,
-)
+SENSITIVE_FIELD_RE = re.compile(r"(password|passkey|otp|verification|card|cvv|cvc|security.?code)", re.IGNORECASE)
+SENSITIVE_TYPED_TEXT_RE = re.compile(r"\b(?:cvv|cvc|security code|verification code|otp)\s*[:#-]?\s*\d+\b", re.IGNORECASE)
 CHECKOUTISH_PAGE_RE = re.compile(r"checkout|buy|payselect|ship|spc|review|ordering", re.IGNORECASE)
 CHECKOUT_QUERY_PAGE_RE = re.compile(r"checkout|payselect|spc|ordering|place[-\s]?order|review\s+your\s+order|order\s+review|/gp/buy|/buy|shipping\s+(address|option|speed|method)|delivery\s+(option|date|window)", re.IGNORECASE)
 POST_PURCHASE_CONFIRMATION_RE = re.compile(r"thank\s*you|order\s+(?:confirmation|confirmed|placed|received)|purchase\s+(?:complete|completed|confirmed)|/gp/buy/thankyou|thankyou|order-confirmation", re.IGNORECASE)
@@ -3535,7 +3532,7 @@ def _assert_checkout_type_allowed(metadata: dict[str, Any], effect: str, reason:
     if SENSITIVE_FIELD_RE.search(control_text) and not SAFE_CHECKOUT_SENSITIVE_LABEL_RE.search(control_text):
         raise ValueError("matched field appears sensitive; Joy must take over")
     if SENSITIVE_TYPED_TEXT_RE.search(str(typed_text or "")):
-        raise ValueError("typed text appears to contain contact, address, payment, or security material; Joy must take over")
+        raise ValueError("typed text appears to contain a verification/security code; Joy must take over")
 
 
 def _checkout_summary_from_browser(browser: CdpSession, session_id: str, max_controls: int = MAX_LINKS) -> dict[str, Any]:
@@ -4144,7 +4141,7 @@ def _reject_unsafe_operation(operation: str) -> dict[str, Any]:
             "operation": op,
             "approval_required": False,
             "boundary": "trusted_assistant_browsing_sanitized",
-            "message": "Allowed for ordinary shopping, account research, including Amazon order history and Buy Again pages. Outputs are sanitized; Star must pause for login, Bitwarden, passkeys, 2FA/CAPTCHA, suspicious security prompts, payment/address/account edits, and final purchase submission.",
+            "message": "Allowed for ordinary shopping, account research, returns, order history, Buy Again pages, forms, and owner-directed browser work. Outputs are sanitized; Star must pause for login, Bitwarden, passkeys, 2FA/CAPTCHA, suspicious security prompts, credential/security-code fields, and final purchase submission.",
         }
     if op == "checkout":
         return {
@@ -4152,7 +4149,7 @@ def _reject_unsafe_operation(operation: str) -> dict[str, Any]:
             "operation": op,
             "approval_required": False,
             "boundary": "checkout_prep_only",
-            "message": "Checkout prep is allowed for owner-directed shopping through audited secure-browser clicks/types. Star may drive ordinary cart, variant, delivery, shipping, packaging, coupon, and review-page controls. Star must pause for login, Bitwarden, passkeys, 2FA, CAPTCHA, suspicious security prompts, payment/address/account edits, or sensitive-information prompts. Final Buy Now/Place Order remains blocked.",
+            "message": "Checkout prep is allowed for owner-directed shopping through audited secure-browser clicks/types. Star may drive ordinary cart, variant, delivery, shipping, packaging, coupon, return/order forms, and review-page controls. Star must pause for login, Bitwarden, passkeys, 2FA, CAPTCHA, suspicious security prompts, credential/security-code fields, or final purchase submission. Final Buy Now/Place Order remains blocked.",
         }
     if op in ("checkout_prep", "select_shipping_option", "select_delivery_option", "select_packaging_option", "apply_checkout_option", "fix_purchase_mode", "cart_line_adjustment"):
         return {
@@ -4160,7 +4157,7 @@ def _reject_unsafe_operation(operation: str) -> dict[str, Any]:
             "operation": op,
             "approval_required": False,
             "boundary": "supervised_checkout_prep",
-            "message": "Allowed as an audited broad secure_browser_click/secure_browser_type approved_effect on visible HTTPS shopping/cart/checkout/order-review controls. Final order submission and sensitive account/payment/address/login scopes are refused.",
+            "message": "Allowed as an audited broad secure_browser_click/secure_browser_type approved_effect on visible HTTPS shopping/cart/checkout/order-review/return controls. Final order submission and credential/login/security-code scopes are refused.",
         }
     if op == "remove_from_cart":
         return {
@@ -5632,9 +5629,9 @@ def _type(selector: str, text: str, reason: str, approved_effect: str = "type") 
         raise ValueError(f"approved_effect must be {', '.join(APPROVED_TYPE_EFFECTS)}")
     selector_lower = safe_selector.lower()
     if SENSITIVE_FIELD_RE.search(selector_lower):
-        raise ValueError("selector appears to target a sensitive credential/contact/payment/address field; Joy must take over")
+        raise ValueError("selector appears to target a credential/security-code field; Joy must take over")
     if SENSITIVE_FIELD_RE.search(str(reason or "")):
-        raise ValueError("reason describes sensitive credential/contact/payment/address input; Joy must take over")
+        raise ValueError("reason describes credential/security-code input; Joy must take over")
 
     def run(browser: CdpSession) -> dict[str, Any]:
         target_id = _first_page_target(browser)
@@ -5642,7 +5639,7 @@ def _type(selector: str, text: str, reason: str, approved_effect: str = "type") 
         field_expr = f"(() => {{ const n = document.querySelector({_json_literal(safe_selector)}); return n ? [n.type || '', n.name || '', n.id || '', n.getAttribute('aria-label') || '', n.placeholder || ''].join(' ') : ''; }})()"
         field_text = str(_evaluate(browser, session_id, field_expr) or "")
         if effect == "type" and SENSITIVE_FIELD_RE.search(field_text):
-            raise ValueError("matched field appears sensitive; Joy must take over")
+            raise ValueError("matched field appears to be a credential/security-code field; Joy must take over")
         if effect != "type":
             checkout_metadata = _evaluate(browser, session_id, CHECKOUT_CONTROL_JS.replace("__SELECTOR__", _json_literal(safe_selector))) or {}
             _assert_checkout_type_allowed(checkout_metadata, effect, reason, safe_text)
@@ -5847,14 +5844,14 @@ def secure_browser_status_tool(args: dict[str, Any], **_kw: Any) -> str:
         },
         "trusted_assistant_access": {
             "status": "broad_browsing_available",
-            "message": "Star may navigate and inspect ordinary shopping, account research surfaces, including Amazon order history, Buy Again, past-order details, and product links. The bridge gates capabilities and sanitizes outputs instead of blanket-blocking account/order-history URLs.",
-            "human_takeover_boundaries": ["login", "Bitwarden", "passkeys", "2FA/OTP", "CAPTCHA", "suspicious security prompts", "payment/address/account edits", "final purchase submission"],
+            "message": "Star may navigate, inspect, click, and type in the secure browser for ordinary owner-directed shopping, returns, order lookup, account-adjacent forms, cart/checkout prep, and product/order workflows. The bridge sanitizes outputs instead of blanket-blocking browser work.",
+            "human_takeover_boundaries": ["login", "Bitwarden", "passkeys", "2FA/OTP", "CAPTCHA", "suspicious security prompts", "credential/security-code fields", "final purchase submission"],
         },
         "supervised_checkout_prep": {
             "status": "available",
             "approved_click_effects": list(CHECKOUT_APPROVED_EFFECTS),
             "approved_type_effects": ["apply_checkout_option", "cart_line_adjustment"],
-            "boundary": "Star may inspect sanitized checkout-prep controls and click/type into ordinary review-page controls under Joy's live supervision with explicit approved_effect values, including shipping, delivery, packaging, purchase-mode, coupon/gift, and cart-line options. For ordinary non-Amazon/Shopify/Shop Pay retailers, Star should hand control to Joy for sensitive details and the final Pay/Buy click rather than launching an Amazon-style approval ceremony by default. Star must pause for login, Bitwarden, passkeys, 2FA, CAPTCHA, suspicious security prompts, payment/address/account edits, or sensitive-information prompts.",
+            "boundary": "Star may inspect sanitized controls and click/type into ordinary shopping, return, cart, checkout-prep, and review-page controls under Joy's direction with explicit approved_effect values when needed, including order identifiers, shipping, delivery, packaging, purchase-mode, coupon/gift, return-label, and cart-line options. Star must pause for login, Bitwarden, passkeys, 2FA, CAPTCHA, suspicious security prompts, credential/security-code fields, or final Pay/Buy/Place Order submission.",
             "sanitization": "Checkout-prep snapshots/current-page summaries return isolated structured item/totals/delivery/surprise fields plus destination city-state/abstract label and payment labels. Mixed blobs, sensitive redaction-marker text, and final purchase controls are removed from ordinary summary fields.",
             "visual_confirmation": "secure_browser_visual_evidence returns a bounded visual proof bundle: a local PNG screenshot, sanitized suggested regions, and optional focused crops. Raw checkout/payment/address screenshots remain blocked except for browser-redacted Amazon checkout evidence; complete checkout evidence for any HTTPS checkout/order-review page uses owner-only Telegram delivery. Amazon thank-you/post-purchase pages are labeled as post-purchase evidence; login/account/payment/address/security pages remain Joy-only.",
             "owner_only_confirmation": "secure_browser_owner_checkout_review can send complete unredacted checkout screenshots for HTTPS checkout/order-review pages directly to Joy's configured Telegram destination without returning paths, MEDIA handles, raw DOM, cookies, storage, request headers, CDP endpoints, or address/payment text to Star. Use it when high-value, confusing, or nonstandard checkouts need owner-only evidence; ordinary non-Amazon checkout can simply be handed to Joy for manual Pay/Buy. Post-purchase/order-history proof is currently Amazon-only.",
@@ -6226,12 +6223,12 @@ CLICK_SCHEMA = {
 
 TYPE_SCHEMA = {
     "name": "secure_browser_type",
-    "description": "Type bounded non-sensitive text into a visible field in the persistent secure browser. Intended for search boxes, quantity fields, and similar shopping UI. Refuses fields that look like password, passkey, OTP, card, contact, address, or payment inputs; Joy must take over those.",
+    "description": "Type bounded Joy-provided text into a visible field in the persistent secure browser for ordinary owner-directed browser work, including shopping, returns, order lookup, cart, account-adjacent, and checkout-prep forms. Refuses only fields that look like passwords, passkeys, OTP/verification/security-code, or card/CVV/CVC inputs; final Pay/Buy/Place Order remains outside this typing tool.",
     "parameters": {
         "type": "object",
         "properties": {
             "selector": {"type": "string", "description": "CSS selector for the input/select/textarea"},
-            "text": {"type": "string", "description": "Non-sensitive text to type"},
+            "text": {"type": "string", "description": "Joy-provided text to type"},
             "reason": {"type": "string", "description": "Short human-readable reason for audit"},
             "approved_effect": {"type": "string", "description": "Expected effect of the typing; checkout-prep effects require Joy live supervision and return a refreshed sanitized checkout summary", "enum": list(APPROVED_TYPE_EFFECTS), "default": "type"},
         },
@@ -6903,25 +6900,40 @@ if __name__ == "__main__":
         "Joy live supervised checkout prep",
         "SAVE10",
     )
+    _assert_checkout_type_allowed(
+        {
+            "url": "https://www.bonobos.com/returns",
+            "page_title": "Print return label",
+            "exists": True,
+            "disabled": False,
+            "visible": True,
+            "text": "Order number",
+            "tag": "INPUT",
+            "type": "text",
+        },
+        "apply_checkout_option",
+        "Joy asked Star to type the order identifier into the return form",
+        "1234567890123456",
+    )
     try:
         _assert_checkout_type_allowed(
             {
-                "url": "https://www.woolandprince.com/checkout/review",
+                "url": "https://www.example.com/checkout/review",
                 "page_title": "Review order",
                 "exists": True,
                 "disabled": False,
                 "visible": True,
-                "text": "Shipping address",
+                "text": "Security code",
                 "tag": "INPUT",
                 "type": "text",
             },
             "apply_checkout_option",
             "Joy live supervised checkout prep",
-            "123 Example Street",
+            "security code 123",
         )
-        raise AssertionError("sensitive checkout typing should remain blocked")
+        raise AssertionError("credential/security-code typing should remain blocked")
     except ValueError as exc:
-        assert "sensitive" in str(exc) or "Joy must take over" in str(exc)
+        assert "security" in str(exc) or "Joy must take over" in str(exc)
     original_with_browser = _with_browser
     original_first_page_target = _first_page_target
     original_attach = _attach
@@ -7241,7 +7253,7 @@ if __name__ == "__main__":
     assert "list" in status["retail_order_operations"]
     assert "upsert" in status["consumable_operations"]
     assert status["supervised_checkout_prep"]["status"] == "available"
-    assert "Joy for sensitive details and the final Pay/Buy click" in status["supervised_checkout_prep"]["boundary"]
+    assert "order identifiers" in status["supervised_checkout_prep"]["boundary"]
     assert status["trusted_assistant_access"]["status"] == "broad_browsing_available"
     assert "owner_checkout_review" in status["approval_gated_operations"]
     assert "place_order" in status["approval_gated_operations"]
