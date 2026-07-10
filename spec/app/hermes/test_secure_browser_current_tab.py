@@ -98,7 +98,7 @@ def write_owner_state(path: Path, module: Any, target_id: str, url: str) -> None
     )
 
 
-def test_stale_bidi_context_id_resolves_by_stored_sanitized_url() -> None:
+def test_stale_bidi_context_id_resolves_by_stored_full_access_url() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         state_path = Path(tmpdir) / "secure-browser-tabs.json"
         module = load_tool_module(state_path)
@@ -117,8 +117,8 @@ def test_stale_bidi_context_id_resolves_by_stored_sanitized_url() -> None:
         assert browser.created_targets == []
         stored = json.loads(state_path.read_text(encoding="utf-8"))["owners"][module.BROWSER_OWNER]
         assert stored["target_id"] == "fresh-session-context"
-        assert stored["url"] == "https://www.amazon.com/gp/your-account/order-history"
-        assert "ref_=" not in stored["url"]
+        assert stored["url"] == order_url
+        assert "ref_=nav_orders_first" in stored["url"]
 
 
 def test_no_owner_match_opens_agent_owned_tab_without_claiming_unowned_page() -> None:
@@ -199,7 +199,7 @@ def test_bidi_page_candidates_ignore_child_iframe_contexts() -> None:
 
 
 if __name__ == "__main__":
-    test_stale_bidi_context_id_resolves_by_stored_sanitized_url()
+    test_stale_bidi_context_id_resolves_by_stored_full_access_url()
     test_no_owner_match_opens_agent_owned_tab_without_claiming_unowned_page()
     test_create_still_opens_a_new_owned_tab_for_explicit_new_page_navigation()
     test_browser_ws_url_uses_wss_for_private_https_firefox_route()
