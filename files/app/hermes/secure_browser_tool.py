@@ -2639,23 +2639,28 @@ def _execute_final_purchase(approval_request_id: str, material_summary_binding: 
     def run(browser: CdpSession) -> dict[str, Any]:
         target_id = _first_page_target(browser)
         session_id = _attach(browser, target_id)
+        source_url, source_title = _safe_page_location(browser, session_id)
         click_result = _evaluate(browser, session_id, FINAL_PURCHASE_CLICK_JS) or {}
         if not click_result.get("clicked"):
             raise RuntimeError(str(click_result.get("reason") or "no visible enabled final purchase control matched"))
-        time.sleep(2.0)
-        final_url = str(_evaluate(browser, session_id, "location.href") or "")
-        final_title = str(_evaluate(browser, session_id, "document.title") or "")
+        transition = _wait_for_final_purchase_transition(browser, session_id, target_id, source_url, source_title)
+        final_url = str(transition.get("url") or "about:blank")
+        final_title = str(transition.get("page_title") or "")
         result = {
             "operation": "execute_final_purchase",
-            "status": "clicked",
+            "status": str(transition.get("status") or "submitted_confirmation_unavailable"),
             "approval_required": False,
             "trusted_approval_required": False,
             "final_url": final_url,
             "final_page_title": final_title,
             "control_label": str(click_result.get("control_label") or "")[:120],
-            "access_note": "Star full-access mode clicked the visible final-purchase control without secure_browser approval-gate policy checks.",
+            "final_purchase_submission": {k: v for k, v in transition.items() if k != "session_id"},
+            "access_note": "Star full-access mode clicked the visible final-purchase control; post-click readback is explicit and never returns a stale checkout review.",
         }
-        _audit("final_purchase_executed_full_access", {"final_url": final_url, "final_title": final_title, "control_label": result.get("control_label")})
+        post_purchase_summary = transition.get("post_purchase_summary")
+        if isinstance(post_purchase_summary, dict) and post_purchase_summary:
+            result["post_purchase_summary"] = post_purchase_summary
+        _audit("final_purchase_executed_full_access", {"final_url": final_url, "final_title": final_title, "control_label": result.get("control_label"), "final_purchase_submission_state": result["final_purchase_submission"].get("state")})
         return result
     return _with_browser(run)
 
@@ -3213,6 +3218,133 @@ def _wait_for_post_purchase_readiness(browser: CdpSession, session_id: str, time
                 "item_clue_count": len(last_summary.get("item_clues") or []),
             }
             raise RuntimeError(f"post-purchase proof page did not expose meaningful loaded content before capture: {json.dumps(details, sort_keys=True)}")
+        time.sleep(0.5)
+
+
+def _safe_page_location(browser: CdpSession, session_id: str) -> tuple[str, str]:
+    try:
+        url = str(_evaluate(browser, session_id, "location.href") or "")
+    except Exception:
+        url = ""
+    try:
+        title = str(_evaluate(browser, session_id, "document.title") or "")
+    except Exception:
+        title = ""
+    return url, title
+
+
+def _record_final_purchase_transition(readback: dict[str, Any]) -> None:
+    safe = {
+        "state": _sanitize_shopping_text(str(readback.get("state") or ""))[:120],
+        "status": _sanitize_shopping_text(str(readback.get("status") or readback.get("state") or ""))[:120],
+        "url": _sanitize_url(str(readback.get("url") or "")),
+        "page_title": _sanitize_shopping_text(str(readback.get("page_title") or ""))[:240],
+        "source_url": _sanitize_url(str(readback.get("source_url") or "")),
+        "source_page_title": _sanitize_shopping_text(str(readback.get("source_page_title") or ""))[:240],
+        "reason": _sanitize_shopping_text(str(readback.get("reason") or ""))[:240],
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    with contextlib.suppress(Exception):
+        with _final_purchase_state_lock() as handle:
+            state = _load_final_purchase_state(handle)
+            state["latest_browser_transition"] = safe
+            _store_final_purchase_state(handle, state)
+
+
+def _latest_final_purchase_transition(max_age_seconds: int = 900) -> dict[str, Any]:
+    with contextlib.suppress(Exception):
+        with _final_purchase_state_lock() as handle:
+            state = _load_final_purchase_state(handle)
+        latest = state.get("latest_browser_transition") if isinstance(state, dict) else None
+        if not isinstance(latest, dict):
+            return {}
+        stamp = _parse_iso_timestamp(latest.get("updated_at"))
+        if stamp is None:
+            return {}
+        if (datetime.now(timezone.utc) - stamp).total_seconds() > max_age_seconds:
+            return {}
+        return dict(latest)
+    return {}
+
+
+def _final_purchase_unavailable_result(url: str, title: str, source_url: str, source_title: str, reason: str) -> dict[str, Any]:
+    result = {
+        "state": "submitted_confirmation_unavailable",
+        "status": "submitted_confirmation_unavailable",
+        "url": _sanitize_url(url) or "about:blank",
+        "page_title": _sanitize_shopping_text(title)[:240],
+        "source_url": _sanitize_url(source_url),
+        "source_page_title": _sanitize_shopping_text(source_title)[:240],
+        "reason": _sanitize_shopping_text(reason)[:240],
+        "post_purchase_summary": {},
+        "verification_next_steps": "The final purchase click was submitted, but the browser did not expose a usable post-purchase confirmation page. Verify via Gmail, Amazon Your Orders, or the safe retail order ledger before reporting the order as confirmed.",
+        "safety_boundary": "This readback deliberately returns only sanitized URL/title/state and next steps; it does not expose raw order numbers, address/payment/account/contact details, screenshots, DOM, cookies, storage, request headers, or browser handles.",
+    }
+    _record_final_purchase_transition(result)
+    return result
+
+
+def _wait_for_final_purchase_transition(
+    browser: CdpSession,
+    session_id: str,
+    original_target_id: str,
+    source_url: str,
+    source_title: str,
+    timeout_seconds: float = 15.0,
+) -> dict[str, Any]:
+    """Return post-purchase proof context or a bounded unavailable state.
+
+    Amazon can detach/blank the checkout browsing context after Place Order even
+    when the order succeeds. Do not hand Star a fresh checkout summary from the
+    pre-click page in that state; wait briefly for a confirmation/Your Orders
+    page, then return an explicit verification-required state.
+    """
+    deadline = time.time() + max(0.0, float(timeout_seconds))
+    last_url, last_title = _safe_page_location(browser, session_id)
+    original_target_id = str(original_target_id or "")
+    while True:
+        current_url, current_title = _safe_page_location(browser, session_id)
+        if current_url or current_title:
+            last_url, last_title = current_url, current_title
+        pages = _page_candidates(browser)
+        post_purchase_pages = [
+            page
+            for page in pages
+            if _is_amazon_post_purchase_page(str(page.get("url") or ""), str(page.get("title") or ""))
+        ]
+        if post_purchase_pages:
+            post_purchase_pages.sort(key=_checkout_review_page_rank)
+            page = post_purchase_pages[-1]
+            target_id = str(page.get("id") or original_target_id)
+            post_session_id = session_id if target_id == original_target_id else _attach(browser, target_id)
+            try:
+                summary = _wait_for_post_purchase_readiness(browser, post_session_id, timeout_seconds=min(5.0, max(0.0, deadline - time.time())))
+            except Exception as exc:
+                last_url = str(page.get("url") or last_url or "")
+                last_title = str(page.get("title") or last_title or "")
+                if time.time() >= deadline:
+                    return _final_purchase_unavailable_result(last_url or "about:blank", last_title, source_url, source_title, f"post-purchase page did not expose meaningful confirmation content: {exc}")
+                time.sleep(0.5)
+                continue
+            url = str(_evaluate(browser, post_session_id, "location.href") or page.get("url") or "")
+            title = str(_evaluate(browser, post_session_id, "document.title") or page.get("title") or "")
+            result = {
+                "state": "post_purchase_confirmation_available",
+                "status": "post_purchase_confirmation_available",
+                "target_id": target_id,
+                "session_id": post_session_id,
+                "url": _sanitize_url(url),
+                "page_title": _sanitize_shopping_text(title)[:240],
+                "source_url": _sanitize_url(source_url),
+                "source_page_title": _sanitize_shopping_text(source_title)[:240],
+                "post_purchase_summary": summary,
+                "verification_next_steps": "Post-purchase context was recognized; owner-only proof capture may be attempted when needed.",
+            }
+            _record_final_purchase_transition(result)
+            return result
+        if time.time() >= deadline:
+            reason = "browser remained on about:blank after final purchase click" if _is_blank_page_url(last_url) else "post-purchase confirmation page was not recognized before timeout"
+            return _final_purchase_unavailable_result(last_url or "about:blank", last_title, source_url, source_title, reason)
         time.sleep(0.5)
 
 
@@ -5229,15 +5361,31 @@ def _click(selector: str, reason: str, approved_effect: str) -> dict[str, Any]:
         elif not current_url:
             current_url = str(page.get("url") or "")
             current_title = current_title or str(page.get("title") or "")
+        clicked_final_purchase = effect in CHECKOUT_APPROVED_EFFECTS and FINAL_PURCHASE_RE.search(" ".join([label, str(result.get("element_text") or "")])) is not None
+        if clicked_final_purchase:
+            source_title = str(_evaluate(browser, session_id, "document.title") or current_title or "")
+            transition = _wait_for_final_purchase_transition(browser, session_id, resolved_target_id, source_url, source_title)
+            current_url = str(transition.get("url") or current_url or "about:blank")
+            current_title = str(transition.get("page_title") or current_title or "")
+            if transition.get("target_id"):
+                resolved_target_id = str(transition.get("target_id"))
+            if transition.get("session_id"):
+                session_id = str(transition.get("session_id"))
         _store_owner_target(resolved_target_id, current_url, current_title)
         result["operation"] = "click"
         result["approved_effect"] = effect
         result["url"] = _sanitize_url(str(current_url or result.get("url") or ""))
         if current_title:
             result["page_title"] = _sanitize_shopping_text(current_title)
-        if effect in CHECKOUT_APPROVED_EFFECTS:
+        if clicked_final_purchase:
+            result["status"] = transition.get("status") or transition.get("state") or "submitted_confirmation_unavailable"
+            result["final_purchase_submission"] = {k: v for k, v in transition.items() if k != "session_id"}
+            post_purchase_summary = transition.get("post_purchase_summary")
+            if isinstance(post_purchase_summary, dict) and post_purchase_summary:
+                result["post_purchase_summary"] = post_purchase_summary
+        elif effect in CHECKOUT_APPROVED_EFFECTS:
             result["checkout_review"] = _checkout_summary_from_browser(browser, session_id)
-        _audit("click", {"selector": safe_selector, "effect": effect, "reason": str(reason or "")[:300], "element_text": result.get("element_text"), "url": result.get("url"), "checkout_binding": (result.get("checkout_review") or {}).get("material_summary_binding")})
+        _audit("click", {"selector": safe_selector, "effect": effect, "reason": str(reason or "")[:300], "element_text": result.get("element_text"), "url": result.get("url"), "checkout_binding": (result.get("checkout_review") or {}).get("material_summary_binding"), "final_purchase_submission_state": (result.get("final_purchase_submission") or {}).get("state")})
         return result
 
     return _with_browser(run)
@@ -5409,6 +5557,24 @@ def _current_page_summary() -> dict[str, Any]:
         session_id = _attach(browser, target_id)
         url = str(_evaluate(browser, session_id, "location.href") or "")
         title = str(_evaluate(browser, session_id, "document.title") or "")
+        if _is_blank_page_url(url):
+            latest_transition = _latest_final_purchase_transition()
+            if latest_transition and latest_transition.get("state") == "submitted_confirmation_unavailable":
+                return {
+                    "operation": "final_purchase_transition_current_page_summary",
+                    "secure_browser_owner": BROWSER_OWNER,
+                    "status": "submitted_confirmation_unavailable",
+                    "url": "about:blank",
+                    "page_title": "",
+                    "final_purchase_submission": latest_transition,
+                    "summary_note": "The secure browser is currently blank after a recent final purchase click. The click may have succeeded, but browser confirmation is unavailable; verify via Gmail, Amazon Your Orders, or the safe retail order ledger instead of relying on a stale checkout review.",
+                    "safety_boundary": "This readback exposes only sanitized transition metadata and verification guidance; no order numbers, address/payment/account/contact details, screenshots, DOM, cookies, storage, request headers, or browser handles are returned.",
+                }
+        if _is_amazon_post_purchase_page(url, title):
+            result = _post_purchase_summary_from_browser(browser, session_id)
+            result["operation"] = "post_purchase_current_page_summary"
+            result["secure_browser_owner"] = BROWSER_OWNER
+            return result
         result = _evaluate(browser, session_id, SUMMARY_EXTRACT_JS) or {}
         if url:
             result["url"] = _sanitize_url(url)
