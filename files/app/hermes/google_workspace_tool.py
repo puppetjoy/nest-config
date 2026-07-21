@@ -77,6 +77,12 @@ def _run_google_api(parts: list[str]) -> dict[str, Any] | list[Any] | str:
 
     env = os.environ.copy()
     env["HERMES_HOME"] = str(_hermes_home())
+    # The upstream google_api.py prefers the `gws` CLI when it is on PATH, but
+    # the packaged CLI uses its own keyring-backed credential store rather than
+    # Star's profile-scoped google_token.json.  Keep this Hermes tool on the
+    # profile-scoped Python client path so reads and sends use the OAuth token
+    # Joy granted to Star, not an unrelated/stale gws keyring entry.
+    env["PATH"] = "/opt/hermes-agent/venv/bin:/usr/bin:/bin"
     result = subprocess.run(
         ["/opt/hermes-agent/venv/bin/python", str(script), *parts],
         capture_output=True,
