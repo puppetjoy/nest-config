@@ -1,9 +1,7 @@
-"""Narrow Google Workspace tools for Joy's Hermes profiles.
+"""Profile-scoped Google Workspace tools for Joy's Hermes profiles.
 
-This exposes profile-scoped Google read/search operations without granting a
-personal-assistant profile the general terminal tool.  It intentionally wraps
-only the read-only subset Joy approved for Star's initial Google Workspace
-integration.
+This exposes selected profile-scoped Google Workspace operations without
+requiring a personal-assistant profile to have the general terminal tool.
 """
 
 from __future__ import annotations
@@ -23,6 +21,7 @@ TOOLSET = "google_workspace"
 MAX_RESULT_CHARS = 24000
 MAX_GMAIL_RESULTS = 20
 MAX_CALENDAR_RESULTS = 50
+GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send"
 
 
 def _hermes_home() -> Path:
@@ -39,6 +38,23 @@ def _token_path() -> Path:
 
 def _client_secret_path() -> Path:
     return _hermes_home() / "google_client_secret.json"
+
+
+def _stored_token_scopes() -> list[str]:
+    try:
+        payload = json.loads(_token_path().read_text())
+    except Exception:
+        return []
+    raw = payload.get("scopes") or payload.get("scope") or []
+    if isinstance(raw, str):
+        return [scope for scope in raw.split() if scope]
+    if isinstance(raw, list):
+        return [str(scope) for scope in raw if str(scope)]
+    return []
+
+
+def _has_scope(scope: str) -> bool:
+    return scope in set(_stored_token_scopes())
 
 
 def _check_google_workspace() -> bool:
@@ -206,6 +222,53 @@ def google_workspace_gmail_labels_tool(args: dict[str, Any], **_kw) -> str:
     return json.dumps(result, ensure_ascii=False)
 
 
+def google_workspace_gmail_send_tool(args: dict[str, Any], **_kw) -> str:
+    """Send a Gmail message through the profile-scoped OAuth token."""
+    to = str(args.get("to") or "").strip()
+    subject = str(args.get("subject") or "").strip()
+    body = str(args.get("body") or "")
+    cc = str(args.get("cc") or "").strip()
+    from_header = str(args.get("from_header") or "").strip()
+    html = bool(args.get("html") or False)
+    thread_id = str(args.get("thread_id") or "").strip()
+
+    missing = [name for name, value in [("to", to), ("subject", subject), ("body", body)] if not value]
+    if missing:
+        return json.dumps({"error": "missing_required_fields", "fields": missing}, ensure_ascii=False)
+
+    if not _token_path().exists():
+        return json.dumps(
+            {
+                "error": "NOT_AUTHENTICATED",
+                "message": "Star's profile-scoped Google token is missing; ask Talon to complete OAuth setup.",
+                "token_path": str(_token_path()),
+            },
+            ensure_ascii=False,
+        )
+
+    if not _has_scope(GMAIL_SEND_SCOPE):
+        return json.dumps(
+            {
+                "error": "MISSING_SCOPE",
+                "required_scope": GMAIL_SEND_SCOPE,
+                "message": "Star must be reauthorized by Joy with gmail.send before Gmail send can run.",
+            },
+            ensure_ascii=False,
+        )
+
+    parts = ["gmail", "send", "--to", to, "--subject", subject, "--body", body]
+    if cc:
+        parts.extend(["--cc", cc])
+    if from_header:
+        parts.extend(["--from", from_header])
+    if html:
+        parts.append("--html")
+    if thread_id:
+        parts.extend(["--thread-id", thread_id])
+    result = _run_google_api(parts)
+    return json.dumps(result, ensure_ascii=False)
+
+
 def google_workspace_calendar_list_tool(args: dict[str, Any], **_kw) -> str:
     parts = ["calendar", "list"]
     start = str(args.get("start") or "").strip()
@@ -257,6 +320,24 @@ GMAIL_LABELS_SCHEMA = {
     "name": "google_workspace_gmail_labels",
     "description": "List Gmail labels. Read-only.",
     "parameters": {"type": "object", "properties": {}, "required": []},
+}
+
+GMAIL_SEND_SCHEMA = {
+    "name": "google_workspace_gmail_send",
+    "description": "Send a Gmail message from Joy's profile-scoped Google account using Star's Google Workspace OAuth token.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "to": {"type": "string", "description": "Recipient email address"},
+            "subject": {"type": "string", "description": "Email subject"},
+            "body": {"type": "string", "description": "Email body"},
+            "cc": {"type": "string", "description": "Optional comma-separated Cc recipients"},
+            "from_header": {"type": "string", "description": "Optional From header/display name"},
+            "html": {"type": "boolean", "description": "Treat body as HTML"},
+            "thread_id": {"type": "string", "description": "Optional Gmail threadId for threading the sent message"},
+        },
+        "required": ["to", "subject", "body"],
+    },
 }
 
 CALENDAR_LIST_SCHEMA = {
@@ -312,6 +393,16 @@ registry.register(
     check_fn=_check_google_workspace,
     description=GMAIL_LABELS_SCHEMA["description"],
     emoji="🏷️",
+    max_result_size_chars=MAX_RESULT_CHARS,
+)
+registry.register(
+    name=GMAIL_SEND_SCHEMA["name"],
+    toolset=TOOLSET,
+    schema=GMAIL_SEND_SCHEMA,
+    handler=google_workspace_gmail_send_tool,
+    check_fn=_check_google_workspace,
+    description=GMAIL_SEND_SCHEMA["description"],
+    emoji="📨",
     max_result_size_chars=MAX_RESULT_CHARS,
 )
 registry.register(
