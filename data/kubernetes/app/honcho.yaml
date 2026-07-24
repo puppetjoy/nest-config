@@ -66,6 +66,11 @@ representation_subthreshold_expiry_job_ttl: 21600
   - name: AUTH_USE_AUTH
     value: 'false'
 
+  # Re-check dependencies on every container restart.  A node/system OOM can kill
+  # Postgres, Redis, API, and deriver containers in the same pod generation; init
+  # containers would not rerun for that case, so the main command waits before
+  # starting Honcho and avoids noisy CrashLoopBackOff while CNPG/Redis recover.
+
   # Local OpenAI-compatible embedding endpoint.  BGE-M3 emits 1024-dimensional
   # vectors, so this config must be deployed together with the reviewed
   # pgvector schema/re-embedding migration; deploying it against the existing
@@ -1084,7 +1089,34 @@ resources:
             - name: api
               image: "%{lookup('honcho_image')}"
               imagePullPolicy: Always
-              command: ['sh', 'docker/entrypoint.sh']
+              command:
+                - /bin/sh
+                - -ceu
+                - |-
+                  /app/.venv/bin/python - <<'PY'
+                  import socket
+                  import sys
+                  import time
+
+                  targets = [
+                      ('postgres', "%{nest::kubernetes::service}-cnpg-rw", 5432),
+                      ('redis', "%{nest::kubernetes::service}-redis", 6379),
+                  ]
+                  deadline = time.monotonic() + 180
+                  for name, host, port in targets:
+                      while True:
+                          try:
+                              with socket.create_connection((host, port), timeout=2):
+                                  print(f'{name} dependency reachable at {host}:{port}', flush=True)
+                                  break
+                          except OSError as exc:
+                              if time.monotonic() >= deadline:
+                                  print(f'timed out waiting for {name} dependency at {host}:{port}: {exc}', file=sys.stderr, flush=True)
+                                  raise
+                              print(f'waiting for {name} dependency at {host}:{port}: {exc}', flush=True)
+                              time.sleep(2)
+                  PY
+                  exec sh docker/entrypoint.sh
               env: *honcho_env
               ports:
                 - name: http
@@ -1137,7 +1169,34 @@ resources:
             - name: deriver
               image: "%{lookup('honcho_image')}"
               imagePullPolicy: Always
-              command: ['/app/.venv/bin/python', '-m', 'src.deriver']
+              command:
+                - /bin/sh
+                - -ceu
+                - |-
+                  /app/.venv/bin/python - <<'PY'
+                  import socket
+                  import sys
+                  import time
+
+                  targets = [
+                      ('postgres', "%{nest::kubernetes::service}-cnpg-rw", 5432),
+                      ('redis', "%{nest::kubernetes::service}-redis", 6379),
+                  ]
+                  deadline = time.monotonic() + 180
+                  for name, host, port in targets:
+                      while True:
+                          try:
+                              with socket.create_connection((host, port), timeout=2):
+                                  print(f'{name} dependency reachable at {host}:{port}', flush=True)
+                                  break
+                          except OSError as exc:
+                              if time.monotonic() >= deadline:
+                                  print(f'timed out waiting for {name} dependency at {host}:{port}: {exc}', file=sys.stderr, flush=True)
+                                  raise
+                              print(f'waiting for {name} dependency at {host}:{port}: {exc}', flush=True)
+                              time.sleep(2)
+                  PY
+                  exec /app/.venv/bin/python -m src.deriver
               env: *honcho_env
 
   api-service:
