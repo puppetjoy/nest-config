@@ -2389,6 +2389,18 @@ def _agent_request_board() -> str:
     return raw or "agent-requests"
 
 
+def _current_profile_name(default: str = "star") -> str:
+    profile = (os.environ.get("HERMES_PROFILE") or os.environ.get("HERMES_PROFILE_NAME") or "").strip().lower()
+    if not profile:
+        home = os.environ.get("HERMES_HOME", "").strip()
+        parent = os.path.basename(os.path.dirname(home)) if home else ""
+        if parent == "profiles":
+            profile = os.path.basename(home).strip().lower()
+    if not re.fullmatch(r"[a-z0-9_-]{1,80}", profile):
+        return default
+    return profile or default
+
+
 def _request_id_from_submit_result(submit_result: dict[str, Any]) -> str:
     request_obj = submit_result.get("request")
     request = request_obj if isinstance(request_obj, dict) else {}
@@ -2429,7 +2441,7 @@ def _supersede_agent_request_disposition(request_id: str, replacement_request_id
                 "reason": reason,
                 "superseded_by": replacement_request_id,
                 "archive": True,
-            }, actor="talon")
+            }, actor=_current_profile_name())
         finally:
             conn.close()
     if isinstance(result, dict) and result.get("error"):
@@ -2544,6 +2556,7 @@ def _submit_final_purchase_approval_request(summary: dict[str, Any], material_su
     facts_json = json.dumps(facts, ensure_ascii=False, sort_keys=True)
     binding_key = _approval_request_binding_key(material_summary_binding, owner_visual_evidence_binding, owner_review_id)
     retailer = _checkout_retailer_label(str(summary.get("url") or ""))
+    executor_profile = _current_profile_name()
     now = datetime.now(timezone.utc).isoformat()
     with _final_purchase_state_lock() as handle:
         state = _load_final_purchase_state(handle)
@@ -2588,10 +2601,11 @@ def _submit_final_purchase_approval_request(summary: dict[str, Any], material_su
     request_body = (
         "Trusted final-purchase execution request for the Star secure browser. "
         "Do not perform shopping research or checkout-prep. After Joy approves the bound proposal, "
-        "execute exactly one final Place Order action through secure_browser_execute_final_purchase, "
+        f"{executor_profile} must execute exactly one final Place Order action through secure_browser_execute_final_purchase, "
         "and only if the live checkout material_summary_binding and owner_visual_evidence_binding still match."
     )
     context = "\n".join([
+        f"executor_profile: {executor_profile}",
         f"material_summary_binding: {material_summary_binding}",
         f"owner_visual_evidence_binding: {owner_visual_evidence_binding}",
         f"owner_review_id: {owner_review_id or 'not supplied'}",
@@ -2605,7 +2619,7 @@ def _submit_final_purchase_approval_request(summary: dict[str, Any], material_su
         "request": request_body,
         "context": context,
         "subject": f"Joy approval to place the current {retailer} order",
-        "target": "talon",
+        "target": executor_profile,
         "urgency": "urgent",
         "board": _agent_request_board(),
     }
@@ -2631,7 +2645,7 @@ def _submit_final_purchase_approval_request(summary: dict[str, Any], material_su
             "summary": f"approval-required: place current {retailer} order exactly once if bound checkout summary still matches",
             "proposal": proposal_text,
             "subject": f"Final {retailer} order submission for current Star checkout",
-            "response_to_requester": "If approved, Talon will execute the bound final purchase exactly once after revalidating the live checkout summary.",
+            "response_to_requester": f"If approved, {executor_profile} will execute the bound final purchase exactly once after revalidating the live checkout summary.",
             "board": _agent_request_board(),
         }))
         if propose_result.get("error"):
@@ -2656,6 +2670,7 @@ def _submit_final_purchase_approval_request(summary: dict[str, Any], material_su
         "material_summary_binding": material_summary_binding,
         "owner_visual_evidence_binding": owner_visual_evidence_binding,
         "owner_review_id": owner_review_id or "",
+        "executor_profile": executor_profile,
         "minimal_order_facts": facts,
         "started_at": now,
         "updated_at": completed_at,
