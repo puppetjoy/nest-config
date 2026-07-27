@@ -765,7 +765,7 @@ define nest::lib::hermes (
     } + $dashboard_theme_config + $dashboard_profile_switcher_config,
   } + $credential_pool_strategy_config + $providers_config + $terminal_config + $browser_camofox_config + $image_gen_config + $plugins_config
 
-  $env_content = [$gitlab_env_lines, $release_digest_gitlab_token_env_lines, $web_backend_env_lines, $telegram_env_lines, $openrouter_env_lines, $voice_tools_openai_env_lines, $agent_request_env_lines, $ssh_env_lines, $kubeconfig_env_lines, $tls_trust_env_lines].flatten.join("\n")
+  $env_content = [$gitlab_env_lines, $release_digest_gitlab_token_env_lines, $web_backend_env_lines, $telegram_env_lines, $openrouter_env_lines, $voice_tools_openai_env_lines, $agent_request_env_lines, $ssh_env_lines, $kubeconfig_env_lines, $extra_env_lines, $tls_trust_env_lines].flatten.join("\n")
 
   if $kubeconfig_content != undef {
     $effective_kubeconfig_content = $kubeconfig_content =~ Sensitive ? {
