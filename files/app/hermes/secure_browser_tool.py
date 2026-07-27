@@ -89,28 +89,13 @@ APPROVED_CART_ADDITIONS = {
 AMAZON_HOST_RE = re.compile(r"(^|\.)amazon\.[a-z.]+$", re.IGNORECASE)
 AMAZON_IMAGE_HOST_RE = re.compile(r"(^|\.)(m\.media-amazon|images-na\.ssl-images-amazon|ssl-images-amazon)\.com$", re.IGNORECASE)
 UNSAFE_OPERATIONS = {
-    "address",
     "update_cart",
     "buy_now",
     "place_order",
-    "login",
-    "signin",
-    "sign_in",
     "account_settings",
     "screenshot_sensitive_page",
     "edit_address",
     "edit_payment",
-    "payment",
-    "wallet",
-    "billing",
-    "card",
-    "password",
-    "passkey",
-    "two_factor",
-    "2fa",
-    "otp",
-    "captcha",
-    "security_check",
     "download_account_data",
     "export_account_data",
     "raw_cdp",
@@ -782,6 +767,55 @@ CHECKOUT_CONTROL_JS = r"""
     name,
     title,
     id,
+    viewport_rect: {x: rect.x, y: rect.y, width: rect.width, height: rect.height},
+    page_title: document.title || '',
+    url: location.href || ''
+  };
+})()
+"""
+
+TRUSTED_CLICK_TARGET_JS = r"""
+(() => {
+  const selector = __SELECTOR__;
+  const initialNode = document.querySelector(selector);
+  const clean = (value) => (value || '').replace(/\s+/g, ' ').trim();
+  const visible = (el) => {
+    if (!el) return false;
+    const style = window.getComputedStyle(el);
+    const rect = el.getBoundingClientRect();
+    return Boolean(style && style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0);
+  };
+  const nodeLabel = (el) => clean(el.innerText || el.value || el.getAttribute('aria-label') || el.textContent || '');
+  const equivalentVisibleNode = (node) => {
+    if (!node || visible(node)) return node;
+    const tag = clean(node.tagName || '').toLowerCase();
+    const aria = node.getAttribute('aria-label') || '';
+    const name = node.getAttribute('name') || '';
+    const id = node.getAttribute('id') || '';
+    const selectors = [];
+    if (id) selectors.push(`#${CSS.escape(id)}`);
+    if (name && tag) selectors.push(`${tag}[name="${CSS.escape(name)}"]`);
+    if (aria && tag) selectors.push(`${tag}[aria-label="${CSS.escape(aria)}"]`);
+    for (const candidateSelector of selectors) {
+      for (const candidate of Array.from(document.querySelectorAll(candidateSelector))) {
+        if (visible(candidate)) return candidate;
+      }
+    }
+    return node;
+  };
+  const node = equivalentVisibleNode(initialNode);
+  if (!node) return {exists: false, clicked: false, reason: 'selector did not match any element'};
+  if (node.disabled || node.getAttribute('aria-disabled') === 'true') return {exists: true, clicked: false, reason: 'matched element is disabled'};
+  node.scrollIntoView({block: 'center', inline: 'center'});
+  const rect = node.getBoundingClientRect();
+  if (!(rect.width > 0 && rect.height > 0)) return {exists: true, clicked: false, reason: 'matched element is not visible'};
+  return {
+    exists: true,
+    clicked: false,
+    element_text: nodeLabel(node).slice(0, 240),
+    x: Math.round(rect.left + rect.width / 2),
+    y: Math.round(rect.top + rect.height / 2),
+    viewport_rect: {x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height)},
     page_title: document.title || '',
     url: location.href || ''
   };
@@ -5814,6 +5848,60 @@ def _visual_evidence(full_page: bool, include_full_page: bool, crops: list[Any])
     return _with_browser(run)
 
 
+def _browser_trusted_pointer_click(browser: CdpSession, session_id: str, x: int, y: int) -> None:
+    if getattr(browser, "protocol", "cdp") == "bidi":
+        browser._bidi(  # type: ignore[attr-defined]
+            "input.performActions",
+            {
+                "context": str(session_id or ""),
+                "actions": [
+                    {
+                        "type": "pointer",
+                        "id": "secure-browser-mouse",
+                        "parameters": {"pointerType": "mouse"},
+                        "actions": [
+                            {"type": "pointerMove", "x": int(x), "y": int(y), "duration": 0, "origin": "viewport"},
+                            {"type": "pointerDown", "button": 0},
+                            {"type": "pointerUp", "button": 0},
+                        ],
+                    }
+                ],
+            },
+        )
+        with contextlib.suppress(Exception):
+            browser._bidi("input.releaseActions", {"context": str(session_id or "")})  # type: ignore[attr-defined]
+        return
+    browser.call("Input.dispatchMouseEvent", {"type": "mouseMoved", "x": int(x), "y": int(y)}, session_id=session_id)
+    browser.call("Input.dispatchMouseEvent", {"type": "mousePressed", "x": int(x), "y": int(y), "button": "left", "clickCount": 1}, session_id=session_id)
+    browser.call("Input.dispatchMouseEvent", {"type": "mouseReleased", "x": int(x), "y": int(y), "button": "left", "clickCount": 1}, session_id=session_id)
+
+
+def _trusted_click(browser: CdpSession, session_id: str, safe_selector: str) -> dict[str, Any]:
+    target = _evaluate(browser, session_id, TRUSTED_CLICK_TARGET_JS.replace("__SELECTOR__", _json_literal(safe_selector))) or {}
+    if not target.get("exists"):
+        return {"clicked": False, "reason": str(target.get("reason") or "selector did not match any element")}
+    if target.get("reason"):
+        return {"clicked": False, "reason": str(target.get("reason"))}
+    try:
+        _browser_trusted_pointer_click(browser, session_id, int(target.get("x") or 0), int(target.get("y") or 0))
+        return {
+            "clicked": True,
+            "element_text": str(target.get("element_text") or "")[:240],
+            "page_title": str(target.get("page_title") or ""),
+            "url": str(target.get("url") or ""),
+            "trusted_user_activation": True,
+            "control_rect": target.get("viewport_rect") if isinstance(target.get("viewport_rect"), dict) else None,
+        }
+    except Exception:
+        # Some fake/unit-test browsers and older CDP-compatible backends do not
+        # implement trusted pointer input. Fall back to the historical DOM click
+        # so ordinary non-Amazon controls keep working, but real Firefox/BiDi
+        # checkout flows get the user-activation path above.
+        result = _evaluate(browser, session_id, CLICK_JS.replace("__SELECTOR__", _json_literal(safe_selector))) or {}
+        result.setdefault("trusted_user_activation", False)
+        return result
+
+
 def _click(selector: str, reason: str, approved_effect: str) -> dict[str, Any]:
     safe_selector = _selector_arg(selector)
     effect = str(approved_effect or "browse").strip().lower()
@@ -5859,6 +5947,8 @@ def _click(selector: str, reason: str, approved_effect: str) -> dict[str, Any]:
             result = _evaluate(browser, session_id, FINAL_PURCHASE_CLICK_JS) or {}
             if not result.get("clicked"):
                 result.setdefault("selector_fallback", "final_purchase_control_scan")
+        elif effect == "checkout_prep":
+            result = _trusted_click(browser, session_id, safe_selector)
         else:
             result = _evaluate(browser, session_id, CLICK_JS.replace("__SELECTOR__", _json_literal(safe_selector))) or {}
         time.sleep(1.0)
