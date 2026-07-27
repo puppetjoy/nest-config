@@ -3189,13 +3189,31 @@ def _post_purchase_summary_from_browser(browser: CdpSession, session_id: str) ->
 
 
 def _post_purchase_summary_is_meaningful(summary: dict[str, Any]) -> bool:
-    if summary.get("confirmation_visible") or summary.get("orders_page_visible"):
+    if summary.get("confirmation_visible"):
         return True
     for key in ("order_presence", "delivery_status", "item_clues"):
         if summary.get(key):
             return True
     state = str(summary.get("post_purchase_state") or "")
-    return state in {"post_purchase_confirmation_visible", "post_purchase_orders_visible"}
+    return state == "post_purchase_confirmation_visible"
+
+
+def _post_purchase_summary_confirms_final_purchase(summary: dict[str, Any], url: str = "", title: str = "") -> bool:
+    """Return whether a post-click Amazon page is strong enough to report success.
+
+    A generic Amazon Your Orders/order-history page is useful evidence for a
+    bounded readback, but it is not proof that the just-clicked checkout was
+    accepted. Require an actual thank-you/confirmation signal before reporting
+    ``post_purchase_confirmation_available``.
+    """
+    page_material = " ".join([
+        str(url or ""),
+        str(title or ""),
+        str(summary.get("url") or ""),
+        str(summary.get("page_title") or ""),
+        " ".join(str(item or "") for item in _as_checkout_list(summary.get("order_presence"))),
+    ])
+    return bool(summary.get("confirmation_visible") or POST_PURCHASE_CONFIRMATION_RE.search(page_material))
 
 
 def _wait_for_post_purchase_readiness(browser: CdpSession, session_id: str, timeout_seconds: float = 20.0) -> dict[str, Any]:
@@ -3267,7 +3285,7 @@ def _latest_final_purchase_transition(max_age_seconds: int = 900) -> dict[str, A
     return {}
 
 
-def _final_purchase_unavailable_result(url: str, title: str, source_url: str, source_title: str, reason: str) -> dict[str, Any]:
+def _final_purchase_unavailable_result(url: str, title: str, source_url: str, source_title: str, reason: str, post_purchase_summary: dict[str, Any] | None = None) -> dict[str, Any]:
     result = {
         "state": "submitted_confirmation_unavailable",
         "status": "submitted_confirmation_unavailable",
@@ -3276,7 +3294,7 @@ def _final_purchase_unavailable_result(url: str, title: str, source_url: str, so
         "source_url": _sanitize_url(source_url),
         "source_page_title": _sanitize_shopping_text(source_title)[:240],
         "reason": _sanitize_shopping_text(reason)[:240],
-        "post_purchase_summary": {},
+        "post_purchase_summary": post_purchase_summary if isinstance(post_purchase_summary, dict) else {},
         "verification_next_steps": "The final purchase click was submitted, but the browser did not expose a usable post-purchase confirmation page. Verify via Gmail, Amazon Your Orders, or the safe retail order ledger before reporting the order as confirmed.",
         "safety_boundary": "This readback deliberately returns only sanitized URL/title/state and next steps; it does not expose raw order numbers, address/payment/account/contact details, screenshots, DOM, cookies, storage, request headers, or browser handles.",
     }
@@ -3328,6 +3346,15 @@ def _wait_for_final_purchase_transition(
                 continue
             url = str(_evaluate(browser, post_session_id, "location.href") or page.get("url") or "")
             title = str(_evaluate(browser, post_session_id, "document.title") or page.get("title") or "")
+            if not _post_purchase_summary_confirms_final_purchase(summary, url, title):
+                return _final_purchase_unavailable_result(
+                    url or str(page.get("url") or last_url or "about:blank"),
+                    title or str(page.get("title") or last_title or ""),
+                    source_url,
+                    source_title,
+                    "post-click Amazon page was a generic Your Orders page without a final-purchase thank-you or confirmation signal",
+                    summary,
+                )
             result = {
                 "state": "post_purchase_confirmation_available",
                 "status": "post_purchase_confirmation_available",
