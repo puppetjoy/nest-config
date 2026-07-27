@@ -4,6 +4,7 @@ include:
 
 backup_hour: '*/3'
 backup_job_ttl: 21600 # 6h; keep last two backup jobs in history
+backup_job_active_deadline_seconds: 7200
 affinity: {}
 tolerations: []
 plan_base: "nest::eyrie::%{nest::kubernetes::app}"
@@ -34,6 +35,7 @@ resources:
       timeZone: 'America/New_York'
       jobTemplate:
         spec:
+          activeDeadlineSeconds: "%{alias('backup_job_active_deadline_seconds')}"
           ttlSecondsAfterFinished: "%{alias('backup_job_ttl')}"
           template:
             spec:
