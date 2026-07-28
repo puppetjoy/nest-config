@@ -828,10 +828,22 @@ CHECKOUT_PAGE_SAFETY_JS = r"""
   const clean = (value) => (value || '').replace(/\s+/g, ' ').trim();
   const pageText = clean(document.body ? document.body.innerText : '');
   const lower = pageText.toLowerCase();
+  const visible = (el) => {
+    if (!el) return false;
+    const style = window.getComputedStyle(el);
+    const rect = el.getBoundingClientRect();
+    return Boolean(style && style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0);
+  };
+  const visibleText = (selector) => Array.from(document.querySelectorAll(selector))
+    .filter(visible)
+    .map((el) => clean(el.innerText || el.value || el.getAttribute('aria-label') || el.textContent || ''))
+    .join(' ')
+    .toLowerCase();
   const blockedReason = (() => {
     if (document.querySelector('form[action*="validateCaptcha"], input[name="password"], input[type="password"], input[name*="otp" i], input[name*="verification" i], input[name*="cvv" i], input[name*="cvc" i]')) return 'Sensitive login, verification, CAPTCHA, or payment security field is visible; Joy must take over.';
+    const challengeText = visibleText('form, main, [role="main"], #authportal-main-section, #cvf-page-content, #captchacharacters');
     if (/enter the characters you see below|not a robot|captcha/.test(lower)) return 'CAPTCHA or robot-check page is visible; Joy must take over.';
-    if (/sign in|password|passkey|verification code|two[- ]?factor|2fa|security check|suspicious/.test(lower)) return 'Login, passkey, 2FA, or security prompt is visible; Joy must take over.';
+    if (/(sign in|log in)\s+(to|with|for)|enter\s+(your\s+)?password|passkey|verification code|two[- ]?factor|2fa|security check|suspicious/.test(challengeText)) return 'Login, passkey, 2FA, or security prompt is visible; Joy must take over.';
     return '';
   })();
   const finalControls = Array.from(document.querySelectorAll('a, button, input, [role="button"], [role="link"]'))
@@ -994,7 +1006,7 @@ CHECKOUT_PREP_CONTROLS_JS = r"""
     final_purchase_controls_visible: finalPurchaseControls.slice(0, 8),
     final_purchase_control_count: finalPurchaseControls.length,
     sensitive_controls_suppressed_count: skippedSensitiveControls.length,
-    policy: 'Checkout-prep control inventory returns sanitized labels/selectors for ordinary review-page controls only. Final order submission and address/payment/account/security controls are withheld or blocked.'
+    policy: 'Checkout-prep control inventory returns sanitized labels/selectors for ordinary review-page controls only. Address/payment/account/security controls are withheld or blocked. Final order submission remains available through secure_browser_click approved_effect=final_purchase on a visible final purchase control when Joy directs Star.'
   };
 })()
 """
@@ -5094,6 +5106,26 @@ def _checkout_candidate_allowed_for_source(page: dict[str, Any], source_url: str
     return True
 
 
+def _post_click_non_blank_fallback_pages(pages: list[dict[str, str]], original_target_id: str, pre_click_target_ids: set[str]) -> list[dict[str, str]]:
+    """Return live non-blank pages that are safe ownership fallbacks after a click.
+
+    Full-access secure-browser control must not collapse Star back to
+    about:blank just because a retailer uses an interstitial, same-tab blanking,
+    or a third-party checkout URL that does not match our checkout-page regexes
+    yet. Prefer pages created by this click, but fall back to any live non-blank
+    page rather than manufacturing/storing a blank owner target.
+    """
+    candidates = [page for page in pages if str(page.get("id") or "") and not _is_blank_page_url(str(page.get("url") or ""))]
+    if pre_click_target_ids:
+        new_pages = [page for page in candidates if str(page.get("id") or "") not in pre_click_target_ids]
+        if new_pages:
+            return new_pages
+    original_pages = [page for page in candidates if str(page.get("id") or "") == original_target_id]
+    if original_pages:
+        return original_pages
+    return candidates
+
+
 def _select_post_click_owner_page(
     browser: CdpSession,
     original_target_id: str,
@@ -5147,6 +5179,10 @@ def _select_post_click_owner_page(
                 if str(page.get("id") or "") == original_target_id:
                     return {"id": original_target_id, "url": current_url, "title": current_title or str(page.get("title") or "")}
             return {"id": original_target_id, "url": current_url, "title": current_title}
+        if prefer_checkout and time.time() >= deadline:
+            fallback_pages = _post_click_non_blank_fallback_pages(pages, original_target_id, pre_click_target_ids)
+            if fallback_pages:
+                return fallback_pages[-1]
         current_page = _deterministic_current_page(pages)
         if current_page is not None and (not prefer_checkout or time.time() >= deadline):
             return current_page
@@ -6032,7 +6068,7 @@ def _click(selector: str, reason: str, approved_effect: str) -> dict[str, Any]:
             result = _evaluate(browser, session_id, FINAL_PURCHASE_CLICK_JS) or {}
             if not result.get("clicked"):
                 result.setdefault("selector_fallback", "final_purchase_control_scan")
-        elif effect == "checkout_prep":
+        elif effect in CHECKOUT_APPROVED_EFFECTS:
             result = _trusted_click(browser, session_id, safe_selector)
         else:
             result = _evaluate(browser, session_id, CLICK_JS.replace("__SELECTOR__", _json_literal(safe_selector))) or {}
