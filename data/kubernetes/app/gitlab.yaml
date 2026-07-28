@@ -133,6 +133,7 @@ values:
   gitlab:
     gitaly:
       persistence:
+        size: 100Gi
         storageClass: data-crypt
     gitlab-shell:
       service:
