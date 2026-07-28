@@ -1367,6 +1367,8 @@ def _compact_checkout_review_for_tool_result(checkout_review: dict[str, Any], ma
 
 def _compact_large_result(data: dict[str, Any]) -> dict[str, Any]:
     compact = dict(data)
+    if compact.get("operation") == "retail_order_refresh_run":
+        compact = _compact_order_refresh_run_result(compact)
     if compact.get("operation") == "owner_checkout_review":
         compact = _compact_owner_checkout_review_result(compact)
     checkout_review = compact.get("checkout_review")
@@ -1380,6 +1382,93 @@ def _compact_large_result(data: dict[str, Any]) -> dict[str, Any]:
         compact["blocked_metadata"] = metadata
         compact["checkout_prep_controls"] = controls[:12]
     return compact
+
+
+def _compact_order_refresh_run_result(data: dict[str, Any]) -> dict[str, Any]:
+    """Return scheduler/tool-safe facts for a retail order refresh pass.
+
+    A full refresh can contain the complete plan plus every source attempt,
+    preview candidate order, stored order, and notification response for each
+    active ledger row. That is still sanitized, but it is much too noisy for a
+    scheduled systemd unit and can exceed the Star-visible tool result budget.
+    Preserve the material outcomes and notification counts without echoing raw
+    browser/Gmail/carrier observations or large per-order payloads.
+    """
+
+    plan_value = data.get("plan")
+    plan = plan_value if isinstance(plan_value, dict) else {}
+    due_orders_value = plan.get("due_orders")
+    due_orders = due_orders_value if isinstance(due_orders_value, list) else []
+    refreshed_value = data.get("refreshed")
+    refreshed = refreshed_value if isinstance(refreshed_value, list) else []
+    compact_refreshed: list[dict[str, Any]] = []
+    source_attempts: dict[str, dict[str, int]] = {}
+    applied_count = 0
+    notification_status_counts: dict[str, int] = {}
+
+    for item in refreshed:
+        if not isinstance(item, dict):
+            continue
+        compact_item: dict[str, Any] = {"handle": _bounded_checkout_scalar(item.get("handle"), 80)}
+        attempts_value = item.get("attempts")
+        attempts = attempts_value if isinstance(attempts_value, list) else []
+        compact_attempts: list[dict[str, str]] = []
+        for attempt in attempts:
+            if not isinstance(attempt, dict):
+                continue
+            source = _bounded_checkout_scalar(attempt.get("source"), 80, "unknown") or "unknown"
+            status = _bounded_checkout_scalar(attempt.get("status"), 80, "unknown") or "unknown"
+            source_counts = source_attempts.setdefault(source, {})
+            source_counts[status] = source_counts.get(status, 0) + 1
+            compact_attempts.append({"source": source, "status": status})
+        compact_item["attempts"] = compact_attempts[:5]
+        if len(compact_attempts) > 5:
+            compact_item["attempts_truncated_from"] = len(compact_attempts)
+
+        applied = item.get("applied") if isinstance(item.get("applied"), dict) else None
+        if applied:
+            applied_count += 1
+            applied_summary: dict[str, Any] = {}
+            observation = applied.get("observation") if isinstance(applied.get("observation"), dict) else {}
+            if observation:
+                applied_summary["observation"] = {
+                    "source": _bounded_checkout_scalar(observation.get("source"), 80),
+                    "status": _bounded_checkout_scalar(observation.get("status"), 80),
+                    "order_status": _bounded_checkout_scalar(observation.get("order_status"), 80),
+                    "eta_window": _bounded_checkout_scalar(observation.get("eta_window"), 120),
+                    "safe_delivery_facts_count": len(observation.get("safe_delivery_facts") or []) if isinstance(observation.get("safe_delivery_facts"), list) else 0,
+                }
+            preview = applied.get("preview") if isinstance(applied.get("preview"), dict) else {}
+            decision = preview.get("notification_decision") if isinstance(preview.get("notification_decision"), dict) else {}
+            if decision:
+                applied_summary["notification_decision"] = {
+                    "should_notify": bool(decision.get("should_notify")),
+                    "event_type": _bounded_checkout_scalar(decision.get("event_type"), 80),
+                    "already_notified": bool(decision.get("already_notified")),
+                }
+            notification = applied.get("notification") if isinstance(applied.get("notification"), dict) else {}
+            if notification:
+                notification_status = _bounded_checkout_scalar(notification.get("status"), 80, "unknown") or "unknown"
+                notification_status_counts[notification_status] = notification_status_counts.get(notification_status, 0) + 1
+                applied_summary["notification"] = {"status": notification_status}
+            compact_item["applied"] = applied_summary
+        compact_refreshed.append(compact_item)
+
+    refreshed_returned = min(len(compact_refreshed), 20)
+    return {
+        "operation": "retail_order_refresh_run",
+        "status": _bounded_checkout_scalar(data.get("status"), 80, "ok") or "ok",
+        "due_orders_count": len(due_orders),
+        "refreshed_count": len(refreshed),
+        "applied_count": applied_count,
+        "notifications_sent": data.get("notifications_sent", 0),
+        "notification_status_counts": notification_status_counts,
+        "source_attempt_status_counts": source_attempts,
+        "refreshed": compact_refreshed[:refreshed_returned],
+        "refreshed_returned": refreshed_returned,
+        "refreshed_truncated_from": len(compact_refreshed) if len(compact_refreshed) > refreshed_returned else 0,
+        "privacy_boundary": "Scheduled refresh output is compact and sanitized: counts, safe handles, coarse statuses, notification decisions, and ETA/status facts only; no raw order numbers, browser/Gmail/carrier content, address/payment/account data, screenshots, or checkout controls.",
+    }
 
 
 def _bounded_checkout_scalar(value: Any, max_chars: int = 160, default: str = "") -> str:
