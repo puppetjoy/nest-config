@@ -5,7 +5,6 @@
 #
 # @example Basic usage
 #   nest::labelname('kestrel-console') # => 'kconsole'
-#   nest::labelname('eagle-gui')       # => 'eaglegui'
 #   nest::labelname('falcon-gui12')    # => 'falgui12'
 #   nest::labelname('foobarbaz12')     # => 'foobar12'
 #   nest::labelname('short')           # => 'short'

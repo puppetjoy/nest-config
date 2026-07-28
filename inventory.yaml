@@ -80,7 +80,7 @@ groups:
       - name: 'eyrie-workers'
         targets:
           - _plugin: puppetdb
-            query: "inventory[certname] { certname ~ '^eagle(t\\d+|$)' }"
+            query: "inventory[certname] { certname = 'eagle' }"
             target_mapping:
               name: certname
               uri: facts.fqdn
@@ -94,7 +94,7 @@ groups:
       - name: 'eyrie-workstations'
         targets:
           - _plugin: puppetdb
-            query: "nodes { inventory { facts.profile.variant = 'workstation' } and resources { type = 'Class' and title = 'Nest::Service::Kubernetes' } }"
+            query: "nodes { inventory { facts.profile.variant = 'workstation' and certname != 'eagle' } and resources { type = 'Class' and title = 'Nest::Service::Kubernetes' } }"
             target_mapping:
               name: certname
               uri: facts.fqdn

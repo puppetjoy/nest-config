@@ -1,6 +1,0 @@
-[Match]
-Host=eagle
-
-[NetDev]
-Kind=bridge
-Name=br0

@@ -1,3 +1,4 @@
 ---
-nest::external_interfaces: ['br0']
+nest::dtb_file: 'broadcom/bcm2712-rpi-500.dtb'
 nest::journal: persistent
+nest::text_scaling_factor: 1.1
