@@ -28,7 +28,7 @@ class nest::app::hermes (
   Optional[String[1]]            $telegram_bot_id                = undef,
   Boolean                        $telegram_rich_messages         = false,
   String[1]                      $model_provider                 = 'openai-codex',
-  String[1]                      $model_name                     = 'gpt-5.5',
+  String[1]                      $model_name                     = 'gpt-5.6-sol',
   String[1]                      $model_base_url                 = 'https://chatgpt.com/backend-api/codex',
   Hash[String[1], Any]           $providers                      = {},
   String[1]                      $auxiliary_provider             = 'openai-codex',

@@ -21,7 +21,7 @@ define nest::lib::hermes (
   Optional[String[1]]  $telegram_bot_id            = undef,
   Boolean              $telegram_rich_messages     = false,
   String[1]            $model_provider             = 'openai-codex',
-  String[1]            $model_name                 = 'gpt-5.5',
+  String[1]            $model_name                 = 'gpt-5.6-sol',
   String[1]            $model_base_url             = 'https://chatgpt.com/backend-api/codex',
   Optional[Integer[1]] $model_max_tokens           = undef,
   Any                  $openrouter_api_key         = undef,
@@ -717,6 +717,10 @@ define nest::lib::hermes (
       'providers' => $tts_custom_providers,
     }),
     'auxiliary'        => {
+      'title_generation' => {
+        'provider' => $auxiliary_provider,
+        'model'    => $auxiliary_mini_model,
+      },
       'compression' => {
         'provider' => $auxiliary_provider,
         'model'    => $auxiliary_mini_model,
