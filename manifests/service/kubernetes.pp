@@ -1,6 +1,7 @@
 class nest::service::kubernetes (
-  Sensitive $bolt_private_key,
-  Boolean $control_plane = false,
+  Sensitive         $bolt_private_key,
+  Boolean           $control_plane = false,
+  Optional[Integer] $max_pods      = undef,
 ) {
   include nest
   include nest::base::bird
@@ -34,7 +35,9 @@ class nest::service::kubernetes (
   }
   ->
   file { '/etc/kubernetes/kubelet.env':
-    content => epp('nest/kubernetes/kubelet.env.epp'),
+    content => epp('nest/kubernetes/kubelet.env.epp', {
+      max_pods => $max_pods,
+    }),
     notify  => Service['kubelet'],
   }
 
