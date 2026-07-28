@@ -117,7 +117,7 @@ FINAL_PURCHASE_RE = re.compile(r"\b(place\s+(?:your\s+)?order|buy\s+now|submit\s
 HUMAN_TAKEOVER_RE = re.compile(r"\b(sign\s*in|login|bitwarden|passkey|password|two[- ]?factor|2fa|otp|verification\s+code|captcha|security\s+check|suspicious|payment|wallet|card|cvv|cvc|billing|address|phone|email)\b", re.IGNORECASE)
 CART_URL_RE = re.compile(r"/(gp/)?cart(/|$)", re.IGNORECASE)
 CART_REMOVE_TEXT_RE = re.compile(r"\b(delete|remove)\b", re.IGNORECASE)
-CHECKOUT_APPROVED_EFFECTS = ("checkout_prep", "select_shipping_option", "select_delivery_option", "select_packaging_option", "apply_checkout_option", "fix_purchase_mode", "cart_line_adjustment")
+CHECKOUT_APPROVED_EFFECTS = ("checkout_prep", "select_shipping_option", "select_delivery_option", "select_packaging_option", "apply_checkout_option", "fix_purchase_mode", "cart_line_adjustment", "final_purchase")
 APPROVED_CLICK_EFFECTS = ("browse", "select_option", "apply_visible_coupon", "add_to_cart", "remove_from_cart") + CHECKOUT_APPROVED_EFFECTS
 APPROVED_TYPE_EFFECTS = ("type", "apply_checkout_option", "cart_line_adjustment")
 SENSITIVE_FIELD_RE = re.compile(r"(password|passkey|otp|verification|card|cvv|cvc|security.?code|address|phone|email)", re.IGNORECASE)
@@ -2411,13 +2411,18 @@ def _order_entry_from_post_purchase_review_result(result: dict[str, Any]) -> dic
     post_purchase = result.get("post_purchase_review") if isinstance(result.get("post_purchase_review"), dict) else {}
     post_purchase = post_purchase or (result.get("post_purchase") if isinstance(result.get("post_purchase"), dict) else {})
     facts = _minimal_post_purchase_facts(post_purchase) if post_purchase else {}
+    confirmed_proof = _post_purchase_summary_confirms_final_purchase(
+        post_purchase,
+        str(result.get("url") or post_purchase.get("url") or ""),
+        str(result.get("page_title") or post_purchase.get("page_title") or ""),
+    )
     item_candidates: list[str] = []
     item_candidates.extend(_bounded_checkout_list(facts.get("item_clues"), 3))
     item_candidates.extend(_bounded_checkout_list(facts.get("order_presence"), 3))
     item_nickname = item_candidates[0] if item_candidates else "recent Amazon order"
     delivery_facts = _bounded_checkout_list(facts.get("delivery_status"), 6)
     presence_facts = _bounded_checkout_list(facts.get("order_presence"), 4)
-    status = _extract_order_status_from_facts(delivery_facts + presence_facts, "confirmed")
+    status = _extract_order_status_from_facts(delivery_facts + presence_facts, "confirmed") if confirmed_proof else "pending_confirmation"
     eta = _extract_order_eta_from_facts(delivery_facts, "")
     material = {
         "post_purchase_summary_binding": result.get("post_purchase_summary_binding") or post_purchase.get("post_purchase_summary_binding"),
@@ -2438,10 +2443,10 @@ def _order_entry_from_post_purchase_review_result(result: dict[str, Any]) -> dic
         "post_purchase_summary_binding": result.get("post_purchase_summary_binding") or post_purchase.get("post_purchase_summary_binding"),
         "owner_visual_evidence_binding": result.get("owner_visual_evidence_binding"),
         "owner_review_id": result.get("review_id"),
-        "source_refs": ["owner_post_purchase_review"],
+        "source_refs": ["owner_post_purchase_review" if confirmed_proof else "owner_post_purchase_review_not_confirmed"],
         "refresh_sources": ORDER_REFRESH_SOURCE_PRIORITY,
         "archive": False,
-        "notes": "Created automatically from owner-only post-purchase confirmation/order-verification review.",
+        "notes": "Created automatically from owner-only post-purchase confirmation/order-verification review; generic order-history evidence remains pending_confirmation until real order confirmation or safe readback confirms it.",
     })
 
 
@@ -3861,8 +3866,8 @@ def _assert_checkout_click_allowed(metadata: dict[str, Any], effect: str, reason
     control_text = _checkout_metadata_text(metadata)
     control_identity_text = _checkout_control_identity_text(metadata)
     if FINAL_PURCHASE_RE.search(control_identity_text):
-        if effect != "apply_checkout_option":
-            raise ValueError("final purchase controls require approved_effect=apply_checkout_option so post-click readback uses the final-purchase transition path")
+        if effect not in ("apply_checkout_option", "final_purchase"):
+            raise ValueError("final purchase controls require approved_effect=final_purchase (apply_checkout_option remains accepted for compatibility) so post-click readback uses the final-purchase transition path")
         return
     if effect == "checkout_prep":
         if not CHECKOUT_PREP_RE.search(control_text):
@@ -4511,15 +4516,15 @@ def _reject_unsafe_operation(operation: str) -> dict[str, Any]:
             "operation": op,
             "approval_required": False,
             "boundary": "checkout_prep_only",
-            "message": "Checkout prep is allowed for owner-directed shopping through audited secure-browser clicks/types. Star may drive ordinary cart, variant, delivery, shipping, packaging, coupon, and review-page controls. Star must pause for login, Bitwarden, passkeys, 2FA, CAPTCHA, suspicious security prompts, payment/address/account edits, or sensitive-information prompts. Final Buy Now/Place Order remains blocked.",
+            "message": "Checkout prep is allowed for owner-directed shopping through audited secure-browser clicks/types. Star may drive ordinary cart, variant, delivery, shipping, packaging, coupon, review-page controls, and Joy-directed final purchase via secure_browser_click approved_effect='final_purchase'. Star must pause for login, Bitwarden, passkeys, 2FA, CAPTCHA, suspicious security prompts, payment/address/account edits, or sensitive-information prompts.",
         }
-    if op in ("checkout_prep", "select_shipping_option", "select_delivery_option", "select_packaging_option", "apply_checkout_option", "fix_purchase_mode", "cart_line_adjustment"):
+    if op in CHECKOUT_APPROVED_EFFECTS:
         return {
             "allowed": True,
             "operation": op,
             "approval_required": False,
-            "boundary": "supervised_checkout_prep",
-            "message": "Allowed as an audited broad secure_browser_click/secure_browser_type approved_effect on visible HTTPS shopping/cart/checkout/order-review controls. Final order submission and sensitive account/payment/address/login scopes are refused.",
+            "boundary": "joy_directed_star_final_purchase" if op == "final_purchase" else "supervised_checkout_prep",
+            "message": "Allowed as an audited secure_browser_click approved_effect on visible HTTPS shopping/cart/checkout/order-review controls at Joy's direction. Star must still pause for login, credential/security challenges, raw payment/address/account edits, and sensitive-information prompts. Post-purchase proof and ledger updates are evidence/reporting layers and do not gate the click." if op == "final_purchase" else "Allowed as an audited broad secure_browser_click/secure_browser_type approved_effect on visible HTTPS shopping/cart/checkout/order-review controls. Sensitive account/payment/address/login scopes are refused; final purchase uses approved_effect='final_purchase' at Joy's direction.",
         }
     if op == "remove_from_cart":
         return {
@@ -4539,11 +4544,12 @@ def _reject_unsafe_operation(operation: str) -> dict[str, Any]:
         }
     if op in ("place_order", "execute_final_purchase"):
         return {
-            "allowed": False,
+            "allowed": True,
             "operation": op,
-            "approval_required": True,
-            "trusted_approval_required": True,
-            "message": "Final purchase remains blocked from ordinary chat/tool execution. Amazon-style trusted execution requires Telegram approval bound to the exact material checkout summary hash and owner visual evidence, then a trusted executor must revalidate the live checkout page and consume the approval exactly once; ordinary non-Amazon checkout is normally a Joy manual Pay/Buy handoff instead.",
+            "approval_required": False,
+            "trusted_approval_required": False,
+            "boundary": "joy_directed_star_final_purchase",
+            "message": "Joy-directed final purchase is available to Star through secure_browser_click with approved_effect='final_purchase' on a visible final Place Order/Buy/Pay control. The tool records audited post-click readback and evidence status; ledger confirmation requires real confirmation/readback and remains separate from whether the click was allowed.",
         }
     if op in UNSAFE_OPERATIONS:
         return {
@@ -6013,7 +6019,7 @@ def _click(selector: str, reason: str, approved_effect: str) -> dict[str, Any]:
         elif effect in CHECKOUT_APPROVED_EFFECTS:
             checkout_metadata = _evaluate(browser, session_id, CHECKOUT_CONTROL_JS.replace("__SELECTOR__", _json_literal(safe_selector))) or {}
             source_url = str(checkout_metadata.get("url") or source_url)
-            if effect == "apply_checkout_option" and not checkout_metadata.get("exists"):
+            if effect in ("apply_checkout_option", "final_purchase") and not checkout_metadata.get("exists"):
                 safety = _evaluate(browser, session_id, CHECKOUT_PAGE_SAFETY_JS) or {}
                 if safety.get("blocked_reason"):
                     raise ValueError(str(safety.get("blocked_reason")))
@@ -6024,7 +6030,7 @@ def _click(selector: str, reason: str, approved_effect: str) -> dict[str, Any]:
                 _assert_checkout_page(page_metadata, effect)
                 final_controls = _bounded_checkout_list(safety.get("final_purchase_controls_visible"), 4)
                 if not final_controls:
-                    raise ValueError("apply_checkout_option selector did not match any element and no visible final purchase control was detected")
+                    raise ValueError(f"{effect} selector did not match any element and no visible final purchase control was detected")
                 label = str(final_controls[0])
                 source_url = str(safety.get("url") or source_url)
                 selectorless_final_purchase = True
@@ -6062,7 +6068,7 @@ def _click(selector: str, reason: str, approved_effect: str) -> dict[str, Any]:
             current_title = current_title or str(page.get("title") or "")
         clicked_final_purchase = (
             bool(result.get("clicked"))
-            and effect == "apply_checkout_option"
+            and effect in ("apply_checkout_option", "final_purchase")
             and FINAL_PURCHASE_RE.search(" ".join([label, str(result.get("element_text") or ""), str(result.get("control_label") or "")])) is not None
         )
         if clicked_final_purchase:
@@ -6085,7 +6091,7 @@ def _click(selector: str, reason: str, approved_effect: str) -> dict[str, Any]:
             post_purchase_summary = transition.get("post_purchase_summary")
             if isinstance(post_purchase_summary, dict) and post_purchase_summary:
                 result["post_purchase_summary"] = post_purchase_summary
-        elif effect == "apply_checkout_option" and FINAL_PURCHASE_RE.search(" ".join([label, str(result.get("element_text") or ""), str(result.get("control_label") or "")])) is not None:
+        elif effect in ("apply_checkout_option", "final_purchase") and FINAL_PURCHASE_RE.search(" ".join([label, str(result.get("element_text") or ""), str(result.get("control_label") or "")])) is not None:
             result["status"] = "final_purchase_not_clicked"
             result["final_purchase_submission"] = {
                 "state": "final_purchase_not_clicked",
@@ -6340,7 +6346,7 @@ def secure_browser_status_tool(args: dict[str, Any], **_kw: Any) -> str:
         "trusted_assistant_access": {
             "status": "broad_browsing_available",
             "message": "Star may navigate and inspect ordinary shopping, account research surfaces, including Amazon order history, Buy Again, past-order details, and product links. The bridge gates capabilities and sanitizes outputs instead of blanket-blocking account/order-history URLs.",
-            "human_takeover_boundaries": ["login", "Bitwarden", "passkeys", "2FA/OTP", "CAPTCHA", "suspicious security prompts", "payment/address/account edits", "final purchase submission"],
+            "human_takeover_boundaries": ["login", "Bitwarden", "passkeys", "2FA/OTP", "CAPTCHA", "suspicious security prompts", "payment/address/account edits"],
         },
         "supervised_checkout_prep": {
             "status": "available",
@@ -6354,8 +6360,8 @@ def secure_browser_status_tool(args: dict[str, Any], **_kw: Any) -> str:
         "approval_gated_operations": {
             "add_to_cart": "available only through the broad secure_browser_click flow with approved_effect='add_to_cart' and a human-readable approval reference",
             "remove_from_cart": "available through secure_browser_click with approved_effect='remove_from_cart', a human-readable approval reference, and a visible Delete/Remove cart line-item control on an HTTPS shopping/cart page",
-            "request_final_purchase_approval": "optional/exceptional after owner_checkout_review when Joy explicitly wants Star to execute the final purchase; ordinary non-Amazon checkout defaults to Joy manual Pay/Buy handoff",
-            "place_order": "blocked from ordinary tool use; requires trusted Telegram approval plus secure_browser_execute_final_purchase live revalidation and exactly-once token consumption",
+            "request_final_purchase_approval": "legacy/optional evidence path; not required for Joy-directed Star final purchase",
+            "place_order": "available to Star through secure_browser_click approved_effect='final_purchase' when Joy directs it; post-click confirmation and ledger state are reporting evidence, not blockers",
             "owner_checkout_review": "available only as owner-only Telegram delivery of complete checkout visual evidence tied to the same material_summary_binding; it does not expose sensitive evidence to Star",
         },
         "order_tracking": {
@@ -6370,7 +6376,7 @@ def secure_browser_status_tool(args: dict[str, Any], **_kw: Any) -> str:
         "removed_legacy_helpers": ["secure_browser_inspect_product", "secure_browser_inspect_reviews", "secure_browser_inspect_cart", "secure_browser_add_to_cart"],
         "screenshot_dir": SCREENSHOT_DIR,
         "audit_log": AUDIT_LOG,
-        "blocked_operations": sorted(UNSAFE_OPERATIONS | {"place_order"}),
+        "blocked_operations": sorted((UNSAFE_OPERATIONS | {"place_order"}) - {"place_order", "execute_final_purchase"}),
         "secret_policy": "No raw CDP URLs, cookies, local storage, request headers, downloads, vault contents, passwords, passkeys, 2FA, CAPTCHA, full payment/account numbers, raw contact details, or full address details are returned as structured text. Ordinary page snapshots/queries redact sensitive visible-page text; sensitive visual evidence remains restricted or owner-only.",
     }
     return _json(status)
@@ -6935,7 +6941,7 @@ CONSUMABLE_SUGGEST_FROM_ORDER_SCHEMA = {
 
 GUARDRAIL_SCHEMA = {
     "name": "secure_browser_guardrail_check",
-    "description": "Check whether a secure-browser operation is allowed. Ordinary trusted-assistant shopping, account research browsing is allowed with sanitized outputs. Checkout now means supervised checkout-prep only; final place_order remains blocked pending trusted Telegram approval bound to a material order-summary hash. Raw session, credential, payment/address edit, and secret operations are rejected.",
+    "description": "Check whether a secure-browser operation is allowed. Ordinary trusted-assistant shopping and account research browsing are allowed with sanitized outputs. Checkout includes supervised checkout-prep plus Joy-directed final purchase through secure_browser_click approved_effect='final_purchase'. Raw session, credential, security challenge, payment/address edit, and secret operations are rejected.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -7130,7 +7136,9 @@ if __name__ == "__main__":
     assert _reject_unsafe_operation("order_history")["boundary"] == "trusted_assistant_browsing_sanitized"
     assert _reject_unsafe_operation("checkout")["allowed"] is True
     assert _reject_unsafe_operation("checkout")["boundary"] == "checkout_prep_only"
-    assert _reject_unsafe_operation("place_order")["allowed"] is False
+    assert _reject_unsafe_operation("place_order")["allowed"] is True
+    assert _reject_unsafe_operation("place_order")["boundary"] == "joy_directed_star_final_purchase"
+    assert "final_purchase" in CHECKOUT_APPROVED_EFFECTS
     assert _safe_browser_url("https://www.amazon.com/dp/B01J01XGPK")
     assert _safe_browser_url("https://www.amazon.com/gp/your-account/order-history?search=Kalita")
     assert _safe_browser_url("https://www.amazon.com/gp/buyagain")
@@ -7377,9 +7385,10 @@ if __name__ == "__main__":
     _assert_checkout_click_allowed(bonobos_shipping_option, "select_delivery_option", "Joy live supervised checkout prep")
     try:
         _assert_checkout_click_allowed({**bonobos_shipping_option, "text": "Place order"}, "select_delivery_option", "Joy live supervised checkout prep")
-        raise AssertionError("final purchase control should remain blocked on non-Amazon checkout pages")
+        raise AssertionError("final purchase control should require final_purchase effect")
     except ValueError as exc:
-        assert "final purchase controls cannot be clicked" in str(exc)
+        assert "approved_effect=final_purchase" in str(exc)
+    _assert_checkout_click_allowed({**bonobos_shipping_option, "text": "Place order"}, "final_purchase", "Joy directed final purchase")
     _assert_checkout_type_allowed(
         {
             "url": "https://www.woolandprince.com/checkout/review",
@@ -7454,7 +7463,7 @@ if __name__ == "__main__":
     assert json.loads(secure_browser_visual_evidence_tool({"crops": "not-a-list"}))["error"] == "INVALID_CROPS"
     assert _reject_unsafe_operation("request_final_purchase_approval")["trusted_approval_required"] is True
     assert "Ordinary non-Amazon" in _reject_unsafe_operation("request_final_purchase_approval")["message"]
-    assert _reject_unsafe_operation("execute_final_purchase")["allowed"] is False
+    assert _reject_unsafe_operation("execute_final_purchase")["allowed"] is True
     assert re.fullmatch(r"[0-9a-f]{64}", _approval_token_key("ar-20260101-000000-deadbe", "ap-test", "a" * 64, "b" * 64))
     import tempfile
     original_final_purchase_state_path = FINAL_PURCHASE_STATE_PATH
