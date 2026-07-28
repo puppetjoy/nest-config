@@ -5152,7 +5152,15 @@ def _select_post_click_owner_page(
     """
     original_target_id = str(original_target_id or "")
     pre_click_target_ids = {str(target_id) for target_id in pre_click_target_ids or set() if str(target_id)}
-    deadline = time.time() + (5.0 if prefer_checkout else 0.0)
+    # Checkout/interstitial clicks often run through a transient about:blank
+    # document before the real order-review context appears.  Five seconds was
+    # long enough for simple third-party checkout popups but too short for
+    # Amazon's BYG/"Need anything else?" continue path, causing the owner tab to
+    # be persisted as about:blank while the live browser was still navigating.
+    # Use the same bounded load timeout as explicit navigations so ordinary
+    # shopping clicks still settle quickly when a non-blank target appears, but
+    # checkout-prep flows get enough time to recover from same-tab blanking.
+    deadline = time.time() + (PAGE_LOAD_TIMEOUT_SECONDS if prefer_checkout else 0.0)
     while True:
         pages = _page_candidates(browser)
         if prefer_checkout:
