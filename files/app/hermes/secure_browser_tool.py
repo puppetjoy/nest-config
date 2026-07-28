@@ -118,6 +118,7 @@ HUMAN_TAKEOVER_RE = re.compile(r"\b(sign\s*in|login|bitwarden|passkey|password|t
 CART_URL_RE = re.compile(r"/(gp/)?cart(/|$)", re.IGNORECASE)
 CART_REMOVE_TEXT_RE = re.compile(r"\b(delete|remove)\b", re.IGNORECASE)
 CHECKOUT_APPROVED_EFFECTS = ("checkout_prep", "select_shipping_option", "select_delivery_option", "select_packaging_option", "apply_checkout_option", "fix_purchase_mode", "cart_line_adjustment", "final_purchase")
+FINAL_PURCHASE_STATE_AVAILABLE = "available_via_secure_browser_click_final_purchase"
 APPROVED_CLICK_EFFECTS = ("browse", "select_option", "apply_visible_coupon", "add_to_cart", "remove_from_cart") + CHECKOUT_APPROVED_EFFECTS
 APPROVED_TYPE_EFFECTS = ("type", "apply_checkout_option", "cart_line_adjustment")
 SENSITIVE_FIELD_RE = re.compile(r"(password|passkey|otp|verification|card|cvv|cvc|security.?code|address|phone|email)", re.IGNORECASE)
@@ -1348,7 +1349,7 @@ def _compact_checkout_review_for_tool_result(checkout_review: dict[str, Any], ma
         "page_title": _bounded_checkout_scalar(checkout_review.get("page_title"), 200),
         "material_summary_binding": _bounded_checkout_scalar(checkout_review.get("material_summary_binding"), 128),
         "checkout_prep_state": _bounded_checkout_scalar(checkout_review.get("checkout_prep_state"), 100),
-        "final_purchase_state": "blocked_pending_trusted_approval",
+        "final_purchase_state": FINAL_PURCHASE_STATE_AVAILABLE,
         "minimal_order_facts": _minimal_owner_checkout_facts(checkout_review),
         "checkout_prep_controls_returned": min(control_count, max_controls),
         "checkout_prep_controls_truncated_from": control_count,
@@ -1515,7 +1516,7 @@ def _minimal_owner_checkout_facts(checkout_review: dict[str, Any]) -> dict[str, 
         "one_time_selected": bool(checkout_review.get("one_time_selected")),
         "informational_flags": _bounded_checkout_list(checkout_review.get("informational_flags"), 3),
         "surprise_flags": _bounded_checkout_list(checkout_review.get("surprise_flags"), 3),
-        "final_purchase_state": "blocked_pending_trusted_approval",
+        "final_purchase_state": FINAL_PURCHASE_STATE_AVAILABLE,
     }
 
 
