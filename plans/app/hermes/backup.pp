@@ -22,7 +22,9 @@ plan nest::app::hermes::backup (
       runuser -u ${user.shellquote} -- /opt/hermes-agent/venv/bin/hermes --profile ${profile_name.shellquote} backup --quick
       | COMMAND
 
-    return run_command($command, $target, 'Create Hermes quick snapshot')
+    return run_command($command, $target, 'Create Hermes quick snapshot', {
+      '_run_as' => 'root',
+    })
   }
 
   $timestamp = run_command('date +%Y%m%d-%H%M%S', $target, 'Timestamp Hermes backup').first.value['stdout'].chomp
@@ -36,5 +38,7 @@ plan nest::app::hermes::backup (
     printf '%s\n' ${archive.shellquote}
     | COMMAND
 
-  return run_command($command, $target, 'Create Hermes backup')
+  return run_command($command, $target, 'Create Hermes backup', {
+    '_run_as' => 'root',
+  })
 }
