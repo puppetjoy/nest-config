@@ -2,7 +2,7 @@
 node_role: workstation
 ssd_osd_count: 3
 ssd_volume_size: 10Gi
-hdd_volume_size: 200Gi
+hdd_volume_size: 300Gi
 service_name: "%{nest::kubernetes::service}-%{nest::kubernetes::namespace}"
 cert_issuer: "eyrie-ca-%{nest::kubernetes::namespace}"
 cert_issuer_kind: Issuer
@@ -36,6 +36,9 @@ values:
       allowMultiplePerNode: true
     mgr:
       allowMultiplePerNode: true
+    storage:
+      # Keep Ceph's CRUSH weights aligned when existing test OSD PVCs grow.
+      allowOsdCrushWeightUpdate: true
 
 patches:
   20-pools:
