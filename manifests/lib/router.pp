@@ -40,7 +40,13 @@ class nest::lib::router {
     ;
 
     '/etc/dnsmasq.d/dhcp-hosts.conf':
-      content => $nest::fixed_ips.map |$name, $ip| { "dhcp-host=${name},${ip},infinite\n" }.join(''),
+      content => $nest::fixed_ips.map |$name, $ip| {
+        $client = $nest::dhcp_client_ids[$name] ? {
+          undef   => $name,
+          default => "id:${nest::dhcp_client_ids[$name]},${name}",
+        }
+        "dhcp-host=${client},${ip},infinite\n"
+      }.join(''),
     ;
 
     '/etc/dnsmasq.d/host-records.conf':

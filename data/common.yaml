@@ -156,6 +156,11 @@ nest::distcc_hosts:
 # 100–254: dynamic DHCP
 # Hostnames in roughly alphabetical + chronological order
 # See: https://gitlab.joyfullee.me/nest/config/-/wikis/Hosts#addressing-philosophy
+nest::dhcp_client_ids:
+  # storage2's active-backup bond changes MAC with its active slave. Match its
+  # stable systemd-networkd DHCP client ID so it keeps its Kubernetes node IP.
+  storage2: 'ff:b5:01:e8:61:00:02:00:00:ab:11:7e:6f:c7:35:ee:1a:2d:8e'
+
 nest::fixed_ips:
   control1: '172.22.4.7'
   control2: '172.22.4.8'

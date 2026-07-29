@@ -1,6 +1,8 @@
 ---
 node_role: storage
-storage_class: eagle
+# Prometheus TSDB requires local block semantics and must not depend on the
+# NFS server it is intended to monitor.
+storage_class: data-crypt
 
 resources:
   certs: {}
