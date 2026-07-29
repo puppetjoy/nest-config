@@ -82,9 +82,6 @@ nest::service::gitlab_runner::instances:
       - '/srv/puppet/r10k/config:/etc/puppetlabs/r10k:ro'
       - '/srv/puppet/r10k/cache:/var/cache/r10k'
 
-# Temporary headroom while Falcon hosts the retired Eagle workers' workloads
-nest::service::kubernetes::max_pods: 160
-
 nest::service::reverse_proxy::hosts:
   nzbget.nest:
     destination: '127.0.0.1:6789'
