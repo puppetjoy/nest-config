@@ -1,0 +1,7 @@
+[Match]
+Host=eagle
+Name=wl*
+
+[Link]
+RequiredForOnline=no
+ActivationPolicy=down
