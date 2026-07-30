@@ -55,7 +55,7 @@ class nest::service::gitlab_runner (
     exec { 'gitlab-runner-reconcile-invalid':
       command => '/bin/true',
       unless  => '/usr/local/bin/gitlab-runner verify',
-      require => $run,
+      require => $install,
       notify  => Exec['gitlab-runner-unregister-all'],
     }
 
