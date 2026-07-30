@@ -132,12 +132,13 @@ define nest::lib::gitlab_runner (
     }
 
     file { "/srv/gitlab-runner/.register-${name}.sh":
-      ensure  => $ensure,
-      mode    => '0600',
-      owner   => 'root',
-      group   => 'root',
-      content => "${register_command}\n",
-      notify  => Exec['gitlab-runner-unregister-all'],
+      ensure    => $ensure,
+      mode      => '0600',
+      owner     => 'root',
+      group     => 'root',
+      show_diff => false,
+      content   => "${register_command}\n",
+      notify    => Exec['gitlab-runner-unregister-all'],
     }
 
     if $ensure == present {
