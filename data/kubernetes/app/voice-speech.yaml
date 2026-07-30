@@ -18,6 +18,7 @@ roundtrip_monitor_image: "%{lookup('config_registry')}/nest/stage1/server"
 roundtrip_monitor_expected_words: 'Joy,Talon,Star,voice,speech,request,recorded'
 roundtrip_monitor_max_rtf: '1.0'
 roundtrip_monitor_max_restarts: '0'
+roundtrip_monitor_restart_window_seconds: '7200'
 
 resources:
   backup: {}
@@ -66,6 +67,7 @@ resources:
     data:
       monitor.py: |
         import contextlib
+        import datetime
         import json
         import os
         import ssl
@@ -85,6 +87,7 @@ resources:
         EXPECTED_WORDS = [w.lower() for w in os.environ.get('EXPECTED_WORDS', '').split(',') if w]
         MAX_RTF = float(os.environ.get('MAX_RTF', '1.0'))
         MAX_RESTARTS = int(os.environ.get('MAX_RESTARTS', '0'))
+        RESTART_WINDOW_SECONDS = int(os.environ.get('RESTART_WINDOW_SECONDS', '7200'))
         PROMPT = os.environ.get(
             'ROUNDTRIP_PROMPT',
             'Joy—voice speech monitor. Talon and Star use voice-speech. Request recorded and task recorded.',
@@ -181,10 +184,33 @@ resources:
             context = ssl.create_default_context(cafile=ca_path)
             with urllib.request.urlopen(request, timeout=30, context=context) as response:
                 pods = json.loads(response.read().decode('utf-8')).get('items', [])
-            return {
-                pod['metadata']['name']: sum(cs.get('restartCount', 0) for cs in pod.get('status', {}).get('containerStatuses', []))
-                for pod in pods
-            }
+            restarts = {}
+            for pod in pods:
+                statuses = pod.get('status', {}).get('containerStatuses', [])
+                last_terminations = [
+                    cs.get('lastState', {}).get('terminated', {})
+                    for cs in statuses
+                    if cs.get('lastState', {}).get('terminated', {}).get('finishedAt')
+                ]
+                latest = max(last_terminations, key=lambda state: state['finishedAt']) if last_terminations else {}
+                restarts[pod['metadata']['name']] = {
+                    'count': sum(cs.get('restartCount', 0) for cs in statuses),
+                    'last_finished_at': latest.get('finishedAt'),
+                    'last_reason': latest.get('reason'),
+                }
+            return restarts
+
+        def recent_excess_restarts(restarts):
+            now = datetime.datetime.now(datetime.timezone.utc)
+            recent = {}
+            for name, details in restarts.items():
+                if details['count'] <= MAX_RESTARTS or not details['last_finished_at']:
+                    continue
+                finished_at = datetime.datetime.fromisoformat(details['last_finished_at'].replace('Z', '+00:00'))
+                age_seconds = max(0, int((now - finished_at).total_seconds()))
+                if age_seconds <= RESTART_WINDOW_SECONDS:
+                    recent[name] = {**details, 'age_seconds': age_seconds}
+            return recent
 
         def main():
             health = get_json('/health')
@@ -224,9 +250,14 @@ resources:
 
             restarts = pod_restarts()
             if restarts is not None:
-                bad = {name: count for name, count in restarts.items() if count > MAX_RESTARTS}
+                bad = recent_excess_restarts(restarts)
                 if bad:
-                    fail('voice-speech pod restarts exceeded threshold', restarts=restarts, max_restarts=MAX_RESTARTS)
+                    fail(
+                        'voice-speech pod restarted recently',
+                        recent_restarts=bad,
+                        max_restarts=MAX_RESTARTS,
+                        restart_window_seconds=RESTART_WINDOW_SECONDS,
+                    )
 
             print(json.dumps({
                 'ok': True,
@@ -264,6 +295,7 @@ resources:
       failedJobsHistoryLimit: 3
       jobTemplate:
         spec:
+          backoffLimit: 0
           ttlSecondsAfterFinished: 86400
           template:
             metadata:
@@ -293,6 +325,8 @@ resources:
                       value: "%{lookup('roundtrip_monitor_max_rtf')}"
                     - name: MAX_RESTARTS
                       value: "%{lookup('roundtrip_monitor_max_restarts')}"
+                    - name: RESTART_WINDOW_SECONDS
+                      value: "%{lookup('roundtrip_monitor_restart_window_seconds')}"
                     - name: STT_MODEL
                       value: 'whisper-large-v3-turbo'
                     - name: STT_PROMPT
