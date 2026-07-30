@@ -52,6 +52,13 @@ class nest::service::gitlab_runner (
   }
 
   if $runner_ensure == present and !$facts['is_container'] {
+    exec { 'gitlab-runner-reconcile-invalid':
+      command => '/bin/true',
+      unless  => '/usr/local/bin/gitlab-runner verify',
+      require => $run,
+      notify  => Exec['gitlab-runner-unregister-all'],
+    }
+
     $register_script_excludes = $instances.keys.map |$instance| {
       ['!', '-name', ".register-${instance}.sh"]
     }
