@@ -185,13 +185,23 @@ plan nest::eyrie::gitlab::reconcile_gitaly_storage (
     ].shellquote, 'localhost', 'Expand the existing Gitaly PVC')
   }
 
+  # Ceph CSI reports FileSystemResizePending while no pod mounts the claim.
+  # Briefly remount the retained claim through the existing StatefulSet so the
+  # node-side filesystem resize can finish, then stop Gitaly again before the
+  # orphan-delete/recreate boundary.
+  run_command([
+    'kubectl', 'scale', 'statefulset', $statefulset,
+    '-n', $namespace, '--replicas=1',
+  ].shellquote, 'localhost', 'Remount the retained claim to finish filesystem expansion')
+
   $wait_resize_script = @("SCRIPT"/L$)
     set -eu
     for unused in \$(seq 1 120); do
       requested=\$(kubectl get pvc ${claim.shellquote} -n ${namespace.shellquote} -o jsonpath='{.spec.resources.requests.storage}')
       capacity=\$(kubectl get pvc ${claim.shellquote} -n ${namespace.shellquote} -o jsonpath='{.status.capacity.storage}')
       phase=\$(kubectl get pvc ${claim.shellquote} -n ${namespace.shellquote} -o jsonpath='{.status.phase}')
-      if [ "\${requested}" = ${desired_size.shellquote} ] && [ "\${capacity}" = ${desired_size.shellquote} ] && [ "\${phase}" = Bound ]; then
+      ready=\$(kubectl get statefulset ${statefulset.shellquote} -n ${namespace.shellquote} -o jsonpath='{.status.readyReplicas}')
+      if [ "\${requested}" = ${desired_size.shellquote} ] && [ "\${capacity}" = ${desired_size.shellquote} ] && [ "\${phase}" = Bound ] && [ "\${ready}" = 1 ]; then
         exit 0
       fi
       sleep 5
@@ -202,6 +212,12 @@ plan nest::eyrie::gitlab::reconcile_gitaly_storage (
     | SCRIPT
 
   run_command(['sh', '-c', $wait_resize_script].shellquote, 'localhost', 'Wait for CSI capacity expansion')
+
+  run_command([
+    'kubectl', 'scale', 'statefulset', $statefulset,
+    '-n', $namespace, '--replicas=0',
+  ].shellquote, 'localhost', 'Stop Gitaly after filesystem expansion')
+  run_command(['sh', '-c', $wait_stopped_script].shellquote, 'localhost', 'Wait for Gitaly to stop before StatefulSet recreation')
 
   run_command([
     'kubectl', 'delete', 'statefulset', $statefulset,
