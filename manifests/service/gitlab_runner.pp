@@ -95,7 +95,7 @@ class nest::service::gitlab_runner (
   nest::lib::container { 'gitlab-runner':
     ensure  => $ensure,
     dns     => $dns,
-    image   => 'gitlab/gitlab-runner:alpine-v19.0.4',
+    image   => 'gitlab/gitlab-runner:alpine-v19.0.2',
     volumes => [
       '/srv/gitlab-runner:/etc/gitlab-runner',
       '/run/podman/podman.sock:/var/run/docker.sock',
