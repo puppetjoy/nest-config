@@ -97,6 +97,7 @@ class nest::service::gitlab_runner (
     dns     => $dns,
     image   => 'gitlab/gitlab-runner:alpine-v19.0.2',
     volumes => [
+      '/etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt:ro',
       '/srv/gitlab-runner:/etc/gitlab-runner',
       '/run/podman/podman.sock:/var/run/docker.sock',
     ],
