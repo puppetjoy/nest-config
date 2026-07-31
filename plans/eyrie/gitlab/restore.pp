@@ -42,11 +42,12 @@ plan nest::eyrie::gitlab::restore (
     if !$preserve_runner_descriptions.empty {
       $preserved_runners_secret = "${service}-preserved-runners"
       $runner_descriptions_json = $preserve_runner_descriptions.to_json
-      $preserve_runners_ruby = @(RUBY)
+      $preserve_runners_ruby = @("RUBY")
         require 'json'
         descriptions = JSON.parse(%q{${runner_descriptions_json}})
         runners = descriptions.map do |description|
-          runner = Ci::Runner.find_by!(description: description)
+          runner = Ci::Runner.find_by(description: description)
+          raise "Runner not found: #{description}" unless runner
           {
             'description'       => runner.description,
             'runner_type'       => runner.runner_type,
@@ -211,7 +212,7 @@ plan nest::eyrie::gitlab::restore (
     run_command($kubectl_wait_started_cmd, 'localhost', "Wait for ${service} deployments")
 
     if !$preserve_runner_descriptions.empty {
-      $restore_runners_ruby = @(RUBY)
+      $restore_runners_ruby = @("RUBY")
         require 'json'
         JSON.parse(STDIN.read).each do |record|
           token = record.delete('token')
@@ -220,7 +221,7 @@ plan nest::eyrie::gitlab::restore (
           runner = Ci::Runner.new(record)
           runner.tag_list = tag_list
           runner.set_token(token)
-          runner.save!
+          raise "Runner restore failed for #{runner.description}: #{runner.errors.full_messages.join(', ')}" unless runner.save
           raise "Runner token restore failed for #{runner.description}" unless runner.reload.token == token
         end
         | RUBY
