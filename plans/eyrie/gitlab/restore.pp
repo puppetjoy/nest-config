@@ -67,7 +67,7 @@ plan nest::eyrie::gitlab::restore (
         'set -eu',
         "runners_json=\$(kubectl exec -n ${namespace} deploy/${service}-toolbox -- gitlab-rails runner ${preserve_runners_ruby.shellquote})",
         '[ -n "$runners_json" ]',
-        "printf '%s' \"$runners_json\" | kubectl create secret generic -n ${namespace} ${preserved_runners_secret} --from-file=runners.json=/dev/stdin --dry-run=client -o yaml | kubectl apply -f -",
+        "printf '%s' \"\${runners_json}\" | kubectl create secret generic -n ${namespace} ${preserved_runners_secret} --from-file=runners.json=/dev/stdin --dry-run=client -o yaml | kubectl apply -f -",
       ].join("\n")
       $kubectl_preserve_runners_cmd = [
         'sh', '-c', $preserve_runners_script,
@@ -228,7 +228,7 @@ plan nest::eyrie::gitlab::restore (
         'set -eu',
         "runners_json=\$(kubectl get secret -n ${namespace} ${preserved_runners_secret} -o jsonpath='{.data.runners\\.json}' | base64 -d)",
         '[ -n "$runners_json" ]',
-        "printf '%s' \"$runners_json\" | kubectl exec -i -n ${namespace} deploy/${service}-toolbox -- gitlab-rails runner ${restore_runners_ruby.shellquote}",
+        "printf '%s' \"\${runners_json}\" | kubectl exec -i -n ${namespace} deploy/${service}-toolbox -- gitlab-rails runner ${restore_runners_ruby.shellquote}",
       ].join("\n")
       $kubectl_restore_runners_cmd = [
         'sh', '-c', $restore_runners_script,
