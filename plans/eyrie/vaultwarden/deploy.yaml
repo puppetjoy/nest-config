@@ -36,12 +36,12 @@ steps:
       app: 'vaultwarden'
       chart: 'guerzon/vaultwarden'
       repo_url: 'https://guerzon.github.io/vaultwarden'
-      version: '0.38.0'
+      version: '0.44.0'
       subcharts:
         - service: "${service}-mariadb"
           app: 'mariadb'
           chart: 'oci://registry-1.docker.io/bitnamicharts/mariadb'
-          version: '26.1.0'
+          version: '26.2.1'
       deploy: $deploy
       init: $init
       wait: $init
