@@ -21,7 +21,7 @@ steps:
       chart: 'cnpg/cloudnative-pg'
       namespace: 'cnpg-system'
       repo_url: 'https://cloudnative-pg.github.io/charts'
-      version: '0.28.2'
+      version: '0.29.0'
       wait: true
       deploy: $deploy
       render_to: $render_to
