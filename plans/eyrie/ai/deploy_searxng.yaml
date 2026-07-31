@@ -31,7 +31,7 @@ steps:
       app: 'searxng'
       chart: 'searxng/searxng'
       repo_url: 'https://techpipe-io.github.io/searxng-helm-chart'
-      version: '0.1.6'
+      version: '0.1.8'
       deploy: $deploy
       init: $init
       wait: $init
