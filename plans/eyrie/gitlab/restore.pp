@@ -7,16 +7,19 @@
 # @param service Kubernetes service
 # @param service_name Unused
 # @param home_page_url Post-restore GitLab home page URL
+# @param backup_timestamp Exact backup timestamp to restore; defaults to latest
+# @param preserve_runner_descriptions Runner records to preserve across the database restore
 # @param restore Safety gate
 plan nest::eyrie::gitlab::restore (
-  TargetSpec       $targets           = 'eyrie-workstations',
-  String           $namespace         = 'test',
-  String           $service           = 'gitlab',
-  Optional[String] $service_name      = undef, # unused
-  String           $home_page_url     = "https://${service}-${namespace}.eyrie/explore",
-  String           $backups_namespace = 'default',
-  Optional[String] $backup_timestamp  = undef,
-  Boolean          $restore           = false,
+  TargetSpec       $targets                      = 'eyrie-workstations',
+  String           $namespace                    = 'test',
+  String           $service                      = 'gitlab',
+  Optional[String] $service_name                 = undef, # unused
+  String           $home_page_url                = "https://${service}-${namespace}.eyrie/explore",
+  String           $backups_namespace            = 'default',
+  Optional[String] $backup_timestamp             = undef,
+  Array[String]    $preserve_runner_descriptions = ['runner1-test'],
+  Boolean          $restore                      = false,
 ) {
   if $restore {
     $kubectl_scale_up_cmd = [
@@ -35,6 +38,43 @@ plan nest::eyrie::gitlab::restore (
       "${service}-webservice-default",
       '--replicas=0',
     ].flatten.shellquote
+
+    if !$preserve_runner_descriptions.empty {
+      $preserved_runners_secret = "${service}-preserved-runners"
+      $runner_descriptions_json = $preserve_runner_descriptions.to_json
+      $preserve_runners_ruby = @(RUBY)
+        require 'json'
+        descriptions = JSON.parse(%q{${runner_descriptions_json}})
+        runners = descriptions.map do |description|
+          runner = Ci::Runner.find_by!(description: description)
+          {
+            'description'       => runner.description,
+            'runner_type'       => runner.runner_type,
+            'registration_type' => runner.registration_type,
+            'active'            => runner.active,
+            'locked'            => runner.locked,
+            'run_untagged'      => runner.run_untagged,
+            'maximum_timeout'   => runner.maximum_timeout,
+            'access_level'      => runner.access_level,
+            'maintainer_note'   => runner.maintainer_note,
+            'tag_list'          => runner.tag_list,
+            'token'             => runner.token,
+          }
+        end
+        print(runners.to_json)
+        | RUBY
+      $preserve_runners_script = [
+        'set -eu',
+        "runners_json=\$(kubectl exec -n ${namespace} deploy/${service}-toolbox -- gitlab-rails runner ${preserve_runners_ruby.shellquote})",
+        '[ -n "$runners_json" ]',
+        "printf '%s' \"$runners_json\" | kubectl create secret generic -n ${namespace} ${preserved_runners_secret} --from-file=runners.json=/dev/stdin --dry-run=client -o yaml | kubectl apply -f -",
+      ].join("\n")
+      $kubectl_preserve_runners_cmd = [
+        'sh', '-c', $preserve_runners_script,
+      ].flatten.shellquote
+
+      run_command($kubectl_preserve_runners_cmd, 'localhost', "Preserve ${service} runner records")
+    }
 
     run_command($kubectl_scale_down_cmd, 'localhost', "Stop ${service}")
 
@@ -169,6 +209,40 @@ plan nest::eyrie::gitlab::restore (
     ].flatten.shellquote
 
     run_command($kubectl_wait_started_cmd, 'localhost', "Wait for ${service} deployments")
+
+    if !$preserve_runner_descriptions.empty {
+      $restore_runners_ruby = @(RUBY)
+        require 'json'
+        JSON.parse(STDIN.read).each do |record|
+          token = record.delete('token')
+          tag_list = record.delete('tag_list')
+          Ci::Runner.where(description: record.fetch('description')).destroy_all
+          runner = Ci::Runner.new(record)
+          runner.tag_list = tag_list
+          runner.set_token(token)
+          runner.save!
+          raise "Runner token restore failed for #{runner.description}" unless runner.reload.token == token
+        end
+        | RUBY
+      $restore_runners_script = [
+        'set -eu',
+        "runners_json=\$(kubectl get secret -n ${namespace} ${preserved_runners_secret} -o jsonpath='{.data.runners\\.json}' | base64 -d)",
+        '[ -n "$runners_json" ]',
+        "printf '%s' \"$runners_json\" | kubectl exec -i -n ${namespace} deploy/${service}-toolbox -- gitlab-rails runner ${restore_runners_ruby.shellquote}",
+      ].join("\n")
+      $kubectl_restore_runners_cmd = [
+        'sh', '-c', $restore_runners_script,
+      ].flatten.shellquote
+
+      run_command($kubectl_restore_runners_cmd, 'localhost', "Restore ${service} runner records")
+
+      $kubectl_delete_preserved_runners_cmd = [
+        'kubectl', 'delete', 'secret', '-n', $namespace,
+        $preserved_runners_secret,
+      ].flatten.shellquote
+
+      run_command($kubectl_delete_preserved_runners_cmd, 'localhost', "Delete preserved ${service} runner records")
+    }
 
     $home_page_url_script = [
       'for i in $(seq 1 60); do',
