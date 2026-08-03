@@ -93,6 +93,19 @@ values:
       prometheusEndpoint: http://ceph-monitoring-prometheus:9090
       ssl: false
 
+    # Small ARM storage nodes can spend tens of seconds in Ceph/RocksDB work
+    # Avoid killing healthy daemons during that work
+    healthCheck:
+      livenessProbe:
+        mon:
+          probe:
+            failureThreshold: 6
+            timeoutSeconds: 30
+        osd:
+          probe:
+            failureThreshold: 6
+            timeoutSeconds: 30
+
     # Run mon and osd on local storage, declaratively
     # See: https://rook.io/docs/rook/latest/CRDs/Cluster/pvc-cluster/#local-storage-example
     # See: https://github.com/rook/rook/blob/master/deploy/examples/cluster-on-local-pvc.yaml
