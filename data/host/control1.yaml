@@ -1,3 +1,6 @@
 ---
-# Keep control1's journal volatile while its eMMC-backed data pool is failing.
+# Keep control1's journal volatile while its eMMC-backed data pool is failing
 nest::journal: volatile
+
+# Keep etcd's small random I/O aligned to ZFS records on the replacement SD pool
+nest::service::kubernetes::etcd_zfs_dataset: control1/crypt/etcd

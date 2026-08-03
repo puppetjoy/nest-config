@@ -21,6 +21,8 @@ networking:
 apiVersion: kubeadm.k8s.io/v1beta3
 kind: InitConfiguration
 certificateKey: <%= $certificate_key.unwrap %>
+patches:
+  directory: /etc/kubernetes/patches
 
 ---
 apiVersion: kubelet.config.k8s.io/v1beta1
