@@ -101,10 +101,6 @@ values:
           probe:
             failureThreshold: 6
             timeoutSeconds: 30
-        osd:
-          probe:
-            failureThreshold: 6
-            timeoutSeconds: 30
 
     # Run mon and osd on local storage, declaratively
     # See: https://rook.io/docs/rook/latest/CRDs/Cluster/pvc-cluster/#local-storage-example
