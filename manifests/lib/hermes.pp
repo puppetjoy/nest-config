@@ -65,6 +65,7 @@ define nest::lib::hermes (
   Boolean              $agent_directory_enabled    = true,
   String[1]            $agent_directory_board      = 'agent-directory',
   Integer[0]           $agent_directory_touch      = 3600,
+  Boolean              $google_photos_enabled      = false,
   Boolean              $google_workspace_enabled   = false,
   Boolean              $voice_auto_tts             = false,
   Boolean              $stt_enabled                = false,
@@ -151,7 +152,11 @@ define nest::lib::hermes (
     'vision',
     'web',
   ]
-  $effective_toolsets                = pick($toolsets, $telegram_toolsets, $default_toolsets)
+  $base_effective_toolsets           = pick($toolsets, $telegram_toolsets, $default_toolsets)
+  $effective_toolsets                = $google_photos_enabled ? {
+    true    => unique($base_effective_toolsets + ['google_photos']),
+    default => $base_effective_toolsets,
+  }
   $platform_toolsets                 = [
     'cli',
     'cron',

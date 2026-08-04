@@ -116,12 +116,13 @@ class nest::app::hermes::install {
 
   exec { 'install_hermes_agent':
     command     => "${venv_pip} install --upgrade --force-reinstall ${source_dir} && git -C ${source_dir} rev-parse HEAD > ${git_revision_file}",
-    unless      => "test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${git_revision_file} 2>/dev/null)\" && test \"$(/usr/bin/sha256sum ${source_dir}/tools/secure_browser_tool.py | /usr/bin/cut -d ' ' -f 1)\" = \"$(/usr/bin/sha256sum ${source_dir}/build/lib/tools/secure_browser_tool.py 2>/dev/null | /usr/bin/cut -d ' ' -f 1)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent')\" && ${venv_python} -c \"import importlib.metadata as m; m.version('python-multipart')\" && ${venv_python} -m pip check",
+    unless      => "test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${git_revision_file} 2>/dev/null)\" && test \"$(/usr/bin/sha256sum ${source_dir}/tools/google_photos_tool.py | /usr/bin/cut -d ' ' -f 1)\" = \"$(/usr/bin/sha256sum ${source_dir}/build/lib/tools/google_photos_tool.py 2>/dev/null | /usr/bin/cut -d ' ' -f 1)\" && test \"$(/usr/bin/sha256sum ${source_dir}/tools/secure_browser_tool.py | /usr/bin/cut -d ' ' -f 1)\" = \"$(/usr/bin/sha256sum ${source_dir}/build/lib/tools/secure_browser_tool.py 2>/dev/null | /usr/bin/cut -d ' ' -f 1)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent')\" && ${venv_python} -c \"import importlib.metadata as m; m.version('python-multipart')\" && ${venv_python} -m pip check",
     environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
     path        => ['/bin', '/usr/bin'],
     require     => [
       Python::Pyvenv[$venv_dir],
       File["${source_dir}/tools/agent_request_tool.py"],
+      File["${source_dir}/tools/google_photos_tool.py"],
       File["${source_dir}/tools/google_workspace_tool.py"],
       File["${source_dir}/tools/oauth_browser_tool.py"],
       File["${source_dir}/tools/secure_browser_oauth_tool.py"],
@@ -157,6 +158,24 @@ class nest::app::hermes::install {
     owner   => 'root',
     group   => 'root',
     require => Vcsrepo[$source_dir],
+  }
+
+  file { "${source_dir}/tools/google_photos_tool.py":
+    ensure  => file,
+    source  => 'puppet:///modules/nest/app/hermes/google_photos_tool.py',
+    mode    => '0644',
+    owner   => 'root',
+    group   => 'root',
+    require => Vcsrepo[$source_dir],
+  }
+
+  file { "${install_dir}/bin/google-photos-oauth":
+    ensure  => file,
+    source  => 'puppet:///modules/nest/app/hermes/google-photos-oauth.py',
+    mode    => '0755',
+    owner   => 'root',
+    group   => 'root',
+    require => Python::Pyvenv[$venv_dir],
   }
 
   file { "${source_dir}/tools/secure_browser_oauth_tool.py":

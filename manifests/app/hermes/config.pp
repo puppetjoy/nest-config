@@ -210,6 +210,7 @@ class nest::app::hermes::config {
     $instance_directory_enabled = pick($config['agent_directory_enabled'], true)
     $instance_directory_board   = pick($config['agent_directory_board'], 'agent-directory')
     $instance_directory_touch   = pick($config['agent_directory_touch'], 3600)
+    $instance_google_photos     = pick($config['google_photos_enabled'], false)
     $instance_google_workspace  = pick($config['google_workspace_enabled'], false)
     $instance_voice_auto_tts    = pick($config['voice_auto_tts'], false)
     $instance_stt_enabled       = pick($config['stt_enabled'], $instance_voice_auto_tts)
@@ -305,6 +306,7 @@ class nest::app::hermes::config {
       agent_directory_enabled    => $instance_directory_enabled,
       agent_directory_board      => $instance_directory_board,
       agent_directory_touch      => $instance_directory_touch,
+      google_photos_enabled      => $instance_google_photos,
       google_workspace_enabled   => $instance_google_workspace,
       voice_auto_tts             => $instance_voice_auto_tts,
       stt_enabled                => $instance_stt_enabled,

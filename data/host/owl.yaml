@@ -295,6 +295,7 @@ nest::app::hermes::instances:
       banner_logo: '__none__'
       tool_prefix: '╎'
       tool_emojis:
+        google_photos: '🖼️'
         google_workspace: '📅'
         cronjob: '⏰'
         todo: '☑️'
@@ -330,6 +331,7 @@ nest::app::hermes::instances:
     git_user_email: 'star@joyfullee.me'
     git_signing_key: '/home/joy/.hermes/profiles/star/.ssh/id_ed25519'
     git_commit_sign: true
+    google_photos_enabled: true
     google_workspace_enabled: true
     environment:
       CAMOFOX_URL: 'https://camofox.eyrie'
