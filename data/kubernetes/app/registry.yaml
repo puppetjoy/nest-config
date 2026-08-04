@@ -36,6 +36,11 @@ resources:
       namespace: "%{nest::kubernetes::namespace}"
     spec:
       secretName: "%{nest::kubernetes::service}-certs"
+      # The same key signs registry bearer tokens. Keep its identity stable across
+      # certificate renewals because distribution loads trusted token keys only
+      # at process startup while docker_auth reads the projected Secret live.
+      privateKey:
+        rotationPolicy: Never
       issuerRef:
         name: "%{lookup('cert_issuer')}"
         kind: "%{lookup('cert_issuer_kind')}"
