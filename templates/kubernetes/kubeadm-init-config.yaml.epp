@@ -15,7 +15,7 @@ clusterName: <%= $cluster_name %>
 controlPlaneEndpoint: <%= $control_plane_endpoint %>
 
 <% unless $etcd_servers.empty { -%>
-# Keep API reads off control1's slower replacement SD-backed etcd member
+# Keep API reads on the explicitly selected healthy etcd members
 apiServer:
   extraArgs:
     etcd-servers: <%= $etcd_servers.join(',') %>

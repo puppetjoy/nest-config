@@ -4,6 +4,7 @@ RSpec.describe 'Kubernetes config image references' do
   let(:repo_root) { File.expand_path('../..', __dir__) }
   let(:common_yaml) { File.read(File.join(repo_root, 'data/kubernetes/common.yaml')) }
   let(:honcho_yaml) { File.read(File.join(repo_root, 'data/kubernetes/app/honcho.yaml')) }
+  let(:registry_yaml) { File.read(File.join(repo_root, 'data/kubernetes/service/registry.yaml')) }
   let(:ci_yaml) { File.read(File.join(repo_root, '.gitlab-ci.yml')) }
 
   it 'defines the Nest config image with an explicit tag' do
@@ -23,6 +24,10 @@ RSpec.describe 'Kubernetes config image references' do
   it 'keeps Honcho backups on the Nest config image path with a tighter pull deadline' do
     expect(honcho_yaml).to include('backup_job_active_deadline_seconds: 1800')
     expect(honcho_yaml).not_to match(%r{^  backup:\n    apiVersion:})
+  end
+
+  it 'allows full registry backups to exceed the shared stall deadline' do
+    expect(registry_yaml).to include('backup_job_active_deadline_seconds: 21600')
   end
 
   it 'uses the tagged config image alias for Honcho init jobs' do
