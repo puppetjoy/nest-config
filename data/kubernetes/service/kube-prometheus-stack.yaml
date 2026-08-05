@@ -14,19 +14,24 @@ values:
   kubeApiServer:
     enabled: true
   kubeControllerManager:
-    enabled: true
+    # The static pods expose metrics only on loopback, so the chart's
+    # node-IP ServiceMonitor can never reach them.
+    enabled: false
     service:
       enabled: false
   kubeEtcd:
-    enabled: true
+    enabled: false
     service:
       enabled: false
   kubeProxy:
-    enabled: true
+    # Eyrie does not run kube-proxy.
+    enabled: false
     service:
       enabled: false
   kubeScheduler:
-    enabled: true
+    # The static pods expose metrics only on loopback, so the chart's
+    # node-IP ServiceMonitor can never reach them.
+    enabled: false
     service:
       enabled: false
   kubelet:
