@@ -1,7 +1,8 @@
 class nest::service::kubernetes (
   Sensitive         $bolt_private_key,
-  Boolean           $control_plane = false,
-  Optional[Integer] $max_pods      = undef,
+  Boolean           $control_plane    = false,
+  Optional[String]  $etcd_zfs_dataset = undef,
+  Optional[Integer] $max_pods         = undef,
 ) {
   include nest
   include nest::base::bird
@@ -79,6 +80,15 @@ class nest::service::kubernetes (
   }
 
   if $control_plane {
+    if $etcd_zfs_dataset {
+      zfs { $etcd_zfs_dataset:
+        ensure     => present,
+        atime      => 'off',
+        recordsize => '16K',
+        require    => Nest::Lib::Package['sys-fs/zfs'],
+      }
+    }
+
     service { 'nfs-server':
       enable => true,
     }
@@ -93,6 +103,15 @@ class nest::service::kubernetes (
         mode  => '0644',
         owner => 'root',
         group => 'root',
+      ;
+
+      '/etc/kubernetes/patches':
+        ensure => directory,
+      ;
+
+      '/etc/kubernetes/patches/kube-apiserver0+strategic.yaml':
+        source  => 'puppet:///modules/nest/kubernetes/kube-apiserver-readyz-period.yaml',
+        require => File['/etc/kubernetes/patches'],
       ;
 
       '/etc/systemd/system/kubelet.service.d':

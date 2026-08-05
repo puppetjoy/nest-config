@@ -3,11 +3,13 @@
 # @param targets Hosts to initialize as the control plane
 # @param name Name of the cluster to configure
 # @param control_plane_endpoint Address control plane is reachable on
+# @param etcd_servers Explicit etcd endpoints for API servers
 plan nest::kubernetes::init (
   TargetSpec              $targets,
   String                  $name,
   String                  $control_plane_endpoint,
   Stdlib::IP::Address::V4 $vip,
+  Array[String]           $etcd_servers = [],
 ) {
   $nodes = get_targets($targets)
   $init_node = $nodes[0]
@@ -30,6 +32,7 @@ plan nest::kubernetes::init (
     cluster_name           => $name,
     control_plane_endpoint => $control_plane_endpoint,
     certificate_key        => $cert_key,
+    etcd_servers           => $etcd_servers,
   })
   write_file($kubeadm_config, '/root/kubeadm-config.yaml', $nodes, {
     _run_as => 'root',

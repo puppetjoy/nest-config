@@ -2,6 +2,7 @@
   String $cluster_name,
   String $control_plane_endpoint,
   Sensitive $certificate_key,
+  Array[String] $etcd_servers = [],
 | -%>
 ---
 apiVersion: kubeadm.k8s.io/v1beta3
@@ -13,6 +14,13 @@ clusterName: <%= $cluster_name %>
 # Use DNS to lookup control plane to route based on client network
 controlPlaneEndpoint: <%= $control_plane_endpoint %>
 
+<% unless $etcd_servers.empty { -%>
+# Keep API reads off control1's slower replacement SD-backed etcd member
+apiServer:
+  extraArgs:
+    etcd-servers: <%= $etcd_servers.join(',') %>
+<% } -%>
+
 # Use the default Calico subnet
 networking:
   podSubnet: 192.168.0.0/16
@@ -21,6 +29,8 @@ networking:
 apiVersion: kubeadm.k8s.io/v1beta3
 kind: InitConfiguration
 certificateKey: <%= $certificate_key.unwrap %>
+patches:
+  directory: /etc/kubernetes/patches
 
 ---
 apiVersion: kubelet.config.k8s.io/v1beta1
