@@ -20,14 +20,6 @@ class nest::app::hermes::service {
     owner  => $nest::user,
     group  => $nest::user,
   }
-  file { "${install_dir}/bin":
-    ensure  => directory,
-    mode    => '0755',
-    owner   => 'root',
-    group   => 'root',
-    require => File[$install_dir],
-  }
-
   file { "${install_dir}/bin/manage-hermes-config":
     ensure  => file,
     mode    => '0755',

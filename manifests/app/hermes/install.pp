@@ -38,6 +38,14 @@ class nest::app::hermes::install {
     group  => 'root',
   }
 
+  file { "${install_dir}/bin":
+    ensure  => directory,
+    mode    => '0755',
+    owner   => 'root',
+    group   => 'root',
+    require => File[$install_dir],
+  }
+
   python::pyvenv { $venv_dir:
     ensure      => present,
     version     => 'system',
@@ -175,7 +183,10 @@ class nest::app::hermes::install {
     mode    => '0755',
     owner   => 'root',
     group   => 'root',
-    require => Python::Pyvenv[$venv_dir],
+    require => [
+      File["${install_dir}/bin"],
+      Python::Pyvenv[$venv_dir],
+    ],
   }
 
   file { "${source_dir}/tools/secure_browser_oauth_tool.py":
