@@ -3,5 +3,6 @@ nest::classes:
   - 'nest::service::kubernetes'
 
 nest::bird_role: control-plane
+nest::service::kubernetes::control_plane: true
 nest::external_interfaces: ['bond0']
 nest::journal: persistent
