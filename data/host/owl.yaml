@@ -17,6 +17,7 @@ nest::app::hermes::git_ref: 'nest'
 nest::app::hermes::agent_request_kanban_board: 'agent-requests'
 nest::app::hermes::gitlab_mr_note_poller_enabled: true
 nest::app::hermes::gitlab_mr_note_poller_profile: 'talon'
+nest::app::hermes::moving_ticket_enabled: true
 # Ordinary browser tools use the singleton Camofox REST API by default.
 # Chrome and agent-browser remain installed for rollback by clearing this
 # managed setting.
