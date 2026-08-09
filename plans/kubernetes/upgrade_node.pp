@@ -13,6 +13,9 @@ plan nest::kubernetes::upgrade_node (
   }
 
   get_targets($targets).each |$target| {
+    run_command('emerge --oneshot --verbose kubeadm', $target, {
+      _run_as => 'root',
+    })
     run_command('kubeadm upgrade node --ignore-preflight-errors=SystemVerification --patches=/etc/kubernetes/patches', $target, {
       _run_as => 'root',
     })

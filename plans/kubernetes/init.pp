@@ -4,12 +4,14 @@
 # @param name Name of the cluster to configure
 # @param control_plane_endpoint Address control plane is reachable on
 # @param etcd_servers Explicit etcd endpoints for API servers
+# @param vip_advertisers Control-plane members allowed to advertise the API VIP
 plan nest::kubernetes::init (
   TargetSpec              $targets,
   String                  $name,
   String                  $control_plane_endpoint,
   Stdlib::IP::Address::V4 $vip,
-  Array[String]           $etcd_servers = [],
+  Array[String]           $etcd_servers    = [],
+  Array[String]           $vip_advertisers = [],
 ) {
   $nodes = get_targets($targets)
   $init_node = $nodes[0]
@@ -69,6 +71,17 @@ plan nest::kubernetes::init (
     targets => $join_nodes,
     vip     => $vip,
   })
+
+  if !$vip_advertisers.empty {
+    $excluded_vip_nodes = $nodes.filter |$node| { $node.name not in $vip_advertisers }
+    if !$excluded_vip_nodes.empty {
+      run_plan('nest::kubernetes::generate_kube_vip_manifest', {
+        targets   => $excluded_vip_nodes,
+        vip       => $vip,
+        advertise => false,
+      })
+    }
+  }
 
   run_command('rm -f /root/kubeadm-config.yaml', $nodes, 'Remove kubeadm config file', {
     _run_as => 'root',
