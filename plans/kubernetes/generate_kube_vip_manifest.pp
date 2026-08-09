@@ -31,7 +31,16 @@ plan nest::kubernetes::generate_kube_vip_manifest (
       '--bgppeers', $bgp_peers.map |$p| { "${p}:65000::false" }.join(','),
     ].flatten.shellquote
 
-    $kube_vip_cmd = "${kube_vip_cmd_quoted} --bgpRouterID \$(facter networking.ip) > /etc/kubernetes/manifests/kube-vip.yaml"
+    $render_command = @(COMMAND/L)
+      set -eu
+      manifest=/etc/kubernetes/manifests/kube-vip.yaml
+      temporary="$(mktemp /tmp/kube-vip.XXXXXX.yaml)"
+      trap 'rm -f "$temporary"' EXIT
+      __KUBE_VIP__ --bgpRouterID "$(facter networking.ip)" > "$temporary"
+      test -s "$temporary"
+      install -m 0600 "$temporary" "$manifest"
+      | COMMAND
+    $kube_vip_cmd = $render_command.regsubst('__KUBE_VIP__', $kube_vip_cmd_quoted, 'G')
 
     if $advertise {
       run_command($kube_vip_cmd, $t, 'Generate kube-vip pod manifest', {

@@ -29,11 +29,31 @@ RSpec.describe 'Kubernetes config image references' do
     expect(honcho_yaml).not_to match(%r{^  backup:\n    apiVersion:})
   end
 
-  it 'allows full registry backups to exceed two hours without overlapping the next schedule' do
-    expect(registry_yaml).to include('backup_job_active_deadline_seconds: 9900')
-    expect(registry_yaml).to include("backup_schedule: '0 2-23/3 * * *'")
-    expect(registry_yaml).to include("restore_schedule: '35 3-23/3 * * *'")
-    expect(registry_yaml).to include('restore_job_active_deadline_seconds: 9900')
+  it 'gives registry backup and restore separate nonoverlapping maximum windows' do
+    registry = YAML.safe_load(registry_yaml)
+    backup_deadline_minutes = registry.fetch('backup_job_active_deadline_seconds') / 60
+    restore_deadline_minutes = registry.fetch('restore_job_active_deadline_seconds') / 60
+    expand_hours = ->(schedule) do
+      range, step = schedule.split[1].split('/')
+      first, last = range.split('-').map(&:to_i)
+      (first..last).step(step.to_i).to_a
+    end
+
+    expect(registry.fetch('backup_schedule')).to eq('0 2-20/6 * * *')
+    expect(registry.fetch('restore_schedule')).to eq('0 5-23/6 * * *')
+    expect(backup_deadline_minutes).to eq(165)
+    expect(restore_deadline_minutes).to eq(165)
+
+    events = expand_hours.call(registry.fetch('backup_schedule')).map { |hour| [hour * 60, backup_deadline_minutes] }
+    events += expand_hours.call(registry.fetch('restore_schedule')).map { |hour| [hour * 60, restore_deadline_minutes] }
+    events.sort_by!(&:first)
+    windows = events.each_with_index.map do |(start, deadline), index|
+      next_start = events[(index + 1) % events.length].first
+      next_start += 24 * 60 if index == events.length - 1
+      [deadline, next_start - start]
+    end
+
+    expect(windows).to all(satisfy { |deadline, available| deadline < available })
   end
 
   it 'bounds restores and allows services to override complete backup and restore schedules' do

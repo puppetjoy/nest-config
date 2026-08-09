@@ -1,0 +1,24 @@
+#!/bin/sh
+
+set -eu
+
+backup_root=$1
+destination=$2
+shift 2
+[ "${1:-}" = '--' ]
+shift
+[ "$#" -gt 0 ]
+
+generation="$(readlink -f "$backup_root/current")"
+case "$generation" in
+  "$backup_root"/generations/*) ;;
+  *)
+    printf '%s\n' 'registry backup current pointer is not a published generation' >&2
+    exit 1
+    ;;
+esac
+
+[ -d "$generation" ]
+[ -f "$generation/.complete" ]
+[ -d "$generation/data" ]
+"$@" "$generation/data/" "$destination"

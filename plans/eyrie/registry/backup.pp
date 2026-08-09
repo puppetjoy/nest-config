@@ -10,15 +10,29 @@ plan nest::eyrie::registry::backup (
   String           $service      = 'registry',
   Optional[String] $service_name = undef, # unused
 ) {
-  $backup_target = get_targets($targets)[0]
+  $backup_targets = get_targets($targets)
+  if $backup_targets.length != 1 {
+    fail('registry backup requires exactly one shared backup target')
+  }
+
+  $backup_target = $backup_targets[0]
   $bucket_config = nest::kubernetes::bucket_config($service, $namespace)
   $lock_file     = '/run/lock/nest-registry-backup-restore.lock'
+  $backup_root   = "/nest/backup/${service}"
+  $helper        = '/tmp/nest-registry-backup-generation'
+
+  upload_file('nest/registry-backup-generation', $helper, $backup_target, {
+    '_run_as' => 'root',
+  })
 
   $backup_cmd = [
     'flock',
     '--exclusive',
     '--nonblock',
     $lock_file,
+    $helper,
+    $backup_root,
+    '--',
     's3cmd',
     'sync',
     '--delete-removed',
@@ -30,10 +44,13 @@ plan nest::eyrie::registry::backup (
     "--host=${bucket_config['BUCKET_HOST']}",
     "--host-bucket=%(bucket)s.${bucket_config['BUCKET_HOST']}",
     "s3://${bucket_config['BUCKET_NAME']}/",
-    "/nest/backup/${service}/",
   ].flatten.shellquote
 
-  run_command($backup_cmd, $backup_target, 's3cmd sync', {
+  run_command("chmod 0700 ${helper.shellquote} && ${backup_cmd}", $backup_target, 'Publish immutable completed registry backup generation', {
+    '_run_as' => 'root',
+  })
+
+  run_command("rm -f ${helper.shellquote}", $backup_target, 'Remove registry backup helper', {
     '_run_as' => 'root',
   })
 }
