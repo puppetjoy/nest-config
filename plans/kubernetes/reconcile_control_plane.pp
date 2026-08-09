@@ -25,6 +25,12 @@ plan nest::kubernetes::reconcile_control_plane (
   $manifest            = '/etc/kubernetes/manifests/kube-apiserver.yaml'
   $lock_name           = 'nest-control-plane-reconcile-lock'
   $member_names_string = $etcd_member_names.shellquote
+  $member_name_quoted  = $member_name.shellquote
+  $endpoint_csv_quoted = $endpoint_csv.shellquote
+  $patches_quoted      = $patches.shellquote
+  $manifest_quoted     = $manifest.shellquote
+  $lock_name_quoted    = $lock_name.shellquote
+  $etcd_arg_quoted     = "--etcd-servers=${endpoint_csv}".shellquote
 
   $ready_command = [
     'kubectl', 'get', '--raw=/readyz?verbose',
@@ -59,20 +65,20 @@ plan nest::kubernetes::reconcile_control_plane (
     set -eu
     tmpdir="$(mktemp -d /tmp/nest-etcd-gate.XXXXXX)"
     trap 'rm -rf "$tmpdir"' EXIT
-    kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system exec etcd-${member_name.shellquote} -- \
-      etcdctl --endpoints=${endpoint_csv.shellquote} \
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system exec etcd-${member_name_quoted} -- \
+      etcdctl --endpoints=${endpoint_csv_quoted} \
       --cacert=/etc/kubernetes/pki/etcd/ca.crt \
       --cert=/etc/kubernetes/pki/etcd/healthcheck-client.crt \
       --key=/etc/kubernetes/pki/etcd/healthcheck-client.key \
       endpoint health --cluster --write-out=table
-    kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system exec etcd-${member_name.shellquote} -- \
-      etcdctl --endpoints=${endpoint_csv.shellquote} \
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system exec etcd-${member_name_quoted} -- \
+      etcdctl --endpoints=${endpoint_csv_quoted} \
       --cacert=/etc/kubernetes/pki/etcd/ca.crt \
       --cert=/etc/kubernetes/pki/etcd/healthcheck-client.crt \
       --key=/etc/kubernetes/pki/etcd/healthcheck-client.key \
       endpoint status --cluster --write-out=json > "$tmpdir/status.json"
-    kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system exec etcd-${member_name.shellquote} -- \
-      etcdctl --endpoints=${endpoint_csv.shellquote} \
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system exec etcd-${member_name_quoted} -- \
+      etcdctl --endpoints=${endpoint_csv_quoted} \
       --cacert=/etc/kubernetes/pki/etcd/ca.crt \
       --cert=/etc/kubernetes/pki/etcd/healthcheck-client.crt \
       --key=/etc/kubernetes/pki/etcd/healthcheck-client.key \
@@ -84,13 +90,14 @@ plan nest::kubernetes::reconcile_control_plane (
   run_command($etcd_gate_command, $member, 'Require exact healthy synchronized etcd topology', {
     _run_as => 'root',
   })
-  run_command("test -d ${patches.shellquote} && test -x /usr/local/sbin/reconcile-kubeadm-cluster-config && test -x /usr/local/sbin/validate-etcd-cluster", $member, 'Require managed kubeadm assets', {
+  run_command("test -d ${patches_quoted} && test -x /usr/local/sbin/reconcile-kubeadm-cluster-config && test -x /usr/local/sbin/validate-etcd-cluster", $member, 'Require managed kubeadm assets', {
     _run_as => 'root',
   })
 
   $lock_owner = run_command('cat /proc/sys/kernel/random/uuid', $member, 'Create reconciliation lock owner', {
     _run_as => 'root',
   }).first.value['stdout'].chomp
+  $lock_owner_quoted = $lock_owner.shellquote
   $acquire_lock_command = [
     'kubectl', '--kubeconfig=/etc/kubernetes/admin.conf', '-n', 'kube-system',
     'create', 'configmap', $lock_name, "--from-literal=owner=${lock_owner}",
@@ -98,9 +105,9 @@ plan nest::kubernetes::reconcile_control_plane (
   ].shellquote
   $release_lock_command = @(COMMAND/L)
     set -eu
-    owner="$(kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system get configmap ${lock_name.shellquote} --output=jsonpath='{.data.owner}')"
-    [ "$owner" = ${lock_owner.shellquote} ]
-    kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system delete configmap ${lock_name.shellquote} --wait=true
+    owner="$(kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system get configmap ${lock_name_quoted} --output=jsonpath='{.data.owner}')"
+    [ "$owner" = ${lock_owner_quoted} ]
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system delete configmap ${lock_name_quoted} --wait=true
     | COMMAND
 
   $timestamp = run_command('date -u +%Y%m%dT%H%M%S.%N', $member, 'Create unique reconciliation timestamp', {
@@ -110,30 +117,35 @@ plan nest::kubernetes::reconcile_control_plane (
   $config_path     = "${backup_dir}/kubeadm-cluster-config.desired.yaml"
   $config_backup   = "${backup_dir}/kubeadm-cluster-config.before.yaml"
   $manifest_backup = "${backup_dir}/kube-apiserver.before.yaml"
+  $backup_dir_quoted      = $backup_dir.shellquote
+  $config_path_quoted     = $config_path.shellquote
+  $config_backup_quoted   = $config_backup.shellquote
+  $manifest_backup_quoted = $manifest_backup.shellquote
   $compare_command = [
     '/usr/local/sbin/reconcile-kubeadm-cluster-config', '--compare', $config_backup,
   ].shellquote
 
   $prepare_config_command = @(COMMAND/L)
-    install -d -m 0700 ${backup_dir.shellquote} && \
-    ${read_config_command} > ${config_backup.shellquote} && \
-    install -m 0600 ${manifest.shellquote} ${manifest_backup.shellquote} && \
-    ${rewrite_command_string} < ${config_backup.shellquote} > ${config_path.shellquote}
+    install -d -m 0700 ${backup_dir_quoted} && \
+    ${read_config_command} > ${config_backup_quoted} && \
+    install -m 0600 ${manifest_quoted} ${manifest_backup_quoted} && \
+    ${rewrite_command_string} < ${config_backup_quoted} > ${config_path_quoted}
     | COMMAND
   run_command($prepare_config_command, $member, 'Render desired kubeadm ClusterConfiguration', {
     _run_as => 'root',
   })
 
-  $reconcile_command = "kubeadm upgrade node phase control-plane --config=${config_path.shellquote} --patches=${patches.shellquote}"
-  run_command("kubeadm config validate --config=${config_path.shellquote} && ${reconcile_command} --dry-run", $member, 'Validate and dry-run desired control-plane manifest', {
+  $reconcile_command = "kubeadm upgrade node phase control-plane --config=${config_path_quoted} --patches=${patches_quoted}"
+  run_command("kubeadm config validate --config=${config_path_quoted} && ${reconcile_command} --dry-run", $member, 'Validate and dry-run desired control-plane manifest', {
     _run_as => 'root',
   })
 
   $old_uid = run_command($get_uid_command, 'localhost', "Capture kube-apiserver ${member_name} mirror-Pod UID").first.value['stdout'].chomp
+  $old_uid_quoted = $old_uid.shellquote
   $wait_new_uid_script = @(SCRIPT/L)
     while :; do
       current_uid="$(${get_uid_command} 2>/dev/null || true)"
-      [ -n "\$current_uid" ] && [ "\$current_uid" != ${old_uid.shellquote} ] && break
+      [ -n "\$current_uid" ] && [ "\$current_uid" != ${old_uid_quoted} ] && break
       sleep 2
     done
     | SCRIPT
@@ -143,10 +155,10 @@ plan nest::kubernetes::reconcile_control_plane (
     _run_as => 'root',
   })
   $freshness = catch_errors() || {
-    run_command("${read_config_command} | ${compare_command} && cmp ${manifest_backup.shellquote} ${manifest.shellquote}", $member, 'Require preflight inputs to remain unchanged after lock acquisition', {
+    run_command("${read_config_command} | ${compare_command} && cmp ${manifest_backup_quoted} ${manifest_quoted}", $member, 'Require preflight inputs to remain unchanged after lock acquisition', {
       _run_as => 'root',
     })
-    run_command("test \"$(${get_uid_command})\" = ${old_uid.shellquote}", 'localhost', 'Require preflight kube-apiserver UID to remain current after lock acquisition')
+    run_command("test \"$(${get_uid_command})\" = ${old_uid_quoted}", 'localhost', 'Require preflight kube-apiserver UID to remain current after lock acquisition')
   }
   if $freshness =~ Error {
     run_command($release_lock_command, $member, 'Release reconciliation lock after stale preflight', {
@@ -156,7 +168,7 @@ plan nest::kubernetes::reconcile_control_plane (
   }
 
   $transaction = catch_errors() || {
-    run_command("kubeadm init phase upload-config kubeadm --config=${config_path.shellquote}", $member, 'Upload kubeadm ClusterConfiguration', {
+    run_command("kubeadm init phase upload-config kubeadm --config=${config_path_quoted}", $member, 'Upload kubeadm ClusterConfiguration', {
       _run_as => 'root',
     })
     run_command("${read_config_command} | ${check_command_string}", $member, 'Verify kubeadm ClusterConfiguration readback', {
@@ -165,7 +177,7 @@ plan nest::kubernetes::reconcile_control_plane (
     run_command($reconcile_command, $member, 'Reconcile one control-plane manifest', {
       _run_as => 'root',
     })
-    run_command("grep -F -- ${("--etcd-servers=${endpoint_csv}").shellquote} ${manifest.shellquote}", $member, 'Verify on-disk kube-apiserver endpoints', {
+    run_command("grep -F -- ${etcd_arg_quoted} ${manifest_quoted}", $member, 'Verify on-disk kube-apiserver endpoints', {
       _run_as => 'root',
     })
     run_command($wait_new_uid_command, 'localhost', "Wait for kube-apiserver ${member_name} mirror-Pod UID to change")
@@ -182,7 +194,7 @@ plan nest::kubernetes::reconcile_control_plane (
   if $transaction =~ Error {
     warning("Control-plane reconciliation failed; restoring ${backup_dir}: ${transaction.message}")
     $config_restore = catch_errors() || {
-      run_command("kubeadm init phase upload-config kubeadm --config=${config_backup.shellquote}", $member, 'Restore kubeadm ConfigMap', {
+      run_command("kubeadm init phase upload-config kubeadm --config=${config_backup_quoted}", $member, 'Restore kubeadm ConfigMap', {
         _run_as => 'root',
       })
       run_command("${read_config_command} | ${compare_command}", $member, 'Verify restored kubeadm ClusterConfiguration', {
@@ -191,19 +203,20 @@ plan nest::kubernetes::reconcile_control_plane (
     }
 
     $manifest_restore = catch_errors() || {
-      $manifest_state = run_command("if cmp -s ${manifest_backup.shellquote} ${manifest.shellquote}; then printf same; else printf changed; fi", $member, 'Determine whether rollback requires static-Pod turnover', {
+      $manifest_state = run_command("if cmp -s ${manifest_backup_quoted} ${manifest_quoted}; then printf same; else printf changed; fi", $member, 'Determine whether rollback requires static-Pod turnover', {
         _run_as => 'root',
       }).first.value['stdout'].chomp
 
       if $manifest_state == 'changed' {
         $rollback_uid = run_command("${get_uid_command} 2>/dev/null || true", 'localhost', 'Capture pre-rollback kube-apiserver UID').first.value['stdout'].chomp
-        run_command("install -m 0600 ${manifest_backup.shellquote} ${manifest.shellquote}", $member, 'Restore local static manifest independently', {
+        $rollback_uid_quoted = $rollback_uid.shellquote
+        run_command("install -m 0600 ${manifest_backup_quoted} ${manifest_quoted}", $member, 'Restore local static manifest independently', {
           _run_as => 'root',
         })
         $wait_rollback_uid_script = @(SCRIPT/L)
           while :; do
             current_uid="$(${get_uid_command} 2>/dev/null || true)"
-            [ -n "\$current_uid" ] && { [ -z ${rollback_uid.shellquote} ] || [ "\$current_uid" != ${rollback_uid.shellquote} ]; } && break
+            [ -n "\$current_uid" ] && { [ -z ${rollback_uid_quoted} ] || [ "\$current_uid" != ${rollback_uid_quoted} ]; } && break
             sleep 2
           done
           | SCRIPT
@@ -212,7 +225,7 @@ plan nest::kubernetes::reconcile_control_plane (
         run_command($wait_ready_command, 'localhost', "Wait for restored kube-apiserver ${member_name}")
       }
 
-      run_command("cmp ${manifest_backup.shellquote} ${manifest.shellquote}", $member, 'Verify restored static manifest', {
+      run_command("cmp ${manifest_backup_quoted} ${manifest_quoted}", $member, 'Verify restored static manifest', {
         _run_as => 'root',
       })
       run_command($direct_ready_command, $member, "Require restored kube-apiserver ${member_name} readiness", {
