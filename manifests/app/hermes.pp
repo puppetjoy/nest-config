@@ -10,6 +10,8 @@ class nest::app::hermes (
   Boolean                        $gitlab_mr_note_poller_enabled  = false,
   String[1]                      $gitlab_mr_note_poller_profile  = 'talon',
   String[1]                      $gitlab_mr_note_poller_interval = '1min',
+  Boolean                        $moving_ticket_enabled          = false,
+  String[1]                      $moving_ticket_interval         = '5min',
   Boolean                        $star_order_refresh_enabled     = true,
   String[1]                      $star_order_refresh_profile     = 'star',
   String[1]                      $star_order_refresh_interval    = '6h',

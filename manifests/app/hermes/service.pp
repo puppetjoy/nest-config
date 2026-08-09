@@ -11,6 +11,7 @@ class nest::app::hermes::service {
   $systemd_main_pid        = '$MAINPID'
   $gitlab_mr_note_poller_profile  = $nest::app::hermes::gitlab_mr_note_poller_profile
   $gitlab_mr_note_poller_interval = $nest::app::hermes::gitlab_mr_note_poller_interval
+  $moving_ticket_interval             = $nest::app::hermes::moving_ticket_interval
   $star_order_refresh_profile     = $nest::app::hermes::star_order_refresh_profile
   $star_order_refresh_interval    = $nest::app::hermes::star_order_refresh_interval
 
@@ -109,6 +110,7 @@ class nest::app::hermes::service {
   $agent_request_diagnostic_commands = [
     'agent-request-doctor',
     'agent-request-poll-gitlab-mr-notes',
+    'agent-request-reconcile-moving-tickets',
     'agent-request-reconcile-gitlab-mr-note',
     'agent-request-tts-cadence-evaluate',
   ]
@@ -230,6 +232,91 @@ class nest::app::hermes::service {
     }
 
     file { "${systemd_user_dir}/hermes-agent-request-gitlab-mr-notes.service":
+      ensure => absent,
+      owner  => $nest::user,
+      group  => $nest::user,
+      notify => Systemd::Daemon_reload['hermes-systemd-user-daemon-reload'],
+    }
+  }
+
+  if $nest::app::hermes::moving_ticket_enabled {
+    file { "${systemd_user_dir}/hermes-agent-request-moving-tickets.service":
+      ensure  => file,
+      mode    => '0644',
+      owner   => $nest::user,
+      group   => $nest::user,
+      content => @("UNIT"),
+        [Unit]
+        Description=Reconcile Agent Requests which have lost a moving owner
+        After=network-online.target
+        Wants=network-online.target
+
+        [Service]
+        Type=oneshot
+        Environment=HERMES_HOME=${hermes_home_dir}
+        Environment=AGENT_REQUEST_KANBAN_BOARD=${nest::app::hermes::agent_request_kanban_board}
+        ExecStart=${install_dir}/bin/agent-request-reconcile-moving-tickets --board ${nest::app::hermes::agent_request_kanban_board} --apply
+        WorkingDirectory=/home/${nest::user}
+        StandardOutput=journal
+        StandardError=journal
+        | UNIT
+      require => [
+        File[$systemd_user_dir],
+        File["${install_dir}/bin/agent-request-reconcile-moving-tickets"],
+        Exec['install_hermes_agent_request_broker'],
+      ],
+      notify  => Systemd::Daemon_reload['hermes-systemd-user-daemon-reload'],
+    }
+
+    file { "${systemd_user_dir}/hermes-agent-request-moving-tickets.timer":
+      ensure  => file,
+      mode    => '0644',
+      owner   => $nest::user,
+      group   => $nest::user,
+      content => @("UNIT"),
+        [Unit]
+        Description=Watchdog for non-moving Agent Request waits
+
+        [Timer]
+        OnBootSec=2min
+        OnUnitActiveSec=${moving_ticket_interval}
+        RandomizedDelaySec=30s
+        Persistent=true
+        Unit=hermes-agent-request-moving-tickets.service
+
+        [Install]
+        WantedBy=timers.target
+        | UNIT
+      require => File["${systemd_user_dir}/hermes-agent-request-moving-tickets.service"],
+      notify  => Systemd::Daemon_reload['hermes-systemd-user-daemon-reload'],
+    }
+
+    systemd::user_service { 'hermes-agent-request-moving-tickets':
+      ensure  => running,
+      enable  => true,
+      unit    => 'hermes-agent-request-moving-tickets.timer',
+      user    => $nest::user,
+      require => [
+        Loginctl_user[$nest::user],
+        File["${systemd_user_dir}/hermes-agent-request-moving-tickets.timer"],
+      ],
+    }
+  } else {
+    systemd::user_service { 'hermes-agent-request-moving-tickets':
+      ensure => stopped,
+      enable => false,
+      unit   => 'hermes-agent-request-moving-tickets.timer',
+      user   => $nest::user,
+    }
+
+    file { "${systemd_user_dir}/hermes-agent-request-moving-tickets.timer":
+      ensure => absent,
+      owner  => $nest::user,
+      group  => $nest::user,
+      notify => Systemd::Daemon_reload['hermes-systemd-user-daemon-reload'],
+    }
+
+    file { "${systemd_user_dir}/hermes-agent-request-moving-tickets.service":
       ensure => absent,
       owner  => $nest::user,
       group  => $nest::user,
