@@ -23,10 +23,56 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
+# Seed the new generation with block clones from the last completed payload so
+# s3cmd only has to transfer changes.  A brand-new empty generation would turn
+# every backup into a full multi-terabyte download and cannot meet the bounded
+# job deadline.  The first run block-clones the legacy in-place payload instead.
+if [ -L "$backup_root/current" ]; then
+  current_target="$(readlink "$backup_root/current")"
+  current_name="${current_target#generations/}"
+  case "$current_target" in
+    generations/*) ;;
+    *)
+      printf '%s\n' 'registry backup current pointer is invalid' >&2
+      exit 1
+      ;;
+  esac
+  case "$current_name" in
+    ''|.|..|*/*)
+      printf '%s\n' 'registry backup current pointer is invalid' >&2
+      exit 1
+      ;;
+  esac
+  current_generation="${backup_root}/${current_target}"
+  [ -f "$current_generation/.complete" ]
+  [ -d "$current_generation/data" ]
+  cp -a --reflink=always "$current_generation/data/." "$staging/data/"
+elif [ -e "$backup_root/current" ]; then
+  printf '%s\n' 'registry backup current pointer is not a symlink' >&2
+  exit 1
+else
+  for legacy_path in "$backup_root"/* "$backup_root"/.[!.]* "$backup_root"/..?*; do
+    [ -e "$legacy_path" ] || [ -L "$legacy_path" ] || continue
+    case "${legacy_path##*/}" in
+      .staging|generations|current|.current-*) continue ;;
+    esac
+    cp -a --reflink=always "$legacy_path" "$staging/data/"
+  done
+fi
+
 "$@" "$staging/data/"
 printf '%s\n' "$generation_id" > "$staging/.complete"
 mv "$staging" "$generation"
 ln -s "generations/${generation_id}" "$current_tmp"
 mv -Tf "$current_tmp" "$backup_root/current"
+
+# Keep the current and immediately preceding completed generations.  Since
+# each generation is a reflink clone, retention consumes only changed blocks.
+set -- "$generations"/*
+while [ "$#" -gt 2 ]; do
+  oldest=$1
+  shift
+  [ "$oldest" = "$generation" ] || rm -rf "$oldest"
+done
 
 trap - EXIT HUP INT TERM

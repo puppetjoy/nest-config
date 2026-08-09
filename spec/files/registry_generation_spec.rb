@@ -43,6 +43,29 @@ RSpec.describe 'registry backup generations' do
     end
   end
 
+  it 'block-clones the prior payload and retains only two completed generations' do
+    Dir.mktmpdir('registry-generation-retention') do |tmpdir|
+      source = File.join(tmpdir, 'source')
+      backup_root = File.join(tmpdir, 'backup')
+      sync = File.join(tmpdir, 'sync')
+      FileUtils.mkdir_p(source)
+      write_sync(sync, 'cp -R "$1/." "$2"')
+
+      ['first', 'second', 'third'].each do |content|
+        File.write(File.join(source, 'artifact'), content)
+        _stdout, stderr, status = Open3.capture3(backup_helper, backup_root, '--', sync, source)
+        expect(status).to be_success, stderr
+      end
+
+      generations = Dir.children(File.join(backup_root, 'generations')).sort
+      expect(generations.length).to eq(2)
+      current = File.realpath(File.join(backup_root, 'current'))
+      expect(File.read(File.join(current, 'data', 'artifact'))).to eq('third')
+      prior = (generations.map { |name| File.join(backup_root, 'generations', name) } - [current]).fetch(0)
+      expect(File.read(File.join(prior, 'data', 'artifact'))).to eq('second')
+    end
+  end
+
   it 'refuses a current pointer without a completed-generation marker' do
     Dir.mktmpdir('registry-incomplete') do |tmpdir|
       backup_root = File.join(tmpdir, 'backup')
