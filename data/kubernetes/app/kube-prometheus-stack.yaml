@@ -65,6 +65,39 @@ values:
     enabled: false
   kube-state-metrics:
     fullnameOverride: "%{lookup('fullname')}-kube-state-metrics"
+    # Helm release Secrets account for roughly 58 MB of each cluster-wide
+    # Secret LIST.  Neither monitoring instance consumes the five metadata-only
+    # kube_secret_* series, so do not let two kube-state-metrics informers turn
+    # an API reconnect into a repeated etcd/CPU pressure loop.
+    collectors:
+      - certificatesigningrequests
+      - configmaps
+      - cronjobs
+      - daemonsets
+      - deployments
+      - endpoints
+      - endpointslices
+      - horizontalpodautoscalers
+      - ingresses
+      - jobs
+      - leases
+      - limitranges
+      - mutatingwebhookconfigurations
+      - namespaces
+      - networkpolicies
+      - nodes
+      - persistentvolumeclaims
+      - persistentvolumes
+      - poddisruptionbudgets
+      - pods
+      - replicasets
+      - replicationcontrollers
+      - resourcequotas
+      - services
+      - statefulsets
+      - storageclasses
+      - validatingwebhookconfigurations
+      - volumeattachments
     rbac:
       create: true
     affinity: *affinity

@@ -4,6 +4,8 @@ RSpec.describe 'Kubernetes config image references' do
   let(:repo_root) { File.expand_path('../..', __dir__) }
   let(:common_yaml) { File.read(File.join(repo_root, 'data/kubernetes/common.yaml')) }
   let(:honcho_yaml) { File.read(File.join(repo_root, 'data/kubernetes/app/honcho.yaml')) }
+  let(:monitoring_yaml) { File.read(File.join(repo_root, 'data/kubernetes/app/kube-prometheus-stack.yaml')) }
+  let(:monitoring_values) { YAML.safe_load(monitoring_yaml, aliases: true).fetch('values').fetch('kube-state-metrics') }
   let(:registry_yaml) { File.read(File.join(repo_root, 'data/kubernetes/service/registry.yaml')) }
   let(:ci_yaml) { File.read(File.join(repo_root, '.gitlab-ci.yml')) }
 
@@ -26,8 +28,25 @@ RSpec.describe 'Kubernetes config image references' do
     expect(honcho_yaml).not_to match(%r{^  backup:\n    apiVersion:})
   end
 
-  it 'allows full registry backups to exceed the shared stall deadline' do
-    expect(registry_yaml).to include('backup_job_active_deadline_seconds: 21600')
+  it 'allows full registry backups to exceed two hours without overlapping the next schedule' do
+    expect(registry_yaml).to include('backup_job_active_deadline_seconds: 9900')
+  end
+
+  it 'keeps kube-state-metrics from listing Secret payloads cluster-wide' do
+    collectors = monitoring_values.fetch('collectors')
+
+    expect(collectors).to eq(
+      [
+        'certificatesigningrequests', 'configmaps', 'cronjobs', 'daemonsets',
+        'deployments', 'endpoints', 'endpointslices', 'horizontalpodautoscalers',
+        'ingresses', 'jobs', 'leases', 'limitranges',
+        'mutatingwebhookconfigurations', 'namespaces', 'networkpolicies', 'nodes',
+        'persistentvolumeclaims', 'persistentvolumes', 'poddisruptionbudgets', 'pods',
+        'replicasets', 'replicationcontrollers', 'resourcequotas', 'services',
+        'statefulsets', 'storageclasses', 'validatingwebhookconfigurations',
+        'volumeattachments'
+      ],
+    )
   end
 
   it 'uses the tagged config image alias for Honcho init jobs' do
