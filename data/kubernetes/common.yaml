@@ -3,6 +3,7 @@ include:
   - 'nest::kubernetes'
 
 backup_hour: '*/3'
+backup_schedule: "%{nest::kubernetes::cron_job_offset} %{lookup('backup_hour')} * * *"
 backup_job_ttl: 21600 # 6h; keep last two backup jobs in history
 backup_job_active_deadline_seconds: 7200
 affinity: {}
@@ -31,7 +32,7 @@ resources:
       namespace: "%{nest::kubernetes::namespace}"
     spec:
       concurrencyPolicy: Forbid
-      schedule: "%{nest::kubernetes::cron_job_offset} %{lookup('backup_hour')} * * *"
+      schedule: "%{lookup('backup_schedule')}"
       timeZone: 'America/New_York'
       jobTemplate:
         spec:

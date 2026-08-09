@@ -3,6 +3,7 @@ require 'spec_helper'
 RSpec.describe 'Kubernetes config image references' do
   let(:repo_root) { File.expand_path('../..', __dir__) }
   let(:common_yaml) { File.read(File.join(repo_root, 'data/kubernetes/common.yaml')) }
+  let(:test_yaml) { File.read(File.join(repo_root, 'data/kubernetes/test.yaml')) }
   let(:honcho_yaml) { File.read(File.join(repo_root, 'data/kubernetes/app/honcho.yaml')) }
   let(:monitoring_yaml) { File.read(File.join(repo_root, 'data/kubernetes/app/kube-prometheus-stack.yaml')) }
   let(:monitoring_values) { YAML.safe_load(monitoring_yaml, aliases: true).fetch('values').fetch('kube-state-metrics') }
@@ -30,6 +31,16 @@ RSpec.describe 'Kubernetes config image references' do
 
   it 'allows full registry backups to exceed two hours without overlapping the next schedule' do
     expect(registry_yaml).to include('backup_job_active_deadline_seconds: 9900')
+    expect(registry_yaml).to include("backup_schedule: '0 2-23/3 * * *'")
+    expect(registry_yaml).to include("restore_schedule: '35 3-23/3 * * *'")
+    expect(registry_yaml).to include('restore_job_active_deadline_seconds: 9900')
+  end
+
+  it 'bounds restores and allows services to override complete backup and restore schedules' do
+    expect(common_yaml).to include(%(schedule: "%{lookup('backup_schedule')}"))
+    expect(test_yaml).to include('restore_job_active_deadline_seconds: 7200')
+    expect(test_yaml).to include(%(activeDeadlineSeconds: "%{alias('restore_job_active_deadline_seconds')}"))
+    expect(test_yaml).to include(%(schedule: "%{lookup('restore_schedule')}"))
   end
 
   it 'keeps kube-state-metrics from listing Secret payloads cluster-wide' do

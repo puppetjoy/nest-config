@@ -12,8 +12,13 @@ plan nest::eyrie::registry::backup (
 ) {
   $backup_target = get_targets($targets)[0]
   $bucket_config = nest::kubernetes::bucket_config($service, $namespace)
+  $lock_file     = '/run/lock/nest-registry-backup-restore.lock'
 
   $backup_cmd = [
+    'flock',
+    '--exclusive',
+    '--nonblock',
+    $lock_file,
     's3cmd',
     'sync',
     '--delete-removed',
