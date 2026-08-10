@@ -19,6 +19,9 @@ class nest::service::kubernetes (
   }
   ->
   file {
+    '/etc/crio/crio.conf':
+      source => 'puppet:///modules/nest/kubernetes/crio.conf',
+      notify => Service['crio'];
     '/etc/crio/crio.conf.d':
       ensure => directory;
     '/etc/crio/crio.conf.d/10-crun.conf':
