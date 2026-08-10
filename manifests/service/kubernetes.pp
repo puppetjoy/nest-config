@@ -21,6 +21,9 @@ class nest::service::kubernetes (
   file {
     '/etc/crio/crio.conf.d':
       ensure => directory;
+    '/etc/crio/crio.conf.d/20-pull-progress.conf':
+      source => 'puppet:///modules/nest/kubernetes/crio-pull-progress.conf',
+      notify => Service['crio'];
     '/etc/crio/crio.conf.d/10-crun.conf':
       source => 'puppet:///modules/nest/kubernetes/crio-crun.conf',
     ;
