@@ -5,9 +5,12 @@ values:
       enabled: true
       forceConflicts: true
 
-  # Production owns the cluster-wide scrape definitions. Both Prometheus
-  # instances discover ServiceMonitors across namespaces, so rendering a
-  # second set here duplicates every cluster target and alert series.
+  # Production owns the cluster-wide scrape definitions and rules. Both
+  # Prometheus instances discover ServiceMonitors and PrometheusRules across
+  # namespaces, so rendering a second set here duplicates every cluster target
+  # and alert series.
+  defaultRules:
+    create: false
   coreDns:
     enabled: false
   kubeApiServer:
