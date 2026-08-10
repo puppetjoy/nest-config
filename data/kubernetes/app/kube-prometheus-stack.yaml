@@ -7,7 +7,7 @@ ingress_class: contour
 node_role: workstation
 storage_retention_size: 4GB
 storage_class: data-crypt
-volume_size: 10Gi
+volume_size: 20Gi
 
 .affinity: &affinity
   nodeAffinity:
