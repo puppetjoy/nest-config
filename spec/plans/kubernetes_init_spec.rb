@@ -3,7 +3,7 @@ require 'yaml'
 
 RSpec.describe 'nest::kubernetes::init safety ordering' do
   let(:repo_root) { File.expand_path('../..', __dir__) }
-  let(:eyrie_build) { YAML.safe_load(File.read(File.join(repo_root, 'plans/eyrie/build.yaml'))) }
+  let(:eyrie_build) { YAML.safe_load_file(File.join(repo_root, 'plans/eyrie/build.yaml')) }
   let(:init_plan) { File.read(File.join(repo_root, 'plans/kubernetes/init.pp')) }
   let(:vip_plan) { File.read(File.join(repo_root, 'plans/kubernetes/generate_kube_vip_manifest.pp')) }
   let(:upgrade_plan) { File.read(File.join(repo_root, 'plans/kubernetes/upgrade_node.pp')) }
@@ -51,10 +51,7 @@ RSpec.describe 'nest::kubernetes::init safety ordering' do
   it 'orders control3 before control2 for final API etcd reads' do
     init_step = eyrie_build.fetch('steps').find { |step| step['plan'] == 'nest::kubernetes::init' }
 
-    expect(init_step.dig('parameters', 'etcd_servers')).to eq([
-      'https://172.22.4.9:2379',
-      'https://172.22.4.8:2379',
-    ])
+    expect(init_step.dig('parameters', 'etcd_servers')).to eq(['https://172.22.4.9:2379', 'https://172.22.4.8:2379'])
   end
 
   it 'uses strict member reconciliation in the control-plane upgrade path' do
