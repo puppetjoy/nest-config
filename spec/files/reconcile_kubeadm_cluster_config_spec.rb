@@ -8,7 +8,7 @@ require 'yaml'
 RSpec.describe 'reconcile-kubeadm-cluster-config' do
   let(:repo_root) { File.expand_path('../..', __dir__) }
   let(:script) { File.join(repo_root, 'files/kubernetes/reconcile-kubeadm-cluster-config.rb') }
-  let(:endpoints) { ['https://172.22.4.8:2379', 'https://172.22.4.9:2379'] }
+  let(:endpoints) { ['https://172.22.4.9:2379', 'https://172.22.4.8:2379'] }
 
   def transform(config, *arguments)
     Open3.capture3(RbConfig.ruby, script, *arguments, stdin_data: YAML.dump(config))
