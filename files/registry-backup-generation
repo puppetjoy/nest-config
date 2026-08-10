@@ -16,6 +16,7 @@ generation="${generations}/${generation_id}"
 current_tmp="${backup_root}/.current-${generation_id}"
 legacy_retirement="${backup_root}/.legacy-retired-${generation_id}"
 migrating_legacy=false
+previous_generation=
 
 install -d -m 0700 "$staging_root" "$generations"
 for stale_staging in "$staging_root"/*; do
@@ -51,6 +52,7 @@ if [ -L "$backup_root/current" ]; then
   esac
   [ -f "$current_generation/.complete" ]
   [ -d "$current_generation/data" ]
+  previous_generation=$current_generation
   for stale_retirement in "$backup_root"/.legacy-retired-*; do
     [ -e "$stale_retirement" ] || [ -L "$stale_retirement" ] || continue
     rm -rf "$stale_retirement"
@@ -93,13 +95,14 @@ if [ "$migrating_legacy" = true ]; then
   rm -rf "$legacy_retirement"
 fi
 
-# Keep the current and immediately preceding completed generations.  Since
-# each generation is a reflink clone, retention consumes only changed blocks.
-set -- "$generations"/*
-while [ "$#" -gt 2 ]; do
-  oldest=$1
-  shift
-  [ "$oldest" = "$generation" ] || rm -rf "$oldest"
+# Keep the new current generation and the exact generation that was current
+# when this run began. Do not infer chronology from names: multiple manual runs
+# can publish in one second and variable-width process IDs do not sort by time.
+for candidate in "$generations"/*; do
+  [ -e "$candidate" ] || [ -L "$candidate" ] || continue
+  if [ "$candidate" != "$generation" ] && [ "$candidate" != "$previous_generation" ]; then
+    rm -rf "$candidate"
+  fi
 done
 
 trap - EXIT HUP INT TERM

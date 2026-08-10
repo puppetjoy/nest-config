@@ -52,14 +52,23 @@ RSpec.describe 'registry backup generations' do
       FileUtils.mkdir_p(source)
       write_sync(sync, 'cp -R "$1/." "$2"')
 
-      ['first', 'second', 'third'].each do |content|
+      ['first', 'second'].each do |content|
         File.write(File.join(source, 'artifact'), content)
         _stdout, stderr, status = Open3.capture3(backup_helper, backup_root, '--', sync, source)
         expect(status).to be_success, stderr
       end
 
+      stale = File.join(backup_root, 'generations', 'zz-stale-generation')
+      FileUtils.mkdir_p(File.join(stale, 'data'))
+      File.write(File.join(stale, '.complete'), "stale\n")
+      File.write(File.join(stale, 'data', 'artifact'), 'stale')
+      File.write(File.join(source, 'artifact'), 'third')
+      _stdout, stderr, status = Open3.capture3(backup_helper, backup_root, '--', sync, source)
+      expect(status).to be_success, stderr
+
       generations = Dir.children(File.join(backup_root, 'generations')).sort
       expect(generations.length).to eq(2)
+      expect(File.exist?(stale)).to be(false)
       current = File.realpath(File.join(backup_root, 'current'))
       expect(File.read(File.join(current, 'data', 'artifact'))).to eq('third')
       prior = (generations.map { |name| File.join(backup_root, 'generations', name) } - [current]).fetch(0)
