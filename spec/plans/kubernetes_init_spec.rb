@@ -24,6 +24,8 @@ RSpec.describe 'nest::kubernetes::init safety ordering' do
     expect([pod_gate, route_gate, ready_gate].max).to be < withdrawal
     expect(init_plan).to include('Wait for kube-vip BGP route withdrawal')
     expect(init_plan).to include('Require API VIP continuity after advertiser withdrawal')
+    expect(init_plan).to include('"--server=https://${control_plane_endpoint}:6443"')
+    expect(init_plan).not_to include('"--server=https://${vip}:6443"')
   end
 
   it 're-advertises every excluded member and verifies rollback health on failure' do

@@ -104,7 +104,9 @@ plan nest::kubernetes::init (
   ] + $vip_pods + ['--timeout=180s']
   $vip_ready_command = [
     'kubectl', '--kubeconfig=/etc/kubernetes/admin.conf',
-    "--server=https://${vip}:6443", 'get', '--raw=/readyz?verbose',
+    # Use the DNS control-plane endpoint so TLS verifies the kubeadm-managed
+    # certificate while DNS still resolves the request through the VIP.
+    "--server=https://${control_plane_endpoint}:6443", 'get', '--raw=/readyz?verbose',
   ].shellquote
   run_command($wait_vip_pods_command.shellquote, $init_node, 'Require intended kube-vip mirror Pods before withdrawal', {
     _run_as => 'root',
