@@ -14,7 +14,7 @@ plan nest::kubernetes::deploy_ceph ( # lint:ignore:deploy_plan_boundary -- exist
     'chart'     => 'rook-release/rook-ceph',
     'namespace' => 'rook-ceph',
     'repo_url'  => 'https://charts.rook.io/release',
-    'version'   => '1.20.0',
+    'version'   => '1.20.3',
     'wait'      => true,
     'deploy'    => $rook,
   })
@@ -36,7 +36,7 @@ plan nest::kubernetes::deploy_ceph ( # lint:ignore:deploy_plan_boundary -- exist
     'chart'     => 'rook-release/rook-ceph-cluster',
     'namespace' => 'rook-ceph',
     'repo_url'  => 'https://charts.rook.io/release',
-    'version'   => '1.20.0',
+    'version'   => '1.20.3',
     'subcharts' => [
       {
         'service'  => 'ceph-monitoring',
