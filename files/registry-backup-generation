@@ -16,6 +16,10 @@ generation="${generations}/${generation_id}"
 current_tmp="${backup_root}/.current-${generation_id}"
 
 install -d -m 0700 "$staging_root" "$generations"
+for stale_staging in "$staging_root"/*; do
+  [ -e "$stale_staging" ] || [ -L "$stale_staging" ] || continue
+  rm -rf "$stale_staging"
+done
 install -d -m 0700 "$staging"
 install -d -m 0700 "$staging/data"
 cleanup() {
@@ -28,10 +32,10 @@ trap cleanup EXIT HUP INT TERM
 # every backup into a full multi-terabyte download and cannot meet the bounded
 # job deadline.  The first run block-clones the legacy in-place payload instead.
 if [ -L "$backup_root/current" ]; then
-  current_target="$(readlink "$backup_root/current")"
-  current_name="${current_target#generations/}"
-  case "$current_target" in
-    generations/*) ;;
+  current_generation="$(readlink -f "$backup_root/current")"
+  current_name="${current_generation#"${generations}/"}"
+  case "$current_generation" in
+    "$generations"/*) ;;
     *)
       printf '%s\n' 'registry backup current pointer is invalid' >&2
       exit 1
@@ -43,7 +47,6 @@ if [ -L "$backup_root/current" ]; then
       exit 1
       ;;
   esac
-  current_generation="${backup_root}/${current_target}"
   [ -f "$current_generation/.complete" ]
   [ -d "$current_generation/data" ]
   cp -a --reflink=always "$current_generation/data/." "$staging/data/"

@@ -82,4 +82,45 @@ RSpec.describe 'registry backup generations' do
       expect(Dir.children(destination)).to be_empty
     end
   end
+
+  it 'removes staging residue from a hard-interrupted prior backup' do
+    Dir.mktmpdir('registry-stale-staging') do |tmpdir|
+      source = File.join(tmpdir, 'source')
+      backup_root = File.join(tmpdir, 'backup')
+      stale = File.join(backup_root, '.staging', 'interrupted')
+      sync = File.join(tmpdir, 'sync')
+      FileUtils.mkdir_p(source)
+      FileUtils.mkdir_p(stale)
+      File.write(File.join(stale, 'partial'), 'incomplete')
+      File.write(File.join(source, 'artifact'), 'complete')
+      write_sync(sync, 'cp -R "$1/." "$2"')
+
+      _stdout, stderr, status = Open3.capture3(backup_helper, backup_root, '--', sync, source)
+      expect(status).to be_success, stderr
+      expect(Dir.children(File.join(backup_root, '.staging'))).to be_empty
+      current = File.realpath(File.join(backup_root, 'current'))
+      expect(File.read(File.join(current, 'data', 'artifact'))).to eq('complete')
+    end
+  end
+
+  it 'refuses a completed generation entry that resolves outside the backup root' do
+    Dir.mktmpdir('registry-generation-escape') do |tmpdir|
+      backup_root = File.join(tmpdir, 'backup')
+      generations = File.join(backup_root, 'generations')
+      outside = File.join(tmpdir, 'outside')
+      sync = File.join(tmpdir, 'sync')
+      FileUtils.mkdir_p(File.join(outside, 'data'))
+      FileUtils.mkdir_p(generations)
+      File.write(File.join(outside, '.complete'), "outside\n")
+      File.write(File.join(outside, 'data', 'artifact'), 'outside')
+      File.symlink(outside, File.join(generations, 'escaped'))
+      File.symlink('generations/escaped', File.join(backup_root, 'current'))
+      write_sync(sync, 'exit 0')
+
+      _stdout, _stderr, status = Open3.capture3(backup_helper, backup_root, '--', sync)
+      expect(status).not_to be_success
+      expect(File.read(File.join(outside, 'data', 'artifact'))).to eq('outside')
+      expect(Dir.children(File.join(backup_root, '.staging'))).to be_empty
+    end
+  end
 end
