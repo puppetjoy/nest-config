@@ -16,8 +16,8 @@ steps:
         - control2
         - control3
       etcd_servers:
-        - https://172.22.4.8:2379
         - https://172.22.4.9:2379
+        - https://172.22.4.8:2379
     targets: eyrie-control-plane
 
   - description: 'Join worker nodes'
