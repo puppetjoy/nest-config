@@ -33,5 +33,5 @@ steps:
       chart: 'openebs-zfslocalpv/zfs-localpv'
       namespace: 'openebs'
       repo_url: 'https://openebs.github.io/zfs-localpv'
-      version: '2.10.0'
+      version: '2.10.1'
       deploy: $zfs
