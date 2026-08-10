@@ -2,6 +2,7 @@ require 'fileutils'
 require 'open3'
 require 'spec_helper'
 require 'tmpdir'
+require 'timeout'
 
 RSpec.describe 'registry backup generations' do
   let(:repo_root) { File.expand_path('../..', __dir__) }
@@ -83,17 +84,71 @@ RSpec.describe 'registry backup generations' do
     end
   end
 
-  it 'removes staging residue from a hard-interrupted prior backup' do
+  it 'retires the legacy payload only after publishing the first generation' do
+    Dir.mktmpdir('registry-legacy-migration') do |tmpdir|
+      source = File.join(tmpdir, 'source')
+      backup_root = File.join(tmpdir, 'backup')
+      sync = File.join(tmpdir, 'sync')
+      failed_sync = File.join(tmpdir, 'failed-sync')
+      FileUtils.mkdir_p(source)
+      FileUtils.mkdir_p(File.join(backup_root, 'docker'))
+      File.write(File.join(backup_root, 'docker', 'legacy'), 'legacy')
+      File.write(File.join(backup_root, '.legacy-object'), 'hidden')
+      File.write(File.join(source, 'artifact'), 'first')
+      write_sync(sync, 'cp -R "$1/." "$2"')
+      write_sync(failed_sync, 'exit 42')
+
+      _stdout, _stderr, status = Open3.capture3(backup_helper, backup_root, '--', failed_sync, source)
+      expect(status.exitstatus).to eq(42)
+      expect(File.read(File.join(backup_root, 'docker', 'legacy'))).to eq('legacy')
+      expect(File.read(File.join(backup_root, '.legacy-object'))).to eq('hidden')
+
+      _stdout, stderr, status = Open3.capture3(backup_helper, backup_root, '--', sync, source)
+      expect(status).to be_success, stderr
+      first_generation = File.realpath(File.join(backup_root, 'current'))
+      expect(File.read(File.join(first_generation, 'data', 'docker', 'legacy'))).to eq('legacy')
+      expect(File.read(File.join(first_generation, 'data', '.legacy-object'))).to eq('hidden')
+      expect(File.exist?(File.join(backup_root, 'docker'))).to be(false)
+      expect(File.exist?(File.join(backup_root, '.legacy-object'))).to be(false)
+
+      stale_retirement = File.join(backup_root, '.legacy-retired-interrupted')
+      FileUtils.mkdir_p(stale_retirement)
+      File.write(File.join(stale_retirement, 'retired-blocks'), 'safe to reap after publication')
+      File.write(File.join(source, 'artifact'), 'second')
+      _stdout, stderr, status = Open3.capture3(backup_helper, backup_root, '--', sync, source)
+      expect(status).to be_success, stderr
+      expect(File.exist?(stale_retirement)).to be(false)
+      expect(Dir.children(File.join(backup_root, 'generations')).length).to eq(2)
+      expect(Dir.children(backup_root).sort).to eq(['.staging', 'current', 'generations'])
+      expect(File.read(File.join(File.realpath(File.join(backup_root, 'current')), 'data', 'artifact'))).to eq('second')
+    end
+  end
+
+  it 'removes staging residue left by a hard-interrupted prior backup' do
     Dir.mktmpdir('registry-stale-staging') do |tmpdir|
       source = File.join(tmpdir, 'source')
       backup_root = File.join(tmpdir, 'backup')
-      stale = File.join(backup_root, '.staging', 'interrupted')
+      marker = File.join(tmpdir, 'sync-started')
       sync = File.join(tmpdir, 'sync')
+      interrupted_sync = File.join(tmpdir, 'interrupted-sync')
       FileUtils.mkdir_p(source)
-      FileUtils.mkdir_p(stale)
-      File.write(File.join(stale, 'partial'), 'incomplete')
-      File.write(File.join(source, 'artifact'), 'complete')
+      File.write(File.join(source, 'artifact'), 'prior')
       write_sync(sync, 'cp -R "$1/." "$2"')
+      write_sync(interrupted_sync, "touch #{marker}; sleep 30")
+
+      _stdout, stderr, status = Open3.capture3(backup_helper, backup_root, '--', sync, source)
+      expect(status).to be_success, stderr
+      published = File.readlink(File.join(backup_root, 'current'))
+      File.write(File.join(source, 'artifact'), 'complete')
+
+      pid = Process.spawn(backup_helper, backup_root, '--', interrupted_sync, source, pgroup: true)
+      Timeout.timeout(5) { sleep 0.01 until File.exist?(marker) }
+      Process.kill('KILL', -pid)
+      _waited_pid, interrupted_status = Process.wait2(pid)
+      expect(interrupted_status.termsig).to eq(Signal.list.fetch('KILL'))
+      expect(Dir.children(File.join(backup_root, '.staging'))).not_to be_empty
+      expect(File.readlink(File.join(backup_root, 'current'))).to eq(published)
+      expect(File.read(File.join(File.realpath(File.join(backup_root, 'current')), 'data', 'artifact'))).to eq('prior')
 
       _stdout, stderr, status = Open3.capture3(backup_helper, backup_root, '--', sync, source)
       expect(status).to be_success, stderr

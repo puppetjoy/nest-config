@@ -14,6 +14,8 @@ staging="${staging_root}/${generation_id}"
 generations="${backup_root}/generations"
 generation="${generations}/${generation_id}"
 current_tmp="${backup_root}/.current-${generation_id}"
+legacy_retirement="${backup_root}/.legacy-retired-${generation_id}"
+migrating_legacy=false
 
 install -d -m 0700 "$staging_root" "$generations"
 for stale_staging in "$staging_root"/*; do
@@ -23,7 +25,7 @@ done
 install -d -m 0700 "$staging"
 install -d -m 0700 "$staging/data"
 cleanup() {
-  rm -rf "$staging" "$current_tmp"
+  rm -rf "$staging" "$current_tmp" "$legacy_retirement"
 }
 trap cleanup EXIT HUP INT TERM
 
@@ -49,11 +51,16 @@ if [ -L "$backup_root/current" ]; then
   esac
   [ -f "$current_generation/.complete" ]
   [ -d "$current_generation/data" ]
+  for stale_retirement in "$backup_root"/.legacy-retired-*; do
+    [ -e "$stale_retirement" ] || [ -L "$stale_retirement" ] || continue
+    rm -rf "$stale_retirement"
+  done
   cp -a --reflink=always "$current_generation/data/." "$staging/data/"
 elif [ -e "$backup_root/current" ]; then
   printf '%s\n' 'registry backup current pointer is not a symlink' >&2
   exit 1
 else
+  migrating_legacy=true
   for legacy_path in "$backup_root"/* "$backup_root"/.[!.]* "$backup_root"/..?*; do
     [ -e "$legacy_path" ] || [ -L "$legacy_path" ] || continue
     case "${legacy_path##*/}" in
@@ -68,6 +75,23 @@ printf '%s\n' "$generation_id" > "$staging/.complete"
 mv "$staging" "$generation"
 ln -s "generations/${generation_id}" "$current_tmp"
 mv -Tf "$current_tmp" "$backup_root/current"
+
+# The first completed generation supersedes the legacy in-place payload.  Only
+# retire the same allowlisted top-level payload names after current has been
+# atomically published, so a failed initial sync leaves the legacy tree intact.
+# If the host is interrupted while moving these entries, current is already a
+# complete generation and the next run seeds from it rather than from legacy.
+if [ "$migrating_legacy" = true ]; then
+  install -d -m 0700 "$legacy_retirement"
+  for legacy_path in "$backup_root"/* "$backup_root"/.[!.]* "$backup_root"/..?*; do
+    [ -e "$legacy_path" ] || [ -L "$legacy_path" ] || continue
+    case "${legacy_path##*/}" in
+      .staging|generations|current|.current-*|.legacy-retired-*) continue ;;
+    esac
+    mv "$legacy_path" "$legacy_retirement/"
+  done
+  rm -rf "$legacy_retirement"
+fi
 
 # Keep the current and immediately preceding completed generations.  Since
 # each generation is a reflink clone, retention consumes only changed blocks.
