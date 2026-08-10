@@ -50,6 +50,7 @@ RSpec.describe 'nest::kubernetes::init safety ordering' do
     expect(upgrade_plan).to include('test -f /etc/kubernetes/manifests/kube-apiserver.yaml')
     expect(upgrade_plan).to include('requires explicit final etcd_servers for strict reconciliation')
     expect(upgrade_plan).to include("run_plan('nest::kubernetes::reconcile_control_plane'")
+    expect(upgrade_plan).to include('--skip-phases=control-plane')
     fail_closed = upgrade_plan.index('requires explicit final etcd_servers for strict reconciliation')
     first_mutation = upgrade_plan.index("run_command('eix-sync -a'")
     reconcile = upgrade_plan.index("run_plan('nest::kubernetes::reconcile_control_plane'")

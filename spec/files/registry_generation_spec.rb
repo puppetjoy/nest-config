@@ -187,4 +187,23 @@ RSpec.describe 'registry backup generations' do
       expect(Dir.children(File.join(backup_root, '.staging'))).to be_empty
     end
   end
+
+  it 'refuses restore from a nested generation path' do
+    Dir.mktmpdir('registry-nested-generation') do |tmpdir|
+      backup_root = File.join(tmpdir, 'backup')
+      nested = File.join(backup_root, 'generations', 'outer', 'nested')
+      destination = File.join(tmpdir, 'destination')
+      sync = File.join(tmpdir, 'sync')
+      FileUtils.mkdir_p(File.join(nested, 'data'))
+      FileUtils.mkdir_p(destination)
+      File.write(File.join(nested, '.complete'), "nested\n")
+      File.write(File.join(nested, 'data', 'artifact'), 'must-not-restore')
+      File.symlink('generations/outer/nested', File.join(backup_root, 'current'))
+      write_sync(sync, 'cp -R "$1/." "$2"')
+
+      _stdout, _stderr, status = Open3.capture3(restore_helper, backup_root, destination, '--', sync)
+      expect(status).not_to be_success
+      expect(Dir.children(destination)).to be_empty
+    end
+  end
 end

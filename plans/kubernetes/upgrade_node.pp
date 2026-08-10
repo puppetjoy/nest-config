@@ -37,6 +37,9 @@ plan nest::kubernetes::upgrade_node (
         targets      => $target,
         etcd_servers => $etcd_servers,
       })
+      run_command('kubeadm upgrade node --ignore-preflight-errors=SystemVerification --patches=/etc/kubernetes/patches --skip-phases=control-plane', $target, {
+        _run_as => 'root',
+      })
     }
     if $upgrade_kubelet {
       run_command('emerge --oneshot --verbose kubelet', $target, {

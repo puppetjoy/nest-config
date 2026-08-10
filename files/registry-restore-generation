@@ -10,10 +10,17 @@ shift
 [ "$#" -gt 0 ]
 
 generation="$(readlink -f "$backup_root/current")"
+generation_name="${generation#"${backup_root}/generations/"}"
 case "$generation" in
   "$backup_root"/generations/*) ;;
   *)
     printf '%s\n' 'registry backup current pointer is not a published generation' >&2
+    exit 1
+    ;;
+esac
+case "$generation_name" in
+  ''|.|..|*/*)
+    printf '%s\n' 'registry backup current pointer is not an immediate published generation' >&2
     exit 1
     ;;
 esac
