@@ -34,11 +34,12 @@ plan nest::kubernetes::generate_kube_vip_manifest (
     $render_command = @(COMMAND/L)
       set -eu
       manifest=/etc/kubernetes/manifests/kube-vip.yaml
-      temporary="$(mktemp /tmp/kube-vip.XXXXXX.yaml)"
+      temporary="$(mktemp /etc/kubernetes/manifests/.kube-vip.XXXXXX.yaml)"
       trap 'rm -f "$temporary"' EXIT
       __KUBE_VIP__ --bgpRouterID "$(facter networking.ip)" > "$temporary"
       test -s "$temporary"
-      install -m 0600 "$temporary" "$manifest"
+      chmod 0600 "$temporary"
+      mv -f "$temporary" "$manifest"
       | COMMAND
     $kube_vip_cmd = $render_command.regsubst('__KUBE_VIP__', $kube_vip_cmd_quoted, 'G')
 

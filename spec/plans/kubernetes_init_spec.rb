@@ -64,9 +64,10 @@ RSpec.describe 'nest::kubernetes::init safety ordering' do
     expect(init_plan).to include('$rollback_observer = ($nodes - $rollback_node)[0]')
   end
 
-  it 'renders replacement static manifests outside the watched directory before atomic install' do
-    expect(vip_plan).to include('temporary="$(mktemp /tmp/kube-vip.XXXXXX.yaml)"')
+  it 'atomically publishes a complete hidden replacement static manifest' do
+    expect(vip_plan).to include('temporary="$(mktemp /etc/kubernetes/manifests/.kube-vip.XXXXXX.yaml)"')
     expect(vip_plan).to include('test -s "$temporary"')
-    expect(vip_plan.index('test -s "$temporary"')).to be < vip_plan.index('install -m 0600 "$temporary" "$manifest"')
+    expect(vip_plan).to include('mv -f "$temporary" "$manifest"')
+    expect(vip_plan.index('test -s "$temporary"')).to be < vip_plan.index('mv -f "$temporary" "$manifest"')
   end
 end
