@@ -1,8 +1,8 @@
 ---
 # A full backup and test restore may each consume up to 2h45m. Run them three
 # hours apart in a six-hour cycle so either job can use its complete deadline
-# without colliding with the other operation. The shared host lock remains a
-# fail-safe against delayed or manually launched generations.
+# without colliding with the other operation. The shared host lock serializes
+# delayed or manually launched generations instead of dropping either one.
 backup_schedule: '0 2-20/6 * * *'
 restore_schedule: '0 5-23/6 * * *'
 restore_job_active_deadline_seconds: 9900
@@ -10,8 +10,8 @@ restore_job_active_deadline_seconds: 9900
 # activeDeadlineSeconds is a wall-clock bound, not an inactivity detector.  A
 # full registry sync can legitimately exceed two hours, but this 2h45m bound
 # expires 15 minutes before the opposite operation's next schedule. Deadline
-# enforcement is asynchronous, so a delayed generation can still encounter the
-# nonblocking host lock; post-deploy freshness remains a separate gate.
+# enforcement is asynchronous, so a delayed generation may wait on the shared
+# lock until its own deadline; post-deploy freshness remains a separate gate.
 backup_job_active_deadline_seconds: 9900
 
 # Ensure 'test' jobs use prod images

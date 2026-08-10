@@ -31,7 +31,6 @@ plan nest::eyrie::registry::restore (
     $restore_cmd = [
       'flock',
       '--exclusive',
-      '--nonblock',
       $lock_file,
       $helper,
       $backup_root,
