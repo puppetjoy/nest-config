@@ -6,6 +6,7 @@ RSpec.describe 'nest::kubernetes::init safety ordering' do
   let(:eyrie_build) { YAML.safe_load_file(File.join(repo_root, 'plans/eyrie/build.yaml')) }
   let(:init_plan) { File.read(File.join(repo_root, 'plans/kubernetes/init.pp')) }
   let(:init_config) { File.read(File.join(repo_root, 'templates/kubernetes/kubeadm-init-config.yaml.epp')) }
+  let(:apiserver_patch) { YAML.safe_load_file(File.join(repo_root, 'files/kubernetes/kube-apiserver-readyz-period.yaml')) }
   let(:vip_plan) { File.read(File.join(repo_root, 'plans/kubernetes/generate_kube_vip_manifest.pp')) }
   let(:upgrade_plan) { File.read(File.join(repo_root, 'plans/kubernetes/upgrade_node.pp')) }
 
@@ -61,6 +62,12 @@ RSpec.describe 'nest::kubernetes::init safety ordering' do
 
   it 'disables size-based list cost estimation during bootstrap' do
     expect(init_config).to include('feature-gates: SizeBasedListCostEstimate=false')
+  end
+
+  it 'bounds recurring readiness storage scans to four per minute per API server' do
+    readiness_probe = apiserver_patch.dig('spec', 'containers', 0, 'readinessProbe')
+
+    expect(readiness_probe.fetch('periodSeconds')).to eq(15)
   end
 
   it 'uses strict member reconciliation in the control-plane upgrade path' do
