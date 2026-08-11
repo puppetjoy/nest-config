@@ -6,4 +6,6 @@ spec:
   containers:
     - name: kube-apiserver
       readinessProbe:
+        httpGet:
+          path: /readyz?exclude=etcd-readiness
         periodSeconds: 15
