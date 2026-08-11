@@ -64,9 +64,10 @@ RSpec.describe 'nest::kubernetes::init safety ordering' do
     expect(init_config).to include('feature-gates: SizeBasedListCostEstimate=false')
   end
 
-  it 'bounds recurring readiness storage scans to four per minute per API server' do
+  it 'keeps static readiness lightweight while external gates retain strict etcd-readiness checks' do
     readiness_probe = apiserver_patch.dig('spec', 'containers', 0, 'readinessProbe')
 
+    expect(readiness_probe.dig('httpGet', 'path')).to eq('/readyz?exclude=etcd-readiness')
     expect(readiness_probe.fetch('periodSeconds')).to eq(15)
   end
 
