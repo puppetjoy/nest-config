@@ -14,10 +14,13 @@ clusterName: <%= $cluster_name %>
 # Use DNS to lookup control plane to route based on client network
 controlPlaneEndpoint: <%= $control_plane_endpoint %>
 
-<% unless $etcd_servers.empty { -%>
-# Keep API reads off control1's slower member and prefer control3 first
 apiServer:
   extraArgs:
+    # Object-count polling fans out across every resource type and repeatedly
+    # overloads the small etcd members; it only feeds apiserver_storage_objects.
+    etcd-count-metric-poll-period: "0"
+<% unless $etcd_servers.empty { -%>
+    # Keep API reads off control1's slower member.
     etcd-servers: <%= $etcd_servers.join(',') %>
 <% } -%>
 
