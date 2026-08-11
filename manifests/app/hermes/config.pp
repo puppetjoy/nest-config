@@ -13,6 +13,8 @@ class nest::app::hermes::config {
   $telegram_bot_username            = $nest::app::hermes::telegram_bot_username
   $telegram_bot_id                  = $nest::app::hermes::telegram_bot_id
   $telegram_rich_messages           = $nest::app::hermes::telegram_rich_messages
+  $streaming_enabled                = $nest::app::hermes::streaming_enabled
+  $streaming_transport              = $nest::app::hermes::streaming_transport
   $model_provider                   = $nest::app::hermes::model_provider
   $model_name                       = $nest::app::hermes::model_name
   $model_base_url                   = $nest::app::hermes::model_base_url
@@ -147,6 +149,8 @@ class nest::app::hermes::config {
       default => $config['telegram_bot_id'],
     }
     $instance_telegram_rich_messages = pick($config['telegram_rich_messages'], $telegram_rich_messages)
+    $instance_streaming_enabled   = pick($config['streaming_enabled'], $streaming_enabled)
+    $instance_streaming_transport = pick($config['streaming_transport'], $streaming_transport)
     $instance_model_provider    = pick($config['model_provider'], $model_provider)
     $instance_model_name        = pick($config['model_name'], $model_name)
     $instance_model_base_url    = pick($config['model_base_url'], $model_base_url)
@@ -263,6 +267,8 @@ class nest::app::hermes::config {
       telegram_bot_username      => $instance_telegram_bot_username,
       telegram_bot_id            => $instance_telegram_bot_id,
       telegram_rich_messages     => $instance_telegram_rich_messages,
+      streaming_enabled          => $instance_streaming_enabled,
+      streaming_transport        => $instance_streaming_transport,
       model_provider             => $instance_model_provider,
       model_name                 => $instance_model_name,
       model_base_url             => $instance_model_base_url,
