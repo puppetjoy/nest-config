@@ -29,6 +29,7 @@ RSpec.describe 'reconcile-kubeadm-cluster-config' do
       expect(stderr).to be_empty
       expect(status).to be_success
       args = YAML.safe_load(stdout).dig('apiServer', 'extraArgs')
+      expect(args['etcd-count-metric-poll-period']).to eq('0')
       expect(args['etcd-servers']).to eq(endpoints.join(','))
       expect(args['audit-log-maxage']).to eq('7') if extra_args.is_a?(Hash)
     end
@@ -53,6 +54,8 @@ RSpec.describe 'reconcile-kubeadm-cluster-config' do
       expect(stderr).to be_empty
       expect(status).to be_success
       args = YAML.safe_load(stdout).dig('apiServer', 'extraArgs')
+      expect(args.count { |arg| arg['name'] == 'etcd-count-metric-poll-period' }).to eq(1)
+      expect(args).to include({ 'name' => 'etcd-count-metric-poll-period', 'value' => '0' })
       expect(args.count { |arg| arg['name'] == 'etcd-servers' }).to eq(1)
       expect(args).to include({ 'name' => 'etcd-servers', 'value' => endpoints.join(',') })
       expect(args).to include({ 'name' => 'audit-log-maxage', 'value' => '7' }) if extra_args.is_a?(Array)
@@ -71,13 +74,16 @@ RSpec.describe 'reconcile-kubeadm-cluster-config' do
       'apiVersion' => 'kubeadm.k8s.io/v1beta4',
       'kind' => 'ClusterConfiguration',
       'apiServer' => {
-        'extraArgs' => [{ 'name' => 'etcd-servers', 'value' => endpoints.reverse.join(',') }],
+        'extraArgs' => [
+          { 'name' => 'etcd-count-metric-poll-period', 'value' => '0' },
+          { 'name' => 'etcd-servers', 'value' => endpoints.reverse.join(',') },
+        ],
       },
     }
     _stdout, stderr, status = transform(config, '--check', *endpoints)
 
     expect(status).not_to be_success
-    expect(stderr).to include('etcd endpoints differ')
+    expect(stderr).to include('etcd-servers differs')
   end
 
   it 'fails readback checking when v1beta4 contains duplicate endpoint arguments' do
@@ -86,6 +92,7 @@ RSpec.describe 'reconcile-kubeadm-cluster-config' do
       'kind' => 'ClusterConfiguration',
       'apiServer' => {
         'extraArgs' => [
+          { 'name' => 'etcd-count-metric-poll-period', 'value' => '0' },
           { 'name' => 'etcd-servers', 'value' => endpoints.join(',') },
           { 'name' => 'etcd-servers', 'value' => endpoints.join(',') },
         ],
@@ -95,6 +102,23 @@ RSpec.describe 'reconcile-kubeadm-cluster-config' do
 
     expect(status).not_to be_success
     expect(stderr).to include('expected exactly one etcd-servers argument, got 2')
+  end
+
+  it 'fails readback checking when object-count polling remains enabled' do
+    config = {
+      'apiVersion' => 'kubeadm.k8s.io/v1beta4',
+      'kind' => 'ClusterConfiguration',
+      'apiServer' => {
+        'extraArgs' => [
+          { 'name' => 'etcd-count-metric-poll-period', 'value' => '1m' },
+          { 'name' => 'etcd-servers', 'value' => endpoints.join(',') },
+        ],
+      },
+    }
+    _stdout, stderr, status = transform(config, '--check', *endpoints)
+
+    expect(status).not_to be_success
+    expect(stderr).to include('etcd-count-metric-poll-period differs')
   end
 
   it 'compares restored configuration structurally' do

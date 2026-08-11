@@ -18,6 +18,11 @@ parser.parse!
 expected_endpoints = ARGV
 raise 'at least one etcd endpoint is required' if mode != :compare && expected_endpoints.empty?
 
+managed_extra_args = {
+  'etcd-count-metric-poll-period' => '0',
+  'etcd-servers' => expected_endpoints.join(','),
+}
+
 config = YAML.safe_load($stdin.read, permitted_classes: [], permitted_symbols: [], aliases: false)
 raise 'input is not a kubeadm ClusterConfiguration' unless config.is_a?(Hash) && config['kind'] == 'ClusterConfiguration'
 
@@ -35,24 +40,33 @@ extra_args = api_server['extraArgs'] ||= default_extra_args
 
 case extra_args
 when Hash
-  actual_endpoints = extra_args['etcd-servers'].to_s.split(',')
-  etcd_arg_count = extra_args.key?('etcd-servers') ? 1 : 0
-  extra_args['etcd-servers'] = expected_endpoints.join(',') unless mode == :check
+  actual_managed_args = managed_extra_args.keys.to_h { |name| [name, extra_args[name]] }
+  managed_arg_counts = managed_extra_args.keys.to_h { |name| [name, extra_args.key?(name) ? 1 : 0] }
+  extra_args.merge!(managed_extra_args) unless mode == :check
 when Array
-  etcd_args = extra_args.select { |arg| arg['name'] == 'etcd-servers' }
-  actual_endpoints = etcd_args.empty? ? [] : etcd_args.first['value'].to_s.split(',')
-  etcd_arg_count = etcd_args.length
+  actual_managed_args = managed_extra_args.keys.to_h do |name|
+    args = extra_args.select { |arg| arg['name'] == name }
+    [name, args.empty? ? nil : args.first['value']]
+  end
+  managed_arg_counts = managed_extra_args.keys.to_h do |name|
+    [name, extra_args.count { |arg| arg['name'] == name }]
+  end
   unless mode == :check
-    extra_args.reject! { |arg| arg['name'] == 'etcd-servers' }
-    extra_args << { 'name' => 'etcd-servers', 'value' => expected_endpoints.join(',') }
+    extra_args.reject! { |arg| managed_extra_args.key?(arg['name']) }
+    managed_extra_args.each { |name, value| extra_args << { 'name' => name, 'value' => value } }
   end
 else
   raise "unsupported apiServer.extraArgs shape: #{extra_args.class}"
 end
 
 if mode == :check
-  raise "expected exactly one etcd-servers argument, got #{etcd_arg_count}" unless etcd_arg_count == 1
-  raise "etcd endpoints differ: expected #{expected_endpoints.inspect}, got #{actual_endpoints.inspect}" unless actual_endpoints == expected_endpoints
+  managed_extra_args.each do |name, expected_value|
+    count = managed_arg_counts.fetch(name)
+    raise "expected exactly one #{name} argument, got #{count}" unless count == 1
+
+    actual_value = actual_managed_args.fetch(name)
+    raise "#{name} differs: expected #{expected_value.inspect}, got #{actual_value.inspect}" unless actual_value == expected_value
+  end
 
   puts expected_endpoints.join(',')
 else
