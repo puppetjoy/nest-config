@@ -123,8 +123,12 @@ class nest::app::hermes::install {
   }
 
   exec { 'install_hermes_agent':
-    command     => "${venv_pip} install --upgrade --force-reinstall --editable ${source_dir} && git -C ${source_dir} rev-parse HEAD > ${git_revision_file}",
-    unless      => "test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"from pathlib import Path; import hermes_constants; assert Path(hermes_constants.__file__).resolve() == Path('${source_dir}/hermes_constants.py').resolve()\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent')\" && ${venv_python} -c \"import importlib.metadata as m; m.version('python-multipart')\" && ${venv_python} -m pip check",
+    # Setuptools' default editable finder runs after PathFinder. A stale
+    # site-packages/hermes_cli directory can therefore win as a namespace
+    # package and hide the source package. Compat mode adds the checkout to
+    # sys.path directly while retaining the required editable install.
+    command     => "${venv_pip} install --upgrade --force-reinstall --config-settings editable_mode=compat --editable ${source_dir} && git -C ${source_dir} rev-parse HEAD > ${git_revision_file}",
+    unless      => "test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"from pathlib import Path; import hermes_cli, hermes_constants; assert Path(hermes_cli.__file__).resolve() == Path('${source_dir}/hermes_cli/__init__.py').resolve(); assert hermes_cli.__version__; assert Path(hermes_constants.__file__).resolve() == Path('${source_dir}/hermes_constants.py').resolve()\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent')\" && ${venv_python} -c \"import importlib.metadata as m; m.version('python-multipart')\" && ${venv_python} -m pip check",
     environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
     path        => ['/bin', '/usr/bin'],
     require     => [
