@@ -16,6 +16,9 @@ controlPlaneEndpoint: <%= $control_plane_endpoint %>
 
 apiServer:
   extraArgs:
+    # Kubernetes 1.34's beta list-cost estimator scans all keys for every
+    # resource type every minute, which overloads the small etcd members.
+    feature-gates: SizeBasedListCostEstimate=false
     # Object-count polling fans out across every resource type and repeatedly
     # overloads the small etcd members; it only feeds apiserver_storage_objects.
     etcd-count-metric-poll-period: "0"

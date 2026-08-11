@@ -59,6 +59,10 @@ RSpec.describe 'nest::kubernetes::init safety ordering' do
     expect(init_config).to include('etcd-count-metric-poll-period: "0"')
   end
 
+  it 'disables size-based list cost estimation during bootstrap' do
+    expect(init_config).to include('feature-gates: SizeBasedListCostEstimate=false')
+  end
+
   it 'uses strict member reconciliation in the control-plane upgrade path' do
     expect(upgrade_plan).to include('test -f /etc/kubernetes/manifests/kube-apiserver.yaml')
     expect(upgrade_plan).to include('requires explicit final etcd_servers for strict reconciliation')
