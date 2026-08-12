@@ -26,7 +26,52 @@ storage_size: 20Gi
     effect: NoSchedule
 
 resources:
-  backup: {}
+  backup:
+    apiVersion: batch/v1
+    kind: CronJob
+    metadata:
+      name: "%{nest::kubernetes::service}-backup"
+      namespace: "%{nest::kubernetes::namespace}"
+      labels:
+        app: "%{nest::kubernetes::service}"
+        component: backup
+    spec:
+      concurrencyPolicy: Forbid
+      schedule: '17 4 * * *'
+      timeZone: 'America/New_York'
+      successfulJobsHistoryLimit: 3
+      failedJobsHistoryLimit: 3
+      jobTemplate:
+        spec:
+          ttlSecondsAfterFinished: 86400
+          template:
+            spec:
+              affinity: *affinity
+              tolerations: *tolerations
+              restartPolicy: Never
+              containers:
+                - name: backup
+                  image: registry.gitlab.joyfullee.me/joy/vesture:main
+                  imagePullPolicy: Always
+                  command:
+                    - /bin/sh
+                    - -ec
+                    - |
+                      stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+                      vesture backup --output "/var/lib/vesture/backups/vesture-${stamp}.zip"
+                      find /var/lib/vesture/backups -type f -name 'vesture-*.zip' -mtime +30 -delete
+                  env:
+                    - name: VESTURE_DATA_DIR
+                      value: /var/lib/vesture
+                    - name: VESTURE_MEDIA_DIR
+                      value: /var/lib/vesture/media
+                  volumeMounts:
+                    - name: data
+                      mountPath: /var/lib/vesture
+              volumes:
+                - name: data
+                  persistentVolumeClaim:
+                    claimName: "%{nest::kubernetes::service}-storage"
   restore: {}
 
   certs:
