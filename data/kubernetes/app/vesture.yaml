@@ -46,6 +46,10 @@ resources:
           ttlSecondsAfterFinished: 86400
           template:
             spec:
+              securityContext:
+                runAsUser: 10001
+                runAsGroup: 10001
+                fsGroup: 10001
               affinity: *affinity
               tolerations: *tolerations
               restartPolicy: Never
