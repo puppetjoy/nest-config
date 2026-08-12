@@ -25,6 +25,8 @@ class nest::app::hermes::config {
   $image_gen_model                  = $nest::app::hermes::image_gen_model
   $ca_bundle_file                   = $nest::app::hermes::ca_bundle_file
   $compression_timeout              = $nest::app::hermes::compression_timeout
+  $responses_native                 = $nest::app::hermes::responses_native
+  $responses_threshold              = $nest::app::hermes::responses_threshold
   $web_extract_timeout              = $nest::app::hermes::web_extract_timeout
   $dashboard_bind_host              = $nest::app::hermes::dashboard_bind_host
   $dashboard_oauth_client_id        = $nest::app::hermes::dashboard_oauth_client_id
@@ -171,6 +173,8 @@ class nest::app::hermes::config {
       default => $config['image_gen_model'],
     }
     $instance_compress_timeout  = pick($config['compression_timeout'], $compression_timeout)
+    $instance_responses_native   = pick($config['responses_native'], $responses_native)
+    $instance_responses_threshold = pick($config['responses_threshold'], $responses_threshold)
     $instance_extract_timeout   = pick($config['web_extract_timeout'], $web_extract_timeout)
     $instance_approval_mode     = pick($config['approval_mode'], 'manual')
     $instance_dashboard_enabled = pick($config['dashboard_enabled'], false)
@@ -280,6 +284,8 @@ class nest::app::hermes::config {
       image_gen_provider         => $instance_image_provider,
       image_gen_model            => $instance_image_model,
       compression_timeout        => $instance_compress_timeout,
+      responses_native           => $instance_responses_native,
+      responses_threshold        => $instance_responses_threshold,
       web_extract_timeout        => $instance_extract_timeout,
       approval_mode              => $instance_approval_mode,
       dashboard_enabled          => $instance_dashboard_enabled,

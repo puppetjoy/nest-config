@@ -40,6 +40,8 @@ class nest::app::hermes (
   Optional[String[1]]            $image_gen_provider             = undef,
   Optional[String[1]]            $image_gen_model                = undef,
   Integer[1]                     $compression_timeout            = 120,
+  Boolean                        $responses_native               = true,
+  Integer[1]                     $responses_threshold            = 200000,
   Integer[1]                     $web_extract_timeout            = 360,
   String[1]                      $dashboard_bind_host            = '0.0.0.0',
   Optional[String[1]]            $dashboard_oauth_client_id      = undef,
