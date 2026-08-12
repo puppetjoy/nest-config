@@ -65,6 +65,8 @@ resources:
                       value: /var/lib/vesture
                     - name: VESTURE_MEDIA_DIR
                       value: /var/lib/vesture/media
+                    - name: VESTURE_PORT
+                      value: '8080'
                   volumeMounts:
                     - name: data
                       mountPath: /var/lib/vesture
