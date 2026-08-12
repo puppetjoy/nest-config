@@ -102,7 +102,6 @@ resources:
       namespace: "%{nest::kubernetes::namespace}"
     stringData:
       VESTURE_SECRET_KEY: "%{nest::service::vesture::secret_key}"
-      VESTURE_UI_PASSWORD_SHA256: "%{nest::service::vesture::ui_password_sha256}"
       VESTURE_STAR_TOKENS: "%{nest::service::vesture::star_tokens}"
 
   storage:
@@ -160,16 +159,13 @@ resources:
                   value: /var/lib/vesture/media
                 - name: VESTURE_SESSION_COOKIE_SECURE
                   value: 'true'
+                - name: VESTURE_PUBLIC_ORIGIN
+                  value: https://vesture.eyrie
                 - name: VESTURE_SECRET_KEY
                   valueFrom:
                     secretKeyRef:
                       name: "%{nest::kubernetes::service}-secrets"
                       key: VESTURE_SECRET_KEY
-                - name: VESTURE_UI_PASSWORD_SHA256
-                  valueFrom:
-                    secretKeyRef:
-                      name: "%{nest::kubernetes::service}-secrets"
-                      key: VESTURE_UI_PASSWORD_SHA256
                 - name: VESTURE_STAR_TOKENS
                   valueFrom:
                     secretKeyRef:
