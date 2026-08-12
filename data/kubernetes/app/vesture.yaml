@@ -58,7 +58,7 @@ resources:
                     - -ec
                     - |
                       stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-                      vesture backup --output "/var/lib/vesture/backups/vesture-${stamp}.zip"
+                      python -m vesture.cli backup --output "/var/lib/vesture/backups/vesture-${stamp}.zip"
                       find /var/lib/vesture/backups -type f -name 'vesture-*.zip' -mtime +30 -delete
                   env:
                     - name: VESTURE_DATA_DIR
