@@ -1,0 +1,28 @@
+---
+description: 'Deploy Vesture private wardrobe service'
+
+parameters:
+  deploy:
+    description: 'Run or skip the deployment'
+    type: Boolean
+    default: true
+  init:
+    description: 'Deploy initial revision'
+    type: Boolean
+    default: false
+  render_to:
+    description: 'Just render the template'
+    type: String
+    default: ''
+
+steps:
+  - description: 'Deploy Vesture'
+    plan: nest::kubernetes::deploy
+    parameters:
+      namespace: 'ai'
+      service: 'vesture'
+      app: 'vesture'
+      deploy: $deploy
+      init: $init
+      wait: $deploy
+      render_to: $render_to

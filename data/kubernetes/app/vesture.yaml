@@ -1,0 +1,187 @@
+---
+include:
+  - 'nest::service::vesture'
+
+service_name: vesture
+fqdn: vesture.eyrie
+cert_issuer: eyrie-ca
+cert_issuer_kind: ClusterIssuer
+ingress_class: contour-compute
+node_role: compute
+image: registry.gitlab.joyfullee.me/joy/vesture:main
+storage_class: owl-crypt
+storage_size: 20Gi
+
+.affinity: &affinity
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+          - key: "node-role.kubernetes.io/%{lookup('node_role')}"
+            operator: Exists
+
+.tolerations: &tolerations
+  - key: "node-role.kubernetes.io/%{lookup('node_role')}"
+    operator: Exists
+    effect: NoSchedule
+
+resources:
+  backup: {}
+  restore: {}
+
+  certs:
+    apiVersion: cert-manager.io/v1
+    kind: Certificate
+    metadata:
+      name: "%{nest::kubernetes::service}-certs"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      secretName: "%{nest::kubernetes::service}-certs"
+      issuerRef:
+        name: "%{lookup('cert_issuer')}"
+        kind: "%{lookup('cert_issuer_kind')}"
+      dnsNames:
+        - "%{lookup('fqdn')}"
+
+  secrets:
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: "%{nest::kubernetes::service}-secrets"
+      namespace: "%{nest::kubernetes::namespace}"
+    stringData:
+      VESTURE_SECRET_KEY: "%{nest::service::vesture::secret_key}"
+      VESTURE_UI_PASSWORD_SHA256: "%{nest::service::vesture::ui_password_sha256}"
+      VESTURE_STAR_TOKENS: "%{nest::service::vesture::star_tokens}"
+
+  storage:
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: "%{nest::kubernetes::service}-storage"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      accessModes: [ReadWriteOnce]
+      resources:
+        requests:
+          storage: "%{lookup('storage_size')}"
+      storageClassName: "%{lookup('storage_class')}"
+
+  deployment:
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: "%{nest::kubernetes::service}"
+      namespace: "%{nest::kubernetes::namespace}"
+      labels:
+        app: "%{nest::kubernetes::service}"
+    spec:
+      replicas: 1
+      strategy:
+        type: Recreate
+      selector:
+        matchLabels:
+          app: "%{nest::kubernetes::service}"
+      template:
+        metadata:
+          labels:
+            app: "%{nest::kubernetes::service}"
+          annotations:
+            joyfullee.me/source-repo: https://gitlab.joyfullee.me/joy/vesture.git
+            joyfullee.me/source-ref: main
+        spec:
+          affinity: *affinity
+          tolerations: *tolerations
+          securityContext:
+            fsGroup: 10001
+          containers:
+            - name: vesture
+              image: "%{lookup('image')}"
+              imagePullPolicy: Always
+              env:
+                - name: VESTURE_BIND_HOST
+                  value: 0.0.0.0
+                - name: VESTURE_PORT
+                  value: '8080'
+                - name: VESTURE_DATA_DIR
+                  value: /var/lib/vesture
+                - name: VESTURE_MEDIA_DIR
+                  value: /var/lib/vesture/media
+                - name: VESTURE_SESSION_COOKIE_SECURE
+                  value: 'true'
+                - name: VESTURE_SECRET_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: "%{nest::kubernetes::service}-secrets"
+                      key: VESTURE_SECRET_KEY
+                - name: VESTURE_UI_PASSWORD_SHA256
+                  valueFrom:
+                    secretKeyRef:
+                      name: "%{nest::kubernetes::service}-secrets"
+                      key: VESTURE_UI_PASSWORD_SHA256
+                - name: VESTURE_STAR_TOKENS
+                  valueFrom:
+                    secretKeyRef:
+                      name: "%{nest::kubernetes::service}-secrets"
+                      key: VESTURE_STAR_TOKENS
+              ports:
+                - name: http
+                  containerPort: 8080
+              readinessProbe:
+                httpGet:
+                  path: /health
+                  port: http
+                periodSeconds: 5
+                failureThreshold: 12
+              livenessProbe:
+                httpGet:
+                  path: /health
+                  port: http
+                periodSeconds: 30
+              volumeMounts:
+                - name: storage
+                  mountPath: /var/lib/vesture
+          volumes:
+            - name: storage
+              persistentVolumeClaim:
+                claimName: "%{nest::kubernetes::service}-storage"
+
+  service:
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: "%{nest::kubernetes::service}"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      selector:
+        app: "%{nest::kubernetes::service}"
+      ports:
+        - name: http
+          port: 80
+          targetPort: http
+
+  ingress:
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: "%{nest::kubernetes::service}"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      ingressClassName: "%{lookup('ingress_class')}"
+      rules:
+        - host: "%{lookup('fqdn')}"
+          http:
+            paths:
+              - path: /
+                pathType: Prefix
+                backend:
+                  service:
+                    name: "%{nest::kubernetes::service}"
+                    port:
+                      number: 80
+      tls:
+        - secretName: "%{nest::kubernetes::service}-certs"
+          hosts:
+            - "%{lookup('fqdn')}"
+
+values: {}
