@@ -7,6 +7,7 @@ RSpec.describe 'nest::kubernetes::init safety ordering' do
   let(:init_plan) { File.read(File.join(repo_root, 'plans/kubernetes/init.pp')) }
   let(:init_config) { File.read(File.join(repo_root, 'templates/kubernetes/kubeadm-init-config.yaml.epp')) }
   let(:apiserver_patch) { YAML.safe_load_file(File.join(repo_root, 'files/kubernetes/kube-apiserver-readyz-period.yaml')) }
+  let(:etcd_patch) { YAML.safe_load_file(File.join(repo_root, 'files/kubernetes/etcd-cpu-request.yaml')) }
   let(:vip_plan) { File.read(File.join(repo_root, 'plans/kubernetes/generate_kube_vip_manifest.pp')) }
   let(:upgrade_plan) { File.read(File.join(repo_root, 'plans/kubernetes/upgrade_node.pp')) }
 
@@ -69,6 +70,13 @@ RSpec.describe 'nest::kubernetes::init safety ordering' do
 
     expect(readiness_probe.dig('httpGet', 'path')).to eq('/readyz?exclude=etcd-readiness')
     expect(readiness_probe.fetch('periodSeconds')).to eq(15)
+  end
+
+  it 'reserves one CPU for latency-sensitive etcd work' do
+    etcd = etcd_patch.dig('spec', 'containers', 0)
+
+    expect(etcd.fetch('name')).to eq('etcd')
+    expect(etcd.dig('resources', 'requests', 'cpu')).to eq('1')
   end
 
   it 'uses strict member reconciliation in the control-plane upgrade path' do
