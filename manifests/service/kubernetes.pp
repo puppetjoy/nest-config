@@ -117,6 +117,11 @@ class nest::service::kubernetes (
         require => File['/etc/kubernetes/patches'],
       ;
 
+      '/etc/kubernetes/patches/etcd0+strategic.yaml':
+        source  => 'puppet:///modules/nest/kubernetes/etcd-cpu-request.yaml',
+        require => File['/etc/kubernetes/patches'],
+      ;
+
       '/usr/local/sbin/reconcile-kubeadm-cluster-config':
         mode   => '0755',
         source => 'puppet:///modules/nest/kubernetes/reconcile-kubeadm-cluster-config.rb',
