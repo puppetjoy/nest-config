@@ -1,0 +1,15 @@
+[Unit]
+Description=Remove deadlocking cross-pool ZVOL SLOGs
+Documentation=https://github.com/openzfs/zfs/issues/1131
+Wants=zfs-import.target
+After=zfs-import.target
+Before=kubelet.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/remove-zvol-slogs
+RemainAfterExit=yes
+TimeoutStartSec=5min
+
+[Install]
+RequiredBy=kubelet.service
