@@ -1,6 +1,33 @@
 class nest::host::falcon {
   $talon_public_key = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKJ3ZH2elB6c0ors9H/mxWrJY1aXKzA4XxA6YCe3rpj9 talon@joyfullee.me'
 
+  file {
+    '/usr/local/sbin/remove-zvol-slogs':
+      mode   => '0755',
+      owner  => 'root',
+      group  => 'root',
+      source => 'puppet:///modules/nest/falcon/remove-zvol-slogs.sh',
+    ;
+
+    '/etc/systemd/system/remove-zvol-slogs.service':
+      mode   => '0644',
+      owner  => 'root',
+      group  => 'root',
+      source => 'puppet:///modules/nest/falcon/remove-zvol-slogs.service',
+      notify => Nest::Lib::Systemd_reload['falcon-zvol-slogs'],
+    ;
+  }
+
+  nest::lib::systemd_reload { 'falcon-zvol-slogs': }
+
+  service { 'remove-zvol-slogs.service':
+    enable  => true,
+    require => [
+      File['/usr/local/sbin/remove-zvol-slogs'],
+      Nest::Lib::Systemd_reload['falcon-zvol-slogs'],
+    ],
+  }
+
   nest::lib::toolchain {
     [
       'aarch64-unknown-linux-gnu',
