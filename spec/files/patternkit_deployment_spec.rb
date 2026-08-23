@@ -96,6 +96,12 @@ RSpec.describe 'Pattern Kit Eyrie deployment assets' do
     expect(resources.fetch('smoke-role').to_s).not_to include('pods/log', 'delete')
   end
 
+  it 'checks OAuth redirects with the lowercase headers emitted by Envoy' do
+    script = File.read(File.join(repo_root, 'files/app/patternkit/smoke_test.py'))
+
+    expect(script).to include('headers.get("location", "")')
+  end
+
   it 'ships Python assets that compile in CI' do
     scripts = ['oauth_proxy.py', 'egress_proxy.py', 'workbench_bridge.py', 'smoke_test.py'].map do |name|
       File.join(repo_root, 'files/app/patternkit', name)

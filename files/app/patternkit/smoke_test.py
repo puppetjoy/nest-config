@@ -91,7 +91,7 @@ def verify_hot_reload() -> float:
 for name, base in (("studio", STUDIO), ("workbench", WORKBENCH)):
     status, _, headers = request(base + "/", follow=False)
     checks[f"{name}_unauth_status"] = status
-    if status != 302 or "gitlab.joyfullee.me/oauth/authorize" not in headers.get("Location", ""):
+    if status != 302 or "gitlab.joyfullee.me/oauth/authorize" not in headers.get("location", ""):
         raise SystemExit(f"{name} did not enforce GitLab OAuth: {json.dumps(checks, sort_keys=True)}")
 
 status, body, _ = request(STUDIO + "/", authenticated=True)
