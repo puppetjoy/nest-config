@@ -56,6 +56,8 @@ lookup_options:
     convert_to: 'Sensitive'
   nest::service::mysql::root_password:
     convert_to: 'Sensitive'
+  nest::service::patternkit::smoke_token:
+    convert_to: 'Sensitive'
   nest::service::puppet::puppetboard_secret_key:
     convert_to: 'Sensitive'
   nest::service::puppet::r10k_deploy_key:
@@ -126,6 +128,8 @@ nest::cnames:
   camofox.eyrie: 'ingress-compute.eyrie'
   browser.eyrie: 'ingress-compute.eyrie'
   browser-cdp.eyrie: 'ingress-compute.eyrie'
+  patternkit.eyrie: 'ingress-compute.eyrie'
+  patternkit-workbench.eyrie: 'ingress-compute.eyrie'
   voice-speech.eyrie: 'ingress-compute.eyrie'
   llama-util.nest: 'kestrel.nest'
 

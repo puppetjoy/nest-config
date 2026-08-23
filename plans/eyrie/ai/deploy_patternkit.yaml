@@ -1,0 +1,25 @@
+---
+description: 'Deploy Pattern Kit Studio and isolated Firefox workbench'
+
+parameters:
+  deploy:
+    description: 'Run or skip the deployment'
+    type: Boolean
+    default: true
+
+  render_to:
+    description: 'Just render the template'
+    type: String
+    default: ''
+
+steps:
+  - description: 'Deploy Pattern Kit Studio and isolated workbench'
+    plan: nest::kubernetes::deploy
+    parameters:
+      service: patternkit
+      app: patternkit
+      namespace: ai
+      init: false
+      deploy: $deploy
+      wait: $deploy
+      render_to: $render_to

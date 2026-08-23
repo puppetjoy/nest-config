@@ -43,6 +43,11 @@ parameters:
     type: Boolean
     default: true
 
+  patternkit:
+    description: 'Deploy Pattern Kit Studio and isolated workbench'
+    type: Boolean
+    default: true
+
   camofox:
     description: 'Deploy singleton Camofox REST API service'
     type: Boolean
@@ -96,6 +101,11 @@ steps:
     plan: nest::eyrie::ai::deploy_firefox
     parameters:
       deploy: $deploy and $firefox
+
+  - description: 'Deploy Pattern Kit Studio and isolated workbench'
+    plan: nest::eyrie::ai::deploy_patternkit
+    parameters:
+      deploy: $deploy and $patternkit
 
   - description: 'Deploy singleton Camofox REST API service'
     plan: nest::eyrie::ai::deploy_camofox

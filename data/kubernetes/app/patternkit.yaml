@@ -1,0 +1,941 @@
+---
+include:
+  - 'nest::service::patternkit'
+
+plan_base: 'nest::eyrie::ai::patternkit'
+service_name: patternkit
+fqdn: patternkit.eyrie
+workbench_fqdn: patternkit-workbench.eyrie
+cert_issuer: eyrie-ca
+cert_issuer_kind: ClusterIssuer
+ingress_class: contour-compute
+node_role: compute
+oauth_client_id: cebcfdf637cfb739a9c13e6dd1096378549b1f31818341e17610614b62ffdec3
+patternkit_path: /home/joy/projects/patternkit
+atelier_path: /home/joy/projects/patternkit-atelier
+patternkit_revision: 2717eca2ea84863d2cafb179dcc74e097b9829cd
+atelier_revision: 986befb94bc941fcaeebdd3e35d28b96453888bd
+runtime_image: registry.eyrie/nest/stage1/server@sha256:7b2313387f960d0639783ba76a70c582688ee876f2f6abdf23002f889ac312e6
+firefox_image: registry.gitlab.joyfullee.me/nest/tools/firefox@sha256:0655d791bf500f9be114a2bab74c5c94a6c3aedb9b7aba6c07dbae927f84765b
+firefox_image_revision: '303e0bca'
+storage_class: owl-crypt
+session_storage_size: 4Gi
+workbench_storage_size: 12Gi
+
+.affinity: &affinity
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+          - key: "node-role.kubernetes.io/%{lookup('node_role')}"
+            operator: Exists
+          - key: kubernetes.io/hostname
+            operator: In
+            values: [owl]
+
+.tolerations: &tolerations
+  - key: "node-role.kubernetes.io/%{lookup('node_role')}"
+    operator: Exists
+    effect: NoSchedule
+
+.oauth_env: &oauth_env
+  - name: OAUTH_PROXY_CLIENT_ID
+    value: "%{lookup('oauth_client_id')}"
+  - name: OAUTH_PROXY_GITLAB_ORIGIN
+    value: https://gitlab.joyfullee.me
+  - name: OAUTH_PROXY_SMOKE_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: "%{nest::kubernetes::service}-smoke"
+        key: token
+
+resources:
+  backup: {}
+  restore: {}
+  registry_auths: {}
+
+  certs:
+    apiVersion: cert-manager.io/v1
+    kind: Certificate
+    metadata:
+      name: "%{nest::kubernetes::service}-certs"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      secretName: "%{nest::kubernetes::service}-certs"
+      issuerRef:
+        name: "%{lookup('cert_issuer')}"
+        kind: "%{lookup('cert_issuer_kind')}"
+      dnsNames:
+        - "%{lookup('fqdn')}"
+        - "%{lookup('workbench_fqdn')}"
+
+  smoke-secret:
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: "%{nest::kubernetes::service}-smoke"
+      namespace: "%{nest::kubernetes::namespace}"
+    stringData:
+      token: "%{nest::service::patternkit::smoke_token_unwrapped}"
+
+  scripts:
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: "%{nest::kubernetes::service}-scripts"
+      namespace: "%{nest::kubernetes::namespace}"
+    binaryData:
+      oauth_proxy.py: "%{nest::service::patternkit::oauth_proxy_script_base64}"
+      egress_proxy.py: "%{nest::service::patternkit::egress_proxy_script_base64}"
+      workbench_bridge.py: "%{nest::service::patternkit::workbench_bridge_script_base64}"
+      smoke_test.py: "%{nest::service::patternkit::smoke_test_script_base64}"
+
+  workbench-browser-policy:
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: "%{nest::kubernetes::service}-workbench-browser-policy"
+      namespace: "%{nest::kubernetes::namespace}"
+    data:
+      policies.json: |-
+        {
+          "policies": {
+            "Proxy": {
+              "Mode": "manual",
+              "HTTPProxy": "%{nest::kubernetes::service}-workbench-egress.%{nest::kubernetes::namespace}.svc:3128",
+              "SSLProxy": "%{nest::kubernetes::service}-workbench-egress.%{nest::kubernetes::namespace}.svc:3128",
+              "UseHTTPProxyForAllProtocols": true,
+              "Passthrough": "localhost, 127.0.0.1"
+            }
+          }
+        }
+
+  sessions:
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: "%{nest::kubernetes::service}-sessions"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      accessModes: [ReadWriteOnce]
+      storageClassName: "%{lookup('storage_class')}"
+      resources:
+        requests:
+          storage: "%{lookup('session_storage_size')}"
+
+  workbench-profile:
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: "%{nest::kubernetes::service}-workbench-profile"
+      namespace: "%{nest::kubernetes::namespace}"
+      labels:
+        app.kubernetes.io/name: patternkit-workbench
+        joyfullee.me/isolation-boundary: dedicated-profile
+    spec:
+      accessModes: [ReadWriteOnce]
+      storageClassName: "%{lookup('storage_class')}"
+      resources:
+        requests:
+          storage: "%{lookup('workbench_storage_size')}"
+
+  studio:
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: "%{nest::kubernetes::service}"
+      namespace: "%{nest::kubernetes::namespace}"
+      labels:
+        app: "%{nest::kubernetes::service}"
+        app.kubernetes.io/name: patternkit
+        app.kubernetes.io/component: studio
+      annotations:
+        joyfullee.me/patternkit-revision: "%{lookup('patternkit_revision')}"
+        joyfullee.me/atelier-revision: "%{lookup('atelier_revision')}"
+        joyfullee.me/authentication: gitlab-oauth-pkce
+    spec:
+      replicas: 1
+      strategy:
+        type: Recreate
+      selector:
+        matchLabels:
+          app: "%{nest::kubernetes::service}"
+          app.kubernetes.io/component: studio
+      template:
+        metadata:
+          labels:
+            app: "%{nest::kubernetes::service}"
+            app.kubernetes.io/name: patternkit
+            app.kubernetes.io/component: studio
+          annotations:
+            joyfullee.me/patternkit-revision: "%{lookup('patternkit_revision')}"
+            joyfullee.me/atelier-revision: "%{lookup('atelier_revision')}"
+            joyfullee.me/source-hot-reload: watchfiles
+        spec:
+          automountServiceAccountToken: false
+          affinity: *affinity
+          tolerations: *tolerations
+          securityContext:
+            fsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          initContainers:
+            - name: verify-source-revisions
+              image: "%{lookup('runtime_image')}"
+              imagePullPolicy: IfNotPresent
+              command:
+                - /bin/sh
+                - -ceu
+                - |
+                  test "$(git -C "$PATTERNKIT_PATH" rev-parse HEAD)" = "$PATTERNKIT_REVISION"
+                  test "$(git -C "$ATELIER_PATH" rev-parse HEAD)" = "$ATELIER_REVISION"
+                  test ! -e "$PATTERNKIT_PATH/.git-credentials"
+                  test ! -e "$ATELIER_PATH/.git-credentials"
+              env:
+                - name: PATTERNKIT_PATH
+                  value: "%{lookup('patternkit_path')}"
+                - name: ATELIER_PATH
+                  value: "%{lookup('atelier_path')}"
+                - name: PATTERNKIT_REVISION
+                  value: "%{lookup('patternkit_revision')}"
+                - name: ATELIER_REVISION
+                  value: "%{lookup('atelier_revision')}"
+              volumeMounts:
+                - name: patternkit-source
+                  mountPath: "%{lookup('patternkit_path')}"
+                  readOnly: true
+                - name: atelier-source
+                  mountPath: "%{lookup('atelier_path')}"
+                  readOnly: true
+          containers:
+            - name: studio
+              image: "%{lookup('runtime_image')}"
+              imagePullPolicy: IfNotPresent
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: [ALL]
+                runAsNonRoot: true
+                runAsUser: 1000
+              workingDir: "%{lookup('patternkit_path')}"
+              command:
+                - "%{lookup('patternkit_path')}/.venv/bin/python"
+                - studio.py
+                - --host
+                - 127.0.0.1
+                - --port
+                - '8765'
+                - --library
+                - "%{lookup('atelier_path')}"
+                - --session-dir
+                - /var/lib/patternkit/sessions
+                - --auth-mode
+                - forwarded
+                - --trusted-proxy
+                - 127.0.0.1
+              env:
+                - name: PYTHONUNBUFFERED
+                  value: '1'
+              ports:
+                - name: studio
+                  containerPort: 8765
+              readinessProbe:
+                exec:
+                  command: [/bin/sh, -ec, 'curl -fsS http://127.0.0.1:8765/api/health >/dev/null']
+                periodSeconds: 5
+                timeoutSeconds: 2
+                failureThreshold: 24
+              livenessProbe:
+                exec:
+                  command: [/bin/sh, -ec, 'curl -fsS http://127.0.0.1:8765/api/health >/dev/null']
+                periodSeconds: 20
+                timeoutSeconds: 2
+              resources:
+                requests:
+                  cpu: 250m
+                  memory: 512Mi
+                limits:
+                  cpu: '4'
+                  memory: 4Gi
+              volumeMounts:
+                - name: patternkit-source
+                  mountPath: "%{lookup('patternkit_path')}"
+                - name: atelier-source
+                  mountPath: "%{lookup('atelier_path')}"
+                - name: sessions
+                  mountPath: /var/lib/patternkit/sessions
+            - name: oauth-proxy
+              image: "%{lookup('runtime_image')}"
+              imagePullPolicy: IfNotPresent
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: [ALL]
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                runAsUser: 1000
+              command: [python3, /opt/patternkit/oauth_proxy.py]
+              env:
+                - name: OAUTH_PROXY_UPSTREAM_PORT
+                  value: '8765'
+                - name: OAUTH_PROXY_PUBLIC_ORIGIN
+                  value: "https://%{lookup('fqdn')}"
+                - name: OAUTH_PROXY_SOURCE_REPOS
+                  value: "%{lookup('patternkit_path')}:%{lookup('atelier_path')}"
+                - name: OAUTH_PROXY_CLIENT_ID
+                  value: "%{lookup('oauth_client_id')}"
+                - name: OAUTH_PROXY_GITLAB_ORIGIN
+                  value: https://gitlab.joyfullee.me
+                - name: OAUTH_PROXY_SMOKE_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: "%{nest::kubernetes::service}-smoke"
+                      key: token
+                - name: PATTERNKIT_NODE_NAME
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: spec.nodeName
+              ports:
+                - name: http
+                  containerPort: 4180
+              readinessProbe:
+                exec:
+                  command: [/bin/sh, -ec, 'curl -fsS http://127.0.0.1:4180/_oauth/health >/dev/null']
+                periodSeconds: 5
+                timeoutSeconds: 2
+              livenessProbe:
+                exec:
+                  command: [/bin/sh, -ec, 'curl -fsS http://127.0.0.1:4180/_oauth/health >/dev/null']
+                periodSeconds: 20
+                timeoutSeconds: 2
+              resources:
+                requests:
+                  cpu: 25m
+                  memory: 48Mi
+                limits:
+                  cpu: 250m
+                  memory: 192Mi
+              volumeMounts:
+                - name: scripts
+                  mountPath: /opt/patternkit
+                  readOnly: true
+                - name: patternkit-source
+                  mountPath: "%{lookup('patternkit_path')}"
+                  readOnly: true
+                - name: atelier-source
+                  mountPath: "%{lookup('atelier_path')}"
+                  readOnly: true
+          volumes:
+            - name: patternkit-source
+              hostPath:
+                path: "%{lookup('patternkit_path')}"
+                type: Directory
+            - name: atelier-source
+              hostPath:
+                path: "%{lookup('atelier_path')}"
+                type: Directory
+            - name: sessions
+              persistentVolumeClaim:
+                claimName: "%{nest::kubernetes::service}-sessions"
+            - name: scripts
+              configMap:
+                name: "%{nest::kubernetes::service}-scripts"
+                defaultMode: 0555
+
+  studio-service:
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: "%{nest::kubernetes::service}"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      selector:
+        app: "%{nest::kubernetes::service}"
+        app.kubernetes.io/component: studio
+      ports:
+        - name: http
+          port: 80
+          targetPort: http
+
+  workbench:
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: "%{nest::kubernetes::service}-workbench"
+      namespace: "%{nest::kubernetes::namespace}"
+      labels:
+        app: "%{nest::kubernetes::service}-workbench"
+        app.kubernetes.io/name: patternkit-workbench
+        browser.joyfullee.me/app: patternkit-workbench
+        browser.joyfullee.me/isolation: dedicated
+      annotations:
+        joyfullee.me/default-origin: "https://%{lookup('fqdn')}"
+        joyfullee.me/profile-storage: dedicated-pvc
+        joyfullee.me/tab-binding: explicit-visible-browser-generation-checked
+        joyfullee.me/forbidden-shared-browser: browser.eyrie
+    spec:
+      replicas: 1
+      strategy:
+        type: Recreate
+      selector:
+        matchLabels:
+          app: "%{nest::kubernetes::service}-workbench"
+      template:
+        metadata:
+          labels:
+            app: "%{nest::kubernetes::service}-workbench"
+            app.kubernetes.io/name: patternkit-workbench
+            browser.joyfullee.me/app: patternkit-workbench
+            browser.joyfullee.me/isolation: dedicated
+          annotations:
+            joyfullee.me/default-origin: "https://%{lookup('fqdn')}"
+            joyfullee.me/tab-binding: explicit-visible-browser-generation-checked
+        spec:
+          automountServiceAccountToken: false
+          affinity: *affinity
+          tolerations: *tolerations
+          securityContext:
+            fsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: firefox
+              image: "%{lookup('firefox_image')}"
+              imagePullPolicy: Always
+              securityContext:
+                capabilities:
+                  add: [SETFCAP]
+              command:
+                - /bin/sh
+                - -ceu
+                - |
+                  python3 /opt/patternkit/workbench_bridge.py &
+                  bridge_pid=$!
+                  trap 'kill "$bridge_pid" 2>/dev/null || true' EXIT TERM INT
+                  for attempt in $(seq 1 30); do
+                    curl -fsS http://127.0.0.1:8766/health >/dev/null && break
+                    sleep 0.2
+                  done
+                  curl -fsS http://127.0.0.1:8766/health >/dev/null
+                  exec /usr/local/bin/nest-firefox-browser
+              env:
+                - name: VNC_PW
+                  value: unused
+                - name: VNCOPTIONS
+                  value: -disableBasicAuth
+                - name: NEST_FIREFOX_IMAGE_REVISION
+                  value: "%{lookup('firefox_image_revision')}"
+                - name: LAUNCH_URL
+                  value: http://127.0.0.1:8766/
+                - name: KASM_RESTRICTED_FILE_CHOOSER
+                  value: '1'
+                - name: APP_ARGS
+                  value: --remote-debugging-address=127.0.0.1 --remote-debugging-port=9222
+                - name: PATTERNKIT_ORIGIN
+                  value: "https://%{lookup('fqdn')}"
+                - name: PATTERNKIT_BRIDGE_HOST
+                  value: 0.0.0.0
+                - name: PATTERNKIT_BINDING_STATE
+                  value: /home/kasm-user/.patternkit-workbench/binding.json
+                - name: PATTERNKIT_BRIDGE_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: "%{nest::kubernetes::service}-smoke"
+                      key: token
+                - name: PATTERNKIT_NODE_NAME
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: spec.nodeName
+              ports:
+                - name: kasm
+                  containerPort: 6901
+                - name: bridge
+                  containerPort: 8766
+              readinessProbe:
+                exec:
+                  command: [/bin/sh, -ec, 'curl -fsS http://127.0.0.1:8766/health >/dev/null && curl -ksf https://127.0.0.1:6901/ >/dev/null']
+                periodSeconds: 5
+                timeoutSeconds: 3
+                failureThreshold: 24
+              livenessProbe:
+                exec:
+                  command: [/bin/sh, -ec, 'curl -ksf https://127.0.0.1:6901/ >/dev/null']
+                periodSeconds: 20
+                timeoutSeconds: 2
+              resources:
+                requests:
+                  cpu: 250m
+                  memory: 768Mi
+                limits:
+                  cpu: '2'
+                  memory: 3Gi
+              volumeMounts:
+                - name: profile
+                  mountPath: /home/kasm-user
+                - name: scripts
+                  mountPath: /opt/patternkit
+                  readOnly: true
+                - name: browser-policy
+                  mountPath: /usr/lib64/firefox/distribution/policies.json
+                  subPath: policies.json
+                  readOnly: true
+                - name: dshm
+                  mountPath: /dev/shm
+            - name: oauth-proxy
+              image: "%{lookup('runtime_image')}"
+              imagePullPolicy: IfNotPresent
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: [ALL]
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                runAsUser: 1000
+              command: [python3, /opt/patternkit/oauth_proxy.py]
+              env:
+                - name: OAUTH_PROXY_UPSTREAM_PORT
+                  value: '6901'
+                - name: OAUTH_PROXY_UPSTREAM_TLS
+                  value: 'true'
+                - name: OAUTH_PROXY_PUBLIC_ORIGIN
+                  value: "https://%{lookup('workbench_fqdn')}"
+                - name: OAUTH_PROXY_CLIENT_ID
+                  value: "%{lookup('oauth_client_id')}"
+                - name: OAUTH_PROXY_GITLAB_ORIGIN
+                  value: https://gitlab.joyfullee.me
+                - name: OAUTH_PROXY_SMOKE_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: "%{nest::kubernetes::service}-smoke"
+                      key: token
+              ports:
+                - name: http
+                  containerPort: 4180
+              readinessProbe:
+                exec:
+                  command: [/bin/sh, -ec, 'curl -fsS http://127.0.0.1:4180/_oauth/health >/dev/null']
+                periodSeconds: 5
+                timeoutSeconds: 2
+              livenessProbe:
+                exec:
+                  command: [/bin/sh, -ec, 'curl -fsS http://127.0.0.1:4180/_oauth/health >/dev/null']
+                periodSeconds: 20
+                timeoutSeconds: 2
+              resources:
+                requests:
+                  cpu: 25m
+                  memory: 48Mi
+                limits:
+                  cpu: 250m
+                  memory: 192Mi
+              volumeMounts:
+                - name: scripts
+                  mountPath: /opt/patternkit
+                  readOnly: true
+          volumes:
+            - name: profile
+              persistentVolumeClaim:
+                claimName: "%{nest::kubernetes::service}-workbench-profile"
+            - name: scripts
+              configMap:
+                name: "%{nest::kubernetes::service}-scripts"
+                defaultMode: 0555
+            - name: browser-policy
+              configMap:
+                name: "%{nest::kubernetes::service}-workbench-browser-policy"
+            - name: dshm
+              emptyDir:
+                medium: Memory
+                sizeLimit: 1Gi
+
+  workbench-egress:
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: "%{nest::kubernetes::service}-workbench-egress"
+      namespace: "%{nest::kubernetes::namespace}"
+      labels:
+        app: "%{nest::kubernetes::service}-workbench-egress"
+        app.kubernetes.io/name: patternkit-workbench
+        app.kubernetes.io/component: egress-proxy
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app: "%{nest::kubernetes::service}-workbench-egress"
+      template:
+        metadata:
+          labels:
+            app: "%{nest::kubernetes::service}-workbench-egress"
+            app.kubernetes.io/name: patternkit-workbench
+            app.kubernetes.io/component: egress-proxy
+        spec:
+          automountServiceAccountToken: false
+          affinity: *affinity
+          tolerations: *tolerations
+          securityContext:
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: egress-proxy
+              image: "%{lookup('runtime_image')}"
+              imagePullPolicy: IfNotPresent
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: [ALL]
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                runAsUser: 1000
+              command: [python3, /opt/patternkit/egress_proxy.py]
+              env:
+                - name: PATTERNKIT_EGRESS_ALLOWED_HOSTS
+                  value: "%{lookup('fqdn')},gitlab.joyfullee.me"
+              ports:
+                - name: proxy
+                  containerPort: 3128
+              readinessProbe:
+                tcpSocket:
+                  port: proxy
+                periodSeconds: 5
+                timeoutSeconds: 2
+              livenessProbe:
+                tcpSocket:
+                  port: proxy
+                periodSeconds: 20
+                timeoutSeconds: 2
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  cpu: 100m
+                  memory: 96Mi
+              volumeMounts:
+                - name: scripts
+                  mountPath: /opt/patternkit
+                  readOnly: true
+          volumes:
+            - name: scripts
+              configMap:
+                name: "%{nest::kubernetes::service}-scripts"
+                defaultMode: 0555
+
+  workbench-egress-service:
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: "%{nest::kubernetes::service}-workbench-egress"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      selector:
+        app: "%{nest::kubernetes::service}-workbench-egress"
+      ports:
+        - name: proxy
+          port: 3128
+          targetPort: proxy
+
+  workbench-service:
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: "%{nest::kubernetes::service}-workbench"
+      namespace: "%{nest::kubernetes::namespace}"
+      labels:
+        app.kubernetes.io/name: patternkit-workbench
+        browser.joyfullee.me/isolation: dedicated
+    spec:
+      selector:
+        app: "%{nest::kubernetes::service}-workbench"
+      ports:
+        - name: http
+          port: 80
+          targetPort: http
+        - name: bridge
+          port: 8766
+          targetPort: bridge
+
+  studio-ingress:
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: "%{nest::kubernetes::service}"
+      namespace: "%{nest::kubernetes::namespace}"
+      annotations:
+        projectcontour.io/response-timeout: 120s
+    spec:
+      ingressClassName: "%{lookup('ingress_class')}"
+      rules:
+        - host: "%{lookup('fqdn')}"
+          http:
+            paths:
+              - path: /
+                pathType: Prefix
+                backend:
+                  service:
+                    name: "%{nest::kubernetes::service}"
+                    port:
+                      number: 80
+      tls:
+        - secretName: "%{nest::kubernetes::service}-certs"
+          hosts: ["%{lookup('fqdn')}"]
+
+  workbench-ingress:
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: "%{nest::kubernetes::service}-workbench"
+      namespace: "%{nest::kubernetes::namespace}"
+      annotations:
+        projectcontour.io/response-timeout: infinity
+        projectcontour.io/websocket-routes: /
+    spec:
+      ingressClassName: "%{lookup('ingress_class')}"
+      rules:
+        - host: "%{lookup('workbench_fqdn')}"
+          http:
+            paths:
+              - path: /
+                pathType: Prefix
+                backend:
+                  service:
+                    name: "%{nest::kubernetes::service}-workbench"
+                    port:
+                      number: 80
+      tls:
+        - secretName: "%{nest::kubernetes::service}-certs"
+          hosts: ["%{lookup('workbench_fqdn')}"]
+
+  metadata-egress-guard:
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: "%{nest::kubernetes::service}-metadata-egress-guard"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      podSelector:
+        matchLabels:
+          app: "%{nest::kubernetes::service}"
+      policyTypes: [Egress]
+      egress:
+        - to:
+            - ipBlock:
+                cidr: 0.0.0.0/0
+                except: [169.254.0.0/16]
+        - to:
+            - ipBlock:
+                cidr: '::/0'
+                except: ['fe80::/10']
+
+  workbench-egress-isolation:
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: "%{nest::kubernetes::service}-workbench-egress-isolation"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      podSelector:
+        matchLabels:
+          app: "%{nest::kubernetes::service}-workbench"
+      policyTypes: [Egress]
+      egress:
+        - to:
+            - namespaceSelector: {}
+              podSelector:
+                matchLabels:
+                  k8s-app: kube-dns
+          ports:
+            - protocol: UDP
+              port: 53
+            - protocol: TCP
+              port: 53
+        - to:
+            - podSelector:
+                matchLabels:
+                  app: "%{nest::kubernetes::service}-workbench-egress"
+          ports:
+            - protocol: TCP
+              port: 3128
+
+  workbench-ingress-isolation:
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: "%{nest::kubernetes::service}-workbench-ingress-isolation"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      podSelector:
+        matchLabels:
+          app: "%{nest::kubernetes::service}-workbench"
+      policyTypes: [Ingress]
+      ingress:
+        - from:
+            - namespaceSelector: {}
+          ports:
+            - protocol: TCP
+              port: 4180
+        - from:
+            - podSelector:
+                matchLabels:
+                  app.kubernetes.io/name: patternkit
+                  app.kubernetes.io/component: synthetic-smoke
+          ports:
+            - protocol: TCP
+              port: 8766
+
+  workbench-egress-proxy-isolation:
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: "%{nest::kubernetes::service}-workbench-egress-proxy-isolation"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      podSelector:
+        matchLabels:
+          app: "%{nest::kubernetes::service}-workbench-egress"
+      policyTypes: [Ingress, Egress]
+      ingress:
+        - from:
+            - podSelector:
+                matchLabels:
+                  app: "%{nest::kubernetes::service}-workbench"
+          ports:
+            - protocol: TCP
+              port: 3128
+      egress:
+        - to:
+            - namespaceSelector: {}
+              podSelector:
+                matchLabels:
+                  k8s-app: kube-dns
+          ports:
+            - protocol: UDP
+              port: 53
+            - protocol: TCP
+              port: 53
+        - to:
+            - ipBlock:
+                cidr: 0.0.0.0/0
+                except: [169.254.0.0/16]
+        - to:
+            - ipBlock:
+                cidr: '::/0'
+                except: ['fe80::/10']
+
+  smoke-service-account:
+    apiVersion: v1
+    kind: ServiceAccount
+    metadata:
+      name: "%{nest::kubernetes::service}-smoke"
+      namespace: "%{nest::kubernetes::namespace}"
+
+  smoke-role:
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: Role
+    metadata:
+      name: "%{nest::kubernetes::service}-smoke"
+      namespace: "%{nest::kubernetes::namespace}"
+    rules:
+      - apiGroups: [apps]
+        resources: [deployments]
+        resourceNames: ["%{nest::kubernetes::service}"]
+        verbs: [get, watch, patch]
+
+  smoke-role-binding:
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: RoleBinding
+    metadata:
+      name: "%{nest::kubernetes::service}-smoke"
+      namespace: "%{nest::kubernetes::namespace}"
+    subjects:
+      - kind: ServiceAccount
+        name: "%{nest::kubernetes::service}-smoke"
+        namespace: "%{nest::kubernetes::namespace}"
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: Role
+      name: "%{nest::kubernetes::service}-smoke"
+
+  smoke-test:
+    apiVersion: batch/v1
+    kind: CronJob
+    metadata:
+      name: "%{nest::kubernetes::service}-smoke-test"
+      namespace: "%{nest::kubernetes::namespace}"
+      labels:
+        app: "%{nest::kubernetes::service}"
+        component: synthetic-smoke
+    spec:
+      suspend: true
+      schedule: '23 4 31 2 *'
+      concurrencyPolicy: Forbid
+      jobTemplate:
+        spec:
+          ttlSecondsAfterFinished: 86400
+          activeDeadlineSeconds: 300
+          template:
+            metadata:
+              labels:
+                app.kubernetes.io/name: patternkit
+                app.kubernetes.io/component: synthetic-smoke
+            spec:
+              affinity: *affinity
+              tolerations: *tolerations
+              serviceAccountName: "%{nest::kubernetes::service}-smoke"
+              restartPolicy: Never
+              containers:
+                - name: smoke-test
+                  image: "%{lookup('runtime_image')}"
+                  imagePullPolicy: IfNotPresent
+                  securityContext:
+                    allowPrivilegeEscalation: false
+                    capabilities:
+                      drop: [ALL]
+                    runAsNonRoot: true
+                    runAsUser: 1000
+                  command:
+                    - /bin/sh
+                    - -ceu
+                    - |
+                      first="$(PATTERNKIT_HOT_RELOAD_PATH=%{lookup('patternkit_path')}/studio.py python3 /opt/patternkit/smoke_test.py)"
+                      printf '%s\n' "$first"
+                      created_at="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["session_created_at"])' "$first")"
+
+                      restarted_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+                      kubectl patch deployment/%{nest::kubernetes::service} --type=merge \
+                        -p "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"joyfullee.me/synthetic-restarted-at\":\"$restarted_at\"}}}}}"
+                      kubectl rollout status deployment/%{nest::kubernetes::service} --timeout=120s
+                      PATTERNKIT_EXPECTED_SESSION_CREATED_AT="$created_at" python3 /opt/patternkit/smoke_test.py
+                  env:
+                    - name: PATTERNKIT_URL
+                      value: "https://%{lookup('fqdn')}"
+                    - name: PATTERNKIT_WORKBENCH_URL
+                      value: "https://%{lookup('workbench_fqdn')}"
+                    - name: PATTERNKIT_WORKBENCH_BRIDGE_URL
+                      value: "http://%{nest::kubernetes::service}-workbench:8766"
+                    - name: PATTERNKIT_EXPECTED_REVISION
+                      value: "%{lookup('patternkit_revision')}"
+                    - name: PATTERNKIT_ATELIER_EXPECTED_REVISION
+                      value: "%{lookup('atelier_revision')}"
+                    - name: PATTERNKIT_SMOKE_TOKEN
+                      valueFrom:
+                        secretKeyRef:
+                          name: "%{nest::kubernetes::service}-smoke"
+                          key: token
+                  volumeMounts:
+                    - name: scripts
+                      mountPath: /opt/patternkit
+                      readOnly: true
+                    - name: patternkit-source
+                      mountPath: "%{lookup('patternkit_path')}"
+              volumes:
+                - name: scripts
+                  configMap:
+                    name: "%{nest::kubernetes::service}-scripts"
+                    defaultMode: 0555
+                - name: patternkit-source
+                  hostPath:
+                    path: "%{lookup('patternkit_path')}"
+                    type: Directory
+
+values: {}
