@@ -38,6 +38,7 @@ define nest::lib::hermes (
   Integer[1]           $responses_threshold        = 200000,
   Integer[1]           $web_extract_timeout        = 360,
   String[1]            $approval_mode              = 'manual',
+  Array[String[1]]     $command_allowlist          = [],
   Boolean              $dashboard_enabled          = false,
   String[1]            $dashboard_bind_host        = '0.0.0.0',
   Stdlib::Port         $dashboard_port             = 9119,
@@ -700,6 +701,7 @@ define nest::lib::hermes (
 
   $managed_config = {
     'toolsets'         => $effective_toolsets,
+    'command_allowlist' => $command_allowlist,
     'streaming'        => {
       'enabled'   => $streaming_enabled,
       'transport' => $streaming_transport,

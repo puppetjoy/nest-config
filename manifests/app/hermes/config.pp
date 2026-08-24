@@ -179,6 +179,7 @@ class nest::app::hermes::config {
     $instance_responses_threshold = pick($config['responses_threshold'], $responses_threshold)
     $instance_extract_timeout   = pick($config['web_extract_timeout'], $web_extract_timeout)
     $instance_approval_mode     = pick($config['approval_mode'], 'manual')
+    $instance_command_allowlist = pick($config['command_allowlist'], [])
     $instance_dashboard_enabled = pick($config['dashboard_enabled'], false)
     $instance_dashboard_bind    = pick($config['dashboard_bind_host'], $dashboard_bind_host)
     $instance_dashboard_port    = pick($config['dashboard_port'], 9119)
@@ -295,6 +296,7 @@ class nest::app::hermes::config {
       responses_threshold        => $instance_responses_threshold,
       web_extract_timeout        => $instance_extract_timeout,
       approval_mode              => $instance_approval_mode,
+      command_allowlist          => $instance_command_allowlist,
       dashboard_enabled          => $instance_dashboard_enabled,
       dashboard_bind_host        => $instance_dashboard_bind,
       dashboard_port             => $instance_dashboard_port,
