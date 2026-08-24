@@ -15,6 +15,8 @@ nest::text_scaling_factor: 1.5
 
 nest::app::hermes::git_ref: 'nest'
 nest::app::hermes::agent_request_kanban_board: 'agent-requests'
+nest::app::hermes::patternkit_session_enabled: true
+nest::app::hermes::patternkit_session_token: 'ENC[PKCS7,MIIBuQYJKoZIhvcNAQcDoIIBqjCCAaYCAQAxggEhMIIBHQIBADAFMAACAQEwDQYJKoZIhvcNAQEBBQAEggEAXpUY4G7OKibc65fEAvGYlB5ofI8huBsjmyaV9SoxOaE5MokVreBSIjDFr9dKp0Hq8ZnpAPs28fO/5EZ43wZzOnAyrqSeVh9pL7iMEujYJ15eB/Kwfu20A+adsPxFkCACUVGmv1VB4oL3hUGfltzdPMfL6UisN/JbDV6rXfs9YHD4zZMduRh2sSoScBsNlgzRGxEBjMpYiWvpkiC4icuQdJ8YwgSV1S703uwGm4JtOtMINobjieHMkzcFaqx+PoKKWM12U0+bRcE5lgGl1NIvqEjaSPuX5GyTgZ6phHGCW0OcdyzQ5UJ7a6ukjSWVoETP0q0pV/dxOnuEsSSGwk8+2zB8BgkqhkiG9w0BBwEwHQYJYIZIAWUDBAEqBBAuFhcpPCjVn0+sAehHoMQUgFCnJUVO2yFlfPzrLf0RPbf5o54f6k1Py1ZAi7lFiqPevcku99epMY0ztOQaEAx9vMnM+9TskCTINB0Hn+pKDtv6XZzzMKyTsIcDbaMLjhMfag==]'
 nest::app::hermes::gitlab_mr_note_poller_enabled: true
 nest::app::hermes::gitlab_mr_note_poller_profile: 'talon'
 nest::app::hermes::moving_ticket_enabled: true
@@ -312,6 +314,8 @@ nest::app::hermes::instances:
     image_gen_provider: 'openai-codex'
     image_gen_model: 'gpt-image-2-medium'
     gitlab_enabled: true
+    enabled_plugins:
+      - 'patternkit-session'
     honcho_workspace: 'hermes'
     honcho_user_peer: 'joy'
     honcho_ai_peer: 'star'

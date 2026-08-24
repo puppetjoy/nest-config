@@ -16,6 +16,8 @@ lookup_options:
     convert_to: 'Sensitive'
   nest::app::hermes::openrouter_api_key:
     convert_to: 'Sensitive'
+  nest::app::hermes::patternkit_session_token:
+    convert_to: 'Sensitive'
   nest::app::hermes::voice_tools_openai_key:
     convert_to: 'Sensitive'
   nest::app::hermes::instances:
@@ -57,6 +59,10 @@ lookup_options:
   nest::service::mysql::root_password:
     convert_to: 'Sensitive'
   nest::service::patternkit::smoke_token:
+    convert_to: 'Sensitive'
+  nest::service::patternkit::agent_token:
+    convert_to: 'Sensitive'
+  nest::service::patternkit::studio_bridge_token:
     convert_to: 'Sensitive'
   nest::service::puppet::puppetboard_secret_key:
     convert_to: 'Sensitive'

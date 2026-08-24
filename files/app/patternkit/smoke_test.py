@@ -145,15 +145,15 @@ status, body, _ = request(WORKBENCH_BRIDGE + "/status", bridge_authenticated=Tru
 binding = json.loads(body) if status == 200 else {}
 checks["workbench_binding_status"] = status
 checks["workbench_binding_reason"] = binding.get("reason")
-checks["workbench_node"] = binding.get("node")
-checks["workbench_selected_context_present"] = bool(binding.get("selected_context"))
+checks["workbench_active_context_verified"] = binding.get("active_context_verified")
+checks["workbench_isolated_browser_verified"] = binding.get("isolated_browser_verified")
 if (
     status != 200
     or binding.get("schema") != "patternkit.workbench.binding/v1"
-    or binding.get("origin") != STUDIO
-    or binding.get("node") != "owl"
     or binding.get("reason") not in {"verified-active-tab", "explicit-share-required"}
-    or bool(binding.get("bound")) != bool(binding.get("selected_context"))
+    or bool(binding.get("bound")) != bool(binding.get("active_context_verified"))
+    or bool(binding.get("bound")) != bool(binding.get("patternkit_origin_verified"))
+    or bool(binding.get("bound")) != bool(binding.get("isolated_browser_verified"))
 ):
     raise SystemExit(f"Workbench identity check failed: {json.dumps(checks, sort_keys=True)}")
 

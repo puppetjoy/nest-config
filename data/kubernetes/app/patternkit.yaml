@@ -77,6 +77,8 @@ resources:
       namespace: "%{nest::kubernetes::namespace}"
     stringData:
       token: "%{nest::service::patternkit::smoke_token_unwrapped}"
+      agent-token: "%{nest::service::patternkit::agent_token_unwrapped}"
+      studio-bridge-token: "%{nest::service::patternkit::studio_bridge_token_unwrapped}"
 
   scripts:
     apiVersion: v1
@@ -291,6 +293,11 @@ resources:
                     secretKeyRef:
                       name: "%{nest::kubernetes::service}-smoke"
                       key: token
+                - name: OAUTH_PROXY_BRIDGE_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: "%{nest::kubernetes::service}-smoke"
+                      key: studio-bridge-token
                 - name: PATTERNKIT_NODE_NAME
                   valueFrom:
                     fieldRef:
@@ -417,6 +424,7 @@ resources:
                     sleep 0.2
                   done
                   curl -fsS http://127.0.0.1:8766/health >/dev/null
+                  unset PATTERNKIT_BRIDGE_TOKEN PATTERNKIT_AGENT_TOKEN PATTERNKIT_STUDIO_BRIDGE_TOKEN
                   exec /usr/local/bin/nest-firefox-browser
               env:
                 - name: VNC_PW
@@ -433,6 +441,8 @@ resources:
                   value: --remote-debugging-address=127.0.0.1 --remote-debugging-port=9222
                 - name: PATTERNKIT_ORIGIN
                   value: "https://%{lookup('fqdn')}"
+                - name: PATTERNKIT_STUDIO_PROXY
+                  value: "http://%{nest::kubernetes::service}-workbench-egress:3128"
                 - name: PATTERNKIT_BRIDGE_HOST
                   value: 0.0.0.0
                 - name: PATTERNKIT_BINDING_STATE
@@ -442,6 +452,16 @@ resources:
                     secretKeyRef:
                       name: "%{nest::kubernetes::service}-smoke"
                       key: token
+                - name: PATTERNKIT_AGENT_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: "%{nest::kubernetes::service}-smoke"
+                      key: agent-token
+                - name: PATTERNKIT_STUDIO_BRIDGE_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: "%{nest::kubernetes::service}-smoke"
+                      key: studio-bridge-token
                 - name: PATTERNKIT_NODE_NAME
                   valueFrom:
                     fieldRef:

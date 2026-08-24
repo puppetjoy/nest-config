@@ -42,9 +42,44 @@ and last nonblank context are never accepted as proof.
 
 The bridge is cluster-private on `service/patternkit-workbench:8766`. Its visible
 landing and share action are loopback-only, while remote status requires a
-constant-time checked bearer from the Pattern Kit secret. Phase ^1553 may
-consume that compact binding status but must keep the credential and service
-behind the Star profile's dedicated Pattern Kit tool boundary.
+constant-time checked bearer from the Pattern Kit secret. Nest installs the
+native `patternkit-session` Hermes plugin only in Star's profile plugin
+directory on owl, and enables it only in Star's managed config. Its availability
+check fails closed unless the exact runtime profile is `star` and the managed
+broker socket is present. The plugin has no Kubernetes client or bridge
+credential. A root-owned fixed-function broker holds the dedicated eyaml-backed
+credential, limits routes and queries, verifies callers belong to the
+`hermes-gateway@star.service` cgroup, and forwards only through a loopback
+port-forward to the dedicated workbench Service. The credential is distinct
+from the synthetic smoke credential and stays out of Star's environment, tool
+results, and command arguments.
+
+The Star tool surface provides binding/status, redacted semantic snapshot,
+canvas-only PNG evidence, bounded structured diagnostics, visible control-lease
+acquire/release/handoff, and controlled click/type/key operations. Every attach
+revalidates active target ID, browser generation, exact origin, and visible
+share nonce plus the one session named in that visible URL. Mutations additionally
+require Star to hold the supported Studio control lease and supply the exact
+current session revision. Selectors are
+literal DOM IDs and source/Git/export/profile/credential/private-measurement
+controls are refused. There is no raw JavaScript, arbitrary URL, browser storage,
+cookie, credential, source-write, or Git operation in the plugin schema.
+
+Studio's OAuth proxy accepts the exact bridge credential as the fixed actor
+`star`, strips that credential before forwarding, and continues to strip all
+caller-supplied identity headers. Bridge-to-Studio API traffic is forced through
+the hostname-aware workbench egress proxy. Semantic evidence uses Studio's
+supported redacted diagnostic-capture API, and visual evidence clips to the
+render canvas; private measurements therefore do not enter ordinary tool logs
+or evidence artifacts. Browser diagnostics expose only allowlisted operational
+words and redact arbitrary literals, numbers, URLs, identifiers, and sensitive
+terms. For browser control, the bridge installs a bounded BiDi intercept only
+for Studio's collaborative-state POST, injects Star's credential at the network
+boundary, and requires the exact successful response plus post-action
+lease/revision state before reporting success. Direct render actions remain
+inspect-only because Studio's render API does not atomically enforce the
+collaboration lease and expected revision. The bridge never forwards Star's
+identity to another origin or to render, source, profile, or Git operations.
 
 ## Deployment and verification
 

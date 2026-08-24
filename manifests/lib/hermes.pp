@@ -32,6 +32,7 @@ define nest::lib::hermes (
   String[1]            $auxiliary_mini_model       = 'gpt-5.4-mini',
   Optional[String[1]]  $image_gen_provider         = undef,
   Optional[String[1]]  $image_gen_model            = undef,
+  Array[String[1]]     $enabled_plugins            = [],
   Integer[1]           $compression_timeout        = 120,
   Boolean              $responses_native           = true,
   Integer[1]           $responses_threshold        = 200000,
@@ -562,12 +563,17 @@ define nest::lib::hermes (
       }),
     },
   }
-  $plugins_config = $image_gen_provider ? {
-    undef   => {},
+  $image_gen_plugins = $image_gen_provider ? {
+    undef   => [],
+    default => ["image_gen/${image_gen_provider}"],
+  }
+  $effective_plugins = ($enabled_plugins + $image_gen_plugins).unique
+  $plugins_config = empty($effective_plugins) ? {
+    true    => {},
     default => {
       'plugins' => {
         'disabled' => [],
-        'enabled'  => ["image_gen/${image_gen_provider}"],
+        'enabled'  => $effective_plugins,
       },
     },
   }
