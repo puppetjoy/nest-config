@@ -1,0 +1,12 @@
+name: patternkit-session
+version: 1.0.0
+description: Star-only exact-session Pattern Kit inspection and leased control
+provides_tools:
+  - patternkit_session_status
+  - patternkit_session_snapshot
+  - patternkit_session_visual_evidence
+  - patternkit_session_diagnostics
+  - patternkit_session_control
+  - patternkit_session_click
+  - patternkit_session_type
+  - patternkit_session_key

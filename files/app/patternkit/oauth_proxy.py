@@ -30,6 +30,7 @@ PUBLIC_ORIGIN = os.environ["OAUTH_PROXY_PUBLIC_ORIGIN"].rstrip("/")
 CLIENT_ID = os.environ["OAUTH_PROXY_CLIENT_ID"]
 GITLAB_ORIGIN = os.environ.get("OAUTH_PROXY_GITLAB_ORIGIN", "https://gitlab.joyfullee.me").rstrip("/")
 SMOKE_TOKEN = os.environ.get("OAUTH_PROXY_SMOKE_TOKEN", "")
+BRIDGE_TOKEN = os.environ.get("OAUTH_PROXY_BRIDGE_TOKEN", "")
 SOURCE_REPOS = [item for item in os.environ.get("OAUTH_PROXY_SOURCE_REPOS", "").split(":") if item]
 NODE_NAME = os.environ.get("PATTERNKIT_NODE_NAME", "")
 COOKIE_NAME = "__Host-patternkit_session"
@@ -185,6 +186,8 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
     def _identity(self) -> str | None:
         _prune()
+        if BRIDGE_TOKEN and secrets.compare_digest(self.headers.get("X-PatternKit-Bridge-Token", ""), BRIDGE_TOKEN):
+            return "star"
         if SMOKE_TOKEN and secrets.compare_digest(self.headers.get("X-PatternKit-Smoke-Token", ""), SMOKE_TOKEN):
             return "synthetic-smoke"
         session = _cookie(self.headers)
@@ -271,6 +274,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
                     "proxy-connection",
                     "te",
                     "trailer",
+                    "x-patternkit-bridge-token",
                     "x-patternkit-smoke-token",
                 }
                 or lowered.startswith("x-forwarded-")

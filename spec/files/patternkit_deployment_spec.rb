@@ -49,6 +49,25 @@ RSpec.describe 'Pattern Kit Eyrie deployment assets' do
     expect(bridge).not_to include('windowactivate')
   end
 
+  it 'routes the Star session bridge through the exact isolated service boundary' do
+    studio = resources.fetch('studio').dig('spec', 'template', 'spec', 'containers')
+    studio_proxy = studio.find { |container| container.fetch('name') == 'oauth-proxy' }
+    workbench = resources.fetch('workbench').dig('spec', 'template', 'spec', 'containers')
+    firefox = workbench.find { |container| container.fetch('name') == 'firefox' }
+    studio_environment = studio_proxy.fetch('env').to_h { |item| [item.fetch('name'), item] }
+    firefox_environment = firefox.fetch('env').to_h { |item| [item.fetch('name'), item] }
+
+    expect(studio_environment.fetch('OAUTH_PROXY_BRIDGE_TOKEN').dig('valueFrom', 'secretKeyRef', 'name')).to eq('%{nest::kubernetes::service}-smoke')
+    expect(studio_environment.fetch('OAUTH_PROXY_BRIDGE_TOKEN').dig('valueFrom', 'secretKeyRef', 'key')).to eq('studio-bridge-token')
+    expect(firefox_environment.fetch('PATTERNKIT_STUDIO_PROXY').fetch('value')).to eq('http://%{nest::kubernetes::service}-workbench-egress:3128')
+    expect(firefox_environment.fetch('PATTERNKIT_BRIDGE_TOKEN').dig('valueFrom', 'secretKeyRef', 'key')).to eq('token')
+    expect(firefox_environment.fetch('PATTERNKIT_AGENT_TOKEN').dig('valueFrom', 'secretKeyRef', 'key')).to eq('agent-token')
+    expect(firefox_environment.fetch('PATTERNKIT_STUDIO_BRIDGE_TOKEN').dig('valueFrom', 'secretKeyRef', 'key')).to eq('studio-bridge-token')
+    expect(firefox.fetch('command').last).to include('unset PATTERNKIT_BRIDGE_TOKEN PATTERNKIT_AGENT_TOKEN PATTERNKIT_STUDIO_BRIDGE_TOKEN')
+    expect(firefox.fetch('command').last.index('unset PATTERNKIT_BRIDGE_TOKEN')).to be < firefox.fetch('command').last.index('exec /usr/local/bin/nest-firefox-browser')
+    expect(resources.fetch('workbench-egress-isolation').to_s).to include('workbench-egress', '3128')
+  end
+
   it 'binds OAuth state to the browser and tunnels WebSockets bidirectionally' do
     proxy = File.read(File.join(repo_root, 'files/app/patternkit/oauth_proxy.py'))
 
@@ -84,7 +103,7 @@ RSpec.describe 'Pattern Kit Eyrie deployment assets' do
     script = File.read(File.join(repo_root, 'files/app/patternkit/smoke_test.py'))
 
     expect(environment.fetch('PATTERNKIT_WORKBENCH_BRIDGE_URL')).to include('%{nest::kubernetes::service}-workbench:8766')
-    expect(script).to include('binding.get("node") != "owl"')
+    expect(script).to include('binding.get("isolated_browser_verified")')
     expect(script).to include('X-PatternKit-Bridge-Token')
     expect(script).to include('workbench_bridge_unauth_status')
     expect(script).to include('/synthetic-contract')
@@ -106,6 +125,7 @@ RSpec.describe 'Pattern Kit Eyrie deployment assets' do
     scripts = ['oauth_proxy.py', 'egress_proxy.py', 'workbench_bridge.py', 'smoke_test.py'].map do |name|
       File.join(repo_root, 'files/app/patternkit', name)
     end
+    scripts << File.join(repo_root, 'files/app/hermes/patternkit_session_broker.py')
     compile = 'import pathlib, sys; [compile(pathlib.Path(path).read_bytes(), path, "exec") for path in sys.argv[1:]]'
     _stdout, stderr, status = Open3.capture3('python3', '-c', compile, *scripts)
 

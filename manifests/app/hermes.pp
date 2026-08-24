@@ -15,6 +15,8 @@ class nest::app::hermes (
   Boolean                        $star_order_refresh_enabled     = true,
   String[1]                      $star_order_refresh_profile     = 'star',
   String[1]                      $star_order_refresh_interval    = '6h',
+  Boolean                        $patternkit_session_enabled     = false,
+  Optional[Sensitive[String[1]]] $patternkit_session_token       = undef,
   String[1]                      $gitlab_url                     = 'https://gitlab.joyfullee.me',
   Optional[Sensitive[String[1]]] $gitlab_token                   = undef,
   Optional[Sensitive[String[1]]] $agent_request_gitlab_joy_token = undef,

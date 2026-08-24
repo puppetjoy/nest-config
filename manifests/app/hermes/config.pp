@@ -37,6 +37,7 @@ class nest::app::hermes::config {
   $agent_request_kanban_board       = $nest::app::hermes::agent_request_kanban_board
   $instances                        = $nest::app::hermes::instances
   $instance_secrets                 = $nest::app::hermes::instance_secrets
+  $patternkit_session_enabled       = $nest::app::hermes::patternkit_session_enabled
 
   $hermes_config_dir    = "/home/${nest::user}/.config/hermes"
   $hermes_home_dir      = "/home/${nest::user}/.hermes"
@@ -172,6 +173,7 @@ class nest::app::hermes::config {
       undef   => $image_gen_model,
       default => $config['image_gen_model'],
     }
+    $instance_enabled_plugins   = pick($config['enabled_plugins'], [])
     $instance_compress_timeout  = pick($config['compression_timeout'], $compression_timeout)
     $instance_responses_native   = pick($config['responses_native'], $responses_native)
     $instance_responses_threshold = pick($config['responses_threshold'], $responses_threshold)
@@ -213,6 +215,10 @@ class nest::app::hermes::config {
         default => $config['telegram_toolsets'],
       },
       default => $config['toolsets'],
+    }
+    $instance_effective_toolsets = ($patternkit_session_enabled and $profile == 'star') ? {
+      true    => unique($instance_toolsets + ['patternkit_session']),
+      default => $instance_toolsets,
     }
     $instance_profile_toolsets  = pick($config['profile_toolsets'], ['hermes-cli', 'kanban'])
     $instance_directory_enabled = pick($config['agent_directory_enabled'], true)
@@ -283,6 +289,7 @@ class nest::app::hermes::config {
       auxiliary_mini_model       => $instance_aux_model,
       image_gen_provider         => $instance_image_provider,
       image_gen_model            => $instance_image_model,
+      enabled_plugins            => $instance_enabled_plugins,
       compression_timeout        => $instance_compress_timeout,
       responses_native           => $instance_responses_native,
       responses_threshold        => $instance_responses_threshold,
@@ -314,7 +321,7 @@ class nest::app::hermes::config {
       skin_content               => $instance_skin_content,
       skin_banner_hero_source    => $instance_skin_hero_source,
       profile_toolsets           => $instance_profile_toolsets,
-      toolsets                   => $instance_toolsets,
+      toolsets                   => $instance_effective_toolsets,
       agent_directory_enabled    => $instance_directory_enabled,
       agent_directory_board      => $instance_directory_board,
       agent_directory_touch      => $instance_directory_touch,
@@ -345,6 +352,47 @@ class nest::app::hermes::config {
       kubeconfig_content         => $instance_kubeconfig,
       extra_packages             => $instance_extra_packages,
       release_digest_enabled     => $instance_release_digest,
+    }
+  }
+
+  $patternkit_profile_plugins_dir = "${profiles_dir}/star/plugins"
+  $patternkit_plugin_dir = "${patternkit_profile_plugins_dir}/patternkit-session"
+  if $patternkit_session_enabled {
+    file { $patternkit_profile_plugins_dir:
+      ensure  => directory,
+      mode    => '0700',
+      owner   => $nest::user,
+      group   => $nest::user,
+      require => File["${profiles_dir}/star"],
+    }
+
+    file { $patternkit_plugin_dir:
+      ensure  => directory,
+      mode    => '0700',
+      owner   => $nest::user,
+      group   => $nest::user,
+      require => File[$patternkit_profile_plugins_dir],
+    }
+
+    ['plugin.yaml', '__init__.py', 'schemas.py', 'tools.py'].each |String[1] $plugin_file| {
+      file { "${patternkit_plugin_dir}/${plugin_file}":
+        ensure  => file,
+        mode    => '0600',
+        owner   => $nest::user,
+        group   => $nest::user,
+        source  => "puppet:///modules/nest/app/hermes/patternkit_session_plugin/${plugin_file}",
+        require => File[$patternkit_plugin_dir],
+        notify  => Exec['restart_hermes_gateway_star'],
+      }
+    }
+  } else {
+    file { $patternkit_plugin_dir:
+      ensure  => absent,
+      force   => true,
+      recurse => true,
+      owner   => $nest::user,
+      group   => $nest::user,
+      require => File[$profiles_dir],
     }
   }
 }

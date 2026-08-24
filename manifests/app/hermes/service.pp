@@ -14,6 +14,8 @@ class nest::app::hermes::service {
   $moving_ticket_interval             = $nest::app::hermes::moving_ticket_interval
   $star_order_refresh_profile     = $nest::app::hermes::star_order_refresh_profile
   $star_order_refresh_interval    = $nest::app::hermes::star_order_refresh_interval
+  $patternkit_session_enabled     = $nest::app::hermes::patternkit_session_enabled
+  $patternkit_session_token       = $nest::app::hermes::patternkit_session_token
 
   file { $systemd_user_dir:
     ensure => directory,
@@ -78,6 +80,106 @@ class nest::app::hermes::service {
     group   => 'root',
     source  => 'puppet:///modules/nest/app/hermes/star-order-refresh-runner.py',
     require => File["${install_dir}/bin"],
+  }
+
+  $patternkit_session_broker_path = "${install_dir}/bin/patternkit_session_broker.py"
+  $patternkit_session_env_path = '/etc/patternkit-session-broker.env'
+
+  if $patternkit_session_enabled {
+    $patternkit_session_token_value = $patternkit_session_token ? {
+      undef   => fail('Star Pattern Kit session tooling requires patternkit_session_token'),
+      default => $patternkit_session_token.unwrap,
+    }
+
+    file { $patternkit_session_broker_path:
+      ensure  => file,
+      mode    => '0755',
+      owner   => 'root',
+      group   => 'root',
+      source  => 'puppet:///modules/nest/app/hermes/patternkit_session_broker.py',
+      require => File["${install_dir}/bin"],
+      notify  => Service['patternkit-session-broker'],
+    }
+
+    file { $patternkit_session_env_path:
+      ensure    => file,
+      mode      => '0600',
+      owner     => 'root',
+      group     => 'root',
+      content   => Sensitive("PATTERNKIT_SESSION_BRIDGE_TOKEN=${patternkit_session_token_value}\n"),
+      show_diff => false,
+      notify    => Service['patternkit-session-broker'],
+    }
+
+    file { '/etc/systemd/system/patternkit-session-broker.service':
+      ensure  => file,
+      mode    => '0644',
+      owner   => 'root',
+      group   => 'root',
+      content => @("UNIT"),
+        [Unit]
+        Description=Star Pattern Kit exact-session credential broker
+        After=network-online.target
+        Wants=network-online.target
+
+        [Service]
+        Type=simple
+        User=root
+        Group=${nest::user}
+        EnvironmentFile=${patternkit_session_env_path}
+        RuntimeDirectory=patternkit-session-broker
+        RuntimeDirectoryMode=0750
+        ExecStart=${venv_python} ${patternkit_session_broker_path}
+        ExecStartPost=/usr/bin/timeout 30 /bin/sh -c 'until /usr/bin/test -S /run/patternkit-session-broker/patternkit-session.sock; do /bin/sleep 0.1; done'
+        Restart=on-failure
+        RestartSec=5
+        NoNewPrivileges=true
+        PrivateTmp=true
+        ProtectHome=read-only
+        ProtectSystem=strict
+        ReadWritePaths=/run/patternkit-session-broker
+
+        [Install]
+        WantedBy=multi-user.target
+        | UNIT
+      require => File[$patternkit_session_env_path],
+      notify  => Exec['patternkit-session-systemd-reload'],
+    }
+
+    exec { 'patternkit-session-systemd-reload':
+      command     => '/bin/systemctl daemon-reload',
+      refreshonly => true,
+    }
+
+    service { 'patternkit-session-broker':
+      ensure    => running,
+      enable    => true,
+      subscribe => File['/etc/systemd/system/patternkit-session-broker.service'],
+      require   => [
+        Exec['patternkit-session-systemd-reload'],
+        File[$patternkit_session_broker_path],
+        File[$patternkit_session_env_path],
+      ],
+    }
+  } else {
+    service { 'patternkit-session-broker':
+      ensure => stopped,
+      enable => false,
+    }
+
+    file { [
+      $patternkit_session_broker_path,
+      $patternkit_session_env_path,
+      '/etc/systemd/system/patternkit-session-broker.service',
+    ]:
+      ensure => absent,
+      notify => Exec['patternkit-session-systemd-reload'],
+    }
+
+    exec { 'patternkit-session-systemd-reload':
+      command     => '/bin/systemctl daemon-reload',
+      refreshonly => true,
+    }
   }
 
   file { [

@@ -46,6 +46,22 @@ class UpstreamCookieTest(unittest.TestCase):
         self.assertIn('(\"X-Forwarded-User\", identity)', source)
         self.assertIn('(\"X-Forwarded-Host\", urlsplit(PUBLIC_ORIGIN).netloc)', source)
         self.assertIn('(\"X-Forwarded-Proto\", \"https\")', source)
+        self.assertIn('\"x-patternkit-bridge-token\"', source)
+
+    def test_exact_bridge_token_maps_to_star_and_never_uses_caller_identity(self) -> None:
+        previous = (PROXY.BRIDGE_TOKEN, PROXY.SMOKE_TOKEN)
+        PROXY.BRIDGE_TOKEN = "exact-bridge-token"
+        PROXY.SMOKE_TOKEN = "synthetic-smoke-token"
+        handler = object.__new__(PROXY.ProxyHandler)
+        try:
+            handler.headers = {"X-PatternKit-Bridge-Token": "wrong"}
+            self.assertIsNone(handler._identity())
+            handler.headers = {"X-PatternKit-Bridge-Token": "synthetic-smoke-token"}
+            self.assertIsNone(handler._identity())
+            handler.headers = {"X-PatternKit-Bridge-Token": "exact-bridge-token", "X-Forwarded-User": "attacker"}
+            self.assertEqual(handler._identity(), "star")
+        finally:
+            PROXY.BRIDGE_TOKEN, PROXY.SMOKE_TOKEN = previous
 
     def test_proxy_caps_request_bodies(self) -> None:
         self.assertEqual(PROXY.MAX_REQUEST_BODY, 16 * 1024 * 1024)
