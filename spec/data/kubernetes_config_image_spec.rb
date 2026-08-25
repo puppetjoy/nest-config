@@ -19,6 +19,12 @@ RSpec.describe 'Kubernetes config image references' do
     expect(common_yaml).not_to include(%(image: "%{lookup('config_registry')}/nest/config/main"))
   end
 
+  it 'lets recurring config-image durability jobs start from a cached image during registry outages' do
+    durability_job_yamls = [common_yaml, test_yaml, File.read(File.join(repo_root, 'data/kubernetes/app/hermes-dashboard.yaml'))]
+
+    expect(durability_job_yamls).to all(match(%r{kind: CronJob.*image: "%\{lookup\('config_image'\)\}"\n\s+imagePullPolicy: IfNotPresent}m))
+  end
+
   it 'bounds shared backup jobs so image pull stalls cannot block future schedules' do
     expect(common_yaml).to include('backup_job_active_deadline_seconds: 7200')
     expect(common_yaml).to include(%(activeDeadlineSeconds: "%{alias('backup_job_active_deadline_seconds')}"))
