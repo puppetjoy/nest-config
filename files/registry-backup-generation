@@ -12,16 +12,24 @@ generation_id="$(date -u +%Y%m%dT%H%M%S)-$$"
 staging_root="${backup_root}/.staging"
 staging="${staging_root}/${generation_id}"
 generations="${backup_root}/generations"
+retired_root="${backup_root}/.retired"
 generation="${generations}/${generation_id}"
 current_tmp="${backup_root}/.current-${generation_id}"
 legacy_retirement="${backup_root}/.legacy-retired-${generation_id}"
 migrating_legacy=false
 previous_generation=
 
-install -d -m 0700 "$staging_root" "$generations"
+install -d -m 0700 "$staging_root" "$generations" "$retired_root"
 for stale_staging in "$staging_root"/*; do
   [ -e "$stale_staging" ] || [ -L "$stale_staging" ] || continue
   rm -rf "$stale_staging"
+done
+# A hard deadline can interrupt physical deletion after a new generation has
+# already been published. Finish that deletion before cloning another complete
+# generation, otherwise each retry can consume another copy of the registry.
+for stale_retirement in "$retired_root"/*; do
+  [ -e "$stale_retirement" ] || [ -L "$stale_retirement" ] || continue
+  rm -rf "$stale_retirement"
 done
 install -d -m 0700 "$staging"
 install -d -m 0700 "$staging/data"
@@ -66,7 +74,7 @@ else
   for legacy_path in "$backup_root"/* "$backup_root"/.[!.]* "$backup_root"/..?*; do
     [ -e "$legacy_path" ] || [ -L "$legacy_path" ] || continue
     case "${legacy_path##*/}" in
-      .staging|generations|current|.current-*) continue ;;
+      .retired|.staging|generations|current|.current-*) continue ;;
     esac
     cp -a --reflink=always "$legacy_path" "$staging/data/"
   done
@@ -88,7 +96,7 @@ if [ "$migrating_legacy" = true ]; then
   for legacy_path in "$backup_root"/* "$backup_root"/.[!.]* "$backup_root"/..?*; do
     [ -e "$legacy_path" ] || [ -L "$legacy_path" ] || continue
     case "${legacy_path##*/}" in
-      .staging|generations|current|.current-*|.legacy-retired-*) continue ;;
+      .retired|.staging|generations|current|.current-*|.legacy-retired-*) continue ;;
     esac
     mv "$legacy_path" "$legacy_retirement/"
   done
@@ -96,13 +104,20 @@ if [ "$migrating_legacy" = true ]; then
 fi
 
 # Keep the new current generation and the exact generation that was current
-# when this run began. Do not infer chronology from names: multiple manual runs
-# can publish in one second and variable-width process IDs do not sort by time.
+# when this run began. Atomically move older generations out of the restore
+# namespace before deleting their large trees. If the Job deadline interrupts
+# deletion, the next run resumes it before publishing another generation.
+# Do not infer chronology from names: multiple manual runs can publish in one
+# second and variable-width process IDs do not sort by time.
 for candidate in "$generations"/*; do
   [ -e "$candidate" ] || [ -L "$candidate" ] || continue
   if [ "$candidate" != "$generation" ] && [ "$candidate" != "$previous_generation" ]; then
-    rm -rf "$candidate"
+    mv "$candidate" "$retired_root/${candidate##*/}"
   fi
+done
+for retired in "$retired_root"/*; do
+  [ -e "$retired" ] || [ -L "$retired" ] || continue
+  rm -rf "$retired"
 done
 
 trap - EXIT HUP INT TERM
