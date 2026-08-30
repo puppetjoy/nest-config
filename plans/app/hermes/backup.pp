@@ -7,7 +7,7 @@ plan nest::app::hermes::backup (
   String[1]           $backup_dir   = '/nest/backup/hermes',
   Boolean             $quick        = false,
   Boolean             $prune_only   = false,
-  String[1]           $user         = 'joy',
+  Pattern[/\A[A-Za-z_][A-Za-z0-9_-]*\z/]             $user         = 'joy',
   Integer[1]          $retain       = 24,
   # Deprecated alias for profile.
   Pattern[/\A[A-Za-z0-9][A-Za-z0-9_.-]*\z/]           $service_name = 'talon',
@@ -36,8 +36,8 @@ plan nest::app::hermes::backup (
   if $prune_only {
     $prune_command = @("COMMAND"/L)
       set -euo pipefail
-      install -d -m 0700 -o ${user} -g ${user} ${backup_dir.shellquote}
-      if ! find ${backup_dir.shellquote} -maxdepth 1 -type f -name ${"${profile_name}-hermes-*.zip".shellquote} -print0 \
+      install -d -m 0700 -o ${user.shellquote} -g ${user.shellquote} ${backup_dir.shellquote}
+      if ! find ${backup_dir.shellquote} -maxdepth 1 -type f -name ${"${profile_name}-hermes-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9].zip".shellquote} -print0 \
         | sort -z \
         | head -z -n -${retain} \
         | xargs -0r rm --; then
@@ -57,10 +57,10 @@ plan nest::app::hermes::backup (
 
   $command = @("COMMAND"/L)
     set -euo pipefail
-    install -d -m 0700 -o ${user} -g ${user} ${backup_dir.shellquote}
+    install -d -m 0700 -o ${user.shellquote} -g ${user.shellquote} ${backup_dir.shellquote}
     runuser -u ${user.shellquote} -- /opt/hermes-agent/venv/bin/hermes --profile ${profile_name.shellquote} backup --output ${archive.shellquote}
     chmod 0600 ${archive.shellquote}
-    if ! find ${backup_dir.shellquote} -maxdepth 1 -type f -name ${"${profile_name}-hermes-*.zip".shellquote} -print0 \
+    if ! find ${backup_dir.shellquote} -maxdepth 1 -type f -name ${"${profile_name}-hermes-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9].zip".shellquote} -print0 \
       | sort -z \
       | head -z -n -${retain} \
       | xargs -0r rm --; then
