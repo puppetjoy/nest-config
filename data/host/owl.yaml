@@ -315,6 +315,7 @@ nest::app::hermes::instances:
     image_gen_model: 'gpt-image-2-medium'
     gitlab_enabled: true
     enabled_plugins:
+      - 'star-command-policy'
       - 'patternkit-session'
     honcho_workspace: 'hermes'
     honcho_user_peer: 'joy'
@@ -336,14 +337,7 @@ nest::app::hermes::instances:
     git_user_email: 'star@joyfullee.me'
     git_signing_key: '/home/joy/.hermes/profiles/star/.ssh/id_ed25519'
     git_commit_sign: true
-    command_allowlist:
-      - 'execute_code'
-      - 'python *'
-      - 'python3 *'
-      - '/opt/hermes-agent/venv/bin/python *'
-      - 'HERMES_HOME=* /opt/hermes-agent/venv/bin/python *'
-      - 'uv run python *'
-      - 'uv run --with * python *'
+    approval_mode: 'off'
     google_photos_enabled: true
     google_workspace_enabled: true
     environment:

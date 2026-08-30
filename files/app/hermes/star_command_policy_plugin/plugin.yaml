@@ -1,0 +1,5 @@
+name: star-command-policy
+version: 1.0.0
+description: Require per-invocation approval only when Star executes sudo
+hooks:
+  - pre_tool_call

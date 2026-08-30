@@ -358,8 +358,10 @@ class nest::app::hermes::config {
   }
 
   $patternkit_profile_plugins_dir = "${profiles_dir}/star/plugins"
+  $star_command_policy_plugin_dir = "${patternkit_profile_plugins_dir}/star-command-policy"
   $patternkit_plugin_dir = "${patternkit_profile_plugins_dir}/patternkit-session"
-  if $patternkit_session_enabled {
+
+  if 'star' in $instances {
     file { $patternkit_profile_plugins_dir:
       ensure  => directory,
       mode    => '0700',
@@ -368,6 +370,28 @@ class nest::app::hermes::config {
       require => File["${profiles_dir}/star"],
     }
 
+    file { $star_command_policy_plugin_dir:
+      ensure  => directory,
+      mode    => '0700',
+      owner   => $nest::user,
+      group   => $nest::user,
+      require => File[$patternkit_profile_plugins_dir],
+    }
+
+    ['plugin.yaml', '__init__.py'].each |String[1] $plugin_file| {
+      file { "${star_command_policy_plugin_dir}/${plugin_file}":
+        ensure  => file,
+        mode    => '0600',
+        owner   => $nest::user,
+        group   => $nest::user,
+        source  => "puppet:///modules/nest/app/hermes/star_command_policy_plugin/${plugin_file}",
+        require => File[$star_command_policy_plugin_dir],
+        notify  => Exec['restart_hermes_gateway_star'],
+      }
+    }
+  }
+
+  if $patternkit_session_enabled {
     file { $patternkit_plugin_dir:
       ensure  => directory,
       mode    => '0700',
