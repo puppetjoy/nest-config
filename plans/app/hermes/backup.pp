@@ -6,6 +6,7 @@ plan nest::app::hermes::backup (
   TargetSpec          $target       = 'owl',
   String[1]           $backup_dir   = '/nest/backup/hermes',
   Boolean             $quick        = false,
+  Boolean             $prune_only   = false,
   String[1]           $user         = 'joy',
   Integer[1]          $retain       = 24,
   # Deprecated alias for profile.
@@ -17,6 +18,10 @@ plan nest::app::hermes::backup (
     default => $profile,
   }
 
+  if $quick and $prune_only {
+    fail_plan('quick and prune_only are mutually exclusive')
+  }
+
   if $quick {
     $command = @("COMMAND"/L)
       set -euo pipefail
@@ -24,6 +29,25 @@ plan nest::app::hermes::backup (
       | COMMAND
 
     return run_command($command, $target, 'Create Hermes quick snapshot', {
+      '_run_as' => 'root',
+    })
+  }
+
+  if $prune_only {
+    $prune_command = @("COMMAND"/L)
+      set -euo pipefail
+      install -d -m 0700 -o ${user} -g ${user} ${backup_dir.shellquote}
+      if ! find ${backup_dir.shellquote} -maxdepth 1 -type f -name ${"${profile_name}-hermes-*.zip".shellquote} -print0 \
+        | sort -z \
+        | head -z -n -${retain} \
+        | xargs -0r rm --; then
+        printf 'Failed to prune old Hermes backups for %s\n' ${profile_name.shellquote} >&2
+        exit 1
+      fi
+      printf 'Retained newest %s Hermes backups for %s\n' ${retain} ${profile_name.shellquote}
+      | COMMAND
+
+    return run_command($prune_command, $target, 'Prune old Hermes backups', {
       '_run_as' => 'root',
     })
   }
