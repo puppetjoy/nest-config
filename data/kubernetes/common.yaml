@@ -45,7 +45,7 @@ resources:
               containers:
                 - name: nest
                   image: "%{lookup('config_image')}"
-                  imagePullPolicy: Always
+                  imagePullPolicy: IfNotPresent
                   command:
                     - bolt
                     - plan

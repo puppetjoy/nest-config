@@ -128,7 +128,7 @@ RSpec.describe 'registry backup generations' do
       expect(status).to be_success, stderr
       expect(File.exist?(stale_retirement)).to be(false)
       expect(Dir.children(File.join(backup_root, 'generations')).length).to eq(2)
-      expect(Dir.children(backup_root).sort).to eq(['.staging', 'current', 'generations'])
+      expect(Dir.children(backup_root).sort).to eq(['.retired', '.staging', 'current', 'generations'])
       expect(File.read(File.join(File.realpath(File.join(backup_root, 'current')), 'data', 'artifact'))).to eq('second')
     end
   end
@@ -162,6 +162,26 @@ RSpec.describe 'registry backup generations' do
       _stdout, stderr, status = Open3.capture3(backup_helper, backup_root, '--', sync, source)
       expect(status).to be_success, stderr
       expect(Dir.children(File.join(backup_root, '.staging'))).to be_empty
+      current = File.realpath(File.join(backup_root, 'current'))
+      expect(File.read(File.join(current, 'data', 'artifact'))).to eq('complete')
+    end
+  end
+
+  it 'finishes interrupted generation retirement before starting another sync' do
+    Dir.mktmpdir('registry-stale-retirement') do |tmpdir|
+      source = File.join(tmpdir, 'source')
+      backup_root = File.join(tmpdir, 'backup')
+      stale_retirement = File.join(backup_root, '.retired', 'interrupted')
+      sync = File.join(tmpdir, 'sync')
+      FileUtils.mkdir_p(source)
+      FileUtils.mkdir_p(stale_retirement)
+      File.write(File.join(source, 'artifact'), 'complete')
+      File.write(File.join(stale_retirement, 'old-block'), 'safe to reap')
+      write_sync(sync, "test ! -e #{stale_retirement}; cp -R \"$1/.\" \"$2\"")
+
+      _stdout, stderr, status = Open3.capture3(backup_helper, backup_root, '--', sync, source)
+      expect(status).to be_success, stderr
+      expect(Dir.children(File.join(backup_root, '.retired'))).to be_empty
       current = File.realpath(File.join(backup_root, 'current'))
       expect(File.read(File.join(current, 'data', 'artifact'))).to eq('complete')
     end
