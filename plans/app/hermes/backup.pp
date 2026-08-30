@@ -7,6 +7,7 @@ plan nest::app::hermes::backup (
   String[1]           $backup_dir   = '/nest/backup/hermes',
   Boolean             $quick        = false,
   String[1]           $user         = 'joy',
+  Integer[1]          $retain       = 24,
   # Deprecated alias for profile.
   String[1]           $service_name = 'talon',
   Optional[String[1]] $profile      = undef,
@@ -35,6 +36,10 @@ plan nest::app::hermes::backup (
     install -d -m 0700 -o ${user} -g ${user} ${backup_dir.shellquote}
     runuser -u ${user.shellquote} -- /opt/hermes-agent/venv/bin/hermes --profile ${profile_name.shellquote} backup --output ${archive.shellquote}
     chmod 0600 ${archive.shellquote}
+    find ${backup_dir.shellquote} -maxdepth 1 -type f -name ${"${profile_name}-hermes-*.zip".shellquote} -print0 \
+      | sort -z \
+      | head -z -n -${retain} \
+      | xargs -0r rm --
     printf '%s\n' ${archive.shellquote}
     | COMMAND
 
