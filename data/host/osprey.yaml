@@ -9,6 +9,9 @@ nest::classes:
   - 'nest::tool::pdk'
   - 'nest::tool::qemu'
 
+nest::packages:
+  - 'virtual/opencl'
+
 nest::ambient_enabled: false
 nest::dvorak: true
 nest::idle_brightness: 15
