@@ -9,8 +9,8 @@ plan nest::app::hermes::backup (
   String[1]           $user         = 'joy',
   Integer[1]          $retain       = 24,
   # Deprecated alias for profile.
-  String[1]           $service_name = 'talon',
-  Optional[String[1]] $profile      = undef,
+  Pattern[/\A[A-Za-z0-9][A-Za-z0-9_.-]*\z/]           $service_name = 'talon',
+  Optional[Pattern[/\A[A-Za-z0-9][A-Za-z0-9_.-]*\z/]] $profile      = undef,
 ) {
   $profile_name = $profile ? {
     undef   => $service_name,
@@ -36,10 +36,13 @@ plan nest::app::hermes::backup (
     install -d -m 0700 -o ${user} -g ${user} ${backup_dir.shellquote}
     runuser -u ${user.shellquote} -- /opt/hermes-agent/venv/bin/hermes --profile ${profile_name.shellquote} backup --output ${archive.shellquote}
     chmod 0600 ${archive.shellquote}
-    find ${backup_dir.shellquote} -maxdepth 1 -type f -name ${"${profile_name}-hermes-*.zip".shellquote} -print0 \
+    if ! find ${backup_dir.shellquote} -maxdepth 1 -type f -name ${"${profile_name}-hermes-*.zip".shellquote} -print0 \
       | sort -z \
       | head -z -n -${retain} \
-      | xargs -0r rm --
+      | xargs -0r rm --; then
+      printf 'Failed to prune old Hermes backups for %s\n' ${profile_name.shellquote} >&2
+      exit 1
+    fi
     printf '%s\n' ${archive.shellquote}
     | COMMAND
 
