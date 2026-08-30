@@ -7,8 +7,9 @@ plan nest::app::hermes::backup (
   String[1]           $backup_dir   = '/nest/backup/hermes',
   Boolean             $quick        = false,
   Boolean             $prune_only   = false,
-  Pattern[/\A[A-Za-z_][A-Za-z0-9_-]*\z/]             $user         = 'joy',
-  Integer[1]          $retain       = 24,
+  # Account used to run Hermes and own the backup directory.
+  Pattern[/\A[A-Za-z_][A-Za-z0-9_-]*\z/] $user   = 'joy',
+  Integer[1]                             $retain = 24,
   # Deprecated alias for profile.
   Pattern[/\A[A-Za-z0-9][A-Za-z0-9_.-]*\z/]           $service_name = 'talon',
   Optional[Pattern[/\A[A-Za-z0-9][A-Za-z0-9_.-]*\z/]] $profile      = undef,
