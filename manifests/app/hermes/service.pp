@@ -106,7 +106,11 @@ class nest::app::hermes::service {
       mode      => '0600',
       owner     => 'root',
       group     => 'root',
-      content   => Sensitive("PATTERNKIT_SESSION_BRIDGE_TOKEN=${patternkit_session_token_value}\n"),
+      content   => Sensitive(join([
+        "PATTERNKIT_SESSION_BRIDGE_TOKEN=${patternkit_session_token_value}",
+        "PATTERNKIT_SESSION_KUBECONFIG=/home/${nest::user}/.hermes/profiles/talon/kubeconfigs/eyrie.conf",
+        '',
+      ], "\n")),
       show_diff => false,
       notify    => Service['patternkit-session-broker'],
     }
