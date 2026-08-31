@@ -1,4 +1,21 @@
 class nest::host::osprey {
+  $resolve_desktop_entry = @("END")
+    [Desktop Entry]
+    Version=1.0
+    Type=Application
+    Name=DaVinci Resolve
+    GenericName=DaVinci Resolve
+    Comment=Revolutionary new tools for editing, visual effects, color correction and professional audio post production, all in a single application!
+    Path=/opt/resolve/
+    Exec=/usr/bin/env ALSA_CONFIG_PATH=/etc/alsa/resolve.conf /opt/resolve/bin/resolve %u
+    Terminal=false
+    MimeType=application/x-resolveproj;
+    Icon=/opt/resolve/graphics/DV_Resolve.png
+    StartupWMClass=resolve
+    StartupNotify=true
+    Name[en_US]=DaVinci Resolve
+    | END
+
   $touchpad_jitter_hwdb = @("END")
     # Increase touchpad hysteresis to ignore small hand tremors while
     # pausing a two-finger scroll gesture.
@@ -14,6 +31,30 @@ class nest::host::osprey {
     mode   => '0755',
     owner  => 'root',
     group  => 'root',
+  }
+
+  # Fairlight probes the generic dmix PCM even when Resolve's speaker setup
+  # selects the ALC294 codec. On osprey card 0 is the NVIDIA HDMI controller,
+  # which has no PCM device 0, so route only Resolve's ALSA namespace through
+  # the already-running PipeWire graph instead of changing global card order.
+  file { '/etc/alsa/resolve.conf':
+    ensure => file,
+    mode   => '0644',
+    owner  => 'root',
+    group  => 'root',
+    source => 'puppet:///modules/nest/alsa/resolve.conf',
+  }
+
+  file { '/usr/local/share/applications/com.blackmagicdesign.resolve.desktop':
+    ensure  => file,
+    mode    => '0644',
+    owner   => 'root',
+    group   => 'root',
+    content => $resolve_desktop_entry,
+    require => [
+      File['/etc/alsa/resolve.conf'],
+      File['/usr/local/share/applications'],
+    ],
   }
 
   file { '/etc/udev/hwdb.d/90-nest-touchpad-jitter.hwdb':
