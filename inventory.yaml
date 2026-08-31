@@ -51,6 +51,13 @@ groups:
           target_mapping:
             name: certname
             uri: facts.fqdn
+    - name: 'mobile'
+      targets:
+        - _plugin: puppetdb
+          query: "inventory[certname] { facts.osfamily = 'Gentoo' and facts.profile.variant = 'mobile' and certname != 'builder' }"
+          target_mapping:
+            name: certname
+            uri: facts.fqdn
 
   - name: 'macs'
     targets:
