@@ -157,6 +157,8 @@ podman run --rm --cidfile "$cidfile" "${podman_tty_args[@]}" -e TERM \
     -v "${PWD}:/modules/${name}" \
     -v /etc/eyaml:/etc/eyaml:ro \
     -v /etc/puppetlabs/bolt:/etc/puppetlabs/bolt:ro \
+    -v /etc/ssh/ssh_config:/etc/ssh/ssh_config:ro \
+    -v /etc/ssh/ssh_config.d:/etc/ssh/ssh_config.d:ro \
     -v /etc/ssh/ssh_known_hosts:/etc/ssh/ssh_known_hosts:ro \
     -v /nest/backup:/nest/backup \
     "${kubeconfig_args[@]}" \
