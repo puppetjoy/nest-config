@@ -9,6 +9,7 @@ class nest::host::osprey {
     Path=/opt/resolve/
     Exec=/usr/bin/env ALSA_CONFIG_PATH=/etc/alsa/resolve.conf /opt/resolve/bin/resolve %u
     Terminal=false
+    PrefersNonDefaultGPU=true
     MimeType=application/x-resolveproj;
     Icon=/opt/resolve/graphics/DV_Resolve.png
     StartupWMClass=resolve
