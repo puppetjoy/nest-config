@@ -8,6 +8,8 @@ hdd_node_role: workstation
 hdd_osd_count: 3
 hdd_storage_class: nest-crypt-block
 hdd_volume_size: 1Ti
+hdd_metadata_storage_class: data-crypt-block
+hdd_metadata_volume_size: 32Gi
 service_name: "%{nest::kubernetes::service}"
 cert_issuer: eyrie-ca
 cert_issuer_kind: ClusterIssuer
@@ -200,6 +202,18 @@ values:
                   requests:
                     storage: "%{lookup('hdd_volume_size')}"
                 storageClassName: "%{lookup('hdd_storage_class')}"
+                volumeMode: Block
+                accessModes:
+                  - ReadWriteOnce
+            # Rook's metadata device holds both BlueStore block.db and block.wal.
+            # Keep it on Falcon's physical SSD-backed data pool, never on nest.
+            - metadata:
+                name: metadata
+              spec:
+                resources:
+                  requests:
+                    storage: "%{lookup('hdd_metadata_volume_size')}"
+                storageClassName: "%{lookup('hdd_metadata_storage_class')}"
                 volumeMode: Block
                 accessModes:
                   - ReadWriteOnce
