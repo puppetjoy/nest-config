@@ -170,7 +170,7 @@ nest::dhcp_client_ids:
   control3: 'ff:d9:bd:32:86:00:02:00:00:ab:11:bb:b2:8d:38:82:e0:16:7e'
   storage1: 'ff:24:d8:be:95:00:02:00:00:ab:11:21:6c:40:1f:fd:90:6f:e5'
   storage2: 'ff:b5:01:e8:61:00:02:00:00:ab:11:7e:6f:c7:35:ee:1a:2d:8e'
-  storage3: 'ff:03:45:55:df:00:02:00:00:ab:11:a6:c3:eb:08:54:09:c9:97'
+  storage3: 'ff:04:8f:48:bf:00:02:00:00:ab:11:a6:c3:eb:08:54:09:c9:97'
   storage4: 'ff:ff:1a:af:79:00:02:00:00:ab:11:2f:8d:d4:82:a7:e7:01:88'
 
 # 1–9: static / critical infra and control nodes
