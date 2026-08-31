@@ -45,4 +45,13 @@ class nest::host::osprey {
     after => '^options nvidia \\$',
   }
   ~> Class['nest::base::dracut']
+
+  file_line { 'nvidia.conf-s0ix-vram-threshold':
+    path    => '/etc/modprobe.d/nvidia.conf',
+    line    => "  NVreg_S0ixPowerManagementVideoMemoryThreshold=10000 \\",
+    match   => '^\\s*NVreg_S0ixPowerManagementVideoMemoryThreshold=',
+    after   => '^\\s*NVreg_EnableS0ixPowerManagement=1 \\$',
+    require => File_line['nvidia.conf-enable-s0ix-power-management'],
+  }
+  ~> Class['nest::base::dracut']
 }
