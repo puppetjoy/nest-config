@@ -46,12 +46,32 @@ class nest::host::osprey {
   }
   ~> Class['nest::base::dracut']
 
+  file { '/usr/local/libexec/nest-prune-misplaced-nvidia-s0ix-vram-threshold':
+    mode   => '0755',
+    source => 'puppet:///modules/nest/host/osprey/prune-misplaced-nvidia-s0ix-vram-threshold.rb',
+  }
+
+  # file_line replaces a matching line in place, so prune any copy outside the
+  # options block before ensuring the desired line at its package-owned anchor.
+  exec { 'prune-misplaced-nvidia-s0ix-vram-threshold':
+    command => '/usr/local/libexec/nest-prune-misplaced-nvidia-s0ix-vram-threshold /etc/modprobe.d/nvidia.conf',
+    onlyif  => '/usr/local/libexec/nest-prune-misplaced-nvidia-s0ix-vram-threshold --check /etc/modprobe.d/nvidia.conf',
+    require => [
+      File['/usr/local/libexec/nest-prune-misplaced-nvidia-s0ix-vram-threshold'],
+      File_line['nvidia.conf-enable-s0ix-power-management'],
+    ],
+  }
+  ~> Class['nest::base::dracut']
+
   file_line { 'nvidia.conf-s0ix-vram-threshold':
     path    => '/etc/modprobe.d/nvidia.conf',
     line    => "  NVreg_S0ixPowerManagementVideoMemoryThreshold=10000 \\",
     match   => '^\\s*NVreg_S0ixPowerManagementVideoMemoryThreshold=',
-    after   => '^\\s*NVreg_EnableS0ixPowerManagement=1 \\$',
-    require => File_line['nvidia.conf-enable-s0ix-power-management'],
+    # Anchor to a package-provided line that exists before this catalog runs.
+    # file_line providers cache the file independently, so anchoring to the
+    # S0ix line managed above can append this line at EOF on the first run.
+    after   => '^\\s*NVreg_PreserveVideoMemoryAllocations=1 \\$',
+    require => Exec['prune-misplaced-nvidia-s0ix-vram-threshold'],
   }
   ~> Class['nest::base::dracut']
 }
