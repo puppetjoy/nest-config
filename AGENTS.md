@@ -16,6 +16,7 @@
 - Do not substitute validation/testing commands (for example `bundle exec rake ...` or `pdk bundle exec rspec`) unless explicitly requested by the user for troubleshooting.
 
 ## Shipping Workflow
+- Puppet describes the ideal durable steady state, not the repair history of one host. Repair malformed or misplaced one-host state directly, then keep only the lasting invariant in source. Do not add host-specific migration helpers, cleanup scripts, or leaf-resource specs solely to preserve a one-off incident. Source-manage a migration only when it is genuinely recurring or fleet-wide, make it idempotent, and state its removal criteria.
 - Deployment wrappers should remain declarative YAML plans that compose `nest::kubernetes::deploy`/KubeCM. Do not put stack initialization, cert generation, data migration, or readiness repair scripts in Bolt deploy plans; implement that work in Helm resources, init containers, hooks, or Kubernetes Jobs. For general admin init containers, pods, or Jobs that need tools such as `kubectl`, prefer `registry.eyrie/nest/stage1/server` because it is the same OS family as this environment and is normally pre-pulled in the cluster.
 - When the user says "ship it", run this sequence unless they explicitly request otherwise:
 - Do not run local validation or tests by default.
