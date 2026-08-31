@@ -37,12 +37,20 @@ class nest::host::osprey {
   # selects the ALC294 codec. On osprey card 0 is the NVIDIA HDMI controller,
   # which has no PCM device 0, so route only Resolve's ALSA namespace through
   # the already-running PipeWire graph instead of changing global card order.
-  file { '/etc/alsa/resolve.conf':
-    ensure => file,
-    mode   => '0644',
+  file { '/etc/alsa':
+    ensure => directory,
+    mode   => '0755',
     owner  => 'root',
     group  => 'root',
-    source => 'puppet:///modules/nest/alsa/resolve.conf',
+  }
+
+  file { '/etc/alsa/resolve.conf':
+    ensure  => file,
+    mode    => '0644',
+    owner   => 'root',
+    group   => 'root',
+    source  => 'puppet:///modules/nest/alsa/resolve.conf',
+    require => File['/etc/alsa'],
   }
 
   file { '/usr/local/share/applications/com.blackmagicdesign.resolve.desktop':
