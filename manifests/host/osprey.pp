@@ -1,4 +1,7 @@
 class nest::host::osprey {
+  # GNOME 48's ordinary gtk-launch path did not apply the switcheroo-control
+  # environment from PrefersNonDefaultGPU, so keep the hint and use the native
+  # switcheroo launcher as a fallback for the executable path.
   $resolve_desktop_entry = @("END")
     [Desktop Entry]
     Version=1.0
@@ -7,7 +10,7 @@ class nest::host::osprey {
     GenericName=DaVinci Resolve
     Comment=Revolutionary new tools for editing, visual effects, color correction and professional audio post production, all in a single application!
     Path=/opt/resolve/
-    Exec=/usr/bin/env ALSA_CONFIG_PATH=/etc/alsa/resolve.conf /opt/resolve/bin/resolve %u
+    Exec=/usr/sbin/switcherooctl launch /usr/bin/env ALSA_CONFIG_PATH=/etc/alsa/resolve.conf /opt/resolve/bin/resolve %u
     Terminal=false
     PrefersNonDefaultGPU=true
     MimeType=application/x-resolveproj;
