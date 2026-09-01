@@ -29,7 +29,9 @@ define nest::lib::hermes (
   Any                  $openrouter_api_key         = undef,
   Hash[String[1], Any] $providers                  = {},
   String[1]            $auxiliary_provider         = 'openai-codex',
-  String[1]            $auxiliary_mini_model       = 'gpt-5.4-mini',
+  String[1]            $auxiliary_compress_model   = 'gpt-5.6-terra',
+  String[1]            $auxiliary_extract_model    = 'gpt-5.6-terra',
+  String[1]            $auxiliary_title_model      = 'gpt-5.6-luna',
   Optional[String[1]]  $image_gen_provider         = undef,
   Optional[String[1]]  $image_gen_model            = undef,
   Array[String[1]]     $enabled_plugins            = [],
@@ -740,16 +742,16 @@ define nest::lib::hermes (
     'auxiliary'        => {
       'title_generation' => {
         'provider' => $auxiliary_provider,
-        'model'    => $auxiliary_mini_model,
+        'model'    => $auxiliary_title_model,
       },
       'compression' => {
         'provider' => $auxiliary_provider,
-        'model'    => $auxiliary_mini_model,
+        'model'    => $auxiliary_compress_model,
         'timeout'  => $compression_timeout,
       },
       'web_extract' => {
         'provider' => $auxiliary_provider,
-        'model'    => $auxiliary_mini_model,
+        'model'    => $auxiliary_extract_model,
         'timeout'  => $web_extract_timeout,
       },
     },

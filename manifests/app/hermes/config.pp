@@ -20,7 +20,9 @@ class nest::app::hermes::config {
   $model_base_url                   = $nest::app::hermes::model_base_url
   $providers                        = $nest::app::hermes::providers
   $auxiliary_provider               = $nest::app::hermes::auxiliary_provider
-  $auxiliary_mini_model             = $nest::app::hermes::auxiliary_mini_model
+  $auxiliary_compress_model         = $nest::app::hermes::auxiliary_compress_model
+  $auxiliary_extract_model          = $nest::app::hermes::auxiliary_extract_model
+  $auxiliary_title_model            = $nest::app::hermes::auxiliary_title_model
   $image_gen_provider               = $nest::app::hermes::image_gen_provider
   $image_gen_model                  = $nest::app::hermes::image_gen_model
   $ca_bundle_file                   = $nest::app::hermes::ca_bundle_file
@@ -163,8 +165,10 @@ class nest::app::hermes::config {
       default => $config['openrouter_api_key'],
     }
     $instance_providers         = pick($config['providers'], $providers)
-    $instance_aux_provider      = pick($config['auxiliary_provider'], $auxiliary_provider)
-    $instance_aux_model         = pick($config['auxiliary_mini_model'], $auxiliary_mini_model)
+    $instance_aux_provider       = pick($config['auxiliary_provider'], $auxiliary_provider)
+    $instance_aux_compress_model = pick($config['auxiliary_compress_model'], $auxiliary_compress_model)
+    $instance_aux_extract_model  = pick($config['auxiliary_extract_model'], $auxiliary_extract_model)
+    $instance_aux_title_model    = pick($config['auxiliary_title_model'], $auxiliary_title_model)
     $instance_image_provider    = $config['image_gen_provider'] ? {
       undef   => $image_gen_provider,
       default => $config['image_gen_provider'],
@@ -287,7 +291,9 @@ class nest::app::hermes::config {
       openrouter_api_key         => $instance_openrouter_key,
       providers                  => $instance_providers,
       auxiliary_provider         => $instance_aux_provider,
-      auxiliary_mini_model       => $instance_aux_model,
+      auxiliary_compress_model   => $instance_aux_compress_model,
+      auxiliary_extract_model    => $instance_aux_extract_model,
+      auxiliary_title_model      => $instance_aux_title_model,
       image_gen_provider         => $instance_image_provider,
       image_gen_model            => $instance_image_model,
       enabled_plugins            => $instance_enabled_plugins,
