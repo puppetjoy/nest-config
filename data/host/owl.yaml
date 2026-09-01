@@ -14,6 +14,11 @@ nest::dvorak: true
 nest::text_scaling_factor: 1.5
 
 nest::app::hermes::git_ref: 'nest'
+nest::app::hermes::git_commit: '58185e349a24f12c9c9e74e3d66aa34b47b2fd47'
+nest::app::hermes::auxiliary_provider: 'openai-codex'
+nest::app::hermes::auxiliary_compress_model: 'gpt-5.6-terra'
+nest::app::hermes::auxiliary_extract_model: 'gpt-5.6-terra'
+nest::app::hermes::auxiliary_title_model: 'gpt-5.6-luna'
 nest::app::hermes::agent_request_kanban_board: 'agent-requests'
 nest::app::hermes::patternkit_session_enabled: true
 nest::app::hermes::patternkit_session_token: 'ENC[PKCS7,MIIBuQYJKoZIhvcNAQcDoIIBqjCCAaYCAQAxggEhMIIBHQIBADAFMAACAQEwDQYJKoZIhvcNAQEBBQAEggEAXpUY4G7OKibc65fEAvGYlB5ofI8huBsjmyaV9SoxOaE5MokVreBSIjDFr9dKp0Hq8ZnpAPs28fO/5EZ43wZzOnAyrqSeVh9pL7iMEujYJ15eB/Kwfu20A+adsPxFkCACUVGmv1VB4oL3hUGfltzdPMfL6UisN/JbDV6rXfs9YHD4zZMduRh2sSoScBsNlgzRGxEBjMpYiWvpkiC4icuQdJ8YwgSV1S703uwGm4JtOtMINobjieHMkzcFaqx+PoKKWM12U0+bRcE5lgGl1NIvqEjaSPuX5GyTgZ6phHGCW0OcdyzQ5UJ7a6ukjSWVoETP0q0pV/dxOnuEsSSGwk8+2zB8BgkqhkiG9w0BBwEwHQYJYIZIAWUDBAEqBBAuFhcpPCjVn0+sAehHoMQUgFCnJUVO2yFlfPzrLf0RPbf5o54f6k1Py1ZAi7lFiqPevcku99epMY0ztOQaEAx9vMnM+9TskCTINB0Hn+pKDtv6XZzzMKyTsIcDbaMLjhMfag==]'
@@ -372,8 +377,6 @@ nest::app::hermes::instances:
     model_provider: 'openai-codex'
     model_name: 'gpt-5.6-sol'
     model_base_url: 'https://chatgpt.com/backend-api/codex'
-    auxiliary_provider: 'openai-codex'
-    auxiliary_mini_model: 'gpt-5.4-mini'
     telegram_bot_username: 'joyfulstarbot'
     telegram_bot_id: '8571651712'
   beryl:
@@ -468,8 +471,6 @@ nest::app::hermes::instances:
     # Cap local-Qwen worker generations so thinking tokens cannot run until the
     # 262K slot fills when a request omits max_tokens/max_completion_tokens.
     model_max_tokens: 4096
-    auxiliary_provider: 'custom:llama-qwen'
-    auxiliary_mini_model: 'qwen-3.6'
     terminal:
       backend: 'docker'
       docker_image: 'registry.gitlab.joyfullee.me/nest/tools/agent:latest'
