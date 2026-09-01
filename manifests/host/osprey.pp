@@ -2,7 +2,6 @@ class nest::host::osprey {
   # GNOME 48's ordinary gtk-launch path did not apply the switcheroo-control
   # environment from PrefersNonDefaultGPU, so keep the hint and use the native
   # switcheroo launcher as a fallback for the executable path.
-  # Resolve does not complete GNOME/XWayland startup notification.
   $resolve_desktop_entry = @("END")
     [Desktop Entry]
     Version=1.0
@@ -17,7 +16,7 @@ class nest::host::osprey {
     MimeType=application/x-resolveproj;
     Icon=/opt/resolve/graphics/DV_Resolve.png
     StartupWMClass=resolve
-    StartupNotify=false
+    StartupNotify=true
     Name[en_US]=DaVinci Resolve
     | END
 
