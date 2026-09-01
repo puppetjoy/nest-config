@@ -69,6 +69,7 @@ define nest::lib::hermes (
   Optional[String[1]]  $skin_name                  = undef,
   Optional[String[1]]  $skin_content               = undef,
   Optional[String[1]]  $skin_banner_hero_source    = undef,
+  Optional[String[1]]  $profile_avatar_source      = undef,
   Array[String[1]]     $profile_toolsets           = ['hermes-cli', 'kanban'],
   Any                  $toolsets                   = undef,
   Any                  $telegram_toolsets          = undef,
@@ -118,6 +119,7 @@ define nest::lib::hermes (
   $hermes_config_manager_path       = "${install_dir}/bin/manage-hermes-config"
   $hermes_honcho_config_path        = "${profile_dir}/honcho.json"
   $hermes_skins_dir                 = "${profile_dir}/skins"
+  $hermes_persona_media_dir         = "${profile_dir}/persona-media"
   $kubeconfig_dir                   = "${profile_dir}/kubeconfigs"
   $effective_kubeconfig_path        = $kubeconfig_path ? {
     undef   => "${kubeconfig_dir}/eyrie.conf",
@@ -866,6 +868,25 @@ define nest::lib::hermes (
       content   => $effective_skin_content,
       show_diff => false,
       require   => File[$hermes_skins_dir],
+    }
+  }
+
+  if $profile_avatar_source != undef {
+    file { $hermes_persona_media_dir:
+      ensure  => directory,
+      mode    => '0700',
+      owner   => $user,
+      group   => $user,
+      require => File[$profile_dir],
+    }
+
+    file { "${hermes_persona_media_dir}/telegram-avatar.jpg":
+      ensure  => file,
+      mode    => '0600',
+      owner   => $user,
+      group   => $user,
+      source  => "puppet:///modules/${profile_avatar_source}",
+      require => File[$hermes_persona_media_dir],
     }
   }
 

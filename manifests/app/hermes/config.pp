@@ -87,16 +87,19 @@ class nest::app::hermes::config {
     require => File[$hermes_home_dir],
   }
 
-  $codex_auth_profiles = $instances.map |String[1] $instance_name, Hash $instance_config| {
+  # Clean profile-local Codex shadows for every managed profile. Codex
+  # profiles then borrow the runtime-owned root pool, while non-Codex
+  # profiles remain isolated from it.
+  $credential_cleanup_profiles = $instances.map |String[1] $instance_name, Hash $instance_config| {
     pick($instance_config['profile'], $instance_name)
   }
 
-  if $codex_auth_profiles.length > 0 {
-    $codex_auth_profile_args = $codex_auth_profiles.join(' ')
+  if $credential_cleanup_profiles.length > 0 {
+    $credential_cleanup_profile_args = $credential_cleanup_profiles.join(' ')
 
     exec { 'manage_hermes_codex_auth_pool':
-      command     => "/bin/sh -c '${codex_auth_manager_path} apply --home /home/${nest::user} ${codex_auth_profile_args}'",
-      unless      => "/bin/sh -c 'test -x ${codex_auth_manager_path} && ${codex_auth_manager_path} check --home /home/${nest::user} ${codex_auth_profile_args}'",
+      command     => "/bin/sh -c '${codex_auth_manager_path} apply --home /home/${nest::user} ${credential_cleanup_profile_args}'",
+      unless      => "/bin/sh -c 'test -x ${codex_auth_manager_path} && ${codex_auth_manager_path} check --home /home/${nest::user} ${credential_cleanup_profile_args}'",
       user        => $nest::user,
       environment => ["HOME=/home/${nest::user}"],
       logoutput   => 'on_failure',
@@ -119,11 +122,15 @@ class nest::app::hermes::config {
     $profile                 = pick($config['profile'], $instance_name)
     $display_name            = pick($config['display_name'], $instance_name)
     $instance_profile_icon   = $config['profile_icon']
+    $inherit_shared_credentials = pick($config['inherit_shared_credentials'], true)
     $instance_gitlab_enabled = pick($config['gitlab_enabled'], false)
     $instance_gitlab_hosts   = pick($config['gitlab_additional_hosts'], [])
     $instance_gitlab_token   = $instance_gitlab_enabled ? {
       true    => $config['gitlab_token'] ? {
-        undef   => $gitlab_token,
+        undef   => $inherit_shared_credentials ? {
+          true    => $gitlab_token,
+          default => undef,
+        },
         default => $config['gitlab_token'],
       },
       default => undef,
@@ -141,7 +148,10 @@ class nest::app::hermes::config {
       default => $config['browser_camofox_url'],
     }
     $instance_telegram_token    = $config['telegram_bot_token'] ? {
-      undef   => $telegram_bot_token,
+      undef   => $inherit_shared_credentials ? {
+        true    => $telegram_bot_token,
+        default => undef,
+      },
       default => $config['telegram_bot_token'],
     }
     $instance_telegram_enabled  = pick($config['telegram_enabled'], true)
@@ -163,10 +173,23 @@ class nest::app::hermes::config {
     $instance_model_base_url    = pick($config['model_base_url'], $model_base_url)
     $instance_model_max_tokens  = $config['model_max_tokens']
     $instance_openrouter_key    = $config['openrouter_api_key'] ? {
-      undef   => $openrouter_api_key,
+      undef   => $inherit_shared_credentials ? {
+        true    => $openrouter_api_key,
+        default => undef,
+      },
       default => $config['openrouter_api_key'],
     }
-    $instance_providers         = pick($config['providers'], $providers)
+    $instance_gitlab_joy_token = $inherit_shared_credentials ? {
+      true    => $agent_request_gitlab_joy_token,
+      default => undef,
+    }
+    $instance_providers         = $config['providers'] ? {
+      undef   => $inherit_shared_credentials ? {
+        true    => $providers,
+        default => {},
+      },
+      default => $config['providers'],
+    }
     $instance_aux_provider       = pick($config['auxiliary_provider'], $auxiliary_provider)
     $instance_aux_compress_model = pick($config['auxiliary_compress_model'], $auxiliary_compress_model)
     $instance_aux_extract_model  = pick($config['auxiliary_extract_model'], $auxiliary_extract_model)
@@ -174,11 +197,17 @@ class nest::app::hermes::config {
     $instance_delegation_provider = pick($config['delegation_provider'], $delegation_provider)
     $instance_delegation_model    = pick($config['delegation_model'], $delegation_model)
     $instance_image_provider    = $config['image_gen_provider'] ? {
-      undef   => $image_gen_provider,
+      undef   => $inherit_shared_credentials ? {
+        true    => $image_gen_provider,
+        default => undef,
+      },
       default => $config['image_gen_provider'],
     }
     $instance_image_model       = $config['image_gen_model'] ? {
-      undef   => $image_gen_model,
+      undef   => $inherit_shared_credentials ? {
+        true    => $image_gen_model,
+        default => undef,
+      },
       default => $config['image_gen_model'],
     }
     $instance_enabled_plugins   = pick($config['enabled_plugins'], [])
@@ -218,6 +247,7 @@ class nest::app::hermes::config {
     $instance_skin_name         = $config['skin_name']
     $instance_skin_content      = $config['skin_content']
     $instance_skin_hero_source  = $config['skin_banner_hero_source']
+    $instance_avatar_source     = $config['profile_avatar_source']
     $instance_toolsets          = $config['toolsets'] ? {
       undef   => $config['telegram_toolsets'] ? {
         undef   => $toolsets,
@@ -251,7 +281,10 @@ class nest::app::hermes::config {
     $instance_tts_voice_speech_model   = pick($config['tts_voice_speech_model'], 'kokoro')
     $instance_tts_voice_speech_timeout = pick($config['tts_voice_speech_timeout'], 60)
     $instance_voice_tools_openai_key   = $config['voice_tools_openai_key'] ? {
-      undef   => $voice_tools_openai_key,
+      undef   => $inherit_shared_credentials ? {
+        true    => $voice_tools_openai_key,
+        default => undef,
+      },
       default => $config['voice_tools_openai_key'],
     }
     $instance_tts_openai_model         = pick($config['tts_openai_model'], 'gpt-4o-mini-tts')
@@ -274,7 +307,7 @@ class nest::app::hermes::config {
       gitlab_url                 => $gitlab_url,
       gitlab_additional_hosts    => $instance_gitlab_hosts,
       gitlab_token               => $instance_gitlab_token,
-      gitlab_joy_token           => $agent_request_gitlab_joy_token,
+      gitlab_joy_token           => $instance_gitlab_joy_token,
       gitlab_enabled             => $instance_gitlab_enabled,
       firecrawl_api_url          => $instance_firecrawl_url,
       searxng_url                => $instance_searxng_url,
@@ -334,6 +367,7 @@ class nest::app::hermes::config {
       skin_name                  => $instance_skin_name,
       skin_content               => $instance_skin_content,
       skin_banner_hero_source    => $instance_skin_hero_source,
+      profile_avatar_source      => $instance_avatar_source,
       profile_toolsets           => $instance_profile_toolsets,
       toolsets                   => $instance_effective_toolsets,
       agent_directory_enabled    => $instance_directory_enabled,
