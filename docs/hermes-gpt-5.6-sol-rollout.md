@@ -4,8 +4,14 @@ Talon inherits the `nest::app::hermes` default model. Star has an explicit
 instance override in `data/host/owl.yaml`; both are set to
 `openai-codex/gpt-5.6-sol`. The shared auxiliary policy uses
 `openai-codex/gpt-5.6-terra` for compression fallback and web extraction, and
-`openai-codex/gpt-5.6-luna` for title generation. Beryl and provisional Quill
-inherit the same auxiliary policy even when their primary models differ.
+`openai-codex/gpt-5.6-luna` for title generation. Provisional Quill inherits
+that policy until its own Copilot-backed source contract is materialized.
+
+Beryl is deliberately isolated from the GPT/OpenAI policy. Its per-instance
+auxiliary and delegation overrides keep primary inference, compression, web
+extraction, title generation, and delegated children entirely on
+`custom:llama-qwen/qwen-3.6`. New local-only profiles must set every auxiliary
+and delegation override rather than inheriting the application defaults.
 
 The deployed Hermes source is pinned to the merged v0.21.0-based Nest fork at
 `58185e349a24f12c9c9e74e3d66aa34b47b2fd47` on the `nest` branch. The previous
@@ -15,9 +21,12 @@ known-good rollback commit is
 Apply the normal Puppet control-repo deployment, then run Puppet on `owl`.
 Canary Star first, then Beryl, then Talon. A new session is required to prove
 the startup model; existing sessions can retain the model selected when they
-started. Verify lightweight Telegram streaming, tool execution, session
-resume, the native Responses compaction path, Terra fallback behavior, and
-Luna title generation through each profile's real runtime.
+started. For Star and Talon, verify lightweight Telegram streaming, tool
+execution, session resume, the native Responses compaction path, Terra fallback
+behavior, and Luna title generation through each profile's real runtime. For
+Beryl, verify local primary inference and a delegated child both use
+`custom:llama-qwen/qwen-3.6`, and inspect its effective configuration for zero
+GPT/OpenAI model routes.
 
 ## Rollback
 
