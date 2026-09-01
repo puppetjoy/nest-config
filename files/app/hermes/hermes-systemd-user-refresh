@@ -38,5 +38,5 @@ if [ "$age" -ge 0 ] && [ "$age" -lt "$debounce_seconds" ]; then
   fi
 fi
 
-XDG_RUNTIME_DIR="$runtime_dir" systemctl --user try-reload-or-restart "$service"
+XDG_RUNTIME_DIR="$runtime_dir" systemctl --user restart "$service"
 printf '%s\n' "$now" > "$stamp_file"
