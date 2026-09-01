@@ -41,6 +41,8 @@ class nest::app::hermes (
   String[1]                      $auxiliary_compress_model       = 'gpt-5.6-terra',
   String[1]                      $auxiliary_extract_model        = 'gpt-5.6-terra',
   String[1]                      $auxiliary_title_model          = 'gpt-5.6-luna',
+  String[1]                      $delegation_provider            = 'openai-codex',
+  String[1]                      $delegation_model               = 'gpt-5.6-terra',
   Optional[String[1]]            $image_gen_provider             = undef,
   Optional[String[1]]            $image_gen_model                = undef,
   Integer[1]                     $compression_timeout            = 120,

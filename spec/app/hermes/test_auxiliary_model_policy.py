@@ -17,7 +17,8 @@ EXPECTED_PROVIDER = "openai-codex"
 EXPECTED_COMPRESSION_MODEL = "gpt-5.6-terra"
 EXPECTED_WEB_EXTRACT_MODEL = "gpt-5.6-terra"
 EXPECTED_TITLE_MODEL = "gpt-5.6-luna"
-EXPECTED_HERMES_COMMIT = "58185e349a24f12c9c9e74e3d66aa34b47b2fd47"
+EXPECTED_DELEGATION_MODEL = "gpt-5.6-terra"
+EXPECTED_HERMES_COMMIT = "82c7fdc7de3ca650fa9ab875e1425c4e06c5c80b"
 
 
 def load_yaml(path: Path) -> dict:
@@ -33,6 +34,8 @@ def test_owl_pins_merged_hermes_and_shared_auxiliary_policy() -> None:
     assert host_config["nest::app::hermes::auxiliary_compress_model"] == EXPECTED_COMPRESSION_MODEL
     assert host_config["nest::app::hermes::auxiliary_extract_model"] == EXPECTED_WEB_EXTRACT_MODEL
     assert host_config["nest::app::hermes::auxiliary_title_model"] == EXPECTED_TITLE_MODEL
+    assert host_config["nest::app::hermes::delegation_provider"] == EXPECTED_PROVIDER
+    assert host_config["nest::app::hermes::delegation_model"] == EXPECTED_DELEGATION_MODEL
 
 
 def test_instances_inherit_shared_auxiliary_policy_without_legacy_override() -> None:
@@ -53,6 +56,8 @@ def test_split_auxiliary_interface_is_wired_to_each_managed_task() -> None:
         "auxiliary_compress_model",
         "auxiliary_extract_model",
         "auxiliary_title_model",
+        "delegation_provider",
+        "delegation_model",
     ):
         assert f"${parameter}" in app_text
         assert f"$nest::app::hermes::{parameter}" in config_text
@@ -61,6 +66,8 @@ def test_split_auxiliary_interface_is_wired_to_each_managed_task() -> None:
     assert "'model'    => $auxiliary_compress_model" in lib_text
     assert "'model'    => $auxiliary_extract_model" in lib_text
     assert "'model'    => $auxiliary_title_model" in lib_text
+    assert "'provider' => $delegation_provider" in lib_text
+    assert "'model'    => $delegation_model" in lib_text
     assert "auxiliary_mini_model" not in app_text
     assert "auxiliary_mini_model" not in config_text
     assert "auxiliary_mini_model" not in lib_text
