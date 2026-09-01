@@ -12,7 +12,7 @@ RSpec.describe 'Quill Hermes work profile' do
       'display_name' => 'Quill',
       'profile_icon' => '🪶',
       'model_provider' => 'copilot',
-      'model_name' => 'gpt-5.6',
+      'model_name' => 'gpt-5.6-sol',
       'inherit_shared_credentials' => false,
       'honcho_workspace' => 'hermes',
       'honcho_user_peer' => 'joy',
