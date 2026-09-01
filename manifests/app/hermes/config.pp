@@ -23,6 +23,8 @@ class nest::app::hermes::config {
   $auxiliary_compress_model         = $nest::app::hermes::auxiliary_compress_model
   $auxiliary_extract_model          = $nest::app::hermes::auxiliary_extract_model
   $auxiliary_title_model            = $nest::app::hermes::auxiliary_title_model
+  $delegation_provider              = $nest::app::hermes::delegation_provider
+  $delegation_model                 = $nest::app::hermes::delegation_model
   $image_gen_provider               = $nest::app::hermes::image_gen_provider
   $image_gen_model                  = $nest::app::hermes::image_gen_model
   $ca_bundle_file                   = $nest::app::hermes::ca_bundle_file
@@ -169,6 +171,8 @@ class nest::app::hermes::config {
     $instance_aux_compress_model = pick($config['auxiliary_compress_model'], $auxiliary_compress_model)
     $instance_aux_extract_model  = pick($config['auxiliary_extract_model'], $auxiliary_extract_model)
     $instance_aux_title_model    = pick($config['auxiliary_title_model'], $auxiliary_title_model)
+    $instance_delegation_provider = pick($config['delegation_provider'], $delegation_provider)
+    $instance_delegation_model    = pick($config['delegation_model'], $delegation_model)
     $instance_image_provider    = $config['image_gen_provider'] ? {
       undef   => $image_gen_provider,
       default => $config['image_gen_provider'],
@@ -294,6 +298,8 @@ class nest::app::hermes::config {
       auxiliary_compress_model   => $instance_aux_compress_model,
       auxiliary_extract_model    => $instance_aux_extract_model,
       auxiliary_title_model      => $instance_aux_title_model,
+      delegation_provider        => $instance_delegation_provider,
+      delegation_model           => $instance_delegation_model,
       image_gen_provider         => $instance_image_provider,
       image_gen_model            => $instance_image_model,
       enabled_plugins            => $instance_enabled_plugins,

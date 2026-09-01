@@ -19,6 +19,8 @@ nest::app::hermes::auxiliary_provider: 'openai-codex'
 nest::app::hermes::auxiliary_compress_model: 'gpt-5.6-terra'
 nest::app::hermes::auxiliary_extract_model: 'gpt-5.6-terra'
 nest::app::hermes::auxiliary_title_model: 'gpt-5.6-luna'
+nest::app::hermes::delegation_provider: 'openai-codex'
+nest::app::hermes::delegation_model: 'gpt-5.6-terra'
 nest::app::hermes::agent_request_kanban_board: 'agent-requests'
 nest::app::hermes::patternkit_session_enabled: true
 nest::app::hermes::patternkit_session_token: 'ENC[PKCS7,MIIBuQYJKoZIhvcNAQcDoIIBqjCCAaYCAQAxggEhMIIBHQIBADAFMAACAQEwDQYJKoZIhvcNAQEBBQAEggEAXpUY4G7OKibc65fEAvGYlB5ofI8huBsjmyaV9SoxOaE5MokVreBSIjDFr9dKp0Hq8ZnpAPs28fO/5EZ43wZzOnAyrqSeVh9pL7iMEujYJ15eB/Kwfu20A+adsPxFkCACUVGmv1VB4oL3hUGfltzdPMfL6UisN/JbDV6rXfs9YHD4zZMduRh2sSoScBsNlgzRGxEBjMpYiWvpkiC4icuQdJ8YwgSV1S703uwGm4JtOtMINobjieHMkzcFaqx+PoKKWM12U0+bRcE5lgGl1NIvqEjaSPuX5GyTgZ6phHGCW0OcdyzQ5UJ7a6ukjSWVoETP0q0pV/dxOnuEsSSGwk8+2zB8BgkqhkiG9w0BBwEwHQYJYIZIAWUDBAEqBBAuFhcpPCjVn0+sAehHoMQUgFCnJUVO2yFlfPzrLf0RPbf5o54f6k1Py1ZAi7lFiqPevcku99epMY0ztOQaEAx9vMnM+9TskCTINB0Hn+pKDtv6XZzzMKyTsIcDbaMLjhMfag==]'

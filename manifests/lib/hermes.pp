@@ -32,6 +32,8 @@ define nest::lib::hermes (
   String[1]            $auxiliary_compress_model   = 'gpt-5.6-terra',
   String[1]            $auxiliary_extract_model    = 'gpt-5.6-terra',
   String[1]            $auxiliary_title_model      = 'gpt-5.6-luna',
+  String[1]            $delegation_provider        = 'openai-codex',
+  String[1]            $delegation_model           = 'gpt-5.6-terra',
   Optional[String[1]]  $image_gen_provider         = undef,
   Optional[String[1]]  $image_gen_model            = undef,
   Array[String[1]]     $enabled_plugins            = [],
@@ -754,6 +756,10 @@ define nest::lib::hermes (
         'model'    => $auxiliary_extract_model,
         'timeout'  => $web_extract_timeout,
       },
+    },
+    'delegation'       => {
+      'provider' => $delegation_provider,
+      'model'    => $delegation_model,
     },
     'compression'      => {
       'codex_responses_native'            => $responses_native,
