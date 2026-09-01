@@ -14,7 +14,7 @@ nest::dvorak: true
 nest::text_scaling_factor: 1.5
 
 nest::app::hermes::git_ref: 'nest'
-nest::app::hermes::git_commit: '58185e349a24f12c9c9e74e3d66aa34b47b2fd47'
+nest::app::hermes::git_commit: '82c7fdc7de3ca650fa9ab875e1425c4e06c5c80b'
 nest::app::hermes::auxiliary_provider: 'openai-codex'
 nest::app::hermes::auxiliary_compress_model: 'gpt-5.6-terra'
 nest::app::hermes::auxiliary_extract_model: 'gpt-5.6-terra'
