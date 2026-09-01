@@ -37,6 +37,10 @@ parameters:
     type: Boolean
     default: true
 
+  quill:
+    description: 'Deploy Quill dashboard edge'
+    type: Boolean
+    default: true
 
   firefox:
     description: 'Deploy Firefox/Kasm browser.eyrie secure-browser canary'
@@ -96,6 +100,11 @@ steps:
     plan: nest::eyrie::ai::deploy_beryl
     parameters:
       deploy: $deploy and $beryl
+
+  - description: 'Deploy Quill dashboard edge'
+    plan: nest::eyrie::ai::deploy_quill
+    parameters:
+      deploy: $deploy and $quill
 
   - description: 'Deploy Firefox/Kasm browser.eyrie secure-browser canary'
     plan: nest::eyrie::ai::deploy_firefox
