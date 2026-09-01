@@ -13,9 +13,10 @@ extraction, title generation, and delegated children entirely on
 `custom:llama-qwen/qwen-3.6`. New local-only profiles must set every auxiliary
 and delegation override rather than inheriting the application defaults.
 
-The deployed Hermes source is pinned to the merged v0.21.0-based Nest fork at
-`58185e349a24f12c9c9e74e3d66aa34b47b2fd47` on the `nest` branch. The previous
-known-good rollback commit is
+The deployed Hermes source follows the rolling `nest` branch of the merged
+v0.21.0-based Nest fork. The exact live revision verified during this rollout
+was `ed2faf36764ad958ab7dbd434a76c1c8daafe61e`. The previous known-good
+rollback commit is
 `ed28eb62c23f85b71d629de67c1a77f4ae7fdecd`.
 
 Apply the normal Puppet control-repo deployment, then run Puppet on `owl`.
@@ -30,11 +31,12 @@ GPT/OpenAI model routes.
 
 ## Rollback
 
-For a Hermes v0.21.0 runtime regression, change
-`nest::app::hermes::git_commit` in `data/host/owl.yaml` to the known-good
+For a Hermes v0.21.0 runtime regression, temporarily add
+`nest::app::hermes::git_commit` in `data/host/owl.yaml` with the known-good
 rollback commit above and repeat the normal deploy/apply/verification
 sequence. Keep `git_ref: nest` so Puppet verifies the rollback commit remains
-reachable from the managed branch.
+reachable from the managed branch. Remove the emergency commit pin after the
+rolling branch is repaired and reverified.
 
 For a primary-model-only rollback, revert `model_name` to `gpt-5.5` in these
 source locations and repeat the same sequence:
