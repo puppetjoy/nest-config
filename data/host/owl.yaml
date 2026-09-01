@@ -200,6 +200,7 @@ nest::app::hermes::instances:
           IdentityAgent /run/user/1000/ssh-agent.socket
           IdentitiesOnly yes
     gateway_enabled: true
+    kanban_dispatch_in_gateway: true
     dashboard_enabled: true
     dashboard_port: 9119
     dashboard_public_url: 'https://talon.eyrie'
@@ -333,7 +334,7 @@ nest::app::hermes::instances:
           IdentitiesOnly yes
           AddKeysToAgent no
     gateway_enabled: true
-    kanban_dispatch_in_gateway: true
+    kanban_dispatch_in_gateway: false
     dashboard_enabled: true
     dashboard_port: 9121
     dashboard_public_url: 'https://star.eyrie'
@@ -520,7 +521,7 @@ nest::app::hermes::instances:
     honcho_user_peer: 'joy'
     honcho_ai_peer: 'beryl'
     gateway_enabled: true
-    kanban_dispatch_in_gateway: true
+    kanban_dispatch_in_gateway: false
     dashboard_enabled: true
     dashboard_port: 9122
     dashboard_public_url: 'https://beryl.eyrie'
