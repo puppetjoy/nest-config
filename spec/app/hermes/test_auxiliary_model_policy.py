@@ -18,18 +18,19 @@ EXPECTED_COMPRESSION_MODEL = "gpt-5.6-terra"
 EXPECTED_WEB_EXTRACT_MODEL = "gpt-5.6-terra"
 EXPECTED_TITLE_MODEL = "gpt-5.6-luna"
 EXPECTED_DELEGATION_MODEL = "gpt-5.6-terra"
-EXPECTED_HERMES_COMMIT = "82c7fdc7de3ca650fa9ab875e1425c4e06c5c80b"
+EXPECTED_LOCAL_PROVIDER = "custom:llama-qwen"
+EXPECTED_LOCAL_MODEL = "qwen-3.6"
 
 
 def load_yaml(path: Path) -> dict:
     return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
-def test_owl_pins_merged_hermes_and_shared_auxiliary_policy() -> None:
+def test_owl_tracks_merged_hermes_and_shared_auxiliary_policy() -> None:
     host_config = load_yaml(OWL_DATA)
 
     assert host_config["nest::app::hermes::git_ref"] == "nest"
-    assert host_config["nest::app::hermes::git_commit"] == EXPECTED_HERMES_COMMIT
+    assert "nest::app::hermes::git_commit" not in host_config
     assert host_config["nest::app::hermes::auxiliary_provider"] == EXPECTED_PROVIDER
     assert host_config["nest::app::hermes::auxiliary_compress_model"] == EXPECTED_COMPRESSION_MODEL
     assert host_config["nest::app::hermes::auxiliary_extract_model"] == EXPECTED_WEB_EXTRACT_MODEL
@@ -38,13 +39,30 @@ def test_owl_pins_merged_hermes_and_shared_auxiliary_policy() -> None:
     assert host_config["nest::app::hermes::delegation_model"] == EXPECTED_DELEGATION_MODEL
 
 
-def test_instances_inherit_shared_auxiliary_policy_without_legacy_override() -> None:
+def test_codex_instances_inherit_shared_auxiliary_policy_without_legacy_override() -> None:
     instances = load_yaml(OWL_DATA)["nest::app::hermes::instances"]
 
-    for profile in ("talon", "star", "beryl"):
+    for profile in ("talon", "star"):
         instance = instances[profile]
         assert "auxiliary_mini_model" not in instance
         assert "auxiliary_provider" not in instance
+
+
+def test_beryl_keeps_every_model_route_local() -> None:
+    beryl = load_yaml(OWL_DATA)["nest::app::hermes::instances"]["beryl"]
+    expected_routes = {
+        "model_provider": EXPECTED_LOCAL_PROVIDER,
+        "model_name": EXPECTED_LOCAL_MODEL,
+        "auxiliary_provider": EXPECTED_LOCAL_PROVIDER,
+        "auxiliary_compress_model": EXPECTED_LOCAL_MODEL,
+        "auxiliary_extract_model": EXPECTED_LOCAL_MODEL,
+        "auxiliary_title_model": EXPECTED_LOCAL_MODEL,
+        "delegation_provider": EXPECTED_LOCAL_PROVIDER,
+        "delegation_model": EXPECTED_LOCAL_MODEL,
+    }
+
+    assert {key: beryl[key] for key in expected_routes} == expected_routes
+    assert all("gpt" not in value.lower() and "openai" not in value.lower() for value in expected_routes.values())
 
 
 def test_split_auxiliary_interface_is_wired_to_each_managed_task() -> None:
@@ -74,6 +92,7 @@ def test_split_auxiliary_interface_is_wired_to_each_managed_task() -> None:
 
 
 if __name__ == "__main__":
-    test_owl_pins_merged_hermes_and_shared_auxiliary_policy()
-    test_instances_inherit_shared_auxiliary_policy_without_legacy_override()
+    test_owl_tracks_merged_hermes_and_shared_auxiliary_policy()
+    test_codex_instances_inherit_shared_auxiliary_policy_without_legacy_override()
+    test_beryl_keeps_every_model_route_local()
     test_split_auxiliary_interface_is_wired_to_each_managed_task()
