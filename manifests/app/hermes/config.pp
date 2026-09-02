@@ -237,6 +237,7 @@ class nest::app::hermes::config {
     }
     $instance_terminal          = pick($config['terminal'], $terminal)
     $instance_environment       = pick($config['environment'], $environment)
+    $instance_runtime_env_keys  = pick($config['runtime_env_keys'], [])
     $instance_gateway_enabled   = pick($config['gateway_enabled'], true)
     $instance_kanban_dispatch   = pick($config['kanban_dispatch_in_gateway'], true)
     $instance_honcho_base_url   = pick($config['honcho_base_url'], 'https://honcho.eyrie')
@@ -398,6 +399,7 @@ class nest::app::hermes::config {
       ssh_config_content         => $instance_ssh_config,
       kubeconfig_path            => $instance_kubeconfig_path,
       kubeconfig_content         => $instance_kubeconfig,
+      runtime_env_keys           => $instance_runtime_env_keys,
       extra_packages             => $instance_extra_packages,
       release_digest_enabled     => $instance_release_digest,
     }
