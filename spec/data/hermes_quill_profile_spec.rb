@@ -44,6 +44,7 @@ RSpec.describe 'Quill Hermes work profile' do
       'TERMINAL_SSH_PORT' => '22',
     )
     expect(quill.fetch('ssh_auth_sock')).to eq('/run/user/1000/ssh-agent.socket')
+    expect(quill.fetch('runtime_env_keys')).to eq(['COPILOT_GITHUB_TOKEN'])
   end
 
   it 'uses the normal approval boundary without a shell-parser plugin' do
