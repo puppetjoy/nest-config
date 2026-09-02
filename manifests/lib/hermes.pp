@@ -101,9 +101,14 @@ define nest::lib::hermes (
   Optional[String[1]]  $ssh_config_content         = undef,
   Optional[String[1]]  $kubeconfig_path            = undef,
   Any                  $kubeconfig_content         = undef,
+  Array[String[1]]     $runtime_env_keys           = [],
   Array[String[1]]     $extra_packages             = [],
   Boolean              $release_digest_enabled     = false,
 ) {
+  $runtime_env_keys.each |String[1] $key| {
+    assert_type(Pattern[/\A[A-Za-z_][A-Za-z0-9_]*\z/], $key)
+  }
+
   $venv_dir                         = "${install_dir}/venv"
   $venv_python                      = "${venv_dir}/bin/python"
   $hermes_home_dir                  = "/home/${user}/.hermes"
@@ -114,6 +119,8 @@ define nest::lib::hermes (
   $glab_config_dir                  = "${profile_dir}/glab"
   $glab_config_path                 = "${glab_config_dir}/config.yml"
   $hermes_env_path                  = "${profile_dir}/.env"
+  $hermes_managed_env_path          = "${profile_dir}/.env.puppet"
+  $hermes_env_manager_path          = "${install_dir}/bin/manage-hermes-env"
   $hermes_config_path               = "${profile_dir}/config.yaml"
   $hermes_managed_config_path       = "${profile_dir}/managed-config.yaml"
   $hermes_config_manager_path       = "${install_dir}/bin/manage-hermes-config"
@@ -831,14 +838,41 @@ define nest::lib::hermes (
     }
   }
 
-  file { $hermes_env_path:
-    ensure    => file,
-    mode      => '0600',
-    owner     => $user,
-    group     => $user,
-    content   => Sensitive([$env_content, ''].join("\n")),
-    show_diff => false,
-    require   => File[$profile_dir],
+  if empty($runtime_env_keys) {
+    file { $hermes_env_path:
+      ensure    => file,
+      mode      => '0600',
+      owner     => $user,
+      group     => $user,
+      content   => Sensitive([$env_content, ''].join("\n")),
+      show_diff => false,
+      require   => File[$profile_dir],
+    }
+    $hermes_env_change_resource = File[$hermes_env_path]
+  } else {
+    $runtime_env_key_args = $runtime_env_keys.map |String[1] $key| { "--preserve ${key}" }.join(' ')
+
+    file { $hermes_managed_env_path:
+      ensure    => file,
+      mode      => '0600',
+      owner     => $user,
+      group     => $user,
+      content   => Sensitive([$env_content, ''].join("\n")),
+      show_diff => false,
+      require   => File[$profile_dir],
+    }
+
+    exec { "sync_hermes_env_${profile}":
+      command   => "${hermes_env_manager_path} sync --base ${hermes_managed_env_path} --target ${hermes_env_path} ${runtime_env_key_args}",
+      unless    => "${hermes_env_manager_path} check --base ${hermes_managed_env_path} --target ${hermes_env_path} ${runtime_env_key_args}",
+      user      => $user,
+      logoutput => 'on_failure',
+      require   => [
+        File[$hermes_managed_env_path],
+        File[$hermes_env_manager_path],
+      ],
+    }
+    $hermes_env_change_resource = Exec["sync_hermes_env_${profile}"]
   }
 
   file { $hermes_config_path:
@@ -988,7 +1022,7 @@ define nest::lib::hermes (
       subscribe   => [
         Exec['install_hermes_agent'],
         Exec['install_hermes_agent_request_broker'],
-        File[$hermes_env_path],
+        $hermes_env_change_resource,
         File["${profile_dir}/systemd.env"],
         $glab_config_subscribe,
         $kubeconfig_subscribe,

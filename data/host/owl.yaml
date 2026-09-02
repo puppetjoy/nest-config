@@ -669,6 +669,10 @@ nest::app::hermes::instances:
       TERMINAL_SSH_HOST: 'hawk'
       TERMINAL_SSH_USER: 'joy'
       TERMINAL_SSH_PORT: '22'
+    # Copilot device authorization is runtime-owned and must survive Puppet
+    # convergence without placing employer OAuth material in Hiera.
+    runtime_env_keys:
+      - 'COPILOT_GITHUB_TOKEN'
     ssh_auth_sock: '/run/user/1000/ssh-agent.socket'
     honcho_workspace: 'hermes'
     honcho_user_peer: 'joy'

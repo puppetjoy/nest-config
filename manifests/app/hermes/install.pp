@@ -193,6 +193,15 @@ class nest::app::hermes::install {
     ],
   }
 
+  file { "${install_dir}/bin/manage-hermes-env":
+    ensure  => file,
+    source  => 'puppet:///modules/nest/app/hermes/manage-hermes-env.py',
+    mode    => '0755',
+    owner   => 'root',
+    group   => 'root',
+    require => File["${install_dir}/bin"],
+  }
+
   file { "${source_dir}/tools/secure_browser_oauth_tool.py":
     ensure  => file,
     source  => 'puppet:///modules/nest/app/hermes/secure_browser_oauth_tool.py',
