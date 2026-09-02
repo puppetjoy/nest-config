@@ -683,7 +683,7 @@ nest::app::hermes::instances:
     dashboard_enabled: true
     dashboard_port: 9123
     dashboard_public_url: 'https://quill.eyrie'
-    dashboard_theme: 'midnight'
+    dashboard_theme: 'mono'
     # Manual mode leaves ordinary commands unprompted while retaining Hermes'
     # normal dangerous-command and interactive sudo boundaries.
     approval_mode: 'manual'
