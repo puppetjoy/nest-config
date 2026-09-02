@@ -11,6 +11,8 @@ class nest::app::hermes::service {
   $systemd_main_pid        = '$MAINPID'
   $gitlab_mr_note_poller_profile  = $nest::app::hermes::gitlab_mr_note_poller_profile
   $gitlab_mr_note_poller_interval = $nest::app::hermes::gitlab_mr_note_poller_interval
+  $gitlab_mr_note_dev_board        = $nest::app::hermes::gitlab_mr_note_dev_board
+  $gitlab_mr_note_dev_url          = $nest::app::hermes::gitlab_mr_note_dev_url
   $moving_ticket_interval             = $nest::app::hermes::moving_ticket_interval
   $star_order_refresh_profile     = $nest::app::hermes::star_order_refresh_profile
   $star_order_refresh_interval    = $nest::app::hermes::star_order_refresh_interval
@@ -271,12 +273,13 @@ class nest::app::hermes::service {
         EnvironmentFile=-${hermes_home_dir}/profiles/${gitlab_mr_note_poller_profile}/systemd.env
         Environment=HERMES_HOME=${hermes_home_dir}
         Environment=AGENT_REQUEST_KANBAN_BOARD=${nest::app::hermes::agent_request_kanban_board}
+        Environment=GITLAB_URL=${nest::app::hermes::gitlab_url}
         Environment=PYTHONPATH=${pythonpath}
         Environment=SSL_CERT_FILE=${ca_bundle_file}
         Environment=REQUESTS_CA_BUNDLE=${ca_bundle_file}
         Environment=CURL_CA_BUNDLE=${ca_bundle_file}
         Environment=SSL_CERT_DIR=/etc/ssl/certs
-        ExecStart=${venv_python} -m agent_request_broker.gitlab_mr_note_poller --board ${nest::app::hermes::agent_request_kanban_board} --json
+        ExecStart=${venv_python} -m agent_request_broker.gitlab_mr_note_poller --board ${nest::app::hermes::agent_request_kanban_board} --gitlab-url ${nest::app::hermes::gitlab_url} --json
         WorkingDirectory=/home/${nest::user}
         StandardOutput=journal
         StandardError=journal
@@ -338,6 +341,99 @@ class nest::app::hermes::service {
     }
 
     file { "${systemd_user_dir}/hermes-agent-request-gitlab-mr-notes.service":
+      ensure => absent,
+      owner  => $nest::user,
+      group  => $nest::user,
+      notify => Systemd::Daemon_reload['hermes-systemd-user-daemon-reload'],
+    }
+  }
+
+  if $nest::app::hermes::gitlab_mr_note_dev_enabled {
+    file { "${systemd_user_dir}/hermes-agent-request-gitlab-mr-notes-dev.service":
+      ensure  => file,
+      mode    => '0644',
+      owner   => $nest::user,
+      group   => $nest::user,
+      content => @("UNIT"),
+        [Unit]
+        Description=Hermes Agent Request development GitLab MR note poller
+        Documentation=file:/opt/hermes-agent/agent-request-broker/docs/gitlab-mr-note-reconciliation.md
+        After=network-online.target
+        Wants=network-online.target
+
+        [Service]
+        Type=oneshot
+        EnvironmentFile=-${hermes_home_dir}/profiles/${gitlab_mr_note_poller_profile}/systemd.env
+        Environment=HERMES_HOME=${hermes_home_dir}
+        Environment=AGENT_REQUEST_KANBAN_BOARD=${gitlab_mr_note_dev_board}
+        Environment=GITLAB_URL=${gitlab_mr_note_dev_url}
+        Environment=PYTHONPATH=${pythonpath}
+        Environment=SSL_CERT_FILE=${ca_bundle_file}
+        Environment=REQUESTS_CA_BUNDLE=${ca_bundle_file}
+        Environment=CURL_CA_BUNDLE=${ca_bundle_file}
+        Environment=SSL_CERT_DIR=/etc/ssl/certs
+        ExecStart=${venv_python} -m agent_request_broker.gitlab_mr_note_poller --board ${gitlab_mr_note_dev_board} --gitlab-url ${gitlab_mr_note_dev_url} --json
+        WorkingDirectory=/home/${nest::user}
+        StandardOutput=journal
+        StandardError=journal
+        | UNIT
+      require => [
+        File[$systemd_user_dir],
+        Exec['install_hermes_agent_request_broker'],
+      ],
+      notify  => Systemd::Daemon_reload['hermes-systemd-user-daemon-reload'],
+    }
+
+    file { "${systemd_user_dir}/hermes-agent-request-gitlab-mr-notes-dev.timer":
+      ensure  => file,
+      mode    => '0644',
+      owner   => $nest::user,
+      group   => $nest::user,
+      content => @("UNIT"),
+        [Unit]
+        Description=Poll development GitLab MR notes for Hermes Agent Request steering
+        Documentation=file:/opt/hermes-agent/agent-request-broker/docs/gitlab-mr-note-reconciliation.md
+
+        [Timer]
+        OnBootSec=2min
+        OnUnitActiveSec=${gitlab_mr_note_poller_interval}
+        RandomizedDelaySec=15s
+        AccuracySec=15s
+        Persistent=false
+
+        [Install]
+        WantedBy=timers.target
+        | UNIT
+      require => File["${systemd_user_dir}/hermes-agent-request-gitlab-mr-notes-dev.service"],
+      notify  => Systemd::Daemon_reload['hermes-systemd-user-daemon-reload'],
+    }
+
+    systemd::user_service { 'hermes-agent-request-gitlab-mr-notes-dev':
+      ensure  => running,
+      enable  => true,
+      unit    => 'hermes-agent-request-gitlab-mr-notes-dev.timer',
+      user    => $nest::user,
+      require => [
+        Loginctl_user[$nest::user],
+        File["${systemd_user_dir}/hermes-agent-request-gitlab-mr-notes-dev.timer"],
+      ],
+    }
+  } else {
+    systemd::user_service { 'hermes-agent-request-gitlab-mr-notes-dev':
+      ensure => stopped,
+      enable => false,
+      unit   => 'hermes-agent-request-gitlab-mr-notes-dev.timer',
+      user   => $nest::user,
+    }
+
+    file { "${systemd_user_dir}/hermes-agent-request-gitlab-mr-notes-dev.timer":
+      ensure => absent,
+      owner  => $nest::user,
+      group  => $nest::user,
+      notify => Systemd::Daemon_reload['hermes-systemd-user-daemon-reload'],
+    }
+
+    file { "${systemd_user_dir}/hermes-agent-request-gitlab-mr-notes-dev.service":
       ensure => absent,
       owner  => $nest::user,
       group  => $nest::user,
