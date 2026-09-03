@@ -130,6 +130,7 @@ describe 'nest' do
 
   mobile = [
     'nest::gui::cups',
+    'nest::gui::environment',
     'nest::gui::firefox',
     'nest::gui::fonts',
     'nest::gui::gnome',
