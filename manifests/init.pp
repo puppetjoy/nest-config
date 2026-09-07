@@ -15,13 +15,14 @@ class nest (
   String               $user_fullname     = 'Joyful Lee',
 
   # Service discovery configuration
-  Hash[Stdlib::Fqdn, Stdlib::Fqdn]        $cnames          = {},
-  Array[Stdlib::Host]                     $cups_servers    = [],
-  Hash[Stdlib::Fqdn, String]              $dhcp_client_ids = {},
-  Hash[Stdlib::Host, Integer]             $distcc_hosts    = {},
-  Hash[Stdlib::Fqdn, Stdlib::IP::Address] $fixed_ips       = {},
-  Hash[String, Stdlib::IP::Address]       $host_records    = {},
-  Hash[Stdlib::Fqdn, Hash]                $hosts           = {},
+  Hash[Stdlib::Fqdn, Stdlib::Fqdn]        $cnames                  = {},
+  Array[Stdlib::Host]                     $cups_servers            = [],
+  Hash[Stdlib::Fqdn, String]              $dhcp_client_ids         = {},
+  Hash[Stdlib::Host, Integer]             $distcc_hosts            = {},
+  Hash[Stdlib::Fqdn, Stdlib::IP::Address] $fixed_ips               = {},
+  Hash[String, Stdlib::IP::Address]       $host_records            = {},
+  Hash[Stdlib::Fqdn, Hash]                $hosts                   = {},
+  Array[Stdlib::Host]                     $openvpn_refresh_servers = [],
 
   # Service toggles
   Boolean $distcc_server = false,

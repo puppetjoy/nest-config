@@ -101,6 +101,12 @@ nobind
 connect-retry 2 30
 connect-timeout 2
 data-ciphers CHACHA20-POLY1305
+  <%- if $facts['os']['family'] == 'Gentoo' and !empty($nest::openvpn_refresh_servers) { -%>
+
+# Prefer last-known-good public DNS results refreshed independently of VPN DNS.
+# Compile-time addresses below remain deterministic startup fallbacks.
+config /var/lib/openvpn/nest-remotes.conf
+  <%- } -%>
   <%- $nest::openvpn_servers.each |$server| { -%>
     <%- if $server =~ Stdlib::IP::Address { -%>
 remote <%= $server %> 1194<% if $nest::vpn_transport == tcp { %> tcp<% } %>
