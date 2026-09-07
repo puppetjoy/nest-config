@@ -1,0 +1,13 @@
+[Unit]
+Description=Periodically refresh OpenVPN client remotes
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=2min
+AccuracySec=15s
+RandomizedDelaySec=15s
+Persistent=true
+Unit=openvpn-client-remotes-refresh.service
+
+[Install]
+WantedBy=timers.target

@@ -2,6 +2,7 @@
 StartLimitIntervalSec=0
 
 [Service]
+ExecStartPre=+<%= $remote_refresh_command %>
 Restart=always
 RestartSec=30s
 ExecStartPost=-/usr/bin/resolvectl reset-server-features

@@ -61,12 +61,77 @@ class nest::base::openvpn {
         notify  => Nest::Lib::Systemd_reload['openvpn'],
       }
 
+      $remote_refresh_hosts = $nest::openvpn_refresh_servers.map |$host| { "--host ${host}" }.join(' ')
+      $remote_refresh_protocol = $nest::vpn_transport ? {
+        'tcp'   => ' --protocol tcp',
+        default => '',
+      }
+      $remote_refresh_command = "/usr/local/sbin/openvpn-refresh-remotes --output /var/lib/openvpn/nest-remotes.conf${remote_refresh_protocol} ${remote_refresh_hosts}"
+
+      file { '/usr/local/sbin/openvpn-refresh-remotes':
+        mode    => '0755',
+        owner   => 'root',
+        group   => 'root',
+        source  => 'puppet:///modules/nest/openvpn/refresh-remotes.rb',
+        require => Package[$openvpn_package_name],
+      }
+
+      file { '/var/lib/openvpn':
+        ensure  => directory,
+        mode    => '0755',
+        owner   => 'root',
+        group   => 'root',
+        require => Package[$openvpn_package_name],
+      }
+      ->
+      file { '/var/lib/openvpn/nest-remotes.conf':
+        ensure  => file,
+        mode    => '0644',
+        owner   => 'root',
+        group   => 'root',
+        content => "# Awaiting an independent public DNS refresh; compile-time remotes remain available.\n",
+        replace => false,
+      }
+
       file { '/etc/systemd/system/openvpn-client@.service.d/30-restart.conf':
         mode    => '0644',
         owner   => 'root',
         group   => 'root',
-        content => epp('nest/openvpn/client-restart.conf.epp'),
+        content => epp('nest/openvpn/client-restart.conf.epp', { 'remote_refresh_command' => $remote_refresh_command }),
+        require => [
+          File['/usr/local/sbin/openvpn-refresh-remotes'],
+          File['/var/lib/openvpn/nest-remotes.conf'],
+        ],
         notify  => Nest::Lib::Systemd_reload['openvpn'],
+      }
+
+      file { '/etc/systemd/system/openvpn-client-remotes-refresh.service':
+        mode    => '0644',
+        owner   => 'root',
+        group   => 'root',
+        content => epp('nest/openvpn/remote-refresh.service.epp', { 'command' => $remote_refresh_command }),
+        require => [
+          File['/usr/local/sbin/openvpn-refresh-remotes'],
+          File['/var/lib/openvpn/nest-remotes.conf'],
+        ],
+        notify  => Nest::Lib::Systemd_reload['openvpn'],
+      }
+
+      file { '/etc/systemd/system/openvpn-client-remotes-refresh.timer':
+        mode   => '0644',
+        owner  => 'root',
+        group  => 'root',
+        source => 'puppet:///modules/nest/openvpn/remote-refresh.timer',
+        notify => Nest::Lib::Systemd_reload['openvpn'],
+      }
+
+      service { 'openvpn-client-remotes-refresh.timer':
+        ensure  => $nest::vpn and !empty($nest::openvpn_refresh_servers) ? {
+          true    => running,
+          default => stopped,
+        },
+        enable  => $nest::vpn and !empty($nest::openvpn_refresh_servers),
+        require => Nest::Lib::Systemd_reload['openvpn'],
       }
 
       if $nest::router {

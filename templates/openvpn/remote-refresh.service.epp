@@ -1,0 +1,8 @@
+[Unit]
+Description=Refresh OpenVPN client remotes from independent public DNS
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=<%= $command %> --restart openvpn-client@nest.service
