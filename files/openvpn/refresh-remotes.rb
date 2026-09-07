@@ -114,7 +114,8 @@ class OpenvpnRemoteRefresher
   end
 
   def restart(service)
-    return if system('/usr/bin/systemctl', 'try-restart', service)
+    return unless system('/usr/bin/systemctl', 'is-active', '--quiet', service)
+    return if system('/usr/bin/systemctl', '--no-block', 'restart', service)
 
     raise "failed to restart #{service}"
   end
