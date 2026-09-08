@@ -1,0 +1,6 @@
+[Match]
+Name=podman*
+Kind=bridge
+
+[Network]
+KeepConfiguration=static
