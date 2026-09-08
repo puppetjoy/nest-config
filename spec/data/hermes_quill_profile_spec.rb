@@ -47,8 +47,9 @@ RSpec.describe 'Quill Hermes work profile' do
     expect(quill.fetch('runtime_env_keys')).to eq(['COPILOT_GITHUB_TOKEN'])
   end
 
-  it 'uses the normal approval boundary without a shell-parser plugin' do
-    expect(quill.fetch('approval_mode')).to eq('manual')
+  it 'matches Star tool-execution privilege without adding a command allowlist' do
+    expect(quill.fetch('approval_mode')).to eq('off')
+    expect(quill).not_to have_key('command_allowlist')
     expect(quill.fetch('enabled_plugins', [])).not_to include('quill-command-policy')
   end
 
