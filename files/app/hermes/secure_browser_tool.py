@@ -3050,6 +3050,13 @@ def _is_amazon_post_purchase_page(url: str, title: str = "") -> bool:
     )
 
 
+def _is_post_purchase_confirmation_page(url: str, title: str = "") -> bool:
+    """Recognize a generic HTTPS purchase confirmation without exposing details."""
+    parsed = urlparse(str(url or ""))
+    page_material = " ".join([parsed.path, parsed.query, str(title or "")])
+    return bool(parsed.scheme == "https" and POST_PURCHASE_CONFIRMATION_RE.search(page_material))
+
+
 def _is_checkoutish_page(url: str, title: str = "") -> bool:
     parsed = urlparse(str(url or ""))
     page_material = " ".join([parsed.path, parsed.query, str(title or "")])
@@ -4853,6 +4860,15 @@ def _merge_existing_keep_fields(entry: dict[str, Any], existing: dict[str, Any] 
     if isinstance(existing, dict):
         if existing.get("created_at"):
             entry["created_at"] = existing["created_at"]
+        # These fields describe who created the tab. A later read from another
+        # profile/task is an accessor, not an ownership transfer.
+        for key in ("profile", "task_id", "run_id"):
+            if existing.get(key):
+                entry[key] = existing[key]
+        context = _current_agent_tab_context()
+        entry["last_access_profile"] = context["profile"]
+        entry["last_access_task_id"] = context["task_id"]
+        entry["last_access_run_id"] = context["run_id"]
         if existing.get("keep_open"):
             entry["keep_open"] = True
             if existing.get("keep_reason"):
@@ -5075,7 +5091,56 @@ def _page_matching_stored_tab(pages: list[dict[str, str]], entry: dict[str, Any]
         page_url = _sanitize_url(str(page.get("url") or ""))
         if page_id and page_url == stored_url:
             return page
-    return None
+    recovery = _owner_recovery_candidates(pages, entry)
+    return recovery[0] if len(recovery) == 1 else None
+
+
+def _same_url_origin(left: str, right: str) -> bool:
+    left_url = urlparse(str(left or ""))
+    right_url = urlparse(str(right or ""))
+    return bool(
+        left_url.scheme in {"http", "https"}
+        and left_url.scheme == right_url.scheme
+        and left_url.netloc.lower() == right_url.netloc.lower()
+    )
+
+
+def _owner_recovery_candidates(pages: list[dict[str, str]], owner: dict[str, Any]) -> list[dict[str, str]]:
+    """Return only confident stale-BiDi ownership recovery candidates.
+
+    Firefox BiDi context ids are session-scoped. During Joy's handoff the same
+    tab can return with a new id and a changed URL after manual completion or
+    submission. Recover only within the stored retailer origin and prefer a
+    unique material checkout/confirmation surface. Multiple equally plausible
+    pages remain ambiguous instead of being guessed.
+    """
+    stored_url = str(owner.get("url") or "")
+    if not stored_url or _is_blank_page_url(stored_url):
+        return []
+    same_origin = [
+        page
+        for page in pages
+        if str(page.get("id") or "")
+        and not _is_blank_page_url(str(page.get("url") or ""))
+        and _same_url_origin(stored_url, str(page.get("url") or ""))
+    ]
+    exact = [page for page in same_origin if _sanitize_url(str(page.get("url") or "")) == _sanitize_url(stored_url)]
+    if exact:
+        return exact
+    material = [
+        page
+        for page in same_origin
+        if _is_checkoutish_page(str(page.get("url") or ""), str(page.get("title") or ""))
+        or _is_post_purchase_confirmation_page(str(page.get("url") or ""), str(page.get("title") or ""))
+    ]
+    if material:
+        ranks = {
+            str(page.get("id") or ""): 2 if _is_post_purchase_confirmation_page(str(page.get("url") or ""), str(page.get("title") or "")) else 1
+            for page in material
+        }
+        highest = max(ranks.values())
+        return [page for page in material if ranks[str(page.get("id") or "")] == highest]
+    return same_origin if len(same_origin) == 1 else []
 
 
 def _deterministic_current_page(pages: list[dict[str, str]]) -> dict[str, str] | None:
@@ -5208,44 +5273,52 @@ def _claim_owner_target(browser: CdpSession, create: bool = False) -> str:
             owners = state.setdefault("owners", {})
             owner = owners.get(BROWSER_OWNER, {}) if isinstance(owners.get(BROWSER_OWNER), dict) else {}
             live_by_id = _sync_known_agent_tabs(browser, state)
+            if create:
+                target_id = str(browser.call("Target.createTarget", {"url": "about:blank"})["targetId"])
+                entry = _owner_state_entry(target_id)
+                owners[BROWSER_OWNER] = entry
+                _owner_tabs(state)[target_id] = entry
+                _enforce_agent_tab_budget(browser, state)
+                _store_owner_state(handle, state)
+                return target_id
+
             existing = str(owner.get("target_id") or "")
-            if existing and existing in live_by_id and not create:
+            if existing and existing in live_by_id:
                 page = live_by_id[existing]
                 if _is_blank_page_url(str(page.get("url") or "")):
-                    current_page = _deterministic_current_page(list(live_by_id.values()))
-                    if current_page is not None and current_page.get("id") and str(current_page.get("id")) != existing:
-                        target_id = str(current_page["id"])
-                        existing_tab = _owner_tabs(state).get(target_id) if isinstance(_owner_tabs(state).get(target_id), dict) else None
-                        entry = _known_agent_tab_entry(target_id, str(current_page.get("url") or ""), str(current_page.get("title") or ""), existing_tab)
-                        owners[BROWSER_OWNER] = entry
-                        _owner_tabs(state)[target_id] = entry
-                        _enforce_agent_tab_budget(browser, state)
-                        _store_owner_state(handle, state)
-                        return target_id
+                    non_blank = [item for item in live_by_id.values() if not _is_blank_page_url(str(item.get("url") or ""))]
+                    code = "OWNER_TAB_AMBIGUOUS" if non_blank else "OWNER_TAB_BLANK"
+                    raise RuntimeError(f"{code}: the tracked secure-browser tab is blank; read-only tools will not guess another tab or create a new one")
                 entry = _known_agent_tab_entry(existing, str(page.get("url") or ""), str(page.get("title") or ""), owner)
                 owners[BROWSER_OWNER] = entry
                 _owner_tabs(state)[existing] = entry
                 _enforce_agent_tab_budget(browser, state)
                 _store_owner_state(handle, state)
                 return existing
+
             pages = list(live_by_id.values())
-            matched = None if create else _page_matching_stored_owner(pages, owner)
+            matched = _page_matching_stored_owner(pages, owner)
             if matched is not None and matched.get("id"):
+                recovery = [matched]
+            else:
+                recovery = _owner_recovery_candidates(pages, owner)
+            if len(recovery) == 1 and recovery[0].get("id"):
+                matched = recovery[0]
                 target_id = str(matched["id"])
                 existing_tab = _owner_tabs(state).get(target_id) if isinstance(_owner_tabs(state).get(target_id), dict) else None
-                entry = _known_agent_tab_entry(target_id, str(matched.get("url") or ""), str(matched.get("title") or ""), existing_tab)
+                entry = _known_agent_tab_entry(target_id, str(matched.get("url") or ""), str(matched.get("title") or ""), existing_tab or owner)
                 owners[BROWSER_OWNER] = entry
                 _owner_tabs(state)[target_id] = entry
                 _enforce_agent_tab_budget(browser, state)
                 _store_owner_state(handle, state)
                 return target_id
-            target_id = str(browser.call("Target.createTarget", {"url": "about:blank"})["targetId"])
-            entry = _owner_state_entry(target_id)
-            owners[BROWSER_OWNER] = entry
-            _owner_tabs(state)[target_id] = entry
-            _enforce_agent_tab_budget(browser, state)
-            _store_owner_state(handle, state)
-            return target_id
+            if len(recovery) > 1:
+                raise RuntimeError(
+                    f"OWNER_TAB_AMBIGUOUS: {len(recovery)} equally plausible live tabs match the tracked retailer; refusing to guess or create a blank tab"
+                )
+            if owner:
+                raise RuntimeError("OWNER_TAB_NOT_FOUND: tracked secure-browser tab is not live and no unique same-retailer checkout or confirmation tab could be recovered")
+            raise RuntimeError("OWNER_TAB_ABSENT: no secure-browser owned tab is recorded; read-only tools will not claim a manual tab or create about:blank")
         finally:
             fcntl.flock(handle, fcntl.LOCK_UN)
 
@@ -5358,7 +5431,18 @@ def _navigate(url: str, new_page: bool) -> dict[str, Any]:
     safe_url = _safe_browser_url(url)
 
     def run(browser: CdpSession) -> dict[str, Any]:
-        target_id = _claim_owner_target(browser, create=True) if new_page else _first_page_target(browser)
+        if new_page:
+            target_id = _claim_owner_target(browser, create=True)
+        else:
+            try:
+                target_id = _first_page_target(browser)
+            except RuntimeError as exc:
+                # Navigation is an explicit request to establish browser state.
+                # It may create the first owned tab, but must not add another tab
+                # when existing same-retailer state is ambiguous.
+                if not str(exc).startswith(("OWNER_TAB_ABSENT", "OWNER_TAB_NOT_FOUND", "OWNER_TAB_BLANK")):
+                    raise
+                target_id = _claim_owner_target(browser, create=True)
         session_id = _attach(browser, target_id)
         _navigate_and_wait(browser, session_id, safe_url)
         current_url = str(_evaluate(browser, session_id, "location.href") or safe_url)
@@ -5399,12 +5483,14 @@ def _tab_lifecycle(action: str, max_age_seconds: int = 0, keep_reason: str = "")
                     target_id = str(owner.get("target_id") or "")
                     page = live_by_id.get(target_id) if target_id else None
                     if page is None:
-                        page = _deterministic_current_page(list(live_by_id.values()))
-                    if page is None or not page.get("id"):
-                        target_id = str(browser.call("Target.createTarget", {"url": "about:blank"})["targetId"])
-                        page = {"id": target_id, "url": "about:blank", "title": ""}
-                    else:
-                        target_id = str(page["id"])
+                        recovery = _owner_recovery_candidates(list(live_by_id.values()), owner)
+                        if len(recovery) > 1:
+                            raise RuntimeError("OWNER_TAB_AMBIGUOUS: multiple live checkout or confirmation tabs match the tracked retailer")
+                        page = recovery[0] if len(recovery) == 1 else None
+                    if page is None or not page.get("id") or _is_blank_page_url(str(page.get("url") or "")):
+                        code = "OWNER_TAB_NOT_FOUND" if owner else "OWNER_TAB_ABSENT"
+                        raise RuntimeError(f"{code}: keep-open lifecycle requires a non-blank owned tab and will not create one")
+                    target_id = str(page["id"])
                     existing = tabs.get(target_id) if isinstance(tabs.get(target_id), dict) else None
                     entry = _known_agent_tab_entry(
                         target_id,
@@ -5488,6 +5574,16 @@ def _page_snapshot(max_text_chars: int = MAX_TEXT_CHARS, max_links: int = MAX_LI
             result["operation"] = "post_purchase_snapshot"
             result["snapshot_note"] = "Amazon post-purchase/order-history pages return sanitized proof fields instead of raw visible text or interactive controls to avoid order, item, address, payment, and account disclosure. Complete visual proof remains owner-only to Joy."
             return result
+        if _is_post_purchase_confirmation_page(url, title):
+            return {
+                "operation": "post_purchase_snapshot",
+                "secure_browser_owner": BROWSER_OWNER,
+                "status": "purchase_confirmation_visible",
+                "purchase_state": "completed_confirmation",
+                "url": _sanitize_url(url),
+                "page_title": _sanitize_shopping_text(title)[:240],
+                "snapshot_note": "A generic HTTPS purchase-confirmation surface is visible. The snapshot is intentionally reduced to sanitized state and does not expose order, address, payment, account, contact, DOM, cookie, storage, request-header, or screenshot data.",
+            }
         if re.search(r"checkout|buy|payselect|ship|spc|review|ordering", " ".join([url, title]), re.IGNORECASE):
             result = _checkout_summary_from_browser(browser, session_id, max_controls=max_links)
             result["operation"] = "checkout_prep_snapshot"
@@ -6339,6 +6435,16 @@ def _current_page_summary() -> dict[str, Any]:
             result["secure_browser_owner"] = BROWSER_OWNER
             result["summary_note"] = "Post-purchase confirmation/order-verification pages return sanitized proof fields, not checkout-prep or final-purchase approval state."
             return result
+        if _is_post_purchase_confirmation_page(url, title):
+            return {
+                "operation": "post_purchase_current_page_summary",
+                "secure_browser_owner": BROWSER_OWNER,
+                "status": "purchase_confirmation_visible",
+                "purchase_state": "completed_confirmation",
+                "url": _sanitize_url(url),
+                "page_title": _sanitize_shopping_text(title)[:240],
+                "summary_note": "A generic HTTPS purchase-confirmation surface is visible. No order reference, address, payment, account, contact, DOM, cookie, storage, request-header, or screenshot data is returned.",
+            }
         if re.search(r"checkout|buy|payselect|ship|spc|review|ordering", " ".join([url, title]), re.IGNORECASE):
             result = _checkout_summary_from_browser(browser, session_id)
             result["operation"] = "checkout_prep_current_page_summary"
