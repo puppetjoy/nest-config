@@ -26,6 +26,12 @@ lookup_options:
     merge: 'deep'
   nest::hosts:
     merge: 'hash'
+  nest::host::hawk::quill_gitlab_token:
+    convert_to: 'Sensitive'
+  nest::host::hawk::quill_gitlab_ssh_private_key:
+    convert_to: 'Sensitive'
+  nest::host::hawk::quill_gitlab_api_tunnel_ssh_private_key:
+    convert_to: 'Sensitive'
   nest::host_records:
     merge: 'hash'
   nest::kernel_cmdline:

@@ -1,0 +1,81 @@
+#!/bin/bash
+set -euo pipefail
+
+readonly gitlab_dir='/home/joy/.hermes/profiles/quill/gitlab'
+readonly ssh_config="${gitlab_dir}/api-tunnel-ssh.conf"
+readonly token_header="${gitlab_dir}/api-token.header"
+readonly tunnel_host='quill-gitlab-api-tunnel'
+readonly tunnel_port='18080'
+
+usage() {
+  printf 'Usage: %s METHOD /api/v4/PATH\n' "$0" >&2
+  printf 'For POST, PUT, or PATCH, provide a JSON request body on standard input.\n' >&2
+  exit 64
+}
+
+[[ $# -eq 2 ]] || usage
+
+method="${1^^}"
+endpoint="$2"
+
+case "$method" in
+  GET|POST|PUT|PATCH|DELETE) ;;
+  *) usage ;;
+esac
+
+case "$endpoint" in
+  /api/v4|/api/v4/*) ;;
+  *)
+    printf 'Refusing non-GitLab API endpoint: %s\n' "$endpoint" >&2
+    exit 64
+    ;;
+esac
+
+if [[ "$endpoint" == *$'\r'* || "$endpoint" == *$'\n'* ]]; then
+  printf 'Refusing endpoint containing a control character.\n' >&2
+  exit 64
+fi
+
+umask 077
+exec 9>"${gitlab_dir}/api.lock"
+/usr/bin/flock -x 9
+
+runtime_dir=$(mktemp -d "${TMPDIR:-/tmp}/quill-gitlab-api.XXXXXX")
+control_path="${runtime_dir}/control"
+
+cleanup() {
+  /usr/bin/ssh -F "$ssh_config" -S "$control_path" -O exit "$tunnel_host" >/dev/null 2>&1 || true
+  rm -rf -- "$runtime_dir"
+}
+trap cleanup EXIT
+
+/usr/bin/ssh \
+  -F "$ssh_config" \
+  -M \
+  -S "$control_path" \
+  -fN \
+  -L "127.0.0.1:${tunnel_port}:127.0.0.1:80" \
+  "$tunnel_host"
+
+curl_args=(
+  --disable
+  --silent
+  --show-error
+  --fail-with-body
+  --noproxy '*'
+  --proto '=http'
+  --max-redirs 0
+  --connect-timeout 10
+  --request "$method"
+  --header "@${token_header}"
+  --connect-to "gitlab.puppet:80:127.0.0.1:${tunnel_port}"
+  --url "http://gitlab.puppet${endpoint}"
+)
+
+case "$method" in
+  POST|PUT|PATCH)
+    curl_args+=(--header 'Content-Type: application/json' --data-binary @-)
+    ;;
+esac
+
+/usr/bin/curl "${curl_args[@]}"
