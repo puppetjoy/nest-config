@@ -77,6 +77,13 @@ class nest::tool::firefox (
     require => File['/opt/nest/firefox/bin'],
   }
 
+  file { '/opt/nest/firefox/bin/firefox-ui-bridge.py':
+    ensure  => file,
+    mode    => '0755',
+    source  => 'puppet:///modules/nest/firefox-browser/firefox-ui-bridge.py',
+    require => File['/opt/nest/firefox/bin'],
+  }
+
   file { '/opt/nest/firefox/bin/build-kasmvnc.sh':
     ensure  => file,
     mode    => '0755',

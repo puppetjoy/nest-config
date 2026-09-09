@@ -1,5 +1,10 @@
 # Firefox/Kasm secure browser bridge plan
 
+> Historical design note: the CDP/WebDriver-oriented bridge described below is
+> superseded by `docs/firefox-ui-control-architecture.md` and the
+> `firefox-ui-v1` implementation. It is retained only as migration history; do
+> not use its automation or approval-gate recommendations for current work.
+
 This document describes the first source-managed `browser.eyrie` secure-browser
 canary and the safest path for future Hermes `secure_browser_*` tools to drive
 the same visible Firefox session Joy sees.

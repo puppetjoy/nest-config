@@ -16,27 +16,28 @@ from pathlib import Path
 
 
 def _load_tool_module():
-    # Source checkouts execute this helper beside secure_browser_tool.py;
-    # deployed units run with PYTHONPATH=/opt/hermes-agent/src and import the
-    # Puppet-copied tool from tools.secure_browser_tool.
+    # Source checkouts execute this helper beside the isolated retail-state
+    # support module; deployed units import the Puppet-copied module through
+    # PYTHONPATH=/opt/hermes-agent/src. The browser UI adapter is intentionally
+    # independent of order ledgers.
     here = Path(__file__).resolve()
-    local_tool = here.with_name("secure_browser_tool.py")
+    local_tool = here.with_name("secure_browser_legacy_support.py")
     if local_tool.exists():
-        spec = importlib.util.spec_from_file_location("secure_browser_tool", local_tool)
+        spec = importlib.util.spec_from_file_location("secure_browser_legacy_support", local_tool)
         if spec and spec.loader:
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
             return module
     for parent in here.parents:
         candidate = parent / "tools"
-        if (candidate / "secure_browser_tool.py").exists():
+        if (candidate / "secure_browser_legacy_support.py").exists():
             sys.path.insert(0, str(parent))
-            from tools import secure_browser_tool  # type: ignore[import-not-found]
+            from tools import secure_browser_legacy_support  # type: ignore[import-not-found]
 
-            return secure_browser_tool
-    from tools import secure_browser_tool  # type: ignore[import-not-found]
+            return secure_browser_legacy_support
+    from tools import secure_browser_legacy_support  # type: ignore[import-not-found]
 
-    return secure_browser_tool
+    return secure_browser_legacy_support
 
 
 def _compact_result(result: dict) -> dict:

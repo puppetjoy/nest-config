@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-SECURE_BROWSER_TOOL = REPO_ROOT / "files/app/hermes/secure_browser_tool.py"
+SECURE_BROWSER_TOOL = REPO_ROOT / "files/app/hermes/secure_browser_legacy_support.py"
 ORDER_REFRESH_RUNNER = REPO_ROOT / "files/app/hermes/star-order-refresh-runner.py"
 
 
