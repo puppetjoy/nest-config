@@ -47,6 +47,15 @@ def test_star_profile_declares_secure_browser_service_endpoint_environment() -> 
     assert "SECURE_BROWSER_CDP_URL" not in environment
 
 
+def test_secure_browser_tool_updates_restart_profile_runtimes() -> None:
+    lib_text = HERMES_LIB.read_text(encoding="utf-8")
+
+    for tool in ("secure_browser_legacy_support.py", "secure_browser_tool.py"):
+        resource = f'File["${{install_dir}}/src/tools/{tool}"]'
+        assert lib_text.count(resource) == 2
+
+
 if __name__ == "__main__":
     test_profile_dotenv_includes_instance_environment_lines()
     test_star_profile_declares_secure_browser_service_endpoint_environment()
+    test_secure_browser_tool_updates_restart_profile_runtimes()

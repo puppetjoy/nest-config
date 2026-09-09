@@ -1043,6 +1043,8 @@ define nest::lib::hermes (
       subscribe   => [
         Exec['install_hermes_agent'],
         Exec['install_hermes_agent_request_broker'],
+        File["${install_dir}/src/tools/secure_browser_legacy_support.py"],
+        File["${install_dir}/src/tools/secure_browser_tool.py"],
         $hermes_env_change_resource,
         File["${profile_dir}/systemd.env"],
         $glab_config_subscribe,
@@ -1086,6 +1088,8 @@ define nest::lib::hermes (
       user        => $user,
       subscribe   => [
         Exec['install_hermes_agent'],
+        File["${install_dir}/src/tools/secure_browser_legacy_support.py"],
+        File["${install_dir}/src/tools/secure_browser_tool.py"],
         File["${profile_dir}/systemd.env"],
         $kubeconfig_subscribe,
         File[$hermes_managed_config_path],
