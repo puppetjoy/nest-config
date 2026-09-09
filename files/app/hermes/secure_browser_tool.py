@@ -303,7 +303,20 @@ SCHEMAS: list[tuple[dict[str, Any], Any]] = [
     ({"name": "secure_browser_execute_final_purchase", "description": "Retired compatibility endpoint. Use secure_browser_click with a fresh locator and action_key for exactly-once execution.", "parameters": {"type": "object", "properties": {}}}, secure_browser_execute_final_purchase_tool),
 ]
 
-for schema, handler in SCHEMAS:
+first_schema, first_handler = SCHEMAS[0]
+registry.register(
+    name=first_schema["name"],
+    toolset=TOOLSET,
+    schema=first_schema,
+    handler=first_handler,
+    check_fn=_check_secure_browser,
+    description=first_schema["description"],
+)
+
+# Hermes discovers built-in tool modules by looking for a direct top-level
+# registry.register() call before importing them. Keep the first registration
+# explicit above; once imported, register the remainder from the shared table.
+for schema, handler in SCHEMAS[1:]:
     registry.register(
         name=schema["name"],
         toolset=TOOLSET,
