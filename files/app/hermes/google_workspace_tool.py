@@ -7,8 +7,10 @@ requiring a personal-assistant profile to have the general terminal tool.
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -21,7 +23,25 @@ TOOLSET = "google_workspace"
 MAX_RESULT_CHARS = 24000
 MAX_GMAIL_RESULTS = 20
 MAX_CALENDAR_RESULTS = 50
+MAX_GMAIL_ATTACHMENT_BYTES = 20 * 1024 * 1024
 GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send"
+SAFE_GMAIL_ATTACHMENT_MIME_TYPES = frozenset(
+    {
+        "application/json",
+        "application/msword",
+        "application/pdf",
+        "application/rtf",
+        "application/vnd.ms-excel",
+        "application/vnd.ms-powerpoint",
+        "application/xml",
+    }
+)
+SAFE_GMAIL_ATTACHMENT_MIME_PREFIXES = (
+    "image/",
+    "text/",
+    "application/vnd.oasis.opendocument.",
+    "application/vnd.openxmlformats-officedocument.",
+)
 
 
 def _hermes_home() -> Path:
@@ -110,8 +130,12 @@ def _run_google_api(parts: list[str]) -> dict[str, Any] | list[Any] | str:
         return stdout
 
 
+def _decode_base64url_bytes(data: str) -> bytes:
+    return base64.urlsafe_b64decode(data + "=" * (-len(data) % 4))
+
+
 def _decode_body_data(data: str) -> str:
-    return base64.urlsafe_b64decode(data).decode("utf-8", errors="replace")
+    return _decode_base64url_bytes(data).decode("utf-8", errors="replace")
 
 
 def _extract_recursive_body(payload: dict[str, Any]) -> tuple[str, str]:
@@ -148,14 +172,100 @@ def _headers_dict(msg: dict[str, Any]) -> dict[str, str]:
     return {h["name"]: h["value"] for h in msg.get("payload", {}).get("headers", [])}
 
 
-def _gmail_get_recursive(message_id: str) -> dict[str, Any]:
+def _gmail_service():
     script_dir = _script_path("google_api.py").parent
     if str(script_dir) not in sys.path:
         sys.path.insert(0, str(script_dir))
     import google_api  # type: ignore[import-not-found]
 
-    service = google_api.build_service("gmail", "v1")
-    msg = service.users().messages().get(userId="me", id=message_id, format="full").execute()
+    return google_api.build_service("gmail", "v1")
+
+
+def _gmail_message(service, message_id: str) -> dict[str, Any]:
+    return service.users().messages().get(userId="me", id=message_id, format="full").execute()
+
+
+def _attachment_metadata(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    attachments: list[dict[str, Any]] = []
+
+    def walk(part: dict[str, Any]) -> None:
+        body = part.get("body") or {}
+        attachment_id = str(body.get("attachmentId") or "")
+        if attachment_id:
+            attachments.append(
+                {
+                    "attachment_id": attachment_id,
+                    "part_id": str(part.get("partId") or ""),
+                    "filename": str(part.get("filename") or ""),
+                    "mime_type": str(part.get("mimeType") or "application/octet-stream").lower(),
+                    "size": int(body.get("size") or 0),
+                }
+            )
+        for child in part.get("parts") or []:
+            walk(child)
+
+    walk(payload)
+    return attachments
+
+
+def _gmail_attachments(message_id: str):
+    service = _gmail_service()
+    msg = _gmail_message(service, message_id)
+    return service, _attachment_metadata(msg.get("payload") or {})
+
+
+def _safe_attachment_mime_type(mime_type: str, filename: str) -> bool:
+    normalized = mime_type.lower().split(";", 1)[0].strip()
+    if normalized == "application/octet-stream":
+        return Path(filename).suffix.lower() == ".pdf"
+    return normalized in SAFE_GMAIL_ATTACHMENT_MIME_TYPES or normalized.startswith(SAFE_GMAIL_ATTACHMENT_MIME_PREFIXES)
+
+
+def _attachment_content_matches_metadata(content: bytes, mime_type: str, filename: str) -> bool:
+    normalized = mime_type.lower().split(";", 1)[0].strip()
+    if normalized == "application/pdf" or (normalized == "application/octet-stream" and Path(filename).suffix.lower() == ".pdf"):
+        return b"%PDF-" in content[:1024]
+    return True
+
+
+def _download_filename(filename: str, mime_type: str, attachment_id: str) -> str:
+    basename = Path(filename.replace("\\", "/")).name
+    basename = re.sub(r"[\x00-\x1f\x7f/\\]", "_", basename).strip(" .")
+    if not basename:
+        basename = "attachment.pdf" if mime_type == "application/pdf" else "attachment.bin"
+    suffix = Path(basename).suffix[:20]
+    stem = Path(basename).stem[:140] or "attachment"
+    digest = hashlib.sha256(attachment_id.encode("utf-8")).hexdigest()[:12]
+    return f"{stem}--{digest}{suffix}"
+
+
+def _attachment_download_path(message_id: str, filename: str, mime_type: str, attachment_id: str) -> Path:
+    root = _hermes_home() / "downloads" / "google-workspace" / "gmail"
+    message_dir = root / message_id
+    message_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(root, 0o700)
+    os.chmod(message_dir, 0o700)
+    return message_dir / _download_filename(filename, mime_type, attachment_id)
+
+
+def _write_private_file(path: Path, content: bytes) -> None:
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    descriptor = os.open(path, flags, 0o600)
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            descriptor = -1
+            stream.write(content)
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+    os.chmod(path, 0o600)
+
+
+def _gmail_get_recursive(message_id: str) -> dict[str, Any]:
+    service = _gmail_service()
+    msg = _gmail_message(service, message_id)
     headers = _headers_dict(msg)
     body, body_mime_type = _extract_recursive_body(msg.get("payload") or {})
     return {
@@ -220,6 +330,116 @@ def google_workspace_gmail_get_tool(args: dict[str, Any], **_kw) -> str:
         result = _gmail_get_recursive(message_id)
     except Exception as exc:
         result = {"error": "GMAIL_GET_FAILED", "message": str(exc)}
+    return json.dumps(result, ensure_ascii=False)
+
+
+def google_workspace_gmail_attachments_tool(args: dict[str, Any], **_kw) -> str:
+    """List attachment metadata for one Gmail message using read-only API calls."""
+    message_id = str(args.get("message_id") or "").strip()
+    if not message_id:
+        return json.dumps({"error": "message_id is required"})
+    try:
+        _service, attachments = _gmail_attachments(message_id)
+        result = {
+            "message_id": message_id,
+            "attachments": attachments,
+            "attachment_count": len(attachments),
+            "read_only": True,
+        }
+    except Exception:
+        result = {"error": "GMAIL_ATTACHMENTS_FAILED", "message": "Gmail attachment metadata retrieval failed."}
+    return json.dumps(result, ensure_ascii=False)
+
+
+def google_workspace_gmail_attachment_download_tool(args: dict[str, Any], **_kw) -> str:
+    """Download one explicitly selected safe Gmail attachment into the profile."""
+    message_id = str(args.get("message_id") or "").strip()
+    part_id = str(args.get("part_id") or "").strip()
+    missing = [name for name, value in (("message_id", message_id), ("part_id", part_id)) if not value]
+    if missing:
+        return json.dumps({"error": "missing_required_fields", "fields": missing})
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", message_id):
+        return json.dumps({"error": "INVALID_MESSAGE_ID"})
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,128}", part_id):
+        return json.dumps({"error": "INVALID_PART_ID"})
+
+    try:
+        service, attachments = _gmail_attachments(message_id)
+        metadata = next((item for item in attachments if item["part_id"] == part_id), None)
+        if metadata is None:
+            return json.dumps({"error": "ATTACHMENT_NOT_FOUND", "message_id": message_id})
+        attachment_id = metadata["attachment_id"]
+        if metadata["size"] > MAX_GMAIL_ATTACHMENT_BYTES:
+            return json.dumps(
+                {
+                    "error": "ATTACHMENT_TOO_LARGE",
+                    "message_id": message_id,
+                    "attachment_id": attachment_id,
+                    "size": metadata["size"],
+                    "max_size": MAX_GMAIL_ATTACHMENT_BYTES,
+                }
+            )
+        if not _safe_attachment_mime_type(metadata["mime_type"], metadata["filename"]):
+            return json.dumps(
+                {
+                    "error": "UNSUPPORTED_ATTACHMENT_MIME_TYPE",
+                    "message_id": message_id,
+                    "attachment_id": attachment_id,
+                    "mime_type": metadata["mime_type"],
+                }
+            )
+
+        attachment = (
+            service.users()
+            .messages()
+            .attachments()
+            .get(userId="me", messageId=message_id, id=attachment_id)
+            .execute()
+        )
+        data = str(attachment.get("data") or "")
+        if not data:
+            return json.dumps({"error": "ATTACHMENT_DATA_MISSING", "message_id": message_id})
+        content = _decode_base64url_bytes(data)
+        if len(content) > MAX_GMAIL_ATTACHMENT_BYTES:
+            return json.dumps(
+                {
+                    "error": "ATTACHMENT_TOO_LARGE",
+                    "message_id": message_id,
+                    "attachment_id": attachment_id,
+                    "size": len(content),
+                    "max_size": MAX_GMAIL_ATTACHMENT_BYTES,
+                }
+            )
+        if not _attachment_content_matches_metadata(content, metadata["mime_type"], metadata["filename"]):
+            return json.dumps(
+                {
+                    "error": "ATTACHMENT_CONTENT_MISMATCH",
+                    "message_id": message_id,
+                    "attachment_id": attachment_id,
+                    "mime_type": metadata["mime_type"],
+                    "filename": metadata["filename"],
+                }
+            )
+
+        path = _attachment_download_path(
+            message_id,
+            metadata["filename"],
+            metadata["mime_type"],
+            f"{message_id}:{part_id}",
+        )
+        _write_private_file(path, content)
+        result = {
+            "message_id": message_id,
+            "attachment_id": attachment_id,
+            "part_id": part_id,
+            "filename": metadata["filename"],
+            "mime_type": metadata["mime_type"],
+            "size": len(content),
+            "path": str(path),
+            "read_only": True,
+        }
+    except Exception:
+        result = {"error": "GMAIL_ATTACHMENT_DOWNLOAD_FAILED", "message": "Gmail attachment download failed."}
     return json.dumps(result, ensure_ascii=False)
 
 
@@ -322,6 +542,31 @@ GMAIL_GET_SCHEMA = {
     },
 }
 
+GMAIL_ATTACHMENTS_SCHEMA = {
+    "name": "google_workspace_gmail_attachments",
+    "description": "List attachment metadata for a Gmail message. Read-only; returns attachment id, stable part id, filename, MIME type, and size without downloading content. Select an item and pass its part_id to google_workspace_gmail_attachment_download.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "message_id": {"type": "string", "description": "Gmail message id returned by google_workspace_gmail_search"},
+        },
+        "required": ["message_id"],
+    },
+}
+
+GMAIL_ATTACHMENT_DOWNLOAD_SCHEMA = {
+    "name": "google_workspace_gmail_attachment_download",
+    "description": "Download one explicitly selected Gmail attachment into the profile's private downloads directory for file/PDF analysis. Read-only Gmail access; allows common document, text, and image MIME types up to 20 MiB. First call google_workspace_gmail_attachments and pass its stable part_id (Gmail attachment_id values may rotate between reads).",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "message_id": {"type": "string", "description": "Gmail message id returned by google_workspace_gmail_search"},
+            "part_id": {"type": "string", "description": "Stable MIME part id returned by google_workspace_gmail_attachments"},
+        },
+        "required": ["message_id", "part_id"],
+    },
+}
+
 GMAIL_LABELS_SCHEMA = {
     "name": "google_workspace_gmail_labels",
     "description": "List Gmail labels. Read-only.",
@@ -389,6 +634,26 @@ registry.register(
     check_fn=_check_google_workspace,
     description=GMAIL_GET_SCHEMA["description"],
     emoji="✉️",
+    max_result_size_chars=MAX_RESULT_CHARS,
+)
+registry.register(
+    name=GMAIL_ATTACHMENTS_SCHEMA["name"],
+    toolset=TOOLSET,
+    schema=GMAIL_ATTACHMENTS_SCHEMA,
+    handler=google_workspace_gmail_attachments_tool,
+    check_fn=_check_google_workspace,
+    description=GMAIL_ATTACHMENTS_SCHEMA["description"],
+    emoji="📎",
+    max_result_size_chars=MAX_RESULT_CHARS,
+)
+registry.register(
+    name=GMAIL_ATTACHMENT_DOWNLOAD_SCHEMA["name"],
+    toolset=TOOLSET,
+    schema=GMAIL_ATTACHMENT_DOWNLOAD_SCHEMA,
+    handler=google_workspace_gmail_attachment_download_tool,
+    check_fn=_check_google_workspace,
+    description=GMAIL_ATTACHMENT_DOWNLOAD_SCHEMA["description"],
+    emoji="📥",
     max_result_size_chars=MAX_RESULT_CHARS,
 )
 registry.register(
