@@ -100,6 +100,25 @@ class FailingNewSessionWebSocket:
         self.closed = True
 
 
+class RenderRecoveryFakeSession:
+    def __init__(self) -> None:
+        self.protocol = "bidi"
+        self.closed_targets: list[str] = []
+        self.reset_urls: list[str] = []
+
+    def reset_bidi_site_cookies(self, url: str) -> list[str]:
+        self.reset_urls.append(url)
+        return ["www.mscdirect.com", ".www.mscdirect.com", ".mscdirect.com"]
+
+    def call(self, method: str, params: dict[str, Any] | None = None, session_id: str | None = None) -> dict[str, Any]:
+        del session_id
+        if method == "Target.createTarget":
+            return {"targetId": "fresh-registration-tab"}
+        if method == "Target.closeTarget":
+            self.closed_targets.append(str((params or {}).get("targetId") or ""))
+        return {}
+
+
 def _configure_msc_operation_fakes(module: Any) -> None:
     module.CdpBridge = FakeBridge
     module.CdpSession = ConcurrentFakeSession
@@ -150,6 +169,24 @@ def test_constructor_closes_websocket_when_session_new_fails() -> None:
         assert websocket.closed, "failed session.new must close its WebSocket"
 
 
+def test_targeted_cookie_reset_includes_parent_retailer_domain_without_reading_cookies() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        module = load_tool_module(Path(tmpdir) / "bidi.lock", Path(tmpdir) / "tabs.json")
+        session = object.__new__(module.CdpSession)
+        session.protocol = "bidi"
+        calls: list[tuple[str, dict[str, Any]]] = []
+
+        def fake_bidi(_self: Any, method: str, params: dict[str, Any]) -> dict[str, Any]:
+            calls.append((method, params))
+            return {}
+
+        session._bidi = types.MethodType(fake_bidi, session)
+        domains = session.reset_bidi_site_cookies(MSC_REGISTRATION_URL)
+
+        assert domains == ["www.mscdirect.com", ".www.mscdirect.com", ".mscdirect.com"]
+        assert calls == [("storage.deleteCookies", {"filter": {"domain": domain}}) for domain in domains]
+
+
 def test_msc_snapshot_query_and_selector_click_share_one_bidi_session_slot() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         module = load_tool_module(Path(tmpdir) / "bidi.lock", Path(tmpdir) / "tabs.json")
@@ -182,6 +219,70 @@ def test_screenshot_uses_shared_browser_lifecycle() -> None:
         result = module._screenshot()
         assert result == {"locked": True}
         assert len(seen) == 1
+
+
+def test_navigation_recovers_waf_interstitial_after_targeted_cookie_reset_without_blank_tab() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        module = load_tool_module(Path(tmpdir) / "bidi.lock", Path(tmpdir) / "tabs.json")
+        browser = RenderRecoveryFakeSession()
+        stored: list[tuple[Any, ...]] = []
+        retired: list[str] = []
+        setattr(module, "_with_browser", lambda fn: fn(browser))
+        setattr(module, "_first_page_target", lambda _browser: "blocked-registration-tab")
+        setattr(module, "_attach", lambda _browser, target_id: target_id)
+        setattr(module, "_navigate_and_wait", lambda *_args: None)
+        setattr(module, "_wait_for_rendered_page", lambda _browser, session_id: (
+            {"title": "", "visible_text_length": 0, "interactive_count": 0, "frames": [{"title": "We're Sorry", "text": "Access Denied: blocked by our security service", "src": "/_Incapsula_Resource"}]}
+            if session_id == "blocked-registration-tab"
+            else {"title": "MSC Industrial Supply - New Registration", "visible_text_length": 1392, "interactive_count": 16, "frames": []}
+        ))
+        setattr(module, "_evaluate", lambda _browser, session_id, expression: (
+            MSC_REGISTRATION_URL if expression == "location.href" else "MSC Industrial Supply - New Registration" if session_id == "fresh-registration-tab" else ""
+        ))
+        setattr(module, "_store_owner_target", lambda *args, **kwargs: stored.append((*args, kwargs)))
+        setattr(module, "_retire_replaced_owner_target", lambda _browser, target_id: retired.append(target_id))
+        setattr(module, "_audit", lambda *_args, **_kwargs: None)
+
+        result = module._navigate(MSC_REGISTRATION_URL, False)
+
+        assert result["status"] == "ok"
+        assert result["rendered"] is True
+        assert result["page_title"] == "MSC Industrial Supply - New Registration"
+        assert result["visible_text_length"] == 1392
+        assert result["interactive_count"] == 16
+        assert result["render_recovery"] == "blocked_site_cookie_reset"
+        assert result["site_cookie_reset_domains"] == ["www.mscdirect.com", ".www.mscdirect.com", ".mscdirect.com"]
+        assert browser.reset_urls == [MSC_REGISTRATION_URL]
+        assert stored == [("fresh-registration-tab", MSC_REGISTRATION_URL, "MSC Industrial Supply - New Registration", {})]
+        assert retired == ["blocked-registration-tab"]
+        assert browser.closed_targets == []
+
+
+def test_navigation_never_reports_ok_when_page_remains_blocked_after_cookie_reset() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        module = load_tool_module(Path(tmpdir) / "bidi.lock", Path(tmpdir) / "tabs.json")
+        browser = RenderRecoveryFakeSession()
+        stored: list[tuple[Any, ...]] = []
+        retired: list[str] = []
+        setattr(module, "_with_browser", lambda fn: fn(browser))
+        setattr(module, "_first_page_target", lambda _browser: "blocked-registration-tab")
+        setattr(module, "_attach", lambda _browser, target_id: target_id)
+        setattr(module, "_navigate_and_wait", lambda *_args: None)
+        setattr(module, "_wait_for_rendered_page", lambda *_args: {"title": "", "visible_text_length": 0, "interactive_count": 0, "frames": [{"title": "We're Sorry", "text": "Access Denied", "src": "/_Incapsula_Resource"}]})
+        setattr(module, "_store_owner_target", lambda *args, **kwargs: stored.append((*args, kwargs)))
+        setattr(module, "_retire_replaced_owner_target", lambda _browser, target_id: retired.append(target_id))
+
+        try:
+            module._navigate(MSC_REGISTRATION_URL, False)
+        except RuntimeError as exc:
+            assert "PAGE_RENDER_FAILED" in str(exc)
+        else:
+            raise AssertionError("blocked navigation after cookie reset must fail closed")
+
+        assert stored == []
+        assert retired == []
+        assert browser.reset_urls == [MSC_REGISTRATION_URL]
+        assert browser.closed_targets == ["fresh-registration-tab"]
 
 
 def _process_lock_worker() -> None:
@@ -232,7 +333,10 @@ def test_bidi_lifecycle_lock_serializes_across_processes() -> None:
 
 if __name__ == "__main__":
     test_constructor_closes_websocket_when_session_new_fails()
+    test_targeted_cookie_reset_includes_parent_retailer_domain_without_reading_cookies()
     test_msc_snapshot_query_and_selector_click_share_one_bidi_session_slot()
     test_screenshot_uses_shared_browser_lifecycle()
+    test_navigation_recovers_waf_interstitial_after_targeted_cookie_reset_without_blank_tab()
+    test_navigation_never_reports_ok_when_page_remains_blocked_after_cookie_reset()
     test_bidi_lifecycle_lock_serializes_across_processes()
     print("secure browser BiDi session regression checks passed")
