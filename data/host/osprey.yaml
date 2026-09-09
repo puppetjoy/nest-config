@@ -39,6 +39,10 @@ nest::package_use:
 nest::kernel_cmdline:
   - 'asus_nb_wmi.tablet_mode_sw=2' # lid-flip
 
+  # Avoid stale fbcon framebuffers retaining the dGPU after display unplug
+  # https://github.com/NVIDIA/open-gpu-kernel-modules/issues/759
+  - 'nvidia_drm.fbdev=0'
+
 nest::kernel_config:
   # WiFi / Bluetooth
   CONFIG_BT_HCIBTUSB_MTK: y
