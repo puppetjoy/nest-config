@@ -28,6 +28,22 @@ class nest::service::nzbget {
     ;
   }
   ->
+  file_line {
+    'nzbget-write-log':
+      path   => '/srv/nzbget/config/nzbget.conf',
+      line   => 'WriteLog=rotate',
+      match  => '^WriteLog=',
+      notify => Service['container-nzbget'],
+    ;
+
+    'nzbget-rotate-log':
+      path   => '/srv/nzbget/config/nzbget.conf',
+      line   => 'RotateLog=3',
+      match  => '^RotateLog=',
+      notify => Service['container-nzbget'],
+    ;
+  }
+  ->
   nest::lib::container { 'nzbget':
     image   => 'linuxserver/nzbget',
     env     => ['PUID=1001', 'PGID=1001', 'TZ=America/New_York'],
