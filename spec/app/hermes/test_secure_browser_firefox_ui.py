@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import json
 import sys
@@ -41,6 +42,19 @@ def parsed(value: str) -> dict[str, Any]:
     result = json.loads(value)
     assert isinstance(result, dict)
     return result
+
+
+def test_tool_module_has_top_level_registry_registration_for_discovery() -> None:
+    tree = ast.parse(TOOL.read_text(encoding="utf-8"))
+    assert any(
+        isinstance(statement, ast.Expr)
+        and isinstance(statement.value, ast.Call)
+        and isinstance(statement.value.func, ast.Attribute)
+        and statement.value.func.attr == "register"
+        and isinstance(statement.value.func.value, ast.Name)
+        and statement.value.func.value.id == "registry"
+        for statement in tree.body
+    )
 
 
 def test_contracts_register_and_dom_incompatibility_is_explicit() -> None:
@@ -107,6 +121,7 @@ def test_screenshot_is_private_and_tab_aliases_migrate() -> None:
 
 
 if __name__ == "__main__":
+    test_tool_module_has_top_level_registry_registration_for_discovery()
     test_contracts_register_and_dom_incompatibility_is_explicit()
     test_joy_directed_checkout_and_purchase_have_no_extra_approval_gate()
     test_screenshot_is_private_and_tab_aliases_migrate()
