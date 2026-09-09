@@ -82,6 +82,12 @@ class nest::host::hawk (
     require => File[$quill_gitlab_dir],
   }
 
+  file { "/home/${nest::user}/.local/bin/quill-gitlab-api":
+    ensure  => link,
+    target  => "${quill_gitlab_dir}/api",
+    require => File["${quill_gitlab_dir}/api"],
+  }
+
   file { "/home/${nest::user}/.ssh/authorized_keys2":
     ensure  => file,
     mode    => '0600',
