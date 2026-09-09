@@ -12,7 +12,7 @@ RSpec.describe 'Quill Hermes work profile' do
       'display_name' => 'Quill',
       'profile_icon' => '🪶',
       'model_provider' => 'copilot',
-      'model_name' => 'gpt-5.6-sol',
+      'model_name' => 'gpt-5.6-terra',
       'inherit_shared_credentials' => false,
       'honcho_workspace' => 'hermes',
       'honcho_user_peer' => 'joy',
@@ -60,7 +60,7 @@ RSpec.describe 'Quill Hermes work profile' do
     expect(config_manifest).not_to include('$instances.filter')
   end
 
-  it 'uses the Copilot Sol, Terra, and Luna role policy' do
+  it 'uses the Copilot Terra and Luna role policy' do
     expect(quill).to include(
       'auxiliary_provider' => 'copilot',
       'auxiliary_compress_model' => 'gpt-5.6-terra',
