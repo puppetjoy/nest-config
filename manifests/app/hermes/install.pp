@@ -138,6 +138,7 @@ class nest::app::hermes::install {
       File["${source_dir}/tools/google_workspace_tool.py"],
       File["${source_dir}/tools/oauth_browser_tool.py"],
       File["${source_dir}/tools/secure_browser_oauth_tool.py"],
+      File["${source_dir}/tools/secure_browser_legacy_support.py"],
       File["${source_dir}/tools/secure_browser_tool.py"],
       File["${source_dir}/tools/shopping_browser_tool.py"],
     ],
@@ -219,6 +220,15 @@ class nest::app::hermes::install {
   file { "${source_dir}/tools/secure_browser_tool.py":
     ensure  => file,
     source  => 'puppet:///modules/nest/app/hermes/secure_browser_tool.py',
+    mode    => '0644',
+    owner   => 'root',
+    group   => 'root',
+    require => Vcsrepo[$source_dir],
+  }
+
+  file { "${source_dir}/tools/secure_browser_legacy_support.py":
+    ensure  => file,
+    source  => 'puppet:///modules/nest/app/hermes/secure_browser_legacy_support.py',
     mode    => '0644',
     owner   => 'root',
     group   => 'root',

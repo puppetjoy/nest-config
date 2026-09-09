@@ -19,7 +19,8 @@ STAR_SECURE_BROWSER_ENV = {
     "SECURE_BROWSER_EXPECTED_APP_LABEL": "firefox",
     "SECURE_BROWSER_PUBLIC_URL": "https://browser.eyrie/",
     "SECURE_BROWSER_OPERATOR_URL": "https://browser.eyrie",
-    "SECURE_BROWSER_CDP_URL": "https://browser-cdp.eyrie",
+    "SECURE_BROWSER_CONTROL_MODE": "firefox-ui-v1",
+    "SECURE_BROWSER_UI_BRIDGE": "/opt/nest/firefox/bin/firefox-ui-bridge.py",
 }
 
 
@@ -43,6 +44,7 @@ def test_star_profile_declares_secure_browser_service_endpoint_environment() -> 
 
     for key, value in STAR_SECURE_BROWSER_ENV.items():
         assert environment[key] == value
+    assert "SECURE_BROWSER_CDP_URL" not in environment
 
 
 if __name__ == "__main__":

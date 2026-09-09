@@ -339,7 +339,7 @@ define nest::lib::hermes (
     default => [],
   }
 
-  if $google_workspace_enabled {
+  if $google_workspace_enabled or $profile == 'star' {
     file { "${profile_dir}/skills":
       ensure  => directory,
       mode    => '0700',
@@ -355,7 +355,9 @@ define nest::lib::hermes (
       group   => $user,
       require => File["${profile_dir}/skills"],
     }
+  }
 
+  if $google_workspace_enabled {
     file { "${profile_dir}/skills/productivity/google-workspace":
       ensure  => link,
       target  => "${install_dir}/src/skills/productivity/google-workspace",
@@ -366,6 +368,25 @@ define nest::lib::hermes (
         Exec['install_hermes_agent'],
         File["${profile_dir}/skills/productivity"],
       ],
+    }
+  }
+
+  if $profile == 'star' {
+    file { "${profile_dir}/skills/productivity/star-firefox-ui":
+      ensure  => directory,
+      mode    => '0700',
+      owner   => $user,
+      group   => $user,
+      require => File["${profile_dir}/skills/productivity"],
+    }
+
+    file { "${profile_dir}/skills/productivity/star-firefox-ui/SKILL.md":
+      ensure  => file,
+      mode    => '0600',
+      owner   => $user,
+      group   => $user,
+      source  => 'puppet:///modules/nest/app/hermes/skills/star-firefox-ui/SKILL.md',
+      require => File["${profile_dir}/skills/productivity/star-firefox-ui"],
     }
   }
 

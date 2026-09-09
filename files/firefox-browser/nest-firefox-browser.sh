@@ -6,6 +6,8 @@ export HOME="${FIREFOX_HOME:-/home/kasm-user}"
 export LAUNCH_URL="${LAUNCH_URL:-about:blank}"
 export APP_ARGS="${APP_ARGS:-}"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/runtime-firefox}"
+export NO_AT_BRIDGE=0
+export GTK_MODULES="${GTK_MODULES:-atk-bridge}"
 vnc_geometry="${VNC_RESOLUTION:-1365x768x24}"
 vnc_width="${vnc_geometry%%x*}"
 vnc_height_depth="${vnc_geometry#*x}"
@@ -22,13 +24,25 @@ mkdir -p \
   "$HOME/.mozilla/firefox/nest-secure-browser" \
   "$HOME/.mozilla/firefox/nest-secure-browser/thumbnails" \
   "$HOME/.vnc" \
+  "$HOME/.local/state/nest-firefox-ui" \
   "$XDG_RUNTIME_DIR" \
   /tmp/nest-firefox
-chmod 700 "$XDG_RUNTIME_DIR" "$HOME/.mozilla/firefox/nest-secure-browser" "$HOME/.vnc" || true
+chmod 700 "$XDG_RUNTIME_DIR" "$HOME/.mozilla/firefox/nest-secure-browser" "$HOME/.vnc" "$HOME/.local/state/nest-firefox-ui" || true
+
+# Phase 1 is intentionally a plain Firefox desktop. Fail closed rather than
+# accidentally reintroducing any browser-internal automation endpoint through
+# KubeCM APP_ARGS or an image default.
+case " $APP_ARGS " in
+  *remote-debugging*|*marionette*|*webdriver*|*bidi*|*devtools-server*)
+    printf '%s\n' 'Refusing automation-specific Firefox APP_ARGS' >&2
+    exit 64
+    ;;
+esac
 
 kasmvnc_pid=
 xmonad_pid=
 firefox_pid=
+dbus_pid=
 
 if [ ! -f "$HOME/.vnc/self.pem" ]; then
   openssl req \
@@ -43,7 +57,7 @@ if [ ! -f "$HOME/.vnc/self.pem" ]; then
 fi
 
 cleanup() {
-  kill "$firefox_pid" "$xmonad_pid" "$kasmvnc_pid" 2>/dev/null || true
+  kill "$firefox_pid" "$xmonad_pid" "$kasmvnc_pid" "$dbus_pid" 2>/dev/null || true
 }
 trap cleanup INT TERM EXIT
 
@@ -69,6 +83,16 @@ for _ in 1 2 3 4 5 6 7 8 9 10; do
   [ -S "/tmp/.X11-unix/X${DISPLAY#:}" ] && break
   sleep 1
 done
+
+# Firefox and the UI bridge share one private desktop accessibility bus. The
+# bridge receives only the bus address, never profile/session secrets. This is
+# the OS accessibility boundary used in place of WebDriver/BiDi/CDP.
+eval "$(dbus-launch --sh-syntax)"
+dbus_pid="${DBUS_SESSION_BUS_PID:-}"
+printf 'DBUS_SESSION_BUS_ADDRESS=%s\n' "$DBUS_SESSION_BUS_ADDRESS" > /tmp/nest-firefox/session.env
+chmod 600 /tmp/nest-firefox/session.env
+gsettings set org.gnome.desktop.interface toolkit-accessibility true >/dev/null 2>&1 || true
+/usr/libexec/at-spi-bus-launcher --launch-immediately >/tmp/nest-firefox/at-spi.log 2>&1 &
 
 # Run xmonad from the workstation base image so Firefox chrome popups (including
 # the extensions panel/Bitwarden entry point) get normal transient-window focus
