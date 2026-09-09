@@ -48,6 +48,7 @@ CDP_ENDPOINT_URL = os.environ.get("SECURE_BROWSER_CDP_URL", "").rstrip("/")
 BROWSER_OWNER = os.environ.get("SECURE_BROWSER_OWNER", "shopping")
 SECURE_BROWSER_MAX_AGENT_TABS = max(1, int(os.environ.get("SECURE_BROWSER_MAX_AGENT_TABS", "1")))
 OWNERSHIP_STATE_PATH = os.environ.get("SECURE_BROWSER_OWNERSHIP_STATE", os.path.expanduser("~/.hermes/secure-browser-tabs.json"))
+BIDI_SESSION_LOCK_PATH = os.environ.get("SECURE_BROWSER_BIDI_SESSION_LOCK", os.path.expanduser("~/.hermes/secure-browser-bidi-session.lock"))
 BROWSER_DISPLAY = os.environ.get("SECURE_BROWSER_DISPLAY", ":1")
 XWD_TIMEOUT_SECONDS = float(os.environ.get("SECURE_BROWSER_XWD_TIMEOUT_SECONDS", "15"))
 MAX_RESULT_CHARS = 16000
@@ -4643,32 +4644,41 @@ class CdpSession:
         self.cdp_url = cdp_url
         self.protocol = "bidi" if websocket_url.startswith("bidi+") else "cdp"
         self._bidi_session_created = False
-        if self.protocol == "bidi":
-            parsed = urlparse(websocket_url[len("bidi+") :])
-            if parsed.hostname is None or parsed.port is None:
-                raise RuntimeError("secure browser BiDi endpoint is missing host or port")
-            if parsed.scheme == "wss":
-                self.ws = websockets.sync.client.connect(parsed.geturl(), open_timeout=5, close_timeout=2, max_size=CDP_MAX_MESSAGE_BYTES, compression=None, proxy=None)
+        self.ws: Any = None
+        try:
+            if self.protocol == "bidi":
+                parsed = urlparse(websocket_url[len("bidi+") :])
+                if parsed.hostname is None or parsed.port is None:
+                    raise RuntimeError("secure browser BiDi endpoint is missing host or port")
+                if parsed.scheme == "wss":
+                    self.ws = websockets.sync.client.connect(parsed.geturl(), open_timeout=5, close_timeout=2, max_size=CDP_MAX_MESSAGE_BYTES, compression=None, proxy=None)
+                    self._bidi("session.new", {"capabilities": {"alwaysMatch": {}}})
+                    self._bidi_session_created = True
+                    return
+                sock = socket.create_connection((parsed.hostname, parsed.port), timeout=5)
+                # Firefox validates the WebSocket Host header against its own
+                # loopback listener.  Kubernetes port-forward uses an arbitrary
+                # local port, so connect the TCP socket to that local port while
+                # sending the browser's real loopback endpoint in the handshake.
+                browser_ws_url = f"ws://127.0.0.1:{REMOTE_DEBUG_PORT}/session"
+                self.ws = websockets.sync.client.connect(browser_ws_url, sock=sock, open_timeout=5, close_timeout=2, max_size=CDP_MAX_MESSAGE_BYTES, compression=None)
                 self._bidi("session.new", {"capabilities": {"alwaysMatch": {}}})
                 self._bidi_session_created = True
-                return
-            sock = socket.create_connection((parsed.hostname, parsed.port), timeout=5)
-            # Firefox validates the WebSocket Host header against its own
-            # loopback listener.  Kubernetes port-forward uses an arbitrary
-            # local port, so connect the TCP socket to that local port while
-            # sending the browser's real loopback endpoint in the handshake.
-            browser_ws_url = f"ws://127.0.0.1:{REMOTE_DEBUG_PORT}/session"
-            self.ws = websockets.sync.client.connect(browser_ws_url, sock=sock, open_timeout=5, close_timeout=2, max_size=CDP_MAX_MESSAGE_BYTES, compression=None)
-            self._bidi("session.new", {"capabilities": {"alwaysMatch": {}}})
-            self._bidi_session_created = True
-        else:
-            self.ws = websockets.sync.client.connect(websocket_url, open_timeout=5, close_timeout=2, max_size=CDP_MAX_MESSAGE_BYTES)
+            else:
+                self.ws = websockets.sync.client.connect(websocket_url, open_timeout=5, close_timeout=2, max_size=CDP_MAX_MESSAGE_BYTES)
+        except Exception:
+            if self.ws is not None:
+                with contextlib.suppress(Exception):
+                    self.ws.close()
+            raise
 
     def close(self) -> None:
         if self.protocol == "bidi" and self._bidi_session_created:
             with contextlib.suppress(Exception):
                 self._bidi("session.end", {})
-        self.ws.close()
+            self._bidi_session_created = False
+        if self.ws is not None:
+            self.ws.close()
 
     def _bidi(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         msg: dict[str, Any] = {"id": self.next_id, "method": method, "params": params or {}}
@@ -5419,11 +5429,25 @@ def _navigate_and_wait(browser: CdpSession, session_id: str, url: str) -> None:
 
 def _with_browser(fn: Any) -> dict[str, Any]:
     with CdpBridge() as cdp_url:
-        browser = CdpSession(_browser_ws_url(cdp_url), cdp_url=cdp_url)
-        try:
-            return fn(browser)
-        finally:
-            browser.close()
+        websocket_url = _browser_ws_url(cdp_url)
+
+        def run_session() -> dict[str, Any]:
+            browser = CdpSession(websocket_url, cdp_url=cdp_url)
+            try:
+                return fn(browser)
+            finally:
+                browser.close()
+
+        if not websocket_url.startswith("bidi+"):
+            return run_session()
+        os.makedirs(os.path.dirname(BIDI_SESSION_LOCK_PATH) or ".", exist_ok=True)
+        with open(BIDI_SESSION_LOCK_PATH, "a+", encoding="utf-8") as handle:
+            os.fchmod(handle.fileno(), 0o600)
+            fcntl.flock(handle, fcntl.LOCK_EX)
+            try:
+                return run_session()
+            finally:
+                fcntl.flock(handle, fcntl.LOCK_UN)
 
 
 
@@ -5720,12 +5744,7 @@ def _screenshot(full_page: bool = False) -> dict[str, Any]:
         _audit("screenshot", {"url": result["url"], "page_title": title, "path": output_path, "full_page": result["full_page"], "capture_method": capture_method, "screenshot_mode": result["screenshot_mode"], "checkout_binding": result.get("material_summary_binding"), "redaction_rects_hash": (result.get("redaction") or {}).get("redaction_rects_hash")})
         return result
 
-    with CdpBridge() as cdp_url:
-        browser = CdpSession(_browser_ws_url(cdp_url), cdp_url=cdp_url)
-        try:
-            return run(browser)
-        finally:
-            browser.close()
+    return _with_browser(run)
 
 
 def _capture_cdp_png(browser: CdpSession, session_id: str, full_page: bool) -> bytes:
