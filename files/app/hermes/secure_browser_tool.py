@@ -74,6 +74,7 @@ MAX_CROP_NAME_CHARS = 80
 CDP_MAX_MESSAGE_BYTES = 32 * 1024 * 1024
 PORT_FORWARD_TIMEOUT_SECONDS = 20
 PAGE_LOAD_TIMEOUT_SECONDS = 15
+PAGE_RENDER_TIMEOUT_SECONDS = 15
 APPROVED_CART_ADDITIONS = {
     "B01J01XGPK": {
         "approval_reference": "agent-request ar-20260606-001458-375534 / kanban t_03ac4852",
@@ -556,6 +557,31 @@ SUMMARY_EXTRACT_JS = r"""
     logged_in_price: text('#corePriceDisplay_desktop_feature_div .a-price .a-offscreen') || text('.a-price .a-offscreen'),
     stock_availability: text('#availability'),
     cart_subtotal: text('#sc-subtotal-amount-activecart') || text('.sc-subtotal')
+  };
+})()
+"""
+
+
+PAGE_RENDER_PROBE_JS = r"""
+(() => {
+  const clean = (value) => (value || '').replace(/\s+/g, ' ').trim();
+  const frames = Array.from(document.querySelectorAll('iframe')).slice(0, 8).map((frame) => {
+    try {
+      return {
+        title: clean(frame.contentDocument?.title),
+        text: clean(frame.contentDocument?.body?.innerText).slice(0, 1000),
+        src: frame.src || ''
+      };
+    } catch (_error) {
+      return {title: '', text: '', src: frame.src || ''};
+    }
+  });
+  return {
+    title: clean(document.title),
+    visible_text_length: clean(document.body?.innerText).length,
+    interactive_count: document.querySelectorAll('a[href], button, input, select, textarea, [role="button"], [role="link"], [role="textbox"], [role="checkbox"], [role="radio"], [role="combobox"]').length,
+    html_length: document.documentElement?.outerHTML.length || 0,
+    frames
   };
 })()
 """
@@ -4718,6 +4744,24 @@ class CdpSession:
         # keep the BiDi compatibility layer at the same top-level-tab boundary.
         return [context for context in (self._bidi("browsingContext.getTree", {}).get("contexts") or []) if isinstance(context, dict)]
 
+    def reset_bidi_site_cookies(self, url: str) -> list[str]:
+        if self.protocol != "bidi":
+            raise RuntimeError("site-cookie reset requires Firefox BiDi")
+        hostname = (urlparse(url).hostname or "").lower()
+        if not hostname:
+            raise RuntimeError("site-cookie reset requires an HTTP(S) hostname")
+        labels = hostname.split(".")
+        domains = [hostname, f".{hostname}"]
+        common_subdomains = {"www", "shop", "store", "secure", "account", "accounts"}
+        common_public_suffix_labels = {"ac", "co", "com", "edu", "gov", "net", "org"}
+        if len(labels) >= 3 and labels[0] in common_subdomains and labels[-2] not in common_public_suffix_labels:
+            domains.append(f".{'.'.join(labels[1:])}")
+        reset: list[str] = []
+        for domain in dict.fromkeys(domains):
+            self._bidi("storage.deleteCookies", {"filter": {"domain": domain}})
+            reset.append(domain)
+        return reset
+
     def call(self, method: str, params: dict[str, Any] | None = None, session_id: str | None = None) -> dict[str, Any]:
         params = params or {}
         if self.protocol == "bidi":
@@ -5427,6 +5471,56 @@ def _navigate_and_wait(browser: CdpSession, session_id: str, url: str) -> None:
         time.sleep(0.25)
 
 
+def _page_render_probe(browser: CdpSession, session_id: str) -> dict[str, Any]:
+    result = _evaluate(browser, session_id, PAGE_RENDER_PROBE_JS)
+    return result if isinstance(result, dict) else {}
+
+
+def _render_probe_usable(probe: dict[str, Any]) -> bool:
+    return bool(
+        str(probe.get("title") or "").strip()
+        and (int(probe.get("visible_text_length") or 0) > 0 or int(probe.get("interactive_count") or 0) > 0)
+    )
+
+
+def _render_probe_blocked(probe: dict[str, Any]) -> bool:
+    frame_material = " ".join(
+        " ".join(str(frame.get(key) or "") for key in ("title", "text", "src"))
+        for frame in (probe.get("frames") or [])
+        if isinstance(frame, dict)
+    ).lower()
+    return bool(re.search(r"\b(?:access denied|request unsuccessful|blocked by our security service|incapsula)\b|currently not available for your use", frame_material))
+
+
+def _wait_for_rendered_page(browser: CdpSession, session_id: str, timeout: float = PAGE_RENDER_TIMEOUT_SECONDS) -> dict[str, Any]:
+    deadline = time.time() + max(0.0, timeout)
+    probe: dict[str, Any] = {}
+    while True:
+        probe = _page_render_probe(browser, session_id)
+        if _render_probe_usable(probe) or _render_probe_blocked(probe) or time.time() >= deadline:
+            return probe
+        time.sleep(0.5)
+
+
+def _retire_replaced_owner_target(browser: CdpSession, target_id: str) -> None:
+    os.makedirs(os.path.dirname(OWNERSHIP_STATE_PATH) or ".", exist_ok=True)
+    with open(OWNERSHIP_STATE_PATH, "a+", encoding="utf-8") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            state = _load_owner_state(handle)
+            tabs = _owner_tabs(state)
+            tabs.pop(target_id, None)
+            owners = state.setdefault("owners", {})
+            owner = owners.get(BROWSER_OWNER) if isinstance(owners, dict) else None
+            if isinstance(owner, dict) and str(owner.get("target_id") or "") == target_id:
+                owners.pop(BROWSER_OWNER, None)
+            _store_owner_state(handle, state)
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+    with contextlib.suppress(Exception):
+        browser.call("Target.closeTarget", {"targetId": target_id})
+
+
 def _with_browser(fn: Any) -> dict[str, Any]:
     with CdpBridge() as cdp_url:
         websocket_url = _browser_ws_url(cdp_url)
@@ -5469,17 +5563,58 @@ def _navigate(url: str, new_page: bool) -> dict[str, Any]:
                 target_id = _claim_owner_target(browser, create=True)
         session_id = _attach(browser, target_id)
         _navigate_and_wait(browser, session_id, safe_url)
-        current_url = str(_evaluate(browser, session_id, "location.href") or safe_url)
-        current_title = str(_evaluate(browser, session_id, "document.title") or "")
-        _store_owner_target(target_id, current_url, current_title)
+        render_probe = _wait_for_rendered_page(browser, session_id)
+        render_recovery = ""
+        reset_domains: list[str] = []
+        if not _render_probe_usable(render_probe):
+            if not _render_probe_blocked(render_probe):
+                raise RuntimeError("PAGE_RENDER_FAILED: navigation completed but the page had no title and no visible text or controls")
+            if getattr(browser, "protocol", "cdp") != "bidi":
+                raise RuntimeError("PAGE_RENDER_FAILED: retailer security interstitial was visible and this backend cannot reset site cookies")
+            # A WAF cookie can poison the persistent profile. Reset only this
+            # retailer's domains without reading cookie values or other sites.
+            reset_domains = browser.reset_bidi_site_cookies(safe_url)
+            replacement_target = str(browser.call("Target.createTarget", {"url": "about:blank"}).get("targetId") or "")
+            if not replacement_target:
+                raise RuntimeError("PAGE_RENDER_FAILED: Firefox BiDi did not create a replacement tab after resetting blocked site cookies")
+            replacement_session = _attach(browser, replacement_target)
+            try:
+                _navigate_and_wait(browser, replacement_session, safe_url)
+                replacement_probe = _wait_for_rendered_page(browser, replacement_session)
+                if not _render_probe_usable(replacement_probe):
+                    reason = "retailer security interstitial remained visible" if _render_probe_blocked(replacement_probe) else "page remained empty"
+                    raise RuntimeError(f"PAGE_RENDER_FAILED: navigation after blocked-site cookie reset completed but {reason}")
+            except Exception:
+                with contextlib.suppress(Exception):
+                    browser.call("Target.closeTarget", {"targetId": replacement_target})
+                raise
+            old_target = target_id
+            target_id = replacement_target
+            session_id = replacement_session
+            render_probe = replacement_probe
+            render_recovery = "blocked_site_cookie_reset"
+            current_url = str(_evaluate(browser, session_id, "location.href") or safe_url)
+            current_title = str(_evaluate(browser, session_id, "document.title") or render_probe.get("title") or "")
+            _store_owner_target(target_id, current_url, current_title)
+            _retire_replaced_owner_target(browser, old_target)
+        else:
+            current_url = str(_evaluate(browser, session_id, "location.href") or safe_url)
+            current_title = str(_evaluate(browser, session_id, "document.title") or render_probe.get("title") or "")
+            _store_owner_target(target_id, current_url, current_title)
         result = {
             "operation": "navigate",
             "status": "ok",
             "secure_browser_owner": BROWSER_OWNER,
             "url": _sanitize_url(current_url),
             "page_title": _sanitize_shopping_text(current_title),
+            "rendered": True,
+            "visible_text_length": int(render_probe.get("visible_text_length") or 0),
+            "interactive_count": int(render_probe.get("interactive_count") or 0),
         }
-        _audit("navigate", {"url": result["url"], "page_title": result["page_title"], "new_page": new_page})
+        if render_recovery:
+            result["render_recovery"] = render_recovery
+            result["site_cookie_reset_domains"] = reset_domains
+        _audit("navigate", {"url": result["url"], "page_title": result["page_title"], "new_page": new_page, "rendered": True, "render_recovery": render_recovery})
         return result
 
     return _with_browser(run)
