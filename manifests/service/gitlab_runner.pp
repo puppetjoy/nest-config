@@ -102,7 +102,7 @@ class nest::service::gitlab_runner (
   nest::lib::container { 'gitlab-runner':
     ensure  => $ensure,
     dns     => $dns,
-    image   => 'gitlab/gitlab-runner:alpine-v19.0.2',
+    image   => 'gitlab/gitlab-runner:alpine-v19.3.2',
     volumes => [
       '/etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt:ro',
       '/srv/gitlab-runner:/etc/gitlab-runner',
