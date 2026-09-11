@@ -26,6 +26,7 @@ define nest::lib::hermes (
   String[1]            $model_name                 = 'gpt-5.6-sol',
   String[1]            $model_base_url             = 'https://chatgpt.com/backend-api/codex',
   Optional[Integer[1]] $model_max_tokens           = undef,
+  Integer[1]           $agent_max_turns            = 90,
   Any                  $openrouter_api_key         = undef,
   Hash[String[1], Any] $providers                  = {},
   String[1]            $auxiliary_provider         = 'openai-codex',
@@ -734,6 +735,9 @@ define nest::lib::hermes (
   }
 
   $managed_config = {
+    'agent'            => {
+      'max_turns' => $agent_max_turns,
+    },
     'toolsets'         => $effective_toolsets,
     'command_allowlist' => $command_allowlist,
     'streaming'        => {
