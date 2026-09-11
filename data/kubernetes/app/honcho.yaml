@@ -9,7 +9,7 @@ honcho_database: honcho
 honcho_user: honcho
 ingress_class: contour-compute
 node_role: compute
-postgres_image: ghcr.io/cloudnative-pg/postgresql:17.6
+postgres_image: ghcr.io/cloudnative-pg/postgresql:17.11
 postgres_storage_class: owl-crypt
 postgres_storage_size: 16Gi
 redis_storage_class: owl-crypt
