@@ -172,7 +172,7 @@ class nest::app::hermes::config {
     $instance_model_name        = pick($config['model_name'], $model_name)
     $instance_model_base_url    = pick($config['model_base_url'], $model_base_url)
     $instance_model_max_tokens  = $config['model_max_tokens']
-    $instance_agent_max_turns   = pick($config['agent_max_turns'], 90)
+    $instance_agent_max_turns   = $config['agent_max_turns']
     $instance_openrouter_key    = $config['openrouter_api_key'] ? {
       undef   => $inherit_shared_credentials ? {
         true    => $openrouter_api_key,

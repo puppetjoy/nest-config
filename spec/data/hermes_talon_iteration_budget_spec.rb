@@ -14,8 +14,9 @@ RSpec.describe 'Talon Hermes iteration budget' do
       !profile.key?('agent_max_turns')
     end)
 
-    expect(config_manifest).to include("pick($config['agent_max_turns'], 90)")
+    expect(config_manifest).to include("$instance_agent_max_turns   = $config['agent_max_turns']")
     expect(config_manifest).to include('agent_max_turns            => $instance_agent_max_turns')
+    expect(profile_manifest).to include('Optional[Integer[1]] $agent_max_turns            = undef')
     expect(profile_manifest).to include("'max_turns' => $agent_max_turns")
   end
 end

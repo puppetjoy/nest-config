@@ -26,7 +26,7 @@ define nest::lib::hermes (
   String[1]            $model_name                 = 'gpt-5.6-sol',
   String[1]            $model_base_url             = 'https://chatgpt.com/backend-api/codex',
   Optional[Integer[1]] $model_max_tokens           = undef,
-  Integer[1]           $agent_max_turns            = 90,
+  Optional[Integer[1]] $agent_max_turns            = undef,
   Any                  $openrouter_api_key         = undef,
   Hash[String[1], Any] $providers                  = {},
   String[1]            $auxiliary_provider         = 'openai-codex',
@@ -733,11 +733,16 @@ define nest::lib::hermes (
     undef   => {},
     default => { 'max_tokens' => $model_max_tokens },
   }
+  $agent_config = $agent_max_turns ? {
+    undef   => {},
+    default => {
+      'agent' => {
+        'max_turns' => $agent_max_turns,
+      },
+    },
+  }
 
   $managed_config = {
-    'agent'            => {
-      'max_turns' => $agent_max_turns,
-    },
     'toolsets'         => $effective_toolsets,
     'command_allowlist' => $command_allowlist,
     'streaming'        => {
@@ -834,7 +839,7 @@ define nest::lib::hermes (
         'portal_url' => $dashboard_oauth_portal_url_value,
       },
     } + $dashboard_theme_config + $dashboard_profile_switcher_config,
-  } + $credential_pool_strategy_config + $providers_config + $terminal_config + $browser_camofox_config + $image_gen_config + $plugins_config
+  } + $credential_pool_strategy_config + $providers_config + $terminal_config + $browser_camofox_config + $image_gen_config + $plugins_config + $agent_config
 
   $env_content = [$gitlab_env_lines, $release_digest_gitlab_token_env_lines, $web_backend_env_lines, $telegram_env_lines, $openrouter_env_lines, $voice_tools_openai_env_lines, $agent_request_env_lines, $ssh_env_lines, $kubeconfig_env_lines, $extra_env_lines, $tls_trust_env_lines].flatten.join("\n")
 
