@@ -52,6 +52,35 @@ class nest::service::gitlab_runner (
   }
 
   if $runner_ensure == present and !$facts['is_container'] {
+    systemd::timer_wrapper { 'podman-build-cache-prune':
+      ensure                 => present,
+      command                => '/usr/bin/podman container prune --force --filter until=720h',
+      on_calendar            => 'daily',
+      service_overrides      => {
+        'ExecStart' => [
+          '/usr/bin/podman container prune --force --filter until=720h',
+          '/usr/bin/podman image prune --force --filter until=720h',
+        ],
+      },
+      service_unit_overrides => {
+        'Description' => 'Prune stale Podman build containers and dangling images',
+      },
+      timer_overrides        => {
+        'Persistent'         => true,
+        'RandomizedDelaySec' => '1h',
+      },
+      timer_unit_overrides   => {
+        'Description' => 'Daily stale Podman build cache pruning',
+      },
+      require                => Class['nest::base::containers'],
+    }
+  } elsif !$facts['is_container'] {
+    systemd::timer_wrapper { 'podman-build-cache-prune':
+      ensure => absent,
+    }
+  }
+
+  if $runner_ensure == present and !$facts['is_container'] {
     exec { 'gitlab-runner-reconcile-invalid':
       command => '/bin/true',
       unless  => '/usr/local/bin/gitlab-runner verify',
