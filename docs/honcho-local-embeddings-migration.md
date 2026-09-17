@@ -66,10 +66,11 @@ Expected probe shape: one embedding with `dim: 1024`.  Record latency with
 
 Also verify the server's effective per-slot context and physical-batch boundary.
 llama.cpp divides `--ctx-size` across `--parallel` slots, so the deployment uses
-`--ctx-size 32768 --parallel 4 --ubatch-size 8192` to keep Honcho's advertised
-8192-token per-input limit usable in every slot.  This content-safe synthetic
-probe deterministically exercises an input above the former 2048-token physical
-batch limit without reading or logging stored Honcho content:
+`--ctx-size 32768 --parallel 4 --batch-size 8192 --ubatch-size 8192` to keep
+Honcho's advertised 8192-token per-input limit usable in every slot and in both
+llama.cpp batching layers.  This content-safe synthetic probe deterministically
+exercises an input above the former 2048-token batch limit without reading or
+logging stored Honcho content:
 
 ```bash
 kubectl -n ai exec -i deploy/honcho-deriver -- /app/.venv/bin/python - <<'PY'

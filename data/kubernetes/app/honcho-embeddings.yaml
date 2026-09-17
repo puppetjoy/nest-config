@@ -19,8 +19,10 @@ parallel_requests: 4
 # accept Honcho's advertised 8192-token per-input limit rather than exposing an
 # effective 2048-token provider limit at parallel=4.
 context_size: 32768
-# Embedding inputs must also fit in one physical batch.  A smaller ubatch makes
-# llama.cpp reject otherwise-valid inputs before the configured context limit.
+# Embedding inputs must fit in both llama.cpp's logical batch and physical
+# microbatch.  Raising only --ubatch-size leaves the default --batch-size at
+# 2048 and the server still rejects otherwise-valid inputs at that boundary.
+logical_batch_size: 8192
 physical_batch_size: 8192
 
 resources:
@@ -102,6 +104,8 @@ resources:
                 - cls
                 - --ctx-size
                 - "%{lookup('context_size')}"
+                - --batch-size
+                - "%{lookup('logical_batch_size')}"
                 - --ubatch-size
                 - "%{lookup('physical_batch_size')}"
                 - --parallel

@@ -8,5 +8,6 @@ model_file: bge-m3-q8_0.gguf
 embedding_dimensions: 1024
 max_input_tokens: 8192
 context_size: 32768
+logical_batch_size: 8192
 physical_batch_size: 8192
 parallel_requests: 4
