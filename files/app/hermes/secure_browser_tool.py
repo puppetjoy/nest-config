@@ -36,6 +36,19 @@ MAX_RESULT_BYTES = 8_000_000
 WORKFLOW_RE = re.compile(r"[^A-Za-z0-9_.:@/-]+")
 
 
+def _session_env(key: str) -> str:
+    try:
+        from gateway.session_context import get_session_env
+        return str(get_session_env(key, "") or "").strip()
+    except (ImportError, RuntimeError):
+        return ""
+
+
+def _telegram_chat_id(value: str) -> str:
+    normalized = value.removeprefix("telegram:").strip()
+    return normalized.split(":", 1)[0]
+
+
 def _json(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
 
@@ -109,7 +122,7 @@ def _safe_call(operation: str, callback: Any) -> str:
         })
 
 
-def _save_screenshot(result: dict[str, Any]) -> dict[str, Any]:
+def _save_screenshot(result: dict[str, Any], *, owner_only: bool = False) -> dict[str, Any]:
     encoded = str(result.pop("png_base64", ""))
     try:
         content = base64.b64decode(encoded, validate=True)
@@ -117,14 +130,24 @@ def _save_screenshot(result: dict[str, Any]) -> dict[str, Any]:
         raise RuntimeError("Firefox UI bridge returned invalid screenshot data") from exc
     if not content.startswith(b"\x89PNG"):
         raise RuntimeError("Firefox UI bridge screenshot was not PNG")
-    evidence_dir = Path(get_hermes_home()) / "secure-browser" / "evidence"
+    leaf = "owner-review" if owner_only else "evidence"
+    evidence_dir = Path(get_hermes_home()) / "secure-browser" / leaf
     evidence_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     path = evidence_dir / f"firefox-{int(time.time() * 1000)}.png"
     path.write_bytes(content)
     os.chmod(path, 0o600)
     result["image_path"] = str(path)
-    result["media"] = f"MEDIA:{path}"
     result["protocol"] = "firefox-ui-v1"
+    if owner_only:
+        result.update({
+            "owner_only": True,
+            "generic_vision_allowed": False,
+            "artifact_allowed": False,
+            "same_message_with_structured_summary_required": True,
+            "delivery_instruction": "Attach this image only to Joy's trusted owner chat in the same message as secure_browser_checkout_readback; never route it to vision/OCR, logs, evidence artifacts, Talon notifications, or another recipient.",
+        })
+    else:
+        result["media"] = f"MEDIA:{path}"
     return result
 
 
@@ -149,11 +172,14 @@ def secure_browser_navigate_tool(args: dict[str, Any], task_id: str | None = Non
         url = str(args.get("url") or "").strip()
         if not url:
             raise ValueError("url is required")
-        return _bridge("navigate", {
+        payload = {
             "url": url,
             "workflow_id": _workflow_id(args, task_id),
             "lease_seconds": args.get("lease_seconds"),
-        })
+        }
+        if args.get("max_wait_seconds") is not None:
+            payload["max_wait_seconds"] = args["max_wait_seconds"]
+        return _bridge("navigate", payload, timeout=BRIDGE_TIMEOUT + 15)
     return _safe_call("navigate", run)
 
 
@@ -177,6 +203,60 @@ def secure_browser_current_page_summary_tool(args: dict[str, Any], **_kw: Any) -
             "observation_boundary": snapshot.get("observation_boundary"),
         }
     return _safe_call("current_page_summary", run)
+
+
+def secure_browser_wait_for_stable_tool(args: dict[str, Any], **_kw: Any) -> str:
+    return _safe_call("wait_for_stable", lambda: _bridge("wait", {
+        "max_wait_seconds": args.get("max_wait_seconds", 6),
+    }, timeout=BRIDGE_TIMEOUT + 15))
+
+
+def secure_browser_checkout_readback_tool(args: dict[str, Any], **_kw: Any) -> str:
+    def run() -> dict[str, Any]:
+        nickname = " ".join(str(args.get("safe_item_nickname") or "").split())[:120]
+        if not nickname:
+            raise ValueError("safe_item_nickname is required")
+        return _bridge("checkout_readback", {
+            "safe_item_nickname": nickname,
+            "max_wait_seconds": args.get("max_wait_seconds", 6),
+        }, timeout=BRIDGE_TIMEOUT + 15)
+    return _safe_call("checkout_readback", run)
+
+
+def secure_browser_scroll_tool(args: dict[str, Any], task_id: str | None = None, **_kw: Any) -> str:
+    return _safe_call("scroll", lambda: _bridge("scroll", {
+        "workflow_id": _workflow_id(args, task_id),
+        "direction": args.get("direction", "down"),
+        "amount": args.get("amount", 1),
+    }))
+
+
+def secure_browser_owner_review_capture_tool(args: dict[str, Any], **_kw: Any) -> str:
+    def run() -> dict[str, Any]:
+        profile = os.environ.get("HERMES_PROFILE", "").strip().lower()
+        if profile != "star":
+            raise ValueError("Owner-review captures are restricted to Star and must not enter Talon notifications")
+        platform = _session_env("HERMES_SESSION_PLATFORM").lower()
+        if platform != "telegram":
+            raise ValueError("Owner-review captures are restricted to Joy's trusted Telegram owner channel")
+        owner_chat = _telegram_chat_id(os.environ.get("SECURE_BROWSER_OWNER_TELEGRAM_CHAT", "") or os.environ.get("TELEGRAM_HOME_CHANNEL", ""))
+        session_chat = _telegram_chat_id(_session_env("HERMES_SESSION_CHAT_ID"))
+        if not owner_chat or not session_chat or session_chat != owner_chat:
+            raise ValueError("Owner-review captures require the active trusted Telegram owner chat")
+        nickname = " ".join(str(args.get("safe_item_nickname") or "").split())[:120]
+        if not nickname:
+            raise ValueError("safe_item_nickname is required")
+        checkout_summary = _bridge("checkout_readback", {
+            "safe_item_nickname": nickname,
+            "max_wait_seconds": args.get("max_wait_seconds", 6),
+        }, timeout=BRIDGE_TIMEOUT + 15)
+        result = _save_screenshot(_bridge("screenshot", {}), owner_only=True)
+        label = WORKFLOW_RE.sub("-", str(args.get("capture_label") or "review"))[:80]
+        result["capture_label"] = label or "review"
+        result["operation"] = "owner_review_capture"
+        result["checkout_summary"] = checkout_summary
+        return result
+    return _safe_call("owner_review_capture", run)
 
 
 def secure_browser_query_tool(args: dict[str, Any], **_kw: Any) -> str:
@@ -217,7 +297,9 @@ def secure_browser_click_tool(args: dict[str, Any], task_id: str | None = None, 
             "coordinate": args.get("coordinate"),
             "action_key": args.get("action_key") or args.get("idempotency_key"),
         }
-        result = _bridge("click", payload)
+        if args.get("max_wait_seconds") is not None:
+            payload["max_wait_seconds"] = args["max_wait_seconds"]
+        result = _bridge("click", payload, timeout=BRIDGE_TIMEOUT + 15)
         if args.get("approved_effect"):
             result["legacy_effect_label"] = str(args["approved_effect"])
             result["approval_note"] = "Effect labels are audit context only in firefox-ui-v1; Joy's workflow direction is the authorization boundary."
@@ -296,13 +378,17 @@ def secure_browser_execute_final_purchase_tool(args: dict[str, Any], **_kw: Any)
 
 SCHEMAS: list[tuple[dict[str, Any], Any]] = [
     ({"name": "secure_browser_status", "description": "Show the persistent Firefox UI-control status, continuity leases, non-instrumentation boundary, and compatibility version.", "parameters": {"type": "object", "properties": {}}}, secure_browser_status_tool),
-    ({"name": "secure_browser_navigate", "description": "Navigate the canonical handoff tab in the owner-visible persistent Firefox by X11 address-bar input, then return accessibility readback. Never creates a tab implicitly.", "parameters": {"type": "object", "properties": {"url": {"type": "string"}, "workflow_id": {"type": "string"}, "lease_seconds": {"type": "integer"}}, "required": ["url"]}}, secure_browser_navigate_tool),
+    ({"name": "secure_browser_navigate", "description": "Navigate the canonical handoff tab in the owner-visible persistent Firefox by X11 address-bar input, then return transition-aware accessibility readback. Never creates a tab implicitly.", "parameters": {"type": "object", "properties": {"url": {"type": "string"}, "workflow_id": {"type": "string"}, "lease_seconds": {"type": "integer"}, "max_wait_seconds": {"type": "number", "minimum": 0, "maximum": 15}}, "required": ["url"]}}, secure_browser_navigate_tool),
     ({"name": "secure_browser_page_snapshot", "description": "Read Firefox through AT-SPI. Returns visible accessibility controls and ephemeral locators, never DOM, cookies, storage, profile data, or page scripts.", "parameters": {"type": "object", "properties": {}}}, secure_browser_page_snapshot_tool),
     ({"name": "secure_browser_current_page_summary", "description": "Return a bounded accessibility-based summary of the same owner-visible Firefox tab.", "parameters": {"type": "object", "properties": {}}}, secure_browser_current_page_summary_tool),
+    ({"name": "secure_browser_wait_for_stable", "description": "Wait a bounded interval for the visible Firefox accessibility state to settle. Deterministically reports stable, in_flight, terminal_success, or terminal_error; delivery alone is never confirmation.", "parameters": {"type": "object", "properties": {"max_wait_seconds": {"type": "number", "minimum": 0, "maximum": 15}}}}, secure_browser_wait_for_stable_tool),
+    ({"name": "secure_browser_checkout_readback", "description": "Return sanitized first-class checkout/post-purchase fields from visible AT-SPI readback: retailer, safe item nickname, selected variant, quantity, subtotal, shipping, tax, total, and confirmation state. Never returns owner identity, email, address, payment details, raw order IDs, or raw page text.", "parameters": {"type": "object", "properties": {"safe_item_nickname": {"type": "string", "maxLength": 120}, "max_wait_seconds": {"type": "number", "minimum": 0, "maximum": 15}}, "required": ["safe_item_nickname"]}}, secure_browser_checkout_readback_tool),
+    ({"name": "secure_browser_scroll", "description": "Scroll the canonical owner-visible Firefox workflow by bounded visible page increments, then return transition-aware readback.", "parameters": {"type": "object", "properties": {"workflow_id": {"type": "string"}, "direction": {"type": "string", "enum": ["up", "down"]}, "amount": {"type": "integer", "minimum": 1, "maximum": 6}}}}, secure_browser_scroll_tool),
+    ({"name": "secure_browser_owner_review_capture", "description": "Capture one visible pre-purchase Firefox viewport and pair it with sanitized structured checkout readback for owner-only delivery in the active trusted Joy Telegram chat. The image must never enter generic vision/OCR, logs, task evidence/artifacts, Talon notifications, or another recipient; capture multiple visible viewports with secure_browser_scroll when needed.", "parameters": {"type": "object", "properties": {"capture_label": {"type": "string", "maxLength": 80}, "safe_item_nickname": {"type": "string", "maxLength": 120}, "max_wait_seconds": {"type": "number", "minimum": 0, "maximum": 15}}, "required": ["safe_item_nickname"]}}, secure_browser_owner_review_capture_tool),
     ({"name": "secure_browser_query", "description": "Versioned compatibility endpoint. firefox-ui-v1 deliberately rejects arbitrary JavaScript/DOM queries and directs callers to accessibility/visual observation.", "parameters": {"type": "object", "properties": {"expression": {"type": "string"}}}}, secure_browser_query_tool),
     ({"name": "secure_browser_screenshot", "description": "Capture the visible persistent Firefox window through X11 and return a local PNG artifact.", "parameters": {"type": "object", "properties": {}}}, secure_browser_screenshot_tool),
     ({"name": "secure_browser_visual_evidence", "description": "Capture visible-window evidence from the persistent Firefox desktop without browser instrumentation.", "parameters": {"type": "object", "properties": {}}}, secure_browser_visual_evidence_tool),
-    ({"name": "secure_browser_click", "description": "Click a fresh accessibility locator or visible coordinate in the canonical Firefox handoff tab, then read back state. Joy's workflow direction is the authorization boundary; use action_key for exactly-once destructive/financial actions.", "parameters": {"type": "object", "properties": {"locator": {"type": "string"}, "coordinate": {"type": "array", "items": {"type": "integer"}, "minItems": 2, "maxItems": 2}, "workflow_id": {"type": "string"}, "action_key": {"type": "string"}, "idempotency_key": {"type": "string"}, "selector": {"type": "string", "description": "Legacy-only; rejected in firefox-ui-v1"}, "approved_effect": {"type": "string", "description": "Legacy audit label; not an approval gate"}}, "anyOf": [{"required": ["locator"]}, {"required": ["coordinate"]}, {"required": ["selector"]}]}}, secure_browser_click_tool),
+    ({"name": "secure_browser_click", "description": "Click a fresh accessibility locator or visible coordinate in the canonical Firefox handoff tab, then return bounded transition-aware readback. A delivered click is never confirmed completion. Joy's workflow direction is the authorization boundary; use action_key for exactly-once destructive/financial actions.", "parameters": {"type": "object", "properties": {"locator": {"type": "string"}, "coordinate": {"type": "array", "items": {"type": "integer"}, "minItems": 2, "maxItems": 2}, "workflow_id": {"type": "string"}, "action_key": {"type": "string"}, "idempotency_key": {"type": "string"}, "max_wait_seconds": {"type": "number", "minimum": 0, "maximum": 15}, "selector": {"type": "string", "description": "Legacy-only; rejected in firefox-ui-v1"}, "approved_effect": {"type": "string", "description": "Legacy audit label; not an approval gate"}}, "anyOf": [{"required": ["locator"]}, {"required": ["coordinate"]}, {"required": ["selector"]}]}}, secure_browser_click_tool),
     ({"name": "secure_browser_type", "description": "Type bounded non-secret text into a fresh accessibility locator and return redacted readback. Never pass passwords, payment numbers, tokens, or other secrets; operate Firefox/Bitwarden UI instead.", "parameters": {"type": "object", "properties": {"locator": {"type": "string"}, "selector": {"type": "string", "description": "Legacy-only; rejected in firefox-ui-v1"}, "text": {"type": "string", "maxLength": 4096}, "workflow_id": {"type": "string"}}, "required": ["text"]}}, secure_browser_type_tool),
     ({"name": "secure_browser_tab_lifecycle", "description": "Acquire, keep open, inspect, or release the canonical workflow tab. Ownership is durable; uncertain or Joy-owned tabs are preserved; hard caps refuse new tabs rather than closing unowned tabs.", "parameters": {"type": "object", "properties": {"action": {"type": "string", "enum": ["status", "acquire", "keep_open", "release", "preview_cleanup", "cleanup", "mark_keep_open"]}, "workflow_id": {"type": "string"}, "lease_seconds": {"type": "integer"}}}}, secure_browser_tab_lifecycle_tool),
     ({"name": "secure_browser_guardrail_check", "description": "Describe the firefox-ui-v1 boundary. Joy-directed browser UI actions are allowed without redundant approval gates; raw browser/profile/automation access is blocked.", "parameters": {"type": "object", "properties": {"operation": {"type": "string"}}}}, secure_browser_guardrail_check_tool),

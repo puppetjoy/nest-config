@@ -33,8 +33,13 @@ DEFAULT_HARD_TAB_CAP = int(os.environ.get("FIREFOX_UI_HARD_TAB_CAP", "12"))
 DEFAULT_LEASE_SECONDS = int(os.environ.get("FIREFOX_UI_LEASE_SECONDS", "7200"))
 MAX_NODES = int(os.environ.get("FIREFOX_UI_MAX_NODES", "350"))
 MAX_NAME = 240
+DEFAULT_STABLE_WAIT_SECONDS = float(os.environ.get("FIREFOX_UI_STABLE_WAIT_SECONDS", "6"))
 SENSITIVE_RE = re.compile(
     r"password|passcode|one[- ]?time|security code|cvv|cvc|card number|account number|routing number|secret|token|private key|recovery code",
+    re.IGNORECASE,
+)
+OWNER_SENSITIVE_RE = re.compile(
+    r"@|\b(?:name|email|address|street|road|avenue|lane|drive|boulevard|postal|zip|phone|card|visa|mastercard|amex)\b|\b\d{4}[ -]?\d{4}\b",
     re.IGNORECASE,
 )
 INTERACTIVE_ROLES = {
@@ -42,6 +47,20 @@ INTERACTIVE_ROLES = {
     "menu item", "page tab", "radio button", "slider", "spin button",
     "text", "toggle button",
 }
+TERMINAL_SUCCESS_RE = re.compile(
+    r"\b(?:order (?:is )?confirmed|purchase (?:is )?complete|payment (?:was )?successful|thank you for your (?:order|purchase)|confirmation status[: ]+confirmed)\b",
+    re.IGNORECASE,
+)
+TERMINAL_ERROR_RE = re.compile(
+    r"\b(?:payment (?:was )?(?:failed|declined)|order (?:could not|was not) (?:be )?(?:placed|processed)|unable to process|transaction failed|checkout error)\b",
+    re.IGNORECASE,
+)
+IN_FLIGHT_RE = re.compile(
+    r"\b(?:processing (?:payment|order)|placing (?:your )?order|please wait|loading|submitting)\b",
+    re.IGNORECASE,
+)
+COMMERCE_CONTEXT_RE = re.compile(r"\b(?:cart|checkout|order|payment|purchase|receipt|confirmation)\b", re.IGNORECASE)
+MONEY_RE = re.compile(r"(?<!\w)([$€£]\s?\d[\d,]*(?:\.\d{2})?)(?!\w)")
 
 
 def _json(data: Any) -> str:
@@ -129,6 +148,13 @@ def _identity(role: str, name: str, path: tuple[int, ...], generation: int) -> s
     return f"ax:{generation}:{encoded_path}:{digest}"
 
 
+def _control_id(role: str, path: tuple[int, ...], generation: int) -> str:
+    """Opaque path identity that does not depend on an accessible name."""
+    digest = hashlib.sha256(role.encode()).hexdigest()[:12]
+    encoded_path = ".".join(str(index) for index in path)
+    return f"ui:{generation}:{encoded_path}:{digest}"
+
+
 def _safe_name(role: str, name: str) -> str:
     compact = " ".join((name or "").split())[:MAX_NAME]
     if role in {"password text", "password"} or SENSITIVE_RE.search(compact):
@@ -145,12 +171,15 @@ def _state_names(node: Any) -> list[str]:
             ("selected", "SELECTED"), ("editable", "EDITABLE"),
             ("enabled", "ENABLED"), ("visible", "VISIBLE"),
             ("showing", "SHOWING"), ("checked", "CHECKED"),
+            ("pressed", "PRESSED"), ("active", "ACTIVE"),
+            ("expanded", "EXPANDED"), ("indeterminate", "INDETERMINATE"),
         ):
-            gi = importlib.import_module("gi")
-            gi.require_version("Atspi", "2.0")
-            Atspi = importlib.import_module("gi.repository.Atspi")
-            if states.contains(getattr(Atspi.StateType, enum_name)):
-                result.append(label)
+            with contextlib.suppress(Exception):
+                gi = importlib.import_module("gi")
+                gi.require_version("Atspi", "2.0")
+                Atspi = importlib.import_module("gi.repository.Atspi")
+                if states.contains(getattr(Atspi.StateType, enum_name)):
+                    result.append(label)
     return result
 
 
@@ -199,6 +228,32 @@ def _walk(root: Any) -> Iterable[tuple[Any, tuple[int, ...]]]:
                     stack.append((child, path + (index,)))
 
 
+def _node_record(node: Any, path: tuple[int, ...], generation: int) -> dict[str, Any]:
+    role = node.get_role_name() or "unknown"
+    raw_name = node.get_name() or ""
+    description = ""
+    with contextlib.suppress(Exception):
+        description = node.get_description() or ""
+    states = _state_names(node)
+    extent = _extent(node)
+    safe_name = _safe_name(role, raw_name)
+    record: dict[str, Any] = {
+        "role": role,
+        "name": safe_name or "<unlabelled>",
+        "accessible_name_present": bool(safe_name),
+        "unlabelled": not bool(safe_name),
+        "states": states,
+        "control_id": _control_id(role, path, generation),
+        "locator": _identity(role, raw_name, path, generation),
+    }
+    safe_description = _safe_name(role, description)
+    if safe_description:
+        record["description"] = safe_description
+    if extent:
+        record["rect"] = extent
+    return record
+
+
 def _snapshot() -> dict[str, Any]:
     generation = _browser_pid()
     nodes: list[dict[str, Any]] = []
@@ -223,21 +278,12 @@ def _snapshot() -> dict[str, Any]:
                     candidate = text_iface.get_text(0, -1) if text_iface else ""
                     if candidate:
                         address = _redact_url(candidate)
-            include = (
-                bool(raw_name)
-                and "showing" in states
-                and (role in INTERACTIVE_ROLES or role in {"heading", "document web", "alert", "notification"})
+            include = "showing" in states and (
+                role in INTERACTIVE_ROLES
+                or (bool(raw_name) and role in {"heading", "document web", "alert", "notification", "static"})
             )
             if include and len(nodes) < MAX_NODES:
-                entry: dict[str, Any] = {
-                    "role": role,
-                    "name": _safe_name(role, raw_name),
-                    "states": states,
-                    "locator": _identity(role, raw_name, path, generation),
-                }
-                if extent:
-                    entry["rect"] = extent
-                nodes.append(entry)
+                nodes.append(_node_record(node, path, generation))
     window_id = _firefox_window_id()
     title = _run(["xdotool", "getwindowname", window_id]).stdout.decode(errors="replace").strip()[:300]
     return {
@@ -251,6 +297,178 @@ def _snapshot() -> dict[str, Any]:
         "nodes": nodes,
         "truncated": len(nodes) >= MAX_NODES,
         "observation_boundary": "AT-SPI accessibility tree; no DOM, page script, browser debugging protocol, cookies, storage, or profile inspection",
+    }
+
+
+def _snapshot_text(snapshot: dict[str, Any]) -> str:
+    names = [str(node.get("name") or "") for node in snapshot.get("nodes", [])]
+    return "\n".join([str(snapshot.get("title") or ""), *names])
+
+
+def _transition_state(snapshot: dict[str, Any]) -> str:
+    text = _snapshot_text(snapshot)
+    terminal_text = "\n".join(
+        str(node.get("name") or "")
+        for node in snapshot.get("nodes", [])
+        if str(node.get("role") or "") in {"heading", "alert", "notification"}
+    )
+    terminal_context = "\n".join((str(snapshot.get("title") or ""), str(snapshot.get("url") or "")))
+    if COMMERCE_CONTEXT_RE.search(terminal_context) and TERMINAL_ERROR_RE.search(terminal_text):
+        return "terminal_error"
+    if COMMERCE_CONTEXT_RE.search(terminal_context) and TERMINAL_SUCCESS_RE.search(terminal_text):
+        return "terminal_success"
+    if IN_FLIGHT_RE.search(text):
+        return "in_flight"
+    nodes = list(snapshot.get("nodes", []))
+    if not nodes or (
+        len(nodes) == 1
+        and (
+            str(nodes[0].get("role") or "") == "document web"
+            or str(nodes[0].get("name") or "").strip().lower() in {"document", "<unlabelled>"}
+        )
+    ):
+        return "in_flight"
+    return "stable"
+
+
+def _snapshot_signature(snapshot: dict[str, Any]) -> str:
+    bounded_nodes = [
+        (
+            node.get("control_id"), node.get("role"), node.get("name"),
+            tuple(node.get("states") or ()), node.get("rect"),
+        )
+        for node in snapshot.get("nodes", [])[:MAX_NODES]
+    ]
+    return hashlib.sha256(_json({
+        "title": snapshot.get("title"),
+        "url": snapshot.get("url"),
+        "selected": (_selected_tab(snapshot) or {}).get("locator"),
+        "nodes": bounded_nodes,
+    }).encode()).hexdigest()
+
+
+def _wait_for_stable(*, max_wait_seconds: float = DEFAULT_STABLE_WAIT_SECONDS, stable_polls: int = 2) -> dict[str, Any]:
+    bounded_wait = max(0.0, min(float(max_wait_seconds), 15.0))
+    deadline = time.monotonic() + bounded_wait
+    previous_signature = ""
+    matching_polls = 0
+    polls = 0
+    snapshot: dict[str, Any] = {}
+    while True:
+        snapshot = _snapshot()
+        polls += 1
+        signature = _snapshot_signature(snapshot)
+        matching_polls = matching_polls + 1 if signature == previous_signature else 1
+        previous_signature = signature
+        state = _transition_state(snapshot)
+        if state in {"terminal_success", "terminal_error"} and matching_polls >= stable_polls:
+            settled = True
+            break
+        if state == "stable" and matching_polls >= stable_polls:
+            settled = True
+            break
+        if time.monotonic() >= deadline:
+            settled = False
+            break
+        time.sleep(0.25)
+    return {
+        "state": _transition_state(snapshot),
+        "settled": settled,
+        "terminal": _transition_state(snapshot) in {"terminal_success", "terminal_error"},
+        "polls": polls,
+        "max_wait_seconds": bounded_wait,
+        "snapshot": snapshot,
+    }
+
+
+def _commerce_readback(snapshot: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    nickname = " ".join(str(payload.get("safe_item_nickname") or "").split())[:120]
+    if not nickname:
+        raise ValueError("safe_item_nickname is required")
+    host = urlsplit(str(snapshot.get("url") or "")).hostname or ""
+    visible_names = [
+        " ".join(str(node.get("name") or "").split())
+        for node in snapshot.get("nodes", [])
+        if node.get("name") and node.get("name") != "<unlabelled>"
+    ]
+
+    def amount_for(label: str) -> str | None:
+        label_re = re.compile(rf"\b{re.escape(label)}\b", re.IGNORECASE)
+        values: list[str] = []
+        for index, text in enumerate(visible_names):
+            if not label_re.search(text):
+                continue
+            following = visible_names[index + 1] if index + 1 < len(visible_names) else ""
+            match = MONEY_RE.search(text)
+            if label == "total":
+                accepted_labels = {"total", "order total", "grand total"}
+                if match and text[:match.start()].strip(" :-").lower() in accepted_labels and not text[match.end():].strip():
+                    values.append(re.sub(r"\s+", "", match.group(1)))
+                elif text.strip(" :-").lower() in accepted_labels:
+                    split_match = MONEY_RE.fullmatch(following)
+                    if split_match:
+                        values.append(re.sub(r"\s+", "", split_match.group(1)))
+                continue
+            if match:
+                values.append(re.sub(r"\s+", "", match.group(1)))
+                continue
+            match = MONEY_RE.fullmatch(following)
+            if match:
+                values.append(re.sub(r"\s+", "", match.group(1)))
+                continue
+            if label == "shipping" and re.fullmatch(r"free", following, re.IGNORECASE):
+                values.append("free")
+                continue
+            if label == "shipping" and re.search(r"\bfree\b", text, re.IGNORECASE):
+                values.append("free")
+        return values[-1] if values else None
+
+    variants: list[str] = []
+    for node in snapshot.get("nodes", []):
+        states = set(node.get("states") or [])
+        if not states.intersection({"selected", "checked", "pressed", "active"}):
+            continue
+        name = " ".join(str(node.get("name") or "").split())
+        match = re.match(r"(?:color|colour|size)\s*[:\-]\s*(.{1,80})$", name, re.IGNORECASE)
+        if match and not SENSITIVE_RE.search(match.group(1)) and not OWNER_SENSITIVE_RE.search(match.group(1)):
+            value = match.group(1).strip()
+            if value not in variants:
+                variants.append(value)
+
+    quantity: int | None = None
+    for text in visible_names:
+        match = re.search(r"\b(?:quantity|qty)\s*[:x-]?\s*(\d{1,3})\b", text, re.IGNORECASE)
+        if match:
+            quantity = int(match.group(1))
+            break
+
+    transition = _transition_state(snapshot)
+    confirmation = {
+        "terminal_success": "confirmed",
+        "terminal_error": "failed",
+        "in_flight": "in_flight",
+        "stable": "not_confirmed",
+    }[transition]
+    return {
+        "operation": "checkout_readback",
+        "status": "ok",
+        "protocol": "firefox-ui-v1",
+        "source": "visible AT-SPI accessibility readback",
+        "retailer": host,
+        "safe_item_nickname": nickname,
+        "variant": variants,
+        "quantity": quantity,
+        "subtotal": amount_for("subtotal"),
+        "shipping": amount_for("shipping"),
+        "tax": amount_for("tax"),
+        "total": amount_for("total"),
+        "confirmation_status": confirmation,
+        "transition_state": transition,
+        "truncated": bool(snapshot.get("truncated")),
+        "redaction": {
+            "owner_name": True, "email": True, "address": True,
+            "payment_details": True, "raw_order_id": True, "raw_page_text": True,
+        },
     }
 
 
@@ -286,17 +504,28 @@ def _focus_browser() -> str:
     return window_id
 
 
-def _readback() -> dict[str, Any]:
+def _readback(max_wait_seconds: float = DEFAULT_STABLE_WAIT_SECONDS) -> dict[str, Any]:
     time.sleep(float(os.environ.get("FIREFOX_UI_READBACK_DELAY", "0.45")))
-    snapshot = _snapshot()
+    transition = _wait_for_stable(max_wait_seconds=max_wait_seconds)
+    snapshot = transition.pop("snapshot")
     selected = _selected_tab(snapshot) or {}
+    terminal_state = transition["state"]
+    safe_title = snapshot["title"]
+    safe_url = snapshot["url"]
+    safe_selected_tab = selected.get("name", "")
+    if terminal_state in {"terminal_success", "terminal_error"}:
+        safe_title = "Purchase confirmation" if terminal_state == "terminal_success" else "Purchase error"
+        parsed_url = urlsplit(str(snapshot.get("url") or ""))
+        safe_url = urlunsplit((parsed_url.scheme, parsed_url.netloc, "", "", "")) if parsed_url.hostname else ""
+        safe_selected_tab = safe_title
     return {
         "browser_generation": snapshot["browser_generation"],
-        "title": snapshot["title"],
-        "url": snapshot["url"],
+        "title": safe_title,
+        "url": safe_url,
         "tab_count": snapshot["tab_count"],
-        "selected_tab": selected.get("name", ""),
+        "selected_tab": safe_selected_tab,
         "selected_locator": selected.get("locator", ""),
+        "transition": transition,
     }
 
 
@@ -487,7 +716,7 @@ def command_navigate(payload: dict[str, Any]) -> dict[str, Any]:
         _xdotool("key", "--clearmodifiers", "ctrl+l")
         _xdotool("type", "--clearmodifiers", "--delay", "1", "--", url, timeout=30)
         _xdotool("key", "--clearmodifiers", "Return")
-        readback = _readback()
+        readback = _readback(float(payload.get("max_wait_seconds") or DEFAULT_STABLE_WAIT_SECONDS))
         record["tab_name"] = readback["selected_tab"]
         record["locator"] = readback.get("selected_locator") or record["locator"]
         record["lease_expires_at"] = time.time() + lease
@@ -510,7 +739,17 @@ def command_click(payload: dict[str, Any]) -> dict[str, Any]:
             if delivered.get("workflow_id") != workflow_id:
                 raise ValueError("action_key is already bound to another workflow")
             _select_workflow_tab(record)
-            return {"operation": "click", "status": "already_delivered", "action_key": action_key, "readback": _readback()}
+            delivery_state = delivered.get("delivery_state", "delivered")
+            return {
+                "operation": "click",
+                "status": "already_delivered" if delivery_state == "delivered" else "delivery_uncertain",
+                "action_key": action_key,
+                "delivery": {
+                    "state": "replayed" if delivery_state == "delivered" else "uncertain_replay_blocked",
+                    "input_sent": False,
+                },
+                "readback": _readback(float(payload.get("max_wait_seconds") or DEFAULT_STABLE_WAIT_SECONDS)),
+            }
         _select_workflow_tab(record)
         if locator:
             _, rect = _resolve_locator(locator)
@@ -521,13 +760,24 @@ def command_click(payload: dict[str, Any]) -> dict[str, Any]:
             x, y = int(coordinate[0]), int(coordinate[1])
         else:
             raise ValueError("click requires an accessibility locator or [x,y] coordinate")
+        if action_key:
+            state["action_keys"][action_key] = {
+                "created_at": time.time(), "workflow_id": workflow_id,
+                "delivery_state": "delivery_started",
+            }
+            _save_state(state)
         _xdotool("mousemove", "--sync", str(x), str(y), "click", "1")
         if action_key:
-            state["action_keys"][action_key] = {"created_at": time.time(), "workflow_id": workflow_id}
-        readback = _readback()
+            state["action_keys"][action_key]["delivery_state"] = "delivered"
+            _save_state(state)
+        readback = _readback(float(payload.get("max_wait_seconds") or DEFAULT_STABLE_WAIT_SECONDS))
         record["tab_name"] = readback["selected_tab"] or record["tab_name"]
         record["locator"] = readback.get("selected_locator") or record["locator"]
-    return {"operation": "click", "status": "delivered", "action_key": action_key or None, "coordinate": [x, y], "readback": readback}
+    return {
+        "operation": "click", "status": "delivered", "action_key": action_key or None,
+        "delivery": {"state": "delivered", "input_sent": True},
+        "coordinate": [x, y], "readback": readback,
+    }
 
 
 def command_type(payload: dict[str, Any]) -> dict[str, Any]:
@@ -553,6 +803,50 @@ def command_type(payload: dict[str, Any]) -> dict[str, Any]:
         record["tab_name"] = readback["selected_tab"] or record["tab_name"]
         record["locator"] = readback.get("selected_locator") or record["locator"]
     return {"operation": "type", "status": "delivered", "typed_chars": len(text), "text_redacted": True, "readback": readback}
+
+
+def command_wait(payload: dict[str, Any]) -> dict[str, Any]:
+    transition = _wait_for_stable(max_wait_seconds=float(payload.get("max_wait_seconds") or DEFAULT_STABLE_WAIT_SECONDS))
+    snapshot = transition.pop("snapshot")
+    return {
+        "operation": "wait", "status": "ok", "protocol": "firefox-ui-v1",
+        "transition": transition,
+        "browser_generation": snapshot.get("browser_generation"),
+        "tab_count": snapshot.get("tab_count"),
+    }
+
+
+def command_checkout_readback(payload: dict[str, Any]) -> dict[str, Any]:
+    transition = _wait_for_stable(max_wait_seconds=float(payload.get("max_wait_seconds") or DEFAULT_STABLE_WAIT_SECONDS))
+    snapshot = transition.pop("snapshot")
+    result = _commerce_readback(snapshot, payload)
+    result["progress"] = transition
+    return result
+
+
+def command_scroll(payload: dict[str, Any]) -> dict[str, Any]:
+    workflow_id = str(payload.get("workflow_id") or "default")[:160]
+    direction = str(payload.get("direction") or "down")
+    if direction not in {"up", "down"}:
+        raise ValueError("scroll direction must be up or down")
+    amount = max(1, min(int(payload.get("amount") or 1), 6))
+    with _locked_state() as state:
+        snapshot = _snapshot()
+        _reconcile_state(state, snapshot)
+        record = state["workflows"].get(workflow_id)
+        if not record or record.get("uncertain"):
+            raise RuntimeError("workflow has no unambiguous canonical handoff tab")
+        _select_workflow_tab(record)
+        key = "Page_Up" if direction == "up" else "Page_Down"
+        for _ in range(amount):
+            _xdotool("key", "--clearmodifiers", key)
+        readback = _readback(3)
+        record["tab_name"] = readback["selected_tab"] or record["tab_name"]
+        record["locator"] = readback.get("selected_locator") or record["locator"]
+    return {
+        "operation": "scroll", "status": "delivered", "direction": direction,
+        "amount": amount, "readback": readback,
+    }
 
 
 def command_screenshot(_: dict[str, Any]) -> dict[str, Any]:
@@ -622,6 +916,9 @@ COMMANDS = {
     "navigate": command_navigate,
     "click": command_click,
     "type": command_type,
+    "wait": command_wait,
+    "checkout_readback": command_checkout_readback,
+    "scroll": command_scroll,
     "screenshot": command_screenshot,
     "tabs": command_tabs,
 }

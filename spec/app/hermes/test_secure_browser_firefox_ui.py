@@ -66,6 +66,8 @@ def test_contracts_register_and_dom_incompatibility_is_explicit() -> None:
         "secure_browser_tab_lifecycle", "secure_browser_guardrail_check",
         "secure_browser_owner_checkout_review", "secure_browser_request_final_purchase_approval",
         "secure_browser_execute_final_purchase",
+        "secure_browser_wait_for_stable", "secure_browser_checkout_readback",
+        "secure_browser_scroll", "secure_browser_owner_review_capture",
     } <= set(registry.names)
     query = parsed(module.secure_browser_query_tool({"expression": "document.title"}))
     assert query["status"] == "unsupported"
@@ -175,6 +177,116 @@ def test_screenshot_is_private_and_tab_aliases_migrate() -> None:
     parsed(module.secure_browser_tab_lifecycle_tool({"action": "cleanup", "workflow_id": "fixture"}))
     assert calls[-1][0] == "tabs"
     assert calls[-1][1]["action"] == "release"
+
+
+def test_checkout_readback_and_wait_are_first_class_bridge_operations() -> None:
+    module, _ = load_tool()
+    calls: list[tuple[str, dict[str, Any]]] = []
+
+    def fake_bridge(command: str, payload: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+        calls.append((command, payload))
+        return {"operation": command, "status": "ok"}
+
+    module._bridge = fake_bridge
+    parsed(module.secure_browser_wait_for_stable_tool({"max_wait_seconds": 7}))
+    parsed(module.secure_browser_checkout_readback_tool({"safe_item_nickname": "ONNO hemp tee", "max_wait_seconds": 5}))
+    parsed(module.secure_browser_scroll_tool({"direction": "down", "amount": 2, "workflow_id": "fixture"}))
+    assert calls == [
+        ("wait", {"max_wait_seconds": 7}),
+        ("checkout_readback", {"safe_item_nickname": "ONNO hemp tee", "max_wait_seconds": 5}),
+        ("scroll", {"workflow_id": "fixture", "direction": "down", "amount": 2}),
+    ]
+
+
+def test_owner_review_capture_is_private_owner_only_and_not_generic_evidence() -> None:
+    module, _ = load_tool()
+    tiny_png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="
+    def fake_bridge(command: str, payload: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+        if command == "checkout_readback":
+            return {
+                "operation": command, "status": "ok", "retailer": "shop.example",
+                "safe_item_nickname": payload["safe_item_nickname"], "variant": ["Navy", "Medium"],
+                "quantity": 1, "subtotal": "$50.00", "shipping": "$5.00", "tax": "$2.24",
+                "total": "$57.24", "confirmation_status": "not_confirmed",
+            }
+        return {"operation": command, "status": "ok", "png_base64": tiny_png}
+
+    module._bridge = fake_bridge
+    original_profile = module.os.environ.get("HERMES_PROFILE")
+    original_platform = module.os.environ.get("HERMES_SESSION_PLATFORM")
+    original_chat = module.os.environ.get("HERMES_SESSION_CHAT_ID")
+    original_home_channel = module.os.environ.get("TELEGRAM_HOME_CHANNEL")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        module.get_hermes_home = lambda: Path(tmpdir)
+        module.os.environ["HERMES_PROFILE"] = "star"
+        module.os.environ["HERMES_SESSION_PLATFORM"] = "telegram"
+        module.os.environ["HERMES_SESSION_CHAT_ID"] = "12345"
+        module.os.environ["TELEGRAM_HOME_CHANNEL"] = "12345"
+        module._session_env = lambda key: module.os.environ.get(key, "")
+        capture = parsed(module.secure_browser_owner_review_capture_tool({
+            "capture_label": "review-1", "safe_item_nickname": "fixture item",
+        }))
+        path = Path(capture["image_path"])
+        assert path.exists()
+        assert path.stat().st_mode & 0o777 == 0o600
+        assert path.parent.name == "owner-review"
+        assert capture["owner_only"] is True
+        assert capture["generic_vision_allowed"] is False
+        assert capture["artifact_allowed"] is False
+        assert capture["same_message_with_structured_summary_required"] is True
+        assert capture["checkout_summary"]["total"] == "$57.24"
+        assert "media" not in capture
+    for key, original in (
+        ("HERMES_PROFILE", original_profile),
+        ("HERMES_SESSION_PLATFORM", original_platform),
+        ("HERMES_SESSION_CHAT_ID", original_chat),
+        ("TELEGRAM_HOME_CHANNEL", original_home_channel),
+    ):
+        if original is None:
+            module.os.environ.pop(key, None)
+        else:
+            module.os.environ[key] = original
+
+
+def test_owner_review_capture_refuses_missing_or_untrusted_owner_context() -> None:
+    module, _ = load_tool()
+    called = False
+
+    def fake_bridge(_command: str, _payload: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+        nonlocal called
+        called = True
+        return {}
+
+    module._bridge = fake_bridge
+    module._session_env = lambda key: module.os.environ.get(key, "")
+    keys = ("HERMES_PROFILE", "HERMES_SESSION_PLATFORM", "HERMES_SESSION_CHAT_ID", "TELEGRAM_HOME_CHANNEL")
+    originals = {key: module.os.environ.get(key) for key in keys}
+    try:
+        for key in keys:
+            module.os.environ.pop(key, None)
+        missing = parsed(module.secure_browser_owner_review_capture_tool({"safe_item_nickname": "fixture"}))
+        module.os.environ["HERMES_PROFILE"] = "talon"
+        module.os.environ["HERMES_SESSION_PLATFORM"] = "telegram"
+        module.os.environ["HERMES_SESSION_CHAT_ID"] = "12345"
+        module.os.environ["TELEGRAM_HOME_CHANNEL"] = "12345"
+        talon = parsed(module.secure_browser_owner_review_capture_tool({"safe_item_nickname": "fixture"}))
+        module.os.environ["HERMES_PROFILE"] = "star"
+        module.os.environ["HERMES_SESSION_PLATFORM"] = "cli"
+        wrong_platform = parsed(module.secure_browser_owner_review_capture_tool({"safe_item_nickname": "fixture"}))
+        module.os.environ["HERMES_SESSION_PLATFORM"] = "telegram"
+        module.os.environ["HERMES_SESSION_CHAT_ID"] = "99999"
+        wrong_recipient = parsed(module.secure_browser_owner_review_capture_tool({"safe_item_nickname": "fixture"}))
+    finally:
+        for key, original in originals.items():
+            if original is None:
+                module.os.environ.pop(key, None)
+            else:
+                module.os.environ[key] = original
+    assert missing["status"] == talon["status"] == wrong_platform["status"] == wrong_recipient["status"] == "error"
+    assert "Star" in talon["message"]
+    assert "Telegram" in wrong_platform["message"]
+    assert "owner" in wrong_recipient["message"].lower()
+    assert called is False
 
 
 if __name__ == "__main__":

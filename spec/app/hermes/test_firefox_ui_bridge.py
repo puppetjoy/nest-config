@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -71,7 +72,7 @@ class DesktopFixture:
         index = int(locator.split(":")[2])
         return None, {"x": index * 20, "y": 0, "width": 10, "height": 10}
 
-    def readback(self) -> dict[str, Any]:
+    def readback(self, _max_wait_seconds: float = 6) -> dict[str, Any]:
         snapshot = self.snapshot()
         selected = next((tab["name"] for tab in snapshot["tabs"] if tab["selected"]), "")
         selected_locator = next((tab["locator"] for tab in snapshot["tabs"] if tab["selected"]), "")
@@ -137,6 +138,8 @@ def test_exactly_once_click_has_readback_and_does_not_repeat_input() -> None:
         second = module.command_click({"workflow_id": "w", "locator": locator, "action_key": "fixture-purchase"})
         assert first["status"] == "delivered"
         assert second["status"] == "already_delivered"
+        assert first["delivery"] == {"state": "delivered", "input_sent": True}
+        assert second["delivery"] == {"state": "replayed", "input_sent": False}
         assert first["readback"]["tab_count"] == second["readback"]["tab_count"] == 1
         assert fixture.commands == delivered_commands
     finally:
@@ -149,13 +152,42 @@ def test_click_action_key_survives_readback_failure() -> None:
         fixture.tabs = [{"name": "New Tab", "selected": True}]
         module.command_navigate({"workflow_id": "w", "url": "https://example.test/"})
         locator = fixture.snapshot()["tabs"][0]["locator"]
-        module._readback = lambda: (_ for _ in ()).throw(RuntimeError("readback unavailable"))
+        module._readback = lambda _max_wait_seconds=6: (_ for _ in ()).throw(RuntimeError("readback unavailable"))
         try:
             module.command_click({"workflow_id": "w", "locator": locator, "action_key": "fixture-once"})
             raise AssertionError("failed readback should be reported")
         except RuntimeError as exc:
             assert "readback unavailable" in str(exc)
         assert module._load_state()["action_keys"]["fixture-once"]["workflow_id"] == "w"
+    finally:
+        tmp.cleanup()
+
+
+def test_click_action_key_is_fail_closed_when_input_delivery_is_uncertain() -> None:
+    module, fixture, tmp = configured_bridge()
+    try:
+        fixture.tabs = [{"name": "New Tab", "selected": True}]
+        module.command_navigate({"workflow_id": "w", "url": "https://example.test/"})
+        locator = fixture.snapshot()["tabs"][0]["locator"]
+        attempted = 0
+
+        def fail_input(*_args: str, **_kwargs: Any) -> str:
+            nonlocal attempted
+            attempted += 1
+            raise RuntimeError("input delivery interrupted")
+
+        module._xdotool = fail_input
+        try:
+            module.command_click({"workflow_id": "w", "locator": locator, "action_key": "fixture-uncertain"})
+            raise AssertionError("uncertain delivery should be reported")
+        except RuntimeError as exc:
+            assert "interrupted" in str(exc)
+        assert module._load_state()["action_keys"]["fixture-uncertain"]["delivery_state"] == "delivery_started"
+
+        replay = module.command_click({"workflow_id": "w", "locator": locator, "action_key": "fixture-uncertain"})
+        assert replay["status"] == "delivery_uncertain"
+        assert replay["delivery"] == {"state": "uncertain_replay_blocked", "input_sent": False}
+        assert attempted == 1
     finally:
         tmp.cleanup()
 
@@ -248,6 +280,155 @@ def test_release_preserves_claimed_owner_blank_and_hard_cap_blocks_creation() ->
         assert len(fixture.tabs) == 2
     finally:
         tmp.cleanup()
+
+
+def test_visible_unlabelled_interactive_control_is_preserved_with_stable_identity() -> None:
+    module = load_bridge()
+
+    class Node:
+        def get_role_name(self) -> str:
+            return "radio button"
+
+        def get_name(self) -> str:
+            return ""
+
+        def get_description(self) -> str:
+            return ""
+
+    module._state_names = lambda _node: ["selected", "showing", "enabled"]
+    module._extent = lambda _node: {"x": 240, "y": 510, "width": 24, "height": 24}
+    first = module._node_record(Node(), (3, 7, 2), 100)
+    second = module._node_record(Node(), (3, 7, 2), 100)
+
+    assert first == second
+    assert first["name"] == "<unlabelled>"
+    assert first["accessible_name_present"] is False
+    assert first["unlabelled"] is True
+    assert first["role"] == "radio button"
+    assert first["states"] == ["selected", "showing", "enabled"]
+    assert first["rect"] == {"x": 240, "y": 510, "width": 24, "height": 24}
+    assert first["control_id"].startswith("ui:100:3.7.2:")
+    assert first["locator"].startswith("ax:100:3.7.2:")
+
+
+def test_wait_for_stable_distinguishes_in_flight_success_and_failure() -> None:
+    module = load_bridge()
+    base = {
+        "browser_generation": 100,
+        "title": "Checkout",
+        "url": "https://shop.example/checkout",
+        "tab_count": 1,
+        "tabs": [{"name": "Checkout", "selected": True, "locator": "ax:100:1:deadbeef0001"}],
+        "truncated": False,
+    }
+
+    def run_sequence(node_names: list[list[str]], role: str = "text") -> dict[str, Any]:
+        snapshots = [
+            {
+                **base,
+                "nodes": [
+                    {
+                        "role": role, "name": name, "states": ["showing"],
+                        "locator": f"ax:100:{index}:deadbeef0001",
+                        "control_id": f"ui:100:{index}:deadbeef0001",
+                    }
+                    for index, name in enumerate(names)
+                ],
+            }
+            for names in node_names
+        ]
+        module._snapshot = lambda: snapshots.pop(0) if len(snapshots) > 1 else snapshots[0]
+        module.time.sleep = lambda _seconds: None
+        return module._wait_for_stable(max_wait_seconds=0.01, stable_polls=2)
+
+    in_flight = run_sequence([["Processing payment"], ["Processing payment"], ["Processing payment"]])
+    assert in_flight["state"] == "in_flight"
+    assert in_flight["settled"] is False
+
+    sparse_document = run_sequence([["Document"], ["Document"], ["Document"]])
+    assert sparse_document["state"] == "in_flight"
+    assert sparse_document["settled"] is False
+
+    generic_copy = run_sequence([["Payment successful stories"], ["Payment successful stories"]])
+    assert generic_copy["state"] == "stable"
+    unrelated_heading = {
+        **base,
+        "title": "Customer stories",
+        "url": "https://shop.example/stories",
+        "nodes": [{"role": "heading", "name": "Payment was successful", "states": ["showing"]}],
+    }
+    assert module._transition_state(unrelated_heading) == "stable"
+
+    success = run_sequence([["Processing payment"], ["Thank you. Your order is confirmed"], ["Thank you. Your order is confirmed"]], role="heading")
+    assert success["state"] == "terminal_success"
+    assert success["settled"] is True
+
+    failure = run_sequence([["Processing payment"], ["Payment failed. Please try again"], ["Payment failed. Please try again"]], role="alert")
+    assert failure["state"] == "terminal_error"
+    assert failure["settled"] is True
+
+
+def test_commerce_readback_is_structured_and_never_returns_owner_sensitive_text() -> None:
+    module = load_bridge()
+    snapshot = {
+        "url": "https://checkout.example.test/orders/raw-secret-order-123?email=joy@example.test",
+        "title": "Order confirmation raw-secret-order-123",
+        "nodes": [
+            {"role": "heading", "name": "Thank you! Order confirmed #raw-secret-order-123", "states": ["showing"]},
+            {"role": "text", "name": "Joyful Lee", "states": ["showing"]},
+            {"role": "text", "name": "123 Private Lane", "states": ["showing"]},
+            {"role": "radio button", "name": "Color: Navy", "states": ["showing", "selected"]},
+            {"role": "radio button", "name": "Size: Medium", "states": ["showing", "checked"]},
+            {"role": "radio button", "name": "Variant: joy@example.test", "states": ["showing", "selected"]},
+            {"role": "radio button", "name": "Variant: Joyful Lee", "states": ["showing", "selected"]},
+            {"role": "spin button", "name": "Quantity 1", "states": ["showing"]},
+            {"role": "text", "name": "Subtotal $50.00", "states": ["showing"]},
+            {"role": "text", "name": "Shipping $5.00", "states": ["showing"]},
+            {"role": "text", "name": "Tax $2.24", "states": ["showing"]},
+            {"role": "text", "name": "Total $57.24", "states": ["showing"]},
+            {"role": "text", "name": "Visa ending in 4242", "states": ["showing"]},
+        ],
+        "truncated": False,
+    }
+    result = module._commerce_readback(snapshot, {"safe_item_nickname": "ONNO hemp tee"})
+    encoded = json.dumps(result, sort_keys=True)
+
+    assert result["retailer"] == "checkout.example.test"
+    assert result["safe_item_nickname"] == "ONNO hemp tee"
+    assert result["variant"] == ["Navy", "Medium"]
+    assert result["quantity"] == 1
+    assert result["subtotal"] == "$50.00"
+    assert result["shipping"] == "$5.00"
+    assert result["tax"] == "$2.24"
+    assert result["total"] == "$57.24"
+    assert result["confirmation_status"] == "confirmed"
+    assert result["source"] == "visible AT-SPI accessibility readback"
+    for secret in ("Joyful Lee", "123 Private Lane", "joy@example.test", "4242", "raw-secret-order-123"):
+        assert secret not in encoded
+
+
+def test_commerce_readback_pairs_split_labels_only_with_standalone_amounts() -> None:
+    module = load_bridge()
+    snapshot = {
+        "url": "https://checkout.example.test/review",
+        "title": "Review order",
+        "nodes": [
+            {"role": "text", "name": "Subtotal", "states": ["showing"]},
+            {"role": "text", "name": "$50.00", "states": ["showing"]},
+            {"role": "text", "name": "Shipping", "states": ["showing"]},
+            {"role": "text", "name": "Free", "states": ["showing"]},
+            {"role": "text", "name": "Tax", "states": ["showing"]},
+            {"role": "text", "name": "Total $57.24", "states": ["showing"]},
+            {"role": "text", "name": "Estimated total $55.00", "states": ["showing"]},
+        ],
+        "truncated": False,
+    }
+    result = module._commerce_readback(snapshot, {"safe_item_nickname": "fixture item"})
+
+    assert result["subtotal"] == "$50.00"
+    assert result["shipping"] == "free"
+    assert result["tax"] is None
+    assert result["total"] == "$57.24"
 
 
 if __name__ == "__main__":
