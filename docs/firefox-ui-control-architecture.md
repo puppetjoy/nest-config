@@ -94,6 +94,38 @@ No UI automation layer can provide a true atomic exactly-once transaction with
 an arbitrary retailer; post-action readback and retailer confirmation remain
 required before claiming success.
 
+Visible interactive AT-SPI nodes are retained even when a retailer supplies no
+accessible name. Such records use the literal `<unlabelled>` marker and expose
+role, accessibility state, screen bounds when available, an ephemeral action
+locator, and a path-derived `control_id` that stays stable for the current
+Firefox generation. This makes otherwise unnamed color/size controls
+distinguishable without inventing labels or consulting the DOM; selected,
+checked, pressed, and active states remain explicit.
+
+Navigation and click readback now waits for two matching accessibility
+snapshots within a bounded interval and returns one of `stable`, `in_flight`,
+`terminal_success`, or `terminal_error`. A sparse document-only tree is
+`in_flight`, not success. `status=delivered` records input delivery only;
+terminal retailer confirmation is a separate deterministic state. Replaying an
+`action_key` returns `already_delivered` with `input_sent=false` and performs no
+second click. The action intent is persisted before X11 input; an interruption
+in that narrow delivery window returns `delivery_uncertain` on replay and also
+blocks a second input.
+
+`secure_browser_checkout_readback` extracts only a sanitized commerce record
+from visible AT-SPI text: retailer host, caller-supplied safe item nickname,
+selected safe color/size labels, quantity, subtotal, shipping, tax, total, and
+confirmation state. It never returns raw page text, owner name, email, address,
+payment details, or raw order identifiers. The owner-review image path is
+separate: `secure_browser_owner_review_capture` writes mode-0600 files outside
+the generic evidence directory, pairs each capture with a fresh sanitized
+checkout summary, and marks it owner-only/no-vision/no-artifact. Capture fails
+closed unless authoritative session context identifies Star in Joy's configured
+Telegram owner chat. Star must attach those visible-window captures in that same
+chat message as the structured summary. When the review spans viewports, Star
+uses bounded `secure_browser_scroll` plus multiple captures; the system does not
+fabricate a full-page image.
+
 ## Compatibility matrix
 
 | Existing operation | `firefox-ui-v1` behavior | Migration status |
@@ -102,6 +134,10 @@ required before claiming success.
 | `secure_browser_navigate` | Address-bar navigation in the acquired canonical tab plus readback; never creates a tab | Preserved with required acquire |
 | `secure_browser_page_snapshot` | Bounded AT-SPI tree with ephemeral `ax:` locators and redacted sensitive control names | Versioned replacement |
 | `secure_browser_current_page_summary` | Bounded title, redacted URL, selected tab, count, and visible controls | Preserved |
+| `secure_browser_wait_for_stable` | Bounded transition readback with distinct in-flight, stable, terminal-success, and terminal-error states | Added |
+| `secure_browser_checkout_readback` | Sanitized structured retailer/item/variant/quantity/subtotal/shipping/tax/total/confirmation fields; no raw checkout text or owner-sensitive data | Added |
+| `secure_browser_scroll` | Bounded visible Page Up/Page Down input in the canonical workflow tab plus transition-aware readback | Added |
+| `secure_browser_owner_review_capture` | Mode-0600 visible-window capture marked for same-message delivery only to Joy's trusted owner chat; never generic vision/evidence | Added |
 | `secure_browser_query` | Returns `FIREFOX_UI_V1_NO_DOM_QUERY`; no JavaScript or DOM result is fabricated | Deliberate incompatibility |
 | `secure_browser_click` | Fresh accessibility locator or grounded coordinate, readback, optional action key | Selector mode deliberately incompatible |
 | `secure_browser_type` | Bounded non-secret text through X11; response contains character count, not text | Selector mode deliberately incompatible |

@@ -23,9 +23,17 @@ This is the current browser.eyrie contract and supersedes older shopping-assista
 4. Read with `secure_browser_page_snapshot` or `secure_browser_current_page_summary`. Locators are ephemeral: refresh immediately before every interaction.
 5. Click with a fresh `ax:...` accessibility locator or a grounded visible coordinate. CSS selectors are deliberately unsupported. Every mutation returns visual/accessibility readback; inspect it before continuing.
 6. Type only non-secret text with a fresh accessibility locator. The result reports only character count and redacted readback.
-7. For destructive or financial controls, set a stable `action_key` derived from the directed workflow step. Reusing it returns `already_delivered`; this is exactly-once correctness, not a user-approval gate.
+7. For destructive or financial controls, set a stable `action_key` derived from the directed workflow step. Reusing it returns `already_delivered`; if delivery was interrupted after the durable intent record, it returns `delivery_uncertain` and blocks a second input. This fail-closed exactly-once behavior is not a user-approval gate.
 8. Use `secure_browser_visual_evidence` for the visible window. There is no fabricated full-document capture or script-derived crop.
 9. Keep a handoff open with `secure_browser_tab_lifecycle(action='keep_open', lease_seconds=...)`; release it when done. Cleanup closes only confidently agent-created tabs. Ambiguous or Joy-owned tabs are preserved.
+
+## Checkout verification and owner review
+
+- Before presenting final purchase options, call `secure_browser_wait_for_stable`, then `secure_browser_checkout_readback` with a safe item nickname. Treat `in_flight`, `terminal_success`, and `terminal_error` as distinct states; a delivered click is never confirmation by itself.
+- Present the structured retailer, item nickname, variant, quantity, subtotal, shipping, tax, total, and confirmation status exactly as returned. Missing fields stay explicitly unavailable; never infer them from a screenshot.
+- In that same Telegram message, attach at least one `secure_browser_owner_review_capture` image of the final pre-purchase retailer review. Pass the same safe item nickname; the capture result pairs the image with another sanitized `checkout_summary`, which must agree with the text you send. If the review spans viewports, capture the current viewport, use `secure_browser_scroll`, capture each additional visible viewport, and attach all captures together without fabricating a full-page image.
+- Owner-review captures may contain masked payment/account or address context. Deliver them only to Joy's trusted owner chat. Never send them through generic vision/OCR, logs, evidence artifacts, task attachments, Talon notifications, or any other recipient. Do not describe or transcribe sensitive screenshot content into tool text.
+- The structured summary and owner-only captures are complementary and must appear together; neither substitutes for the other. These are review evidence, not an extra approval ceremony.
 
 ## Compatibility changes
 
