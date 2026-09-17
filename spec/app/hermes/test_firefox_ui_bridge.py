@@ -359,7 +359,7 @@ def test_wait_for_stable_distinguishes_in_flight_success_and_failure() -> None:
         "truncated": False,
     }
 
-    def run_sequence(node_names: list[list[str]], role: str = "text") -> dict[str, Any]:
+    def run_sequence(node_names: list[list[str]], role: str = "paragraph") -> dict[str, Any]:
         snapshots = [
             {
                 **base,
@@ -386,7 +386,7 @@ def test_wait_for_stable_distinguishes_in_flight_success_and_failure() -> None:
     assert sparse_document["state"] == "in_flight"
     assert sparse_document["settled"] is False
 
-    generic_copy = run_sequence([["Payment successful stories"], ["Payment successful stories"]])
+    generic_copy = run_sequence([["Payment successful stories"], ["Payment successful stories"]], role="text")
     assert generic_copy["state"] == "stable"
     unrelated_heading = {
         **base,
@@ -395,6 +395,15 @@ def test_wait_for_stable_distinguishes_in_flight_success_and_failure() -> None:
         "nodes": [{"role": "heading", "name": "Payment was successful", "states": ["showing"]}],
     }
     assert module._transition_state(unrelated_heading) == "stable"
+    background_loading_tab = {
+        **base,
+        "nodes": [
+            {"role": "page tab", "name": "Problem loading page", "states": ["showing"]},
+            {"role": "page tab", "name": "Checkout", "states": ["selected", "showing"]},
+            {"role": "paragraph", "name": "Total $57.24", "states": ["showing"]},
+        ],
+    }
+    assert module._transition_state(background_loading_tab) == "stable"
 
     success = run_sequence([["Processing payment"], ["Thank you. Your order is confirmed"], ["Thank you. Your order is confirmed"]], role="heading")
     assert success["state"] == "terminal_success"
