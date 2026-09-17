@@ -331,9 +331,11 @@ def google_photos_download_selection_tool(args: dict[str, Any], **_kw) -> str:
             "schema": 1,
             "batch": batch,
             "source": "google-photos-picker",
+            "artifact_kind": "supported-rendition",
+            "archival_original": False,
             "downloaded": downloaded,
             "failures": failures,
-            "quality_note": "Photos use =d (location metadata removed); videos use =dv (high-quality transcoded), per Google's supported Picker base-URL contract.",
+            "quality_note": "Supported Picker renditions, not archival originals: photos use =d (location metadata removed); videos use =dv (high-quality transcoded).",
         }
         manifest_path = batch_dir / "manifest.json"
         _atomic_private_json(manifest_path, manifest)
@@ -405,20 +407,57 @@ DOWNLOAD_SCHEMA = {
     },
 }
 
-for schema, handler, emoji in [
-    (STATUS_SCHEMA, google_photos_status_tool, "🔐"),
-    (CREATE_SCHEMA, google_photos_create_selection_tool, "🖼️"),
-    (SELECTION_STATUS_SCHEMA, google_photos_selection_status_tool, "⏳"),
-    (LIST_SCHEMA, google_photos_list_selection_tool, "🗂️"),
-    (DOWNLOAD_SCHEMA, google_photos_download_selection_tool, "📥"),
-]:
-    registry.register(
-        name=schema["name"],
-        toolset=TOOLSET,
-        schema=schema,
-        handler=handler,
-        check_fn=_check_google_photos,
-        description=schema["description"],
-        emoji=emoji,
-        max_result_size_chars=MAX_RESULT_CHARS,
-    )
+registry.register(
+    name="google_photos_status",
+    toolset=TOOLSET,
+    schema=STATUS_SCHEMA,
+    handler=google_photos_status_tool,
+    check_fn=_check_google_photos,
+    description=STATUS_SCHEMA["description"],
+    emoji="🔐",
+    max_result_size_chars=MAX_RESULT_CHARS,
+)
+
+registry.register(
+    name="google_photos_create_selection",
+    toolset=TOOLSET,
+    schema=CREATE_SCHEMA,
+    handler=google_photos_create_selection_tool,
+    check_fn=_check_google_photos,
+    description=CREATE_SCHEMA["description"],
+    emoji="🖼️",
+    max_result_size_chars=MAX_RESULT_CHARS,
+)
+
+registry.register(
+    name="google_photos_selection_status",
+    toolset=TOOLSET,
+    schema=SELECTION_STATUS_SCHEMA,
+    handler=google_photos_selection_status_tool,
+    check_fn=_check_google_photos,
+    description=SELECTION_STATUS_SCHEMA["description"],
+    emoji="⏳",
+    max_result_size_chars=MAX_RESULT_CHARS,
+)
+
+registry.register(
+    name="google_photos_list_selection",
+    toolset=TOOLSET,
+    schema=LIST_SCHEMA,
+    handler=google_photos_list_selection_tool,
+    check_fn=_check_google_photos,
+    description=LIST_SCHEMA["description"],
+    emoji="🗂️",
+    max_result_size_chars=MAX_RESULT_CHARS,
+)
+
+registry.register(
+    name="google_photos_download_selection",
+    toolset=TOOLSET,
+    schema=DOWNLOAD_SCHEMA,
+    handler=google_photos_download_selection_tool,
+    check_fn=_check_google_photos,
+    description=DOWNLOAD_SCHEMA["description"],
+    emoji="📥",
+    max_result_size_chars=MAX_RESULT_CHARS,
+)
