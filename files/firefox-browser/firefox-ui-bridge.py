@@ -352,18 +352,20 @@ def _snapshot_text(snapshot: dict[str, Any]) -> str:
 
 
 def _transition_state(snapshot: dict[str, Any]) -> str:
-    text = _snapshot_text(snapshot)
-    terminal_text = "\n".join(
+    page_status_text = "\n".join(
         str(node.get("name") or "")
         for node in snapshot.get("nodes", [])
         if str(node.get("role") or "") in {"heading", "alert", "notification", "static", "static text", "paragraph"}
     )
     terminal_context = "\n".join((str(snapshot.get("title") or ""), str(snapshot.get("url") or "")))
-    if COMMERCE_CONTEXT_RE.search(terminal_context) and TERMINAL_ERROR_RE.search(terminal_text):
+    if COMMERCE_CONTEXT_RE.search(terminal_context) and TERMINAL_ERROR_RE.search(page_status_text):
         return "terminal_error"
-    if COMMERCE_CONTEXT_RE.search(terminal_context) and TERMINAL_SUCCESS_RE.search(terminal_text):
+    if COMMERCE_CONTEXT_RE.search(terminal_context) and TERMINAL_SUCCESS_RE.search(page_status_text):
         return "terminal_success"
-    if IN_FLIGHT_RE.search(text):
+    # Browser chrome and background-tab names are part of the AT-SPI tree. A
+    # stale tab named "Problem loading page" must not classify the selected
+    # checkout as in flight; only safe, visible page prose can carry progress.
+    if IN_FLIGHT_RE.search(page_status_text):
         return "in_flight"
     nodes = list(snapshot.get("nodes", []))
     if not nodes or (
