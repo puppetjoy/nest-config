@@ -14,8 +14,14 @@ model_path: /cache/models/bge-m3-q8_0.gguf
 model_url: https://huggingface.co/ggml-org/bge-m3-Q8_0-GGUF/resolve/main/bge-m3-q8_0.gguf
 embedding_dimensions: 1024
 max_input_tokens: 8192
-physical_batch_size: 2048
 parallel_requests: 4
+# llama.cpp divides --ctx-size across --parallel slots.  Keep every slot able to
+# accept Honcho's advertised 8192-token per-input limit rather than exposing an
+# effective 2048-token provider limit at parallel=4.
+context_size: 32768
+# Embedding inputs must also fit in one physical batch.  A smaller ubatch makes
+# llama.cpp reject otherwise-valid inputs before the configured context limit.
+physical_batch_size: 8192
 
 resources:
   backup: {}
@@ -95,7 +101,7 @@ resources:
                 - --pooling
                 - cls
                 - --ctx-size
-                - "%{lookup('max_input_tokens')}"
+                - "%{lookup('context_size')}"
                 - --ubatch-size
                 - "%{lookup('physical_batch_size')}"
                 - --parallel

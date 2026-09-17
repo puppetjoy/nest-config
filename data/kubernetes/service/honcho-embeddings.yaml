@@ -7,4 +7,6 @@ model_repo: ggml-org/bge-m3-Q8_0-GGUF
 model_file: bge-m3-q8_0.gguf
 embedding_dimensions: 1024
 max_input_tokens: 8192
+context_size: 32768
+physical_batch_size: 8192
 parallel_requests: 4

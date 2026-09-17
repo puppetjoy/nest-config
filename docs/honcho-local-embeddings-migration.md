@@ -64,6 +64,42 @@ kubectl -n ai run honcho-embedding-probe --rm -i --restart=Never \
 Expected probe shape: one embedding with `dim: 1024`.  Record latency with
 `curl -w '%{time_total}'` during rollout.
 
+Also verify the server's effective per-slot context and physical-batch boundary.
+llama.cpp divides `--ctx-size` across `--parallel` slots, so the deployment uses
+`--ctx-size 32768 --parallel 4 --ubatch-size 8192` to keep Honcho's advertised
+8192-token per-input limit usable in every slot.  This content-safe synthetic
+probe deterministically exercises an input above the former 2048-token physical
+batch limit without reading or logging stored Honcho content:
+
+```bash
+kubectl -n ai exec -i deploy/honcho-deriver -- /app/.venv/bin/python - <<'PY'
+import json
+import urllib.request
+
+payload = json.dumps({"model": "bge-m3", "input": ["probe " * 3000]}).encode()
+request = urllib.request.Request(
+    "http://honcho-embeddings/v1/embeddings",
+    data=payload,
+    headers={
+        "Authorization": "Bearer not-a-real-key",
+        "Content-Type": "application/json",
+    },
+)
+with urllib.request.urlopen(request, timeout=120) as response:
+    result = json.load(response)
+assert response.status == 200
+assert len(result["data"]) == 1
+assert len(result["data"][0]["embedding"]) == 1024
+print({"status": response.status, "vectors": 1, "dimension": 1024})
+PY
+
+kubectl -n ai exec deploy/honcho-embeddings -- \
+  sh -ceu 'curl -fsS http://127.0.0.1:8080/props' \
+  | jq '{per_slot_context: .default_generation_settings.n_ctx, total_slots}'
+```
+
+Expected properties are `per_slot_context: 8192` and `total_slots: 4`.
+
 ## Backup gate
 
 Treat the rest as a destructive data migration.  Take and verify a Honcho backup
