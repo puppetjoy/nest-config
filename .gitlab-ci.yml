@@ -25,7 +25,7 @@ stages:
   image: '${CI_REGISTRY}/nest/tools/pdk'
   stage: 'Test'
   script:
-    - 'pdk test unit --parallel --verbose'
+    - 'pdk test unit --parallel'
 
 .template:
   stage: 'Build'

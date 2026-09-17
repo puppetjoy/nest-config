@@ -44,6 +44,7 @@ def test_star_profile_declares_secure_browser_service_endpoint_environment() -> 
 
     for key, value in STAR_SECURE_BROWSER_ENV.items():
         assert environment[key] == value
+    assert star["kubeconfig_path"] == "/home/joy/.hermes/profiles/talon/kubeconfigs/eyrie.conf"
     assert "SECURE_BROWSER_CDP_URL" not in environment
 
 
