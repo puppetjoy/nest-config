@@ -319,6 +319,16 @@ patches:
           value: *hdd_osd_placement
         - op: remove
           path: '/spec/gateway/resources'
+        - op: add
+          path: '/spec/healthCheck'
+          value:
+            startupProbe:
+              probe:
+                # RGW initialization can exceed Rook's 330-second default
+                # while object pools recover or rebalance
+                failureThreshold: 180
+                periodSeconds: 10
+                timeoutSeconds: 5
         - op: replace
           path: '/spec/hosting'
           value:
