@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import base64
+import builtins
 import importlib.util
 import json
 import stat
@@ -83,10 +84,16 @@ def load_tool_module(tmp_path: Path, service: FakeService):
 
   scripts = tmp_path / "skills/productivity/google-workspace/scripts"
   scripts.mkdir(parents=True)
-  (scripts / "google_api.py").write_text("# fake\n", encoding="utf-8")
-  google_api_module = types.ModuleType("google_api")
-  setattr(google_api_module, "build_service", lambda *_args, **_kwargs: service)
-  sys.modules["google_api"] = google_api_module
+  services = getattr(builtins, "_gmail_attachment_test_services", {})
+  services[str(tmp_path)] = service
+  setattr(builtins, "_gmail_attachment_test_services", services)
+  (scripts / "google_api.py").write_text(
+    "import builtins\n"
+    f"PROFILE_HOME = {str(tmp_path)!r}\n"
+    "def build_service(*_args, **_kwargs):\n"
+    "  return builtins._gmail_attachment_test_services[PROFILE_HOME]\n",
+    encoding="utf-8",
+  )
 
   spec = importlib.util.spec_from_file_location("google_workspace_tool_under_test", GOOGLE_WORKSPACE_TOOL)
   assert spec is not None and spec.loader is not None

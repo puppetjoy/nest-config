@@ -8,11 +8,18 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import importlib.util
 import json
+import mimetypes
 import os
 import re
+import secrets
+import sqlite3
+import stat
 import subprocess
 import sys
+import threading
+from email.message import EmailMessage
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +31,7 @@ MAX_RESULT_CHARS = 24000
 MAX_GMAIL_RESULTS = 20
 MAX_CALENDAR_RESULTS = 50
 MAX_GMAIL_ATTACHMENT_BYTES = 20 * 1024 * 1024
+MAX_GMAIL_SEND_ATTACHMENT_BYTES = 18 * 1024 * 1024
 GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send"
 SAFE_GMAIL_ATTACHMENT_MIME_TYPES = frozenset(
     {
@@ -42,6 +50,7 @@ SAFE_GMAIL_ATTACHMENT_MIME_PREFIXES = (
     "application/vnd.oasis.opendocument.",
     "application/vnd.openxmlformats-officedocument.",
 )
+_GOOGLE_API_IMPORT_LOCK = threading.Lock()
 
 
 def _hermes_home() -> Path:
@@ -173,11 +182,38 @@ def _headers_dict(msg: dict[str, Any]) -> dict[str, str]:
 
 
 def _gmail_service():
-    script_dir = _script_path("google_api.py").parent
-    if str(script_dir) not in sys.path:
-        sys.path.insert(0, str(script_dir))
-    import google_api  # type: ignore[import-not-found]
+    script = _script_path("google_api.py")
+    module_name = f"hermes_google_api_{hashlib.sha256(str(_hermes_home()).encode()).hexdigest()[:16]}"
 
+    def load_module(name: str, path: Path):
+        spec = importlib.util.spec_from_file_location(name, path)
+        if spec is None or spec.loader is None:
+            raise RuntimeError("profile-scoped Google Workspace API script could not be loaded")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        try:
+            spec.loader.exec_module(module)
+        except Exception:
+            sys.modules.pop(name, None)
+            raise
+        return module
+
+    with _GOOGLE_API_IMPORT_LOCK:
+        original_path = sys.path[:]
+        previous_helper = sys.modules.get("_hermes_home")
+        try:
+            sys.path.insert(0, str(script.parent))
+            helper_path = script.parent / "_hermes_home.py"
+            if helper_path.exists():
+                helper_name = f"{module_name}_hermes_home"
+                sys.modules["_hermes_home"] = load_module(helper_name, helper_path)
+            google_api = load_module(module_name, script)
+        finally:
+            sys.path[:] = original_path
+            if previous_helper is None:
+                sys.modules.pop("_hermes_home", None)
+            else:
+                sys.modules["_hermes_home"] = previous_helper
     return google_api.build_service("gmail", "v1")
 
 
@@ -448,15 +484,220 @@ def google_workspace_gmail_labels_tool(args: dict[str, Any], **_kw) -> str:
     return json.dumps(result, ensure_ascii=False)
 
 
+def _gmail_send_attachment_root() -> Path:
+    return _hermes_home() / "downloads" / "google-workspace"
+
+
+def _gmail_send_attachment(item: dict[str, Any]) -> tuple[Path, str, str, int]:
+    raw_path = str(item.get("path") or "").strip()
+    if not raw_path:
+        raise ValueError("ATTACHMENT_PATH_REQUIRED")
+    source = Path(raw_path).expanduser()
+    if not source.is_absolute():
+        raise ValueError("UNSUPPORTED_ATTACHMENT_PATH")
+    if source.is_symlink():
+        raise ValueError("UNSUPPORTED_ATTACHMENT_PATH")
+    try:
+        resolved = source.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise ValueError("ATTACHMENT_NOT_FOUND") from exc
+    try:
+        resolved.relative_to(_gmail_send_attachment_root().resolve())
+    except ValueError as exc:
+        raise ValueError("UNSUPPORTED_ATTACHMENT_PATH") from exc
+    source_stat = resolved.stat()
+    if not stat.S_ISREG(source_stat.st_mode) or source_stat.st_nlink != 1:
+        raise ValueError("UNSUPPORTED_ATTACHMENT_PATH")
+
+    filename = str(item.get("filename") or resolved.name).strip()
+    if not filename or Path(filename.replace("\\", "/")).name != filename or "\n" in filename or "\r" in filename:
+        raise ValueError("INVALID_ATTACHMENT_FILENAME")
+    mime_type = str(item.get("mime_type") or mimetypes.guess_type(filename)[0] or "application/octet-stream").lower().strip()
+    if not re.fullmatch(r"[-+.a-z0-9]+/[-+.a-z0-9]+", mime_type):
+        raise ValueError("INVALID_ATTACHMENT_MIME_TYPE")
+    return resolved, filename, mime_type, source_stat.st_size
+
+
+def _read_gmail_send_attachment(path: Path, max_bytes: int) -> bytes:
+    flags = os.O_RDONLY
+    flags |= getattr(os, "O_CLOEXEC", 0)
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as exc:
+        if path.is_symlink():
+            raise ValueError("ATTACHMENT_CHANGED") from exc
+        raise ValueError("ATTACHMENT_NOT_READABLE") from exc
+
+    try:
+        opened = os.fstat(descriptor)
+        if not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1:
+            raise ValueError("UNSUPPORTED_ATTACHMENT_PATH")
+
+        try:
+            current = os.stat(path, follow_symlinks=False)
+            resolved = path.resolve(strict=True)
+            resolved.relative_to(_gmail_send_attachment_root().resolve())
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise ValueError("ATTACHMENT_CHANGED") from exc
+        if (
+            not stat.S_ISREG(current.st_mode)
+            or current.st_nlink != 1
+            or (current.st_dev, current.st_ino) != (opened.st_dev, opened.st_ino)
+        ):
+            raise ValueError("ATTACHMENT_CHANGED")
+        if opened.st_size > max_bytes:
+            raise ValueError("ATTACHMENTS_TOO_LARGE")
+
+        with os.fdopen(descriptor, "rb", closefd=True) as handle:
+            descriptor = -1
+            content = handle.read(max_bytes + 1)
+        if len(content) > max_bytes:
+            raise ValueError("ATTACHMENTS_TOO_LARGE")
+        return content
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+
+
+def _gmail_thread_reply_headers(service, thread_id: str) -> tuple[str, str, str]:
+    thread = (
+        service.users()
+        .threads()
+        .get(userId="me", id=thread_id, format="metadata")
+        .execute(num_retries=0)
+    )
+    messages = thread.get("messages") or []
+    if not messages:
+        raise ValueError("THREAD_NOT_FOUND")
+    headers = {
+        str(item.get("name") or "").lower(): str(item.get("value") or "")
+        for item in (messages[-1].get("payload") or {}).get("headers") or []
+    }
+    message_id = headers.get("message-id", "").strip()
+    if not message_id:
+        raise ValueError("THREAD_MESSAGE_ID_MISSING")
+    subject = headers.get("subject", "").strip()
+    if not subject:
+        raise ValueError("THREAD_SUBJECT_MISSING")
+    references = headers.get("references", "").strip()
+    if message_id not in references.split():
+        references = f"{references} {message_id}".strip()
+    return message_id, references, subject
+
+
+def _gmail_send_request_hash(
+    *,
+    to: str,
+    cc: str,
+    bcc: str,
+    from_header: str,
+    subject: str,
+    body: str,
+    html: bool,
+    thread_id: str,
+    attachments: list[tuple[bytes, str, str]],
+) -> str:
+    payload = {
+        "to": to,
+        "cc": cc,
+        "bcc": bcc,
+        "from_header": from_header,
+        "subject": subject,
+        "body": body,
+        "html": html,
+        "thread_id": thread_id,
+        "attachments": [
+            {
+                "sha256": hashlib.sha256(content).hexdigest(),
+                "filename": filename,
+                "mime_type": mime_type,
+            }
+            for content, filename, mime_type in attachments
+        ],
+    }
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _gmail_send_ledger() -> sqlite3.Connection:
+    state_dir = _hermes_home() / "state"
+    state_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(state_dir, 0o700)
+    path = state_dir / "google_workspace_gmail_send.sqlite3"
+    connection = sqlite3.connect(path, timeout=5)
+    connection.execute(
+        """CREATE TABLE IF NOT EXISTS sends (
+               idempotency_key TEXT PRIMARY KEY,
+               request_hash TEXT NOT NULL,
+               status TEXT NOT NULL,
+               message_id TEXT,
+               thread_id TEXT
+           )"""
+    )
+    connection.commit()
+    os.chmod(path, 0o600)
+    return connection
+
+
+def _reserve_gmail_send(idempotency_key: str, request_hash: str) -> dict[str, Any] | None:
+    with _gmail_send_ledger() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        row = connection.execute(
+            "SELECT request_hash, status, message_id, thread_id FROM sends WHERE idempotency_key = ?",
+            (idempotency_key,),
+        ).fetchone()
+        if row is None:
+            connection.execute(
+                "INSERT INTO sends (idempotency_key, request_hash, status) VALUES (?, ?, 'sending')",
+                (idempotency_key, request_hash),
+            )
+            return None
+        stored_hash, status, message_id, thread_id = row
+        if stored_hash != request_hash:
+            return {
+                "error": "IDEMPOTENCY_KEY_REUSED",
+                "message": "This idempotency_key is already bound to different message content.",
+                "idempotency_key": idempotency_key,
+            }
+        if status == "sent":
+            return {
+                "message_id": message_id or "",
+                "thread_id": thread_id or "",
+                "idempotency_key": idempotency_key,
+                "duplicate_suppressed": True,
+            }
+        return {
+            "error": "UNKNOWN_SEND_OUTCOME",
+            "message": "A prior attempt may have reached Gmail; the tool will not risk sending a duplicate.",
+            "idempotency_key": idempotency_key,
+        }
+
+
+def _record_gmail_send(idempotency_key: str, *, status: str, message_id: str = "", thread_id: str = "") -> None:
+    with _gmail_send_ledger() as connection:
+        connection.execute(
+            "UPDATE sends SET status = ?, message_id = ?, thread_id = ? WHERE idempotency_key = ?",
+            (status, message_id, thread_id, idempotency_key),
+        )
+
+
+def _forget_gmail_send(idempotency_key: str) -> None:
+    with _gmail_send_ledger() as connection:
+        connection.execute("DELETE FROM sends WHERE idempotency_key = ?", (idempotency_key,))
+
+
 def google_workspace_gmail_send_tool(args: dict[str, Any], **_kw) -> str:
     """Send a Gmail message through the profile-scoped OAuth token."""
     to = str(args.get("to") or "").strip()
     subject = str(args.get("subject") or "").strip()
     body = str(args.get("body") or "")
     cc = str(args.get("cc") or "").strip()
+    bcc = str(args.get("bcc") or "").strip()
     from_header = str(args.get("from_header") or "").strip()
     html = bool(args.get("html") or False)
     thread_id = str(args.get("thread_id") or "").strip()
+    idempotency_key = str(args.get("idempotency_key") or secrets.token_urlsafe(18)).strip()
 
     missing = [name for name, value in [("to", to), ("subject", subject), ("body", body)] if not value]
     if missing:
@@ -482,17 +723,236 @@ def google_workspace_gmail_send_tool(args: dict[str, Any], **_kw) -> str:
             ensure_ascii=False,
         )
 
-    parts = ["gmail", "send", "--to", to, "--subject", subject, "--body", body]
-    if cc:
-        parts.extend(["--cc", cc])
-    if from_header:
-        parts.extend(["--from", from_header])
-    if html:
-        parts.append("--html")
-    if thread_id:
-        parts.extend(["--thread-id", thread_id])
-    result = _run_google_api(parts)
-    return json.dumps(result, ensure_ascii=False)
+    if not re.fullmatch(r"[A-Za-z0-9._:-]{8,128}", idempotency_key):
+        return json.dumps(
+            {
+                "error": "INVALID_IDEMPOTENCY_KEY",
+                "message": "idempotency_key must be 8-128 safe ASCII characters.",
+            },
+            ensure_ascii=False,
+        )
+
+    attachment_items = args.get("attachments") or []
+    if not isinstance(attachment_items, list) or not all(isinstance(item, dict) for item in attachment_items):
+        return json.dumps(
+            {
+                "error": "INVALID_ATTACHMENTS",
+                "message": "attachments must be an array of objects with a path field.",
+            },
+            ensure_ascii=False,
+        )
+    if len(attachment_items) > 20:
+        return json.dumps(
+            {"error": "TOO_MANY_ATTACHMENTS", "message": "At most 20 attachments may be sent in one message."},
+            ensure_ascii=False,
+        )
+    try:
+        attachment_sources = [_gmail_send_attachment(item) for item in attachment_items]
+    except ValueError as exc:
+        error = str(exc)
+        messages = {
+            "ATTACHMENT_PATH_REQUIRED": "Every attachment requires a path.",
+            "ATTACHMENT_NOT_FOUND": "Attachment path does not exist or cannot be read.",
+            "UNSUPPORTED_ATTACHMENT_PATH": "Attachment must be a regular, non-symlink file under this profile's downloads/google-workspace staging directory.",
+            "INVALID_ATTACHMENT_FILENAME": "Attachment filename must be a safe basename without control characters.",
+            "INVALID_ATTACHMENT_MIME_TYPE": "Attachment MIME type must use a valid type/subtype form.",
+        }
+        return json.dumps({"error": error, "message": messages.get(error, "Attachment validation failed.")}, ensure_ascii=False)
+    except OSError:
+        return json.dumps(
+            {"error": "ATTACHMENT_NOT_READABLE", "message": "Attachment exists but could not be read."},
+            ensure_ascii=False,
+        )
+    total_attachment_bytes = sum(size for _path, _filename, _mime_type, size in attachment_sources)
+    if total_attachment_bytes > MAX_GMAIL_SEND_ATTACHMENT_BYTES:
+        return json.dumps(
+            {
+                "error": "ATTACHMENTS_TOO_LARGE",
+                "message": "Aggregate attachment source size exceeds the safe 18 MiB limit for Gmail's encoded message limit.",
+                "size": total_attachment_bytes,
+                "max_size": MAX_GMAIL_SEND_ATTACHMENT_BYTES,
+            },
+            ensure_ascii=False,
+        )
+
+    try:
+        attachments: list[tuple[bytes, str, str]] = []
+        remaining_bytes = MAX_GMAIL_SEND_ATTACHMENT_BYTES
+        for path, filename, mime_type, _size in attachment_sources:
+            content = _read_gmail_send_attachment(path, remaining_bytes)
+            attachments.append((content, filename, mime_type))
+            remaining_bytes -= len(content)
+    except ValueError as exc:
+        error = str(exc)
+        if error != "ATTACHMENTS_TOO_LARGE":
+            messages = {
+                "ATTACHMENT_CHANGED": "Attachment changed after validation and was not read; stage it again before retrying.",
+                "ATTACHMENT_NOT_READABLE": "Attachment exists but could not be safely opened for reading.",
+                "UNSUPPORTED_ATTACHMENT_PATH": "Attachment must remain a regular, non-symlink file under downloads/google-workspace.",
+            }
+            return json.dumps(
+                {"error": error, "message": messages.get(error, "Attachment validation failed while reading.")},
+                ensure_ascii=False,
+            )
+        return json.dumps(
+            {
+                "error": "ATTACHMENTS_TOO_LARGE",
+                "message": "Attachment content changed while reading and exceeds the safe 18 MiB limit.",
+                "max_size": MAX_GMAIL_SEND_ATTACHMENT_BYTES,
+            },
+            ensure_ascii=False,
+        )
+
+    request_hash = _gmail_send_request_hash(
+        to=to,
+        cc=cc,
+        bcc=bcc,
+        from_header=from_header,
+        subject=subject,
+        body=body,
+        html=html,
+        thread_id=thread_id,
+        attachments=attachments,
+    )
+
+    try:
+        message = EmailMessage()
+        message["To"] = to
+        message["Subject"] = subject
+        if cc:
+            message["Cc"] = cc
+        if bcc:
+            message["Bcc"] = bcc
+        if from_header:
+            message["From"] = from_header
+        message["Message-ID"] = f"<hermes-{hashlib.sha256(idempotency_key.encode()).hexdigest()}@gmail-send.invalid>"
+        message.set_content(body, subtype="html" if html else "plain")
+        for content, filename, mime_type in attachments:
+            maintype, subtype = mime_type.split("/", 1)
+            message.add_attachment(content, maintype=maintype, subtype=subtype, filename=filename)
+    except (TypeError, ValueError):
+        return json.dumps(
+            {
+                "error": "INVALID_MESSAGE_HEADERS",
+                "message": "Message address or header values are invalid; no message was sent.",
+                "idempotency_key": idempotency_key,
+            },
+            ensure_ascii=False,
+        )
+
+    try:
+        service = _gmail_service()
+        reply_headers = _gmail_thread_reply_headers(service, thread_id) if thread_id else None
+        if reply_headers is not None:
+            in_reply_to, references, thread_subject = reply_headers
+            if subject != thread_subject:
+                return json.dumps(
+                    {
+                        "error": "THREAD_SUBJECT_MISMATCH",
+                        "message": "Gmail requires a threaded reply to use the existing thread subject; no message was sent.",
+                        "thread_subject": thread_subject,
+                        "idempotency_key": idempotency_key,
+                    },
+                    ensure_ascii=False,
+                )
+            message["In-Reply-To"] = in_reply_to
+            message["References"] = references
+
+        request_body: dict[str, str] = {
+            "raw": base64.urlsafe_b64encode(message.as_bytes()).decode("ascii").rstrip("="),
+        }
+        if thread_id:
+            request_body["threadId"] = thread_id
+    except Exception as exc:
+        http_status = int(getattr(getattr(exc, "resp", None), "status", 0) or 0)
+        error = "THREAD_LOOKUP_FAILED" if thread_id else "GMAIL_CLIENT_FAILED"
+        message_text = (
+            "Gmail thread metadata could not be read; no message was sent. Retry with the same idempotency_key."
+            if thread_id
+            else "The profile-scoped Gmail client could not be loaded; no message was sent. Retry with the same idempotency_key."
+        )
+        return json.dumps(
+            {
+                "error": error,
+                "message": message_text,
+                "http_status": http_status,
+                "idempotency_key": idempotency_key,
+            },
+            ensure_ascii=False,
+        )
+
+    prior_result = _reserve_gmail_send(idempotency_key, request_hash)
+    if prior_result is not None:
+        return json.dumps(prior_result, ensure_ascii=False)
+
+    try:
+        result = (
+            service
+            .users()
+            .messages()
+            .send(userId="me", body=request_body)
+            .execute(num_retries=0)
+        )
+    except Exception as exc:
+        http_status = int(getattr(getattr(exc, "resp", None), "status", 0) or 0)
+        if http_status == 401:
+            _forget_gmail_send(idempotency_key)
+            return json.dumps(
+                {
+                    "error": "AUTHENTICATION_FAILED",
+                    "message": "Gmail authorization failed; ask Talon to refresh this profile's OAuth grant and scopes.",
+                    "http_status": http_status,
+                    "idempotency_key": idempotency_key,
+                },
+                ensure_ascii=False,
+            )
+        if 400 <= http_status < 500 and http_status not in (403, 408, 429):
+            _forget_gmail_send(idempotency_key)
+            return json.dumps(
+                {
+                    "error": "GMAIL_REJECTED",
+                    "message": "Gmail rejected the message before accepting it. Correct the message and use a new idempotency_key.",
+                    "http_status": http_status,
+                    "idempotency_key": idempotency_key,
+                },
+                ensure_ascii=False,
+            )
+        _record_gmail_send(idempotency_key, status="unknown")
+        return json.dumps(
+            {
+                "error": "UNKNOWN_SEND_OUTCOME",
+                "message": "Gmail did not confirm whether the message was accepted; do not retry without this idempotency_key.",
+                "http_status": http_status,
+                "idempotency_key": idempotency_key,
+            },
+            ensure_ascii=False,
+        )
+    message_id = str(result.get("id") or "")
+    result_thread_id = str(result.get("threadId") or "")
+    if not message_id or not result_thread_id:
+        _record_gmail_send(idempotency_key, status="unknown")
+        return json.dumps(
+            {
+                "error": "UNKNOWN_SEND_OUTCOME",
+                "message": "Gmail accepted the request but did not return both message ID and thread ID; do not retry without this idempotency_key.",
+                "idempotency_key": idempotency_key,
+            },
+            ensure_ascii=False,
+        )
+    _record_gmail_send(
+        idempotency_key,
+        status="sent",
+        message_id=message_id,
+        thread_id=result_thread_id,
+    )
+    return json.dumps(
+        {
+            "message_id": message_id,
+            "thread_id": result_thread_id,
+            "idempotency_key": idempotency_key,
+        },
+        ensure_ascii=False,
+    )
 
 
 def google_workspace_calendar_list_tool(args: dict[str, Any], **_kw) -> str:
@@ -575,7 +1035,7 @@ GMAIL_LABELS_SCHEMA = {
 
 GMAIL_SEND_SCHEMA = {
     "name": "google_workspace_gmail_send",
-    "description": "Send a Gmail message from Joy's profile-scoped Google account using Star's Google Workspace OAuth token.",
+    "description": "Send a Gmail message, optionally with local attachments, from Joy's profile-scoped Google account using Star's Google Workspace OAuth token.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -583,9 +1043,32 @@ GMAIL_SEND_SCHEMA = {
             "subject": {"type": "string", "description": "Email subject"},
             "body": {"type": "string", "description": "Email body"},
             "cc": {"type": "string", "description": "Optional comma-separated Cc recipients"},
+            "bcc": {"type": "string", "description": "Optional comma-separated Bcc recipients"},
             "from_header": {"type": "string", "description": "Optional From header/display name"},
             "html": {"type": "boolean", "description": "Treat body as HTML"},
             "thread_id": {"type": "string", "description": "Optional Gmail threadId for threading the sent message"},
+            "attachments": {
+                "type": "array",
+                "description": "Optional local files under this profile's downloads/google-workspace staging directory; aggregate source size is limited to 18 MiB.",
+                "maxItems": 20,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string", "description": "Absolute path under this profile's downloads/google-workspace staging directory"},
+                        "filename": {"type": "string", "description": "Optional attachment filename; defaults to the local basename"},
+                        "mime_type": {"type": "string", "description": "Optional type/subtype; safely auto-detected when omitted"},
+                    },
+                    "required": ["path"],
+                    "additionalProperties": False,
+                },
+            },
+            "idempotency_key": {
+                "type": "string",
+                "description": "Optional stable retry key. Reuse the returned key after an unknown outcome; the tool will not send twice.",
+                "minLength": 8,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9._:-]+$",
+            },
         },
         "required": ["to", "subject", "body"],
     },
