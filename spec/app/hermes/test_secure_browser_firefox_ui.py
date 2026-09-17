@@ -290,7 +290,5 @@ def test_owner_review_capture_refuses_missing_or_untrusted_owner_context() -> No
 
 
 if __name__ == "__main__":
-    test_tool_module_has_top_level_registry_registration_for_discovery()
-    test_contracts_register_and_dom_incompatibility_is_explicit()
-    test_joy_directed_checkout_and_purchase_have_no_extra_approval_gate()
-    test_screenshot_is_private_and_tab_aliases_migrate()
+    for test_name in sorted(name for name in globals() if name.startswith("test_")):
+        globals()[test_name]()
