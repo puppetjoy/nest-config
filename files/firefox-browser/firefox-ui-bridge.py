@@ -47,6 +47,7 @@ INTERACTIVE_ROLES = {
     "menu item", "page tab", "radio button", "slider", "spin button",
     "text", "toggle button",
 }
+PROSE_ROLES = {"heading", "document web", "alert", "notification", "static", "static text", "paragraph"}
 TERMINAL_SUCCESS_RE = re.compile(
     r"\b(?:order (?:is )?confirmed|purchase (?:is )?complete|payment (?:was )?successful|thank you for your (?:order|purchase)|confirmation status[: ]+confirmed)\b",
     re.IGNORECASE,
@@ -162,6 +163,50 @@ def _safe_name(role: str, name: str) -> str:
     return compact
 
 
+def _text_content(node: Any) -> str:
+    """Read AT-SPI text through the interface's static GI methods."""
+    with contextlib.suppress(Exception):
+        Atspi = importlib.import_module("gi.repository.Atspi")
+        count = int(Atspi.Text.get_character_count(node))
+        if count > 0:
+            return str(Atspi.Text.get_text(node, 0, min(count, MAX_NAME * 4)) or "")
+    return ""
+
+
+def _safe_visible_commerce_text(value: str) -> str:
+    """Canonicalize only checkout-safe visible text and drop all other prose."""
+    compact = " ".join((value or "").split())
+    if not compact:
+        return ""
+    if TERMINAL_ERROR_RE.search(compact):
+        return "Payment failed"
+    if TERMINAL_SUCCESS_RE.search(compact):
+        return "Order confirmed"
+    if IN_FLIGHT_RE.search(compact):
+        return "Processing payment"
+    quantity = re.search(r"\b(?:quantity|qty)\s*[:x-]?\s*(\d{1,3})\b", compact, re.IGNORECASE)
+    if quantity:
+        return f"Quantity {quantity.group(1)}"
+    money = MONEY_RE.search(compact)
+    if money and not compact[money.end():].strip():
+        label = compact[:money.start()].strip(" :-").lower()
+        canonical_labels = {
+            "subtotal": "Subtotal", "shipping": "Shipping", "tax": "Tax",
+            "total": "Total", "order total": "Total", "grand total": "Total",
+        }
+        if label in canonical_labels:
+            return f"{canonical_labels[label]} {re.sub(r'\s+', '', money.group(1))}"
+    if re.fullmatch(r"shipping\s*[: -]?\s*free", compact, re.IGNORECASE):
+        return "Shipping free"
+    return ""
+
+
+def _safe_observed_name(role: str, accessible_name: str, text_content: str) -> str:
+    if role in PROSE_ROLES:
+        return _safe_visible_commerce_text(text_content or accessible_name)
+    return accessible_name
+
+
 def _state_names(node: Any) -> list[str]:
     result: list[str] = []
     with contextlib.suppress(Exception):
@@ -228,9 +273,9 @@ def _walk(root: Any) -> Iterable[tuple[Any, tuple[int, ...]]]:
                     stack.append((child, path + (index,)))
 
 
-def _node_record(node: Any, path: tuple[int, ...], generation: int) -> dict[str, Any]:
+def _node_record(node: Any, path: tuple[int, ...], generation: int, observed_name: str | None = None) -> dict[str, Any]:
     role = node.get_role_name() or "unknown"
-    raw_name = node.get_name() or ""
+    raw_name = node.get_name() or "" if observed_name is None else observed_name
     description = ""
     with contextlib.suppress(Exception):
         description = node.get_description() or ""
@@ -246,7 +291,7 @@ def _node_record(node: Any, path: tuple[int, ...], generation: int) -> dict[str,
         "control_id": _control_id(role, path, generation),
         "locator": _identity(role, raw_name, path, generation),
     }
-    safe_description = _safe_name(role, description)
+    safe_description = "" if role in PROSE_ROLES else _safe_name(role, description)
     if safe_description:
         record["description"] = safe_description
     if extent:
@@ -273,17 +318,18 @@ def _snapshot() -> dict[str, Any]:
                     "locator": _identity(role, raw_name, path, generation),
                 })
             if role in {"entry", "text"} and any(term in raw_name.lower() for term in ("address", "search with", "enter address")):
-                with contextlib.suppress(Exception):
-                    text_iface = node.get_text_iface()
-                    candidate = text_iface.get_text(0, -1) if text_iface else ""
-                    if candidate:
-                        address = _redact_url(candidate)
+                candidate = _text_content(node)
+                if candidate:
+                    address = _redact_url(candidate)
+            observed_name = _safe_observed_name(role, raw_name, _text_content(node))
+            commerce_name = observed_name if role in PROSE_ROLES else ""
             include = "showing" in states and (
                 role in INTERACTIVE_ROLES
-                or (bool(raw_name) and role in {"heading", "document web", "alert", "notification", "static"})
+                or (bool(observed_name) and role in PROSE_ROLES)
             )
+            include = include or bool(commerce_name and "visible" in states)
             if include and len(nodes) < MAX_NODES:
-                nodes.append(_node_record(node, path, generation))
+                nodes.append(_node_record(node, path, generation, observed_name))
     window_id = _firefox_window_id()
     title = _run(["xdotool", "getwindowname", window_id]).stdout.decode(errors="replace").strip()[:300]
     return {
@@ -310,7 +356,7 @@ def _transition_state(snapshot: dict[str, Any]) -> str:
     terminal_text = "\n".join(
         str(node.get("name") or "")
         for node in snapshot.get("nodes", [])
-        if str(node.get("role") or "") in {"heading", "alert", "notification"}
+        if str(node.get("role") or "") in {"heading", "alert", "notification", "static", "static text", "paragraph"}
     )
     terminal_context = "\n".join((str(snapshot.get("title") or ""), str(snapshot.get("url") or "")))
     if COMMERCE_CONTEXT_RE.search(terminal_context) and TERMINAL_ERROR_RE.search(terminal_text):

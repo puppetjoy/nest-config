@@ -282,6 +282,43 @@ def test_release_preserves_claimed_owner_blank_and_hard_cap_blocks_creation() ->
         tmp.cleanup()
 
 
+def test_atspi_text_api_and_safe_commerce_canonicalization() -> None:
+    module = load_bridge()
+
+    class TextAPI:
+        @staticmethod
+        def get_character_count(_node: Any) -> int:
+            return len("Subtotal $50.00")
+
+        @staticmethod
+        def get_text(_node: Any, start: int, end: int) -> str:
+            assert start == 0
+            assert end == len("Subtotal $50.00")
+            return "Subtotal $50.00"
+
+    original_import = module.importlib.import_module
+    module.importlib.import_module = lambda name: type("AtspiModule", (), {"Text": TextAPI}) if name == "gi.repository.Atspi" else original_import(name)
+    try:
+        assert module._text_content(object()) == "Subtotal $50.00"
+    finally:
+        module.importlib.import_module = original_import
+
+    assert module._safe_visible_commerce_text("Subtotal $50.00") == "Subtotal $50.00"
+    assert module._safe_visible_commerce_text("Shipping Free") == "Shipping free"
+    assert module._safe_visible_commerce_text("Quantity 1") == "Quantity 1"
+    assert module._safe_visible_commerce_text("Thank you. Your order is confirmed #raw-order-id") == "Order confirmed"
+    assert module._safe_visible_commerce_text("Payment failed for Joyful Lee") == "Payment failed"
+    assert module._safe_visible_commerce_text("123 Private Lane") == ""
+    assert module._safe_observed_name("paragraph", "Joyful Lee, 123 Private Lane", "") == ""
+    assert module._safe_observed_name("static text", "joy@example.test", "") == ""
+    assert module._safe_observed_name("heading", "Order confirmed #raw-order-id", "") == "Order confirmed"
+    static_terminal = {
+        "title": "Checkout", "url": "https://shop.example/checkout",
+        "nodes": [{"role": "paragraph", "name": "Order confirmed", "states": ["visible"]}],
+    }
+    assert module._transition_state(static_terminal) == "terminal_success"
+
+
 def test_visible_unlabelled_interactive_control_is_preserved_with_stable_identity() -> None:
     module = load_bridge()
 
@@ -432,11 +469,5 @@ def test_commerce_readback_pairs_split_labels_only_with_standalone_amounts() -> 
 
 
 if __name__ == "__main__":
-    test_same_tab_continuity_and_readback_without_duplicate_tabs()
-    test_page_tab_locator_survives_title_change()
-    test_exactly_once_click_has_readback_and_does_not_repeat_input()
-    test_click_action_key_survives_readback_failure()
-    test_action_key_cannot_suppress_a_different_workflow()
-    test_restart_reconciliation_and_ambiguous_tabs_are_fail_closed()
-    test_owned_tab_expiry_closes_once_but_owner_tab_is_preserved()
-    test_release_preserves_claimed_owner_blank_and_hard_cap_blocks_creation()
+    for test_name in sorted(name for name in globals() if name.startswith("test_")):
+        globals()[test_name]()
