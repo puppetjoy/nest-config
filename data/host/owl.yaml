@@ -350,6 +350,10 @@ nest::app::hermes::instances:
     approval_mode: 'off'
     google_photos_enabled: true
     google_workspace_enabled: true
+    # The Firefox UI bridge reaches its fixed ai/firefox workload through
+    # kubectl. Make that dependency explicit so Star's gateway never falls
+    # back to kubectl's localhost:8080 default.
+    kubeconfig_path: '/home/joy/.hermes/profiles/talon/kubeconfigs/eyrie.conf'
     environment:
       CAMOFOX_URL: 'https://camofox.eyrie'
       CAMOFOX_GENERAL_URL: 'https://camofox.eyrie'

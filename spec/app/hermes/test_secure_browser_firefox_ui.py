@@ -97,6 +97,63 @@ def test_joy_directed_checkout_and_purchase_have_no_extra_approval_gate() -> Non
     assert calls[-1] == ("click", {"workflow_id": "fixture", "locator": "ax:1:2:0123456789ab", "coordinate": None, "action_key": "fixture-order"})
 
 
+def test_missing_kubeconfig_reports_profile_configuration_error_without_kubectl_noise() -> None:
+    module, _ = load_tool()
+    original_home = module.os.environ.get("HOME")
+    original_kubeconfig = module.os.environ.pop("KUBECONFIG", None)
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            module.os.environ["HOME"] = tmpdir
+            result = parsed(module.secure_browser_status_tool({}))
+    finally:
+        if original_home is None:
+            module.os.environ.pop("HOME", None)
+        else:
+            module.os.environ["HOME"] = original_home
+        if original_kubeconfig is not None:
+            module.os.environ["KUBECONFIG"] = original_kubeconfig
+
+    assert result["error"] == "FIREFOX_UI_CONTROL_FAILED"
+    assert result["message"] == "Firefox UI bridge configuration missing: KUBECONFIG is not set for this profile"
+    assert "localhost:8080" not in result["message"]
+    assert "memcache.go" not in result["message"]
+
+
+def test_missing_kubeconfig_file_reports_exact_dependency_without_kubectl_noise() -> None:
+    module, _ = load_tool()
+    original_kubeconfig = module.os.environ.get("KUBECONFIG")
+    try:
+        module.os.environ["KUBECONFIG"] = "/missing/firefox-ui-kubeconfig"
+        result = parsed(module.secure_browser_status_tool({}))
+    finally:
+        if original_kubeconfig is None:
+            module.os.environ.pop("KUBECONFIG", None)
+        else:
+            module.os.environ["KUBECONFIG"] = original_kubeconfig
+
+    assert result["message"] == "Firefox UI bridge configuration invalid: KUBECONFIG file does not exist: /missing/firefox-ui-kubeconfig"
+    assert "localhost:8080" not in result["message"]
+    assert "memcache.go" not in result["message"]
+
+
+def test_unusable_kubeconfig_reports_configuration_error_without_localhost_fallback_noise() -> None:
+    module, _ = load_tool()
+    original_kubeconfig = module.os.environ.get("KUBECONFIG")
+    try:
+        with tempfile.NamedTemporaryFile() as kubeconfig:
+            module.os.environ["KUBECONFIG"] = kubeconfig.name
+            result = parsed(module.secure_browser_status_tool({}))
+    finally:
+        if original_kubeconfig is None:
+            module.os.environ.pop("KUBECONFIG", None)
+        else:
+            module.os.environ["KUBECONFIG"] = original_kubeconfig
+
+    assert result["message"] == "Firefox UI bridge Kubernetes configuration is unusable; verify KUBECONFIG selects a reachable cluster"
+    assert "localhost:8080" not in result["message"]
+    assert "memcache.go" not in result["message"]
+
+
 def test_screenshot_is_private_and_tab_aliases_migrate() -> None:
     module, _ = load_tool()
     tiny_png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="

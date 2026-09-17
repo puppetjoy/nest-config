@@ -52,6 +52,12 @@ def _workflow_id(args: dict[str, Any], task_id: str | None = None) -> str:
 def _bridge(command: str, payload: dict[str, Any], *, timeout: int | None = None) -> dict[str, Any]:
     if CONTROL_MODE != "firefox-ui-v1":
         raise RuntimeError(f"unsupported secure browser control mode: {CONTROL_MODE}")
+    kubeconfig = os.environ.get("KUBECONFIG", "").strip()
+    if not kubeconfig:
+        raise RuntimeError("Firefox UI bridge configuration missing: KUBECONFIG is not set for this profile")
+    missing_kubeconfigs = [path for path in kubeconfig.split(os.pathsep) if path and not Path(path).is_file()]
+    if missing_kubeconfigs:
+        raise RuntimeError(f"Firefox UI bridge configuration invalid: KUBECONFIG file does not exist: {missing_kubeconfigs[0]}")
     argv = [
         "kubectl", "-n", NAMESPACE, "exec", "-i", WORKLOAD, "-c", CONTAINER,
         "--", "env", "DISPLAY=:1", BRIDGE_PATH, command,
@@ -70,6 +76,8 @@ def _bridge(command: str, payload: dict[str, Any], *, timeout: int | None = None
         raise RuntimeError(f"Firefox UI bridge invocation failed: {exc}") from exc
     if result.returncode != 0:
         message = result.stderr.strip() or result.stdout.strip()
+        if "localhost:8080" in message:
+            raise RuntimeError("Firefox UI bridge Kubernetes configuration is unusable; verify KUBECONFIG selects a reachable cluster")
         raise RuntimeError(f"Firefox UI bridge failed ({result.returncode}): {message[:1000]}")
     if len(result.stdout.encode()) > MAX_RESULT_BYTES:
         raise RuntimeError("Firefox UI bridge response exceeded the bounded result size")
