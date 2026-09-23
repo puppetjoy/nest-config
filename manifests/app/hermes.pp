@@ -39,6 +39,8 @@ class nest::app::hermes (
   String[1]                      $model_provider                 = 'openai-codex',
   String[1]                      $model_name                     = 'gpt-5.6-sol',
   String[1]                      $model_base_url                 = 'https://chatgpt.com/backend-api/codex',
+  Optional[String[1]]            $model_api_mode                 = undef,
+  Optional[String[1]]            $agent_reasoning_effort         = undef,
   Hash[String[1], Any]           $providers                      = {},
   String[1]                      $auxiliary_provider             = 'openai-codex',
   String[1]                      $auxiliary_compress_model       = 'gpt-5.6-terra',
