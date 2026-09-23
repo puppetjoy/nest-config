@@ -93,6 +93,8 @@ nest::service::gitlab_runner::instances:
 nest::app::hermes::instances:
   talon:
     profile: 'talon'
+    enabled_plugins:
+      - 'agent-request-blocked-writer'
     display_name: 'Talon'
     profile_icon: '🦉'
     model_provider: 'openai-codex'
@@ -331,6 +333,7 @@ nest::app::hermes::instances:
     enabled_plugins:
       - 'star-command-policy'
       - 'patternkit-session'
+      - 'agent-request-blocked-writer'
     honcho_workspace: 'hermes'
     honcho_user_peer: 'joy'
     honcho_ai_peer: 'star'
@@ -395,6 +398,8 @@ nest::app::hermes::instances:
     telegram_bot_id: '8571651712'
   beryl:
     profile: 'beryl'
+    enabled_plugins:
+      - 'agent-request-blocked-writer'
     display_name: 'Beryl'
     profile_icon: '🐝'
     skin_name: 'beryl-worker-bee'
@@ -567,6 +572,8 @@ nest::app::hermes::instances:
     telegram_bot_id: '8968373190'
   quill:
     profile: 'quill'
+    enabled_plugins:
+      - 'agent-request-blocked-writer'
     display_name: 'Quill'
     profile_icon: '🪶'
     skin_name: 'quill-puppet-dusk'
