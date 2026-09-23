@@ -25,16 +25,18 @@ define nest::lib::hermes (
   String[1]            $model_provider             = 'openai-codex',
   String[1]            $model_name                 = 'gpt-5.6-sol',
   String[1]            $model_base_url             = 'https://chatgpt.com/backend-api/codex',
+  Optional[String[1]]  $model_api_mode             = undef,
   Optional[Integer[1]] $model_max_tokens           = undef,
   Optional[Integer[1]] $agent_max_turns            = undef,
+  Optional[String[1]]  $agent_reasoning_effort     = undef,
   Any                  $openrouter_api_key         = undef,
   Hash[String[1], Any] $providers                  = {},
   String[1]            $auxiliary_provider         = 'openai-codex',
-  String[1]            $auxiliary_compress_model   = 'gpt-5.6-terra',
-  String[1]            $auxiliary_extract_model    = 'gpt-5.6-terra',
-  String[1]            $auxiliary_title_model      = 'gpt-5.6-luna',
+  String[1]            $auxiliary_compress_model   = 'gpt-6-luna',
+  String[1]            $auxiliary_extract_model    = 'gpt-6-luna',
+  String[1]            $auxiliary_title_model      = 'gpt-6-luna',
   String[1]            $delegation_provider        = 'openai-codex',
-  String[1]            $delegation_model           = 'gpt-5.6-terra',
+  String[1]            $delegation_model           = 'gpt-6-luna',
   Optional[String[1]]  $image_gen_provider         = undef,
   Optional[String[1]]  $image_gen_model            = undef,
   Array[String[1]]     $enabled_plugins            = [],
@@ -732,13 +734,22 @@ define nest::lib::hermes (
     undef   => {},
     default => { 'max_tokens' => $model_max_tokens },
   }
-  $agent_config = $agent_max_turns ? {
+  $model_api_mode_config = $model_api_mode ? {
     undef   => {},
-    default => {
-      'agent' => {
-        'max_turns' => $agent_max_turns,
-      },
-    },
+    default => { 'api_mode' => $model_api_mode },
+  }
+  $agent_max_turns_config = $agent_max_turns ? {
+    undef   => {},
+    default => { 'max_turns' => $agent_max_turns },
+  }
+  $agent_reasoning_config = $agent_reasoning_effort ? {
+    undef   => {},
+    default => { 'reasoning_effort' => $agent_reasoning_effort },
+  }
+  $agent_values = $agent_max_turns_config + $agent_reasoning_config
+  $agent_config = empty($agent_values) ? {
+    true    => {},
+    default => { 'agent' => $agent_values },
   }
 
   $managed_config = {
@@ -752,7 +763,7 @@ define nest::lib::hermes (
       'provider' => $model_provider,
       'default'  => $model_name,
       'base_url' => $model_base_url,
-    } + $model_max_tokens_config,
+    } + $model_api_mode_config + $model_max_tokens_config,
     'web'              => {
       'backend'         => 'firecrawl',
       'search_backend'  => 'firecrawl',

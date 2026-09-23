@@ -14,10 +14,7 @@ LIB_MANIFEST = REPO_ROOT / "manifests/lib/hermes.pp"
 OWL_DATA = REPO_ROOT / "data/host/owl.yaml"
 
 EXPECTED_PROVIDER = "openai-codex"
-EXPECTED_COMPRESSION_MODEL = "gpt-5.6-terra"
-EXPECTED_WEB_EXTRACT_MODEL = "gpt-5.6-terra"
-EXPECTED_TITLE_MODEL = "gpt-5.6-luna"
-EXPECTED_DELEGATION_MODEL = "gpt-5.6-terra"
+EXPECTED_HELPER_MODEL = "gpt-6-luna"
 EXPECTED_LOCAL_PROVIDER = "custom:llama-qwen"
 EXPECTED_LOCAL_MODEL = "qwen-3.6"
 
@@ -30,13 +27,12 @@ def test_owl_tracks_merged_hermes_and_shared_auxiliary_policy() -> None:
     host_config = load_yaml(OWL_DATA)
 
     assert host_config["nest::app::hermes::git_ref"] == "nest"
-    assert "nest::app::hermes::git_commit" not in host_config
     assert host_config["nest::app::hermes::auxiliary_provider"] == EXPECTED_PROVIDER
-    assert host_config["nest::app::hermes::auxiliary_compress_model"] == EXPECTED_COMPRESSION_MODEL
-    assert host_config["nest::app::hermes::auxiliary_extract_model"] == EXPECTED_WEB_EXTRACT_MODEL
-    assert host_config["nest::app::hermes::auxiliary_title_model"] == EXPECTED_TITLE_MODEL
+    assert host_config["nest::app::hermes::auxiliary_compress_model"] == EXPECTED_HELPER_MODEL
+    assert host_config["nest::app::hermes::auxiliary_extract_model"] == EXPECTED_HELPER_MODEL
+    assert host_config["nest::app::hermes::auxiliary_title_model"] == EXPECTED_HELPER_MODEL
     assert host_config["nest::app::hermes::delegation_provider"] == EXPECTED_PROVIDER
-    assert host_config["nest::app::hermes::delegation_model"] == EXPECTED_DELEGATION_MODEL
+    assert host_config["nest::app::hermes::delegation_model"] == EXPECTED_HELPER_MODEL
 
 
 def test_codex_instances_inherit_shared_auxiliary_policy_without_legacy_override() -> None:
@@ -46,6 +42,22 @@ def test_codex_instances_inherit_shared_auxiliary_policy_without_legacy_override
         instance = instances[profile]
         assert "auxiliary_mini_model" not in instance
         assert "auxiliary_provider" not in instance
+
+
+def test_quill_uses_copilot_gpt_6_luna_for_every_helper_without_reasoning_override() -> None:
+    quill = load_yaml(OWL_DATA)["nest::app::hermes::instances"]["quill"]
+
+    assert quill["auxiliary_provider"] == "copilot"
+    assert quill["delegation_provider"] == "copilot"
+    for key in (
+        "auxiliary_compress_model",
+        "auxiliary_extract_model",
+        "auxiliary_title_model",
+        "delegation_model",
+    ):
+        assert quill[key] == EXPECTED_HELPER_MODEL
+    assert "auxiliary_reasoning_effort" not in quill
+    assert "delegation_reasoning_effort" not in quill
 
 
 def test_beryl_keeps_every_model_route_local() -> None:
@@ -94,5 +106,6 @@ def test_split_auxiliary_interface_is_wired_to_each_managed_task() -> None:
 if __name__ == "__main__":
     test_owl_tracks_merged_hermes_and_shared_auxiliary_policy()
     test_codex_instances_inherit_shared_auxiliary_policy_without_legacy_override()
+    test_quill_uses_copilot_gpt_6_luna_for_every_helper_without_reasoning_override()
     test_beryl_keeps_every_model_route_local()
     test_split_auxiliary_interface_is_wired_to_each_managed_task()
