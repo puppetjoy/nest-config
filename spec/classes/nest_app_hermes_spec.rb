@@ -46,6 +46,11 @@ describe 'nest::app::hermes' do
         {
           gitlab_mr_note_poller_enabled: true,
           gitlab_mr_note_dev_enabled: true,
+          instances: {
+            'talon' => {
+              'soul_content' => 'test soul',
+            },
+          },
         }
       end
 
@@ -54,6 +59,7 @@ describe 'nest::app::hermes' do
       let(:production_timer_path) { '/home/joy/.config/systemd/user/hermes-agent-request-gitlab-mr-notes.timer' }
       let(:development_timer_path) { '/home/joy/.config/systemd/user/hermes-agent-request-gitlab-mr-notes-dev.timer' }
 
+      it { is_expected.to compile }
       it { is_expected.to contain_file(production_timer_path).with_ensure('file') }
       it { is_expected.to contain_file(development_timer_path).with_ensure('file') }
       it { is_expected.to contain_systemd__user_service('hermes-agent-request-gitlab-mr-notes').with_unit('hermes-agent-request-gitlab-mr-notes.timer') }
