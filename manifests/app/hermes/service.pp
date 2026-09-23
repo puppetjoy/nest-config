@@ -659,7 +659,7 @@ class nest::app::hermes::service {
     service_entry => {
       'Type'                   => 'simple',
       'EnvironmentFile'        => "-${hermes_home_dir}/profiles/%i/systemd.env",
-      'ExecStart'              => "${venv_python} -m hermes_cli.main --profile %i gateway run --replace",
+      'ExecStart'              => "${venv_python} -m hermes_cli.main --profile %i gateway run --replace --force",
       'WorkingDirectory'       => "/home/${nest::user}",
       'Environment'            => [
         "PATH=${venv_dir}/bin:/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
