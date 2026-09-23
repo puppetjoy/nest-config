@@ -48,6 +48,7 @@ INTERACTIVE_ROLES = {
     "text", "toggle button",
 }
 PROSE_ROLES = {"heading", "document web", "alert", "notification", "static", "static text", "paragraph"}
+PRIVATE_VALUE_RE = re.compile(r"\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b|\b(?:\d[ -]*?){13,19}\b")
 TERMINAL_SUCCESS_RE = re.compile(
     r"\b(?:order (?:is )?confirmed|purchase (?:is )?complete|payment (?:was )?successful|thank you for your (?:order|purchase)|confirmation status[: ]+confirmed)\b",
     re.IGNORECASE,
@@ -202,9 +203,12 @@ def _safe_visible_commerce_text(value: str) -> str:
 
 
 def _safe_observed_name(role: str, accessible_name: str, text_content: str) -> str:
-    if role in PROSE_ROLES:
-        return _safe_visible_commerce_text(text_content or accessible_name)
-    return accessible_name
+    if role in {"password", "password text"}:
+        return "<sensitive control; value redacted>"
+    value = " ".join((text_content or accessible_name if role in PROSE_ROLES | {"text", "entry", "spin button"} else accessible_name).split())
+    if SENSITIVE_RE.search(accessible_name) or PRIVATE_VALUE_RE.search(value):
+        return "<sensitive control; value redacted>"
+    return value[:MAX_NAME * 4]
 
 
 def _state_names(node: Any) -> list[str]:
@@ -275,13 +279,14 @@ def _walk(root: Any) -> Iterable[tuple[Any, tuple[int, ...]]]:
 
 def _node_record(node: Any, path: tuple[int, ...], generation: int, observed_name: str | None = None) -> dict[str, Any]:
     role = node.get_role_name() or "unknown"
-    raw_name = node.get_name() or "" if observed_name is None else observed_name
+    raw_name = node.get_name() or ""
+    display_name = raw_name if observed_name is None else observed_name
     description = ""
     with contextlib.suppress(Exception):
         description = node.get_description() or ""
     states = _state_names(node)
     extent = _extent(node)
-    safe_name = _safe_name(role, raw_name)
+    safe_name = _safe_name(role, display_name)
     record: dict[str, Any] = {
         "role": role,
         "name": safe_name or "<unlabelled>",
@@ -294,6 +299,10 @@ def _node_record(node: Any, path: tuple[int, ...], generation: int, observed_nam
     safe_description = "" if role in PROSE_ROLES else _safe_name(role, description)
     if safe_description:
         record["description"] = safe_description
+    if role in {"entry", "spin button", "text"}:
+        value = _safe_observed_name(role, raw_name, _text_content(node))
+        if value and value != raw_name:
+            record["value"] = value
     if extent:
         record["rect"] = extent
     return record
@@ -321,13 +330,13 @@ def _snapshot() -> dict[str, Any]:
                 candidate = _text_content(node)
                 if candidate:
                     address = _redact_url(candidate)
-            observed_name = _safe_observed_name(role, raw_name, _text_content(node))
-            commerce_name = observed_name if role in PROSE_ROLES else ""
+            observed_name = _safe_observed_name(role, raw_name, _text_content(node) if role in PROSE_ROLES else "")
+            prose_name = observed_name if role in PROSE_ROLES else ""
             include = "showing" in states and (
                 role in INTERACTIVE_ROLES
                 or (bool(observed_name) and role in PROSE_ROLES)
             )
-            include = include or bool(commerce_name and "visible" in states)
+            include = include or bool(prose_name and "visible" in states)
             if include and len(nodes) < MAX_NODES:
                 nodes.append(_node_record(node, path, generation, observed_name))
     window_id = _firefox_window_id()
@@ -342,7 +351,7 @@ def _snapshot() -> dict[str, Any]:
         "tabs": tabs,
         "nodes": nodes,
         "truncated": len(nodes) >= MAX_NODES,
-        "observation_boundary": "AT-SPI accessibility tree; no DOM, page script, browser debugging protocol, cookies, storage, or profile inspection",
+        "observation_boundary": "AT-SPI accessibility tree and visible text; no DOM, page script, browser debugging protocol, cookies, storage, or profile inspection",
     }
 
 
@@ -800,9 +809,30 @@ def command_click(payload: dict[str, Any]) -> dict[str, Any]:
             }
         _select_workflow_tab(record)
         if locator:
-            _, rect = _resolve_locator(locator)
+            node, rect = _resolve_locator(locator)
             if not rect:
                 raise ValueError("accessibility control has no screen bounds")
+            # Styled radio labels can leave every hidden input at the same AX
+            # coordinates. Prefer the accessible action over a guessed pixel.
+            if node is not None and node.get_role_name() in {"radio button", "check box"}:
+                action = node.get_action_iface()
+                if action and action.get_n_actions():
+                    if action_key:
+                        state["action_keys"][action_key] = {"created_at": time.time(), "workflow_id": workflow_id, "delivery_state": "delivery_started"}
+                        _save_state(state)
+                    if not action.do_action(0):
+                        raise RuntimeError("accessibility action failed; inspect visible control before coordinate fallback")
+                    if action_key:
+                        state["action_keys"][action_key]["delivery_state"] = "delivered"
+                        _save_state(state)
+                    readback = _readback(float(payload.get("max_wait_seconds") or DEFAULT_STABLE_WAIT_SECONDS))
+                    record["tab_name"] = readback["selected_tab"] or record["tab_name"]
+                    record["locator"] = readback.get("selected_locator") or record["locator"]
+                    return {"operation": "click", "status": "delivered", "action_key": action_key or None,
+                            "delivery": {"state": "delivered", "input_sent": True, "via": "accessibility_action"}, "readback": readback}
+                same_bounds = [item for item in snapshot["nodes"] if item.get("rect") == rect and item.get("role") in {"radio button", "check box"}]
+                if len(same_bounds) > 1:
+                    raise ValueError("overlapping accessibility bounds; use a visible label coordinate after screenshot review")
             x, y = rect["x"] + rect["width"] // 2, rect["y"] + rect["height"] // 2
         elif isinstance(coordinate, list) and len(coordinate) == 2:
             x, y = int(coordinate[0]), int(coordinate[1])

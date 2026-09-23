@@ -309,9 +309,11 @@ def test_atspi_text_api_and_safe_commerce_canonicalization() -> None:
     assert module._safe_visible_commerce_text("Thank you. Your order is confirmed #raw-order-id") == "Order confirmed"
     assert module._safe_visible_commerce_text("Payment failed for Joyful Lee") == "Payment failed"
     assert module._safe_visible_commerce_text("123 Private Lane") == ""
-    assert module._safe_observed_name("paragraph", "Joyful Lee, 123 Private Lane", "") == ""
-    assert module._safe_observed_name("static text", "joy@example.test", "") == ""
-    assert module._safe_observed_name("heading", "Order confirmed #raw-order-id", "") == "Order confirmed"
+    assert module._safe_observed_name("paragraph", "Roll-Line Small Step Lower Gray/Soft", "") == "Roll-Line Small Step Lower Gray/Soft"
+    assert module._safe_observed_name("static text", "joy@example.test", "") == "<sensitive control; value redacted>"
+    assert module._safe_observed_name("heading", "Order confirmed #raw-order-id", "") == "Order confirmed #raw-order-id"
+    assert module._safe_observed_name("paragraph", "Read our return policy", "") == "Read our return policy"
+    assert module._safe_observed_name("spin button", "Quantity", "2") == "2"
     static_terminal = {
         "title": "Checkout", "url": "https://shop.example/checkout",
         "nodes": [{"role": "paragraph", "name": "Order confirmed", "states": ["visible"]}],
@@ -346,6 +348,47 @@ def test_visible_unlabelled_interactive_control_is_preserved_with_stable_identit
     assert first["rect"] == {"x": 240, "y": 510, "width": 24, "height": 24}
     assert first["control_id"].startswith("ui:100:3.7.2:")
     assert first["locator"].startswith("ax:100:3.7.2:")
+
+
+def test_generic_accessible_page_text_and_values_across_unrelated_sites() -> None:
+    module = load_bridge()
+    for hostname, text, value in (
+        ("fivestride.example", "Gray/Soft Large Upper — Set of 4 $29.00", "2"),
+        ("library.example", "The public library opens Tuesday at nine", "Tuesday"),
+        ("weather.example", "Partly cloudy with scattered showers", "18"),
+    ):
+        assert hostname
+        assert module._safe_observed_name("paragraph", text, "") == text
+        assert module._safe_observed_name("entry", "Search", value) == value
+    assert module._safe_observed_name("password text", "Password", "hunter2").startswith("<sensitive")
+    assert module._safe_observed_name("text", "Card number", "4111111111111111").startswith("<sensitive")
+
+
+def test_overlapping_radio_locator_fails_closed_without_action() -> None:
+    module, fixture, tmp = configured_bridge()
+    try:
+        fixture.tabs = [{"name": "New Tab", "selected": True}]
+        module.command_navigate({"workflow_id": "w", "url": "https://example.test/"})
+        rect = {"x": 0, "y": 0, "width": 10, "height": 10}
+        class Radio:
+            def get_role_name(self) -> str:
+                return "radio button"
+            def get_action_iface(self) -> None:
+                return None
+        module._resolve_locator = lambda locator: (Radio(), rect)
+        original_snapshot = fixture.snapshot
+        module._snapshot = lambda: {**original_snapshot(), "nodes": [
+            {"role": "radio button", "rect": rect, "name": name} for name in ("Green", "Gray")
+        ]}
+        fixture.commands.clear()
+        try:
+            module.command_click({"workflow_id": "w", "locator": original_snapshot()["tabs"][0]["locator"]})
+            raise AssertionError("overlapping radio bounds must not deliver input")
+        except ValueError as exc:
+            assert "overlapping" in str(exc)
+        assert not any("click" in command for command in fixture.commands)
+    finally:
+        tmp.cleanup()
 
 
 def test_wait_for_stable_distinguishes_in_flight_success_and_failure() -> None:

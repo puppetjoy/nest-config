@@ -233,7 +233,9 @@ def secure_browser_scroll_tool(args: dict[str, Any], task_id: str | None = None,
 
 def secure_browser_owner_review_capture_tool(args: dict[str, Any], **_kw: Any) -> str:
     def run() -> dict[str, Any]:
-        profile = os.environ.get("HERMES_PROFILE", "").strip().lower()
+        # Gateway multiplex sessions bind the served persona per turn; the
+        # process environment may have no HERMES_PROFILE at all.
+        profile = _session_env("HERMES_SESSION_PROFILE").lower()
         if profile != "star":
             raise ValueError("Owner-review captures are restricted to Star and must not enter Talon notifications")
         platform = _session_env("HERMES_SESSION_PLATFORM").lower()
@@ -379,8 +381,8 @@ def secure_browser_execute_final_purchase_tool(args: dict[str, Any], **_kw: Any)
 SCHEMAS: list[tuple[dict[str, Any], Any]] = [
     ({"name": "secure_browser_status", "description": "Show the persistent Firefox UI-control status, continuity leases, non-instrumentation boundary, and compatibility version.", "parameters": {"type": "object", "properties": {}}}, secure_browser_status_tool),
     ({"name": "secure_browser_navigate", "description": "Navigate the canonical handoff tab in the owner-visible persistent Firefox by X11 address-bar input, then return transition-aware accessibility readback. Never creates a tab implicitly.", "parameters": {"type": "object", "properties": {"url": {"type": "string"}, "workflow_id": {"type": "string"}, "lease_seconds": {"type": "integer"}, "max_wait_seconds": {"type": "number", "minimum": 0, "maximum": 15}}, "required": ["url"]}}, secure_browser_navigate_tool),
-    ({"name": "secure_browser_page_snapshot", "description": "Read Firefox through AT-SPI. Returns visible accessibility controls and ephemeral locators, never DOM, cookies, storage, profile data, or page scripts.", "parameters": {"type": "object", "properties": {}}}, secure_browser_page_snapshot_tool),
-    ({"name": "secure_browser_current_page_summary", "description": "Return a bounded accessibility-based summary of the same owner-visible Firefox tab.", "parameters": {"type": "object", "properties": {}}}, secure_browser_current_page_summary_tool),
+    ({"name": "secure_browser_page_snapshot", "description": "Read the owner-visible Firefox accessibility tree: ordinary page text, controls, values, states, and ephemeral locators. Secrets are redacted; DOM, cookies and browser profile data are not exposed.", "parameters": {"type": "object", "properties": {}}}, secure_browser_page_snapshot_tool),
+    ({"name": "secure_browser_current_page_summary", "description": "Return a bounded accessibility-based page summary including ordinary readable content and controls; use page_snapshot for more nodes.", "parameters": {"type": "object", "properties": {}}}, secure_browser_current_page_summary_tool),
     ({"name": "secure_browser_wait_for_stable", "description": "Wait a bounded interval for the visible Firefox accessibility state to settle. Deterministically reports stable, in_flight, terminal_success, or terminal_error; delivery alone is never confirmation.", "parameters": {"type": "object", "properties": {"max_wait_seconds": {"type": "number", "minimum": 0, "maximum": 15}}}}, secure_browser_wait_for_stable_tool),
     ({"name": "secure_browser_checkout_readback", "description": "Return sanitized first-class checkout/post-purchase fields from visible AT-SPI readback: retailer, safe item nickname, selected variant, quantity, subtotal, shipping, tax, total, and confirmation state. Never returns owner identity, email, address, payment details, raw order IDs, or raw page text.", "parameters": {"type": "object", "properties": {"safe_item_nickname": {"type": "string", "maxLength": 120}, "max_wait_seconds": {"type": "number", "minimum": 0, "maximum": 15}}, "required": ["safe_item_nickname"]}}, secure_browser_checkout_readback_tool),
     ({"name": "secure_browser_scroll", "description": "Scroll the canonical owner-visible Firefox workflow by bounded visible page increments, then return transition-aware readback.", "parameters": {"type": "object", "properties": {"workflow_id": {"type": "string"}, "direction": {"type": "string", "enum": ["up", "down"]}, "amount": {"type": "integer", "minimum": 1, "maximum": 6}}}}, secure_browser_scroll_tool),
