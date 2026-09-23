@@ -520,6 +520,37 @@ def test_commerce_readback_pairs_split_labels_only_with_standalone_amounts() -> 
     assert result["total"] == "$57.24"
 
 
+def test_commerce_readback_ignores_promotional_amount_and_sums_labelled_controls() -> None:
+    module = load_bridge()
+    snapshot = {
+        "url": "https://unrelated-shop.example/cart", "title": "Cart",
+        "nodes": [
+            {"role": "static", "name": "FREE STANDARD SHIPPING ON ORDERS OVER $100"},
+            {"role": "spin button", "name": "Quantity", "value": "1"},
+            {"role": "spin button", "name": "Quantity", "value": "2"},
+            {"role": "heading", "name": "Subtotal: $60.00 USD"},
+        ], "truncated": False,
+    }
+    result = module._commerce_readback(snapshot, {"safe_item_nickname": "fixture"})
+    assert result["quantity"] == 3
+    assert result["subtotal"] == "$60.00"
+    assert result["shipping"] is None
+    assert result["total"] is None
+
+
+def test_commerce_readback_keeps_real_shipping_amount_when_banner_precedes_it() -> None:
+    module = load_bridge()
+    snapshot = {
+        "url": "https://another-shop.example/checkout",
+        "nodes": [
+            {"role": "static", "name": "Free shipping on orders over $100"},
+            {"role": "text", "name": "Shipping cost"},
+            {"role": "text", "name": "$5.00"},
+        ],
+    }
+    assert module._commerce_readback(snapshot, {"safe_item_nickname": "fixture"})["shipping"] == "$5.00"
+
+
 if __name__ == "__main__":
     for test_name in sorted(name for name in globals() if name.startswith("test_")):
         globals()[test_name]()
