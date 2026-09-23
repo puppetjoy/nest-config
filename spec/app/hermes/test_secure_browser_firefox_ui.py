@@ -213,12 +213,14 @@ def test_owner_review_capture_is_private_owner_only_and_not_generic_evidence() -
 
     module._bridge = fake_bridge
     original_profile = module.os.environ.get("HERMES_PROFILE")
+    original_session_profile = module.os.environ.get("HERMES_SESSION_PROFILE")
     original_platform = module.os.environ.get("HERMES_SESSION_PLATFORM")
     original_chat = module.os.environ.get("HERMES_SESSION_CHAT_ID")
     original_home_channel = module.os.environ.get("TELEGRAM_HOME_CHANNEL")
     with tempfile.TemporaryDirectory() as tmpdir:
         module.get_hermes_home = lambda: Path(tmpdir)
         module.os.environ["HERMES_PROFILE"] = "star"
+        module.os.environ["HERMES_SESSION_PROFILE"] = "star"
         module.os.environ["HERMES_SESSION_PLATFORM"] = "telegram"
         module.os.environ["HERMES_SESSION_CHAT_ID"] = "12345"
         module.os.environ["TELEGRAM_HOME_CHANNEL"] = "12345"
@@ -238,6 +240,7 @@ def test_owner_review_capture_is_private_owner_only_and_not_generic_evidence() -
         assert "media" not in capture
     for key, original in (
         ("HERMES_PROFILE", original_profile),
+        ("HERMES_SESSION_PROFILE", original_session_profile),
         ("HERMES_SESSION_PLATFORM", original_platform),
         ("HERMES_SESSION_CHAT_ID", original_chat),
         ("TELEGRAM_HOME_CHANNEL", original_home_channel),
@@ -259,18 +262,20 @@ def test_owner_review_capture_refuses_missing_or_untrusted_owner_context() -> No
 
     module._bridge = fake_bridge
     module._session_env = lambda key: module.os.environ.get(key, "")
-    keys = ("HERMES_PROFILE", "HERMES_SESSION_PLATFORM", "HERMES_SESSION_CHAT_ID", "TELEGRAM_HOME_CHANNEL")
+    keys = ("HERMES_PROFILE", "HERMES_SESSION_PROFILE", "HERMES_SESSION_PLATFORM", "HERMES_SESSION_CHAT_ID", "TELEGRAM_HOME_CHANNEL")
     originals = {key: module.os.environ.get(key) for key in keys}
     try:
         for key in keys:
             module.os.environ.pop(key, None)
         missing = parsed(module.secure_browser_owner_review_capture_tool({"safe_item_nickname": "fixture"}))
         module.os.environ["HERMES_PROFILE"] = "talon"
+        module.os.environ["HERMES_SESSION_PROFILE"] = "talon"
         module.os.environ["HERMES_SESSION_PLATFORM"] = "telegram"
         module.os.environ["HERMES_SESSION_CHAT_ID"] = "12345"
         module.os.environ["TELEGRAM_HOME_CHANNEL"] = "12345"
         talon = parsed(module.secure_browser_owner_review_capture_tool({"safe_item_nickname": "fixture"}))
         module.os.environ["HERMES_PROFILE"] = "star"
+        module.os.environ["HERMES_SESSION_PROFILE"] = "star"
         module.os.environ["HERMES_SESSION_PLATFORM"] = "cli"
         wrong_platform = parsed(module.secure_browser_owner_review_capture_tool({"safe_item_nickname": "fixture"}))
         module.os.environ["HERMES_SESSION_PLATFORM"] = "telegram"
