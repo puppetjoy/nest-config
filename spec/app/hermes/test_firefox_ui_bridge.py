@@ -368,8 +368,8 @@ def test_snapshot_keeps_long_rendered_text_in_unusual_accessibility_roles() -> N
     module = load_bridge()
 
     class Node:
-        def __init__(self, role: str, name: str, text: str = "") -> None:
-            self.role, self.name, self.text = role, name, text
+        def __init__(self, role: str, name: str, text: str = "", children: int = 0) -> None:
+            self.role, self.name, self.text, self.children = role, name, text, children
 
         def get_role_name(self) -> str:
             return self.role
@@ -380,13 +380,17 @@ def test_snapshot_keeps_long_rendered_text_in_unusual_accessibility_roles() -> N
         def get_description(self) -> str:
             return ""
 
+        def get_child_count(self) -> int:
+            return self.children
+
     for site_text in (
         "Gray/Soft Upper Set of 4 $30.00",
         "Library event starts at noon",
         "Weather advisory: heavy rain tomorrow",
     ):
         long_text = "Read the full page. " * 20 + site_text
-        nodes = [Node("section", "", long_text), Node("paragraph", "", long_text),
+        nodes = [Node("section", "", long_text, children=1),
+                 Node("section", "", long_text), Node("paragraph", "", long_text),
                  Node("entry", "Card number", "4111111111111111")]
         module._firefox_root = lambda: object()
         module._walk = lambda _root: ((node, (index,)) for index, node in enumerate(nodes))
@@ -400,7 +404,9 @@ def test_snapshot_keeps_long_rendered_text_in_unusual_accessibility_roles() -> N
         assert [item["name"] for item in snapshot["nodes"][:2]] == [long_text, long_text]
         assert site_text in snapshot["nodes"][0]["name"]
         assert snapshot["nodes"][2]["name"].startswith("<sensitive")
+        assert len(snapshot["nodes"]) == 3
         assert "4111" not in str(snapshot)
+    assert module._safe_observed_name("button", "Buy now", "Unrelated subtree") == "Buy now"
 
 
 def test_overlapping_radio_locator_fails_closed_without_action() -> None:

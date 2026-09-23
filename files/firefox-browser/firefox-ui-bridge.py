@@ -206,7 +206,8 @@ def _safe_visible_commerce_text(value: str) -> str:
 def _safe_observed_name(role: str, accessible_name: str, text_content: str) -> str:
     if role in {"password", "password text"}:
         return "<sensitive control; value redacted>"
-    source = text_content or accessible_name
+    text_bearing = role in PROSE_ROLES | {"text", "entry", "spin button"} or role not in INTERACTIVE_ROLES
+    source = (text_content or accessible_name) if text_bearing else accessible_name
     value = " ".join(source.split())
     if SENSITIVE_RE.search(accessible_name) or PRIVATE_VALUE_RE.search(value):
         return "<sensitive control; value redacted>"
@@ -334,7 +335,14 @@ def _snapshot() -> dict[str, Any]:
                     address = _redact_url(candidate)
             text_content = _text_content(node) if "showing" in states or "visible" in states else ""
             observed_name = _safe_observed_name(role, raw_name, text_content)
-            prose_name = observed_name if role in PROSE_ROLES or (text_content and role not in INTERACTIVE_ROLES) else ""
+            # Container text interfaces often repeat their entire descendant
+            # subtree. Include unfamiliar text-bearing *leaves*, not parent
+            # containers that would exhaust the node budget before controls.
+            leaf_text = False
+            if text_content and role not in INTERACTIVE_ROLES | PROSE_ROLES:
+                with contextlib.suppress(Exception):
+                    leaf_text = node.get_child_count() == 0
+            prose_name = observed_name if role in PROSE_ROLES or leaf_text else ""
             include = "showing" in states and (
                 role in INTERACTIVE_ROLES
                 or bool(prose_name)
