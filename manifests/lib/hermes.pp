@@ -162,7 +162,6 @@ define nest::lib::hermes (
     'image_gen',
     'kanban',
     'memory',
-    'messaging',
     'secure_browser',
     'session_search',
     'skills',

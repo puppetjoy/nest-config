@@ -71,7 +71,6 @@ class nest::app::hermes (
     'image_gen',
     'kanban',
     'memory',
-    'messaging',
     'secure_browser',
     'session_search',
     'skills',
