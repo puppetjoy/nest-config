@@ -364,6 +364,45 @@ def test_generic_accessible_page_text_and_values_across_unrelated_sites() -> Non
     assert module._safe_observed_name("text", "Card number", "4111111111111111").startswith("<sensitive")
 
 
+def test_snapshot_keeps_long_rendered_text_in_unusual_accessibility_roles() -> None:
+    module = load_bridge()
+
+    class Node:
+        def __init__(self, role: str, name: str, text: str = "") -> None:
+            self.role, self.name, self.text = role, name, text
+
+        def get_role_name(self) -> str:
+            return self.role
+
+        def get_name(self) -> str:
+            return self.name
+
+        def get_description(self) -> str:
+            return ""
+
+    for site_text in (
+        "Gray/Soft Upper Set of 4 $30.00",
+        "Library event starts at noon",
+        "Weather advisory: heavy rain tomorrow",
+    ):
+        long_text = "Read the full page. " * 20 + site_text
+        nodes = [Node("section", "", long_text), Node("paragraph", "", long_text),
+                 Node("entry", "Card number", "4111111111111111")]
+        module._firefox_root = lambda: object()
+        module._walk = lambda _root: ((node, (index,)) for index, node in enumerate(nodes))
+        module._browser_pid = lambda: 100
+        module._state_names = lambda _node: ["showing", "visible"]
+        module._extent = lambda _node: None
+        module._text_content = lambda node: node.text
+        module._firefox_window_id = lambda: "1"
+        module._run = lambda _argv: type("Result", (), {"stdout": b"Fixture - Firefox"})()
+        snapshot = module._snapshot()
+        assert [item["name"] for item in snapshot["nodes"][:2]] == [long_text, long_text]
+        assert site_text in snapshot["nodes"][0]["name"]
+        assert snapshot["nodes"][2]["name"].startswith("<sensitive")
+        assert "4111" not in str(snapshot)
+
+
 def test_overlapping_radio_locator_fails_closed_without_action() -> None:
     module, fixture, tmp = configured_bridge()
     try:
