@@ -48,7 +48,9 @@ resources:
               containers:
                 - name: nest
                   image: "%{lookup('config_image')}"
-                  imagePullPolicy: IfNotPresent
+                  # The config image uses the rolling main tag. Always pull so
+                  # backup-plan fixes are not hidden by a node-local old image.
+                  imagePullPolicy: Always
                   command:
                     - bolt
                     - plan
