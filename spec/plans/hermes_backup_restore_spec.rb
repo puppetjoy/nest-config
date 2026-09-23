@@ -13,6 +13,12 @@ RSpec.describe 'Hermes full-home backup generations' do
     expect(dashboard_data).not_to match(%r{"(?:profile|service_name)=})
   end
 
+  it 'hands the private uploaded helper to the unprivileged backup account' do
+    expect(backup_plan).to include('chown ${user.shellquote}:${user.shellquote} ${helper.shellquote}')
+    expect(backup_plan).to include('chmod 0700 ${helper.shellquote}')
+    expect(backup_plan).to include('runuser -u ${user.shellquote} -- ${helper_args.shellquote}')
+  end
+
   it 'stops every required profile service around a shared-root restore' do
     expect(restore_plan).to include("['talon', 'star', 'beryl', 'quill']")
     expect(restore_plan).to include('for restore_profile in ${profile_args}')

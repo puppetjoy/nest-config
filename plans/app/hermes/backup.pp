@@ -105,6 +105,7 @@ plan nest::app::hermes::backup (
     set -euo pipefail
     trap 'rm -f ${helper}' EXIT HUP INT TERM
     install -d -m 0700 -o ${user.shellquote} -g ${user.shellquote} ${backup_dir.shellquote}
+    chown ${user.shellquote}:${user.shellquote} ${helper.shellquote}
     chmod 0700 ${helper.shellquote}
     runuser -u ${user.shellquote} -- ${helper_args.shellquote}
     | COMMAND
