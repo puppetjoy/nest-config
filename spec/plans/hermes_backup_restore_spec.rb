@@ -13,6 +13,10 @@ RSpec.describe 'Hermes full-home backup generations' do
     expect(dashboard_data).not_to match(%r{"(?:profile|service_name)=})
   end
 
+  it 'always pulls the rolling config image before running the backup plan' do
+    expect(dashboard_data).to include('imagePullPolicy: Always')
+  end
+
   it 'hands the private uploaded helper to the unprivileged backup account' do
     expect(backup_plan).to include('chown ${user.shellquote}:${user.shellquote} ${helper.shellquote}')
     expect(backup_plan).to include('chmod 0700 ${helper.shellquote}')
