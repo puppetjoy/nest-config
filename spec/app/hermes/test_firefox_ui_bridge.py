@@ -583,6 +583,28 @@ def test_commerce_readback_ignores_promotional_amount_and_sums_labelled_controls
     assert result["total"] is None
 
 
+def test_commerce_readback_sums_unlabelled_stepper_values_without_other_numeric_inputs() -> None:
+    module = load_bridge()
+    for host, controls in (
+        ("shop.example", ("Decrease", "Increase")),
+        ("unrelated.example", ("Minus", "Plus")),
+    ):
+        snapshot = {
+            "url": f"https://{host}/cart", "title": "Cart",
+            "nodes": [
+                {"role": "entry", "name": "Gift card amount", "value": "50"},
+                {"role": "link", "name": controls[0]},
+                {"role": "spin button", "name": "1", "value": "1"},
+                {"role": "link", "name": controls[1]},
+                {"role": "link", "name": controls[0]},
+                {"role": "spin button", "name": "2", "value": "2"},
+                {"role": "link", "name": controls[1]},
+                {"role": "spin button", "name": "99", "value": "99"},
+            ],
+        }
+        assert module._commerce_readback(snapshot, {"safe_item_nickname": "fixture"})["quantity"] == 3
+
+
 def test_commerce_readback_keeps_real_shipping_amount_when_banner_precedes_it() -> None:
     module = load_bridge()
     snapshot = {

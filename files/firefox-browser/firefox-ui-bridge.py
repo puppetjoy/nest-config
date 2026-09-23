@@ -522,6 +522,20 @@ def _commerce_readback(snapshot: dict[str, Any], payload: dict[str, Any]) -> dic
         and re.fullmatch(r"(?:quantity|qty)", str(node.get("name") or ""), re.IGNORECASE)
         and re.fullmatch(r"\d{1,3}", str(node.get("value") or ""))
     ]
+    if not control_quantities:
+        # Some sites name quantity spin buttons with the number itself. Only
+        # treat them as quantities when bracketed by decrement/increment
+        # controls in the same accessibility reading order.
+        nodes = list(snapshot.get("nodes", []))
+        control_quantities = [
+            int(value) for index, node in enumerate(nodes)
+            if node.get("role") == "spin button"
+            for value in [str(node.get("value") or node.get("name") or "")]
+            if re.fullmatch(r"\d{1,3}", value)
+            and index > 0 and index + 1 < len(nodes)
+            and re.fullmatch(r"(?:decrease|decrement|minus|remove one)", str(nodes[index - 1].get("name") or ""), re.IGNORECASE)
+            and re.fullmatch(r"(?:increase|increment|plus|add one)", str(nodes[index + 1].get("name") or ""), re.IGNORECASE)
+        ]
     quantity: int | None = sum(control_quantities) if control_quantities else None
     if quantity is None:
         for text in visible_names:
