@@ -1,5 +1,7 @@
 ---
 cachedir: '/var/cache/r10k'
+# GitLab's SSH endpoint closes concurrent fetches from the legacy deploy host.
+pool_size: 1
 
 sources:
   nest:
