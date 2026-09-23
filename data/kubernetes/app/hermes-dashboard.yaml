@@ -24,11 +24,9 @@ node_role: compute
 resources:
   registry_auths: {}
 
-  # Hermes profile backups run on the host-local Hermes service, not inside the
-  # Eyrie namespace/service backing the dashboard edge.  Keep this explicit so
-  # the shared Kubernetes backup CronJob arguments (namespace=/service=) cannot
-  # drift back into nest::app::hermes::backup, which only accepts profile-style
-  # parameters.
+  # Every profile dashboard invokes the same host-local backup checkpoint.
+  # The plan serializes these calls and publishes exactly one full Hermes-home
+  # generation; profile labels must never multiply or rename that generation.
   backup:
     apiVersion: batch/v1
     kind: CronJob
@@ -56,8 +54,7 @@ resources:
                     - plan
                     - run
                     - "%{lookup('plan_base')}::backup"
-                    - "service_name=%{nest::kubernetes::service_name}"
-                    - "profile=%{nest::kubernetes::service}"
+
                   env:
                     - name: KUBECONFIG
                       value: '/nest/home/kubeconfigs/eyrie.conf'
