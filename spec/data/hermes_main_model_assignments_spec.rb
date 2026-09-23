@@ -21,7 +21,7 @@ RSpec.describe 'Hermes main model assignments' do
     )
   end
 
-  it 'leaves Beryl and all auxiliary and delegation routes unchanged' do
+  it 'moves hosted helper routes to GPT-6 Luna while leaving Beryl local' do
     expect(instances.fetch('beryl')).to include(
       'model_provider' => 'custom:llama-qwen',
       'model_name' => 'qwen-3.6',
@@ -30,11 +30,13 @@ RSpec.describe 'Hermes main model assignments' do
     expect(instances.fetch('star')).not_to have_key('delegation_provider')
     expect(instances.fetch('quill')).to include(
       'auxiliary_provider' => 'copilot',
-      'auxiliary_compress_model' => 'gpt-5.6-terra',
-      'auxiliary_extract_model' => 'gpt-5.6-terra',
-      'auxiliary_title_model' => 'gpt-5.6-luna',
+      'auxiliary_compress_model' => 'gpt-6-luna',
+      'auxiliary_extract_model' => 'gpt-6-luna',
+      'auxiliary_title_model' => 'gpt-6-luna',
       'delegation_provider' => 'copilot',
-      'delegation_model' => 'gpt-5.6-terra',
+      'delegation_model' => 'gpt-6-luna',
     )
+    expect(instances.fetch('quill')).not_to have_key('auxiliary_reasoning_effort')
+    expect(instances.fetch('quill')).not_to have_key('delegation_reasoning_effort')
   end
 end

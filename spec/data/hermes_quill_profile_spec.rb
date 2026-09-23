@@ -70,15 +70,17 @@ RSpec.describe 'Quill Hermes work profile' do
     expect(hermes_define).to include("default => { 'reasoning_effort' => $agent_reasoning_effort }")
   end
 
-  it 'uses GPT-6 Luna for the main route without changing auxiliary roles' do
+  it 'uses GPT-6 Luna with provider-default reasoning for every helper route' do
     expect(quill).to include(
       'auxiliary_provider' => 'copilot',
-      'auxiliary_compress_model' => 'gpt-5.6-terra',
-      'auxiliary_extract_model' => 'gpt-5.6-terra',
-      'auxiliary_title_model' => 'gpt-5.6-luna',
+      'auxiliary_compress_model' => 'gpt-6-luna',
+      'auxiliary_extract_model' => 'gpt-6-luna',
+      'auxiliary_title_model' => 'gpt-6-luna',
       'delegation_provider' => 'copilot',
-      'delegation_model' => 'gpt-5.6-terra',
+      'delegation_model' => 'gpt-6-luna',
     )
+    expect(quill).not_to have_key('auxiliary_reasoning_effort')
+    expect(quill).not_to have_key('delegation_reasoning_effort')
   end
 
   it 'uses the selected local speech voice and source-managed media' do
