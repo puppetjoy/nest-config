@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate rendered Talon/Star Hermes backup CronJob Bolt arguments.
+"""Validate rendered Hermes backup CronJobs use one unscoped generation plan.
 
 Pass one or more rendered KubeCM YAML files, for example:
   scripts/check_hermes_backup_cronjobs.py render/talon.yaml render/star.yaml
@@ -30,19 +30,21 @@ def cronjob_block(text: str, service: str) -> str:
 
 def check_file(path: Path) -> list[str]:
     text = path.read_text(encoding="utf-8")
-    services = [service for service in ("talon", "star") if f"name: {service}-backup" in text]
+    services = [
+        service
+        for service in ("talon", "star", "beryl", "quill")
+        if f"name: {service}-backup" in text
+    ]
     if not services:
-        raise AssertionError(f"{path}: no talon-backup or star-backup CronJob found")
+        raise AssertionError(f"{path}: no Hermes profile backup CronJob found")
 
     checked: list[str] = []
     for service in services:
         block = cronjob_block(text, service)
         if "nest::app::hermes::backup" not in block:
             raise AssertionError(f"{path}: {service}-backup does not call nest::app::hermes::backup")
-        if f"profile={service}" not in block:
-            raise AssertionError(f"{path}: {service}-backup is missing profile={service}")
-        if f"service_name={service}" not in block:
-            raise AssertionError(f"{path}: {service}-backup is missing service_name={service}")
+        if re.search(r"^-\s+['\"]?(profile|service_name)=", block, re.MULTILINE):
+            raise AssertionError(f"{path}: {service}-backup labels a full-home backup by profile")
         forbidden = FORBIDDEN_ARG_RE.search(block)
         if forbidden:
             raise AssertionError(
@@ -62,11 +64,10 @@ def main() -> int:
     for path in args.rendered_yaml:
         seen.update(check_file(path))
 
-    missing = {"talon", "star"} - seen
-    if missing:
-        raise AssertionError(f"missing rendered CronJobs for: {', '.join(sorted(missing))}")
+    if not seen:
+        raise AssertionError("no rendered Hermes backup CronJobs were checked")
 
-    print("Hermes backup CronJobs use profile/service_name args only for talon and star")
+    print("Hermes backup CronJobs use one unscoped full-home generation plan")
     return 0
 
 

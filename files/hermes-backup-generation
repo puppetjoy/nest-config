@@ -1,0 +1,291 @@
+#!/usr/bin/env python3
+"""Create and retain truthful full-Hermes backup generations."""
+
+from __future__ import annotations
+
+import argparse
+import fcntl
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+import time
+import zipfile
+from pathlib import Path
+
+
+GENERATION_RE = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9_.-]*\Z")
+ARCHIVE_RE = re.compile(r"\Ahermes-home-([A-Za-z0-9][A-Za-z0-9_.-]*)\.zip\Z")
+LEGACY_RE = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9_.-]*-hermes-\d{8}-\d{6}\.zip\Z")
+DEFAULT_PROFILES = ("talon", "star", "beryl", "quill")
+REQUIRED_SHARED = ("config.yaml", "auth.json", "kanban.db")
+
+
+def _archive_for(backup_dir: Path, checkpoint: str) -> Path:
+    if not GENERATION_RE.fullmatch(checkpoint):
+        raise ValueError(f"invalid checkpoint: {checkpoint!r}")
+    return backup_dir / f"hermes-home-{checkpoint}.zip"
+
+
+def _profile_name(value: str) -> str:
+    if not GENERATION_RE.fullmatch(value):
+        raise argparse.ArgumentTypeError(f"invalid profile name: {value!r}")
+    return value
+
+
+def _metadata_for(archive: Path) -> Path:
+    return archive.with_suffix(".json")
+
+
+def _verify_archive(
+    archive: Path,
+    required_profiles: tuple[str, ...],
+    *,
+    full_crc: bool = False,
+) -> dict[str, object]:
+    if not zipfile.is_zipfile(archive):
+        raise RuntimeError(f"not a ZIP archive: {archive}")
+    with zipfile.ZipFile(archive) as backup:
+        names = {name.rstrip("/") for name in backup.namelist()}
+        if full_crc:
+            bad_member = backup.testzip()
+            if bad_member is not None:
+                raise RuntimeError(f"CRC verification failed at {bad_member}")
+
+    missing_shared = [name for name in REQUIRED_SHARED if name not in names]
+    missing_profiles = [
+        profile
+        for profile in required_profiles
+        if not any(name.startswith(f"profiles/{profile}/") for name in names)
+    ]
+    if missing_shared or missing_profiles:
+        raise RuntimeError(
+            "backup is incomplete: "
+            f"missing shared={missing_shared!r}, profiles={missing_profiles!r}"
+        )
+    return {
+        "archive": str(archive),
+        "bytes": archive.stat().st_size,
+        "members": len(names),
+        "required_profiles": list(required_profiles),
+        "required_shared": list(REQUIRED_SHARED),
+    }
+
+
+def _atomic_json(path: Path, payload: dict[str, object]) -> None:
+    fd, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    temporary = Path(temporary_name)
+    try:
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as output:
+            json.dump(payload, output, indent=2, sort_keys=True)
+            output.write("\n")
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _generation_archives(backup_dir: Path) -> list[Path]:
+    archives = [
+        path
+        for path in backup_dir.iterdir()
+        if path.is_file() and ARCHIVE_RE.fullmatch(path.name)
+    ]
+    return sorted(archives, key=lambda path: (path.stat().st_mtime_ns, path.name), reverse=True)
+
+
+def _prune(backup_dir: Path, retain: int, protect: Path | None = None) -> list[str]:
+    if retain < 1:
+        raise ValueError("retain must be at least 1")
+    archives = _generation_archives(backup_dir)
+    keep = set(archives[:retain])
+    if protect is not None:
+        keep.add(protect)
+    removed: list[str] = []
+    for archive in archives:
+        if archive in keep:
+            continue
+        metadata = _metadata_for(archive)
+        archive.unlink()
+        metadata.unlink(missing_ok=True)
+        removed.append(str(archive))
+    return removed
+
+
+def _current_checkpoint() -> str:
+    return time.strftime("cron-%Y%m%dT%H", time.gmtime())
+
+
+def _read_completed_metadata(archive: Path, checkpoint: str) -> dict[str, object] | None:
+    metadata_path = _metadata_for(archive)
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, OSError, json.JSONDecodeError):
+        return None
+    if metadata.get("checkpoint") != checkpoint or metadata.get("archive") != archive.name:
+        return None
+    try:
+        if metadata.get("bytes") != archive.stat().st_size:
+            return None
+    except FileNotFoundError:
+        return None
+    return metadata
+
+
+def create_generation(args: argparse.Namespace) -> dict[str, object]:
+    backup_dir = args.backup_dir.resolve()
+    backup_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(backup_dir, 0o700)
+    checkpoint = args.checkpoint or _current_checkpoint()
+    archive = _archive_for(backup_dir, checkpoint)
+    lock_path = backup_dir / ".generation.lock"
+
+    with lock_path.open("a+b") as lock:
+        os.chmod(lock_path, 0o600)
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        completed = _read_completed_metadata(archive, checkpoint)
+        if completed is not None:
+            _verify_archive(archive, tuple(args.required_profile))
+            return {"action": "reused", **completed}
+        if archive.exists() or _metadata_for(archive).exists():
+            raise RuntimeError(
+                f"refusing to replace incomplete generation artifacts for {checkpoint}: {archive}"
+            )
+
+        subprocess.run(
+            [str(args.hermes_bin), "backup", "--output", str(archive)],
+            check=True,
+        )
+        os.chmod(archive, 0o600)
+        verification = _verify_archive(archive, tuple(args.required_profile))
+        metadata: dict[str, object] = {
+            "archive": archive.name,
+            "bytes": verification["bytes"],
+            "checkpoint": checkpoint,
+            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "format": "full-hermes-home-v1",
+            "members": verification["members"],
+            "required_profiles": verification["required_profiles"],
+            "required_shared": verification["required_shared"],
+            "verified": True,
+            "verified_by": "native Hermes staged CRC test and atomic publish",
+        }
+        _atomic_json(_metadata_for(archive), metadata)
+        removed = _prune(backup_dir, args.retain, protect=archive)
+        return {"action": "created", **metadata, "pruned": removed}
+
+
+def prune_generations(args: argparse.Namespace) -> dict[str, object]:
+    backup_dir = args.backup_dir.resolve()
+    backup_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    with (backup_dir / ".generation.lock").open("a+b") as lock:
+        os.chmod(lock.name, 0o600)
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        return {"action": "pruned", "removed": _prune(backup_dir, args.retain)}
+
+
+def _cleanup_legacy_locked(args: argparse.Namespace, backup_dir: Path) -> dict[str, object]:
+    legacy = sorted(
+        (path for path in backup_dir.iterdir() if path.is_file() and LEGACY_RE.fullmatch(path.name)),
+        key=lambda path: (path.stat().st_mtime_ns, path.name),
+        reverse=True,
+    )
+    protected = legacy[:1]
+    candidates = legacy[1:]
+    report: dict[str, object] = {
+        "action": "legacy-cleanup-applied" if args.apply else "legacy-cleanup-dry-run",
+        "candidate_bytes": sum(path.stat().st_size for path in candidates),
+        "candidates": [str(path) for path in candidates],
+        "candidate_details": [
+            {"bytes": path.stat().st_size, "path": str(path)} for path in candidates
+        ],
+        "protected_newest_legacy": [str(path) for path in protected],
+        "protected_details": [
+            {"bytes": path.stat().st_size, "path": str(path)} for path in protected
+        ],
+    }
+    if not args.apply:
+        return report
+
+    generations = _generation_archives(backup_dir)
+    if not generations:
+        raise RuntimeError("refusing legacy cleanup without a completed full-home generation")
+    newest_generation = generations[0]
+    metadata = _read_completed_metadata(newest_generation, ARCHIVE_RE.fullmatch(newest_generation.name).group(1))
+    if metadata is None or metadata.get("verified") is not True:
+        raise RuntimeError("refusing legacy cleanup without verified generation metadata")
+    _verify_archive(newest_generation, tuple(args.required_profile), full_crc=True)
+
+    deleted: list[str] = []
+    for path in candidates:
+        path.unlink()
+        deleted.append(str(path))
+    survivors = [str(path) for path in legacy if path.exists()]
+    if [str(path) for path in protected] != survivors:
+        raise RuntimeError(f"legacy cleanup readback mismatch: survivors={survivors!r}")
+    report["deleted"] = deleted
+    report["readback_survivors"] = survivors
+    report["verified_generation"] = str(newest_generation)
+    return report
+
+
+def cleanup_legacy(args: argparse.Namespace) -> dict[str, object]:
+    backup_dir = args.backup_dir.resolve()
+    backup_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    with (backup_dir / ".generation.lock").open("a+b") as lock:
+        os.chmod(lock.name, 0o600)
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        return _cleanup_legacy_locked(args, backup_dir)
+
+
+def parser() -> argparse.ArgumentParser:
+    result = argparse.ArgumentParser()
+    subparsers = result.add_subparsers(dest="command", required=True)
+
+    def common(subparser: argparse.ArgumentParser) -> None:
+        subparser.add_argument("--backup-dir", type=Path, required=True)
+        subparser.add_argument(
+            "--required-profile",
+            action="append",
+            default=[],
+            type=_profile_name,
+        )
+
+    backup = subparsers.add_parser("backup")
+    common(backup)
+    backup.add_argument("--checkpoint")
+    backup.add_argument("--hermes-bin", type=Path, required=True)
+    backup.add_argument("--retain", type=int, default=24)
+    backup.set_defaults(handler=create_generation)
+
+    prune = subparsers.add_parser("prune")
+    common(prune)
+    prune.add_argument("--retain", type=int, default=24)
+    prune.set_defaults(handler=prune_generations)
+
+    legacy = subparsers.add_parser("legacy-cleanup")
+    common(legacy)
+    legacy.add_argument("--apply", action="store_true")
+    legacy.set_defaults(handler=cleanup_legacy)
+    return result
+
+
+def main() -> int:
+    args = parser().parse_args()
+    if hasattr(args, "required_profile") and not args.required_profile:
+        args.required_profile = list(DEFAULT_PROFILES)
+    try:
+        result = args.handler(args)
+    except (OSError, RuntimeError, ValueError, subprocess.CalledProcessError) as exc:
+        print(json.dumps({"error": str(exc)}, sort_keys=True), file=sys.stderr)
+        return 1
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
