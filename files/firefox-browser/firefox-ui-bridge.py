@@ -461,17 +461,25 @@ def _commerce_readback(snapshot: dict[str, Any], payload: dict[str, Any]) -> dic
                 continue
             following = visible_names[index + 1] if index + 1 < len(visible_names) else ""
             match = MONEY_RE.search(text)
+            currency_suffix = text[match.end():].strip() if match else ""
+            amount_ends_line = not currency_suffix or bool(re.fullmatch(r"(?:USD|CAD|AUD|EUR|GBP)", currency_suffix, re.IGNORECASE))
             if label == "total":
                 accepted_labels = {"total", "order total", "grand total"}
-                if match and text[:match.start()].strip(" :-").lower() in accepted_labels and not text[match.end():].strip():
+                if match and text[:match.start()].strip(" :-").lower() in accepted_labels and amount_ends_line:
                     values.append(re.sub(r"\s+", "", match.group(1)))
                 elif text.strip(" :-").lower() in accepted_labels:
                     split_match = MONEY_RE.fullmatch(following)
                     if split_match:
                         values.append(re.sub(r"\s+", "", split_match.group(1)))
                 continue
-            if match:
+            # A shipping promotion or threshold banner is not a charge.
+            # Accept only a standalone checkout line label, not arbitrary prose
+            # containing the word (e.g. "free shipping on orders over $100").
+            accepted_labels = {"shipping", "shipping cost", "shipping charge", "delivery", "delivery fee"} if label == "shipping" else {label}
+            if match and text[:match.start()].strip(" :-").lower() in accepted_labels and amount_ends_line:
                 values.append(re.sub(r"\s+", "", match.group(1)))
+                continue
+            if text.strip(" :-").lower() not in accepted_labels:
                 continue
             match = MONEY_RE.fullmatch(following)
             if match:
@@ -496,12 +504,21 @@ def _commerce_readback(snapshot: dict[str, Any], payload: dict[str, Any]) -> dic
             if value not in variants:
                 variants.append(value)
 
-    quantity: int | None = None
-    for text in visible_names:
-        match = re.search(r"\b(?:quantity|qty)\s*[:x-]?\s*(\d{1,3})\b", text, re.IGNORECASE)
-        if match:
-            quantity = int(match.group(1))
-            break
+    # Prefer labelled control values: a cart often has a separate Quantity
+    # spin button on every row, not prose containing "Quantity 1".
+    control_quantities = [
+        int(str(node.get("value"))) for node in snapshot.get("nodes", [])
+        if str(node.get("role") or "") in {"spin button", "entry"}
+        and re.fullmatch(r"(?:quantity|qty)", str(node.get("name") or ""), re.IGNORECASE)
+        and re.fullmatch(r"\d{1,3}", str(node.get("value") or ""))
+    ]
+    quantity: int | None = sum(control_quantities) if control_quantities else None
+    if quantity is None:
+        for text in visible_names:
+            match = re.search(r"\b(?:quantity|qty)\s*[:x-]?\s*(\d{1,3})\b", text, re.IGNORECASE)
+            if match:
+                quantity = int(match.group(1))
+                break
 
     transition = _transition_state(snapshot)
     confirmation = {
