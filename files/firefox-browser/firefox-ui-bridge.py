@@ -33,6 +33,7 @@ DEFAULT_HARD_TAB_CAP = int(os.environ.get("FIREFOX_UI_HARD_TAB_CAP", "12"))
 DEFAULT_LEASE_SECONDS = int(os.environ.get("FIREFOX_UI_LEASE_SECONDS", "7200"))
 MAX_NODES = int(os.environ.get("FIREFOX_UI_MAX_NODES", "350"))
 MAX_NAME = 240
+MAX_PAGE_TEXT = 2048
 DEFAULT_STABLE_WAIT_SECONDS = float(os.environ.get("FIREFOX_UI_STABLE_WAIT_SECONDS", "6"))
 SENSITIVE_RE = re.compile(
     r"password|passcode|one[- ]?time|security code|cvv|cvc|card number|account number|routing number|secret|token|private key|recovery code",
@@ -170,7 +171,7 @@ def _text_content(node: Any) -> str:
         Atspi = importlib.import_module("gi.repository.Atspi")
         count = int(Atspi.Text.get_character_count(node))
         if count > 0:
-            return str(Atspi.Text.get_text(node, 0, min(count, MAX_NAME * 4)) or "")
+            return str(Atspi.Text.get_text(node, 0, min(count, MAX_PAGE_TEXT)) or "")
     return ""
 
 
@@ -205,11 +206,11 @@ def _safe_visible_commerce_text(value: str) -> str:
 def _safe_observed_name(role: str, accessible_name: str, text_content: str) -> str:
     if role in {"password", "password text"}:
         return "<sensitive control; value redacted>"
-    source = text_content or accessible_name if role in PROSE_ROLES | {"text", "entry", "spin button"} else accessible_name
+    source = text_content or accessible_name
     value = " ".join(source.split())
     if SENSITIVE_RE.search(accessible_name) or PRIVATE_VALUE_RE.search(value):
         return "<sensitive control; value redacted>"
-    return value[:MAX_NAME * 4]
+    return value[:MAX_PAGE_TEXT]
 
 
 def _state_names(node: Any) -> list[str]:
@@ -287,7 +288,7 @@ def _node_record(node: Any, path: tuple[int, ...], generation: int, observed_nam
         description = node.get_description() or ""
     states = _state_names(node)
     extent = _extent(node)
-    safe_name = _safe_name(role, display_name)
+    safe_name = _safe_name(role, display_name) if role in INTERACTIVE_ROLES or observed_name is None else display_name[:MAX_PAGE_TEXT]
     record: dict[str, Any] = {
         "role": role,
         "name": safe_name or "<unlabelled>",
@@ -331,11 +332,12 @@ def _snapshot() -> dict[str, Any]:
                 candidate = _text_content(node)
                 if candidate:
                     address = _redact_url(candidate)
-            observed_name = _safe_observed_name(role, raw_name, _text_content(node) if role in PROSE_ROLES else "")
-            prose_name = observed_name if role in PROSE_ROLES else ""
+            text_content = _text_content(node) if "showing" in states or "visible" in states else ""
+            observed_name = _safe_observed_name(role, raw_name, text_content)
+            prose_name = observed_name if role in PROSE_ROLES or (text_content and role not in INTERACTIVE_ROLES) else ""
             include = "showing" in states and (
                 role in INTERACTIVE_ROLES
-                or (bool(observed_name) and role in PROSE_ROLES)
+                or bool(prose_name)
             )
             include = include or bool(prose_name and "visible" in states)
             if include and len(nodes) < MAX_NODES:
