@@ -29,14 +29,20 @@ mkdir -p \
   /tmp/nest-firefox
 chmod 700 "$XDG_RUNTIME_DIR" "$HOME/.mozilla/firefox/nest-secure-browser" "$HOME/.vnc" "$HOME/.local/state/nest-firefox-ui" || true
 
-# Phase 1 is intentionally a plain Firefox desktop. Fail closed rather than
-# accidentally reintroducing any browser-internal automation endpoint through
-# KubeCM APP_ARGS or an image default.
+# The optional v2 backend attaches to this SAME visible Firefox process through
+# a loopback-only BiDi listener. Never accept arbitrary automation arguments
+# from KubeCM, and never publish this listener as a container/service port.
 case " $APP_ARGS " in
   *remote-debugging*|*marionette*|*webdriver*|*bidi*|*devtools-server*)
     printf '%s\n' 'Refusing automation-specific Firefox APP_ARGS' >&2
     exit 64
     ;;
+esac
+
+case "${FIREFOX_CONTROL_PROTOCOL:-firefox-ui-v1}" in
+  firefox-ui-v1) bidi_args= ;;
+  firefox-bidi-ui-v2) bidi_args='--remote-debugging-port=9222' ;;
+  *) printf '%s\n' 'Unknown Firefox control protocol' >&2; exit 64 ;;
 esac
 
 kasmvnc_pid=
@@ -86,7 +92,8 @@ done
 
 # Firefox and the UI bridge share one private desktop accessibility bus. The
 # bridge receives only the bus address, never profile/session secrets. This is
-# the OS accessibility boundary used in place of WebDriver/BiDi/CDP.
+# the OS accessibility boundary; v2 additionally uses private BiDi for page
+# content/selector access, but keeps this bus for chrome and fallback controls.
 eval "$(dbus-launch --sh-syntax)"
 dbus_pid="${DBUS_SESSION_BUS_PID:-}"
 printf 'DBUS_SESSION_BUS_ADDRESS=%s\n' "$DBUS_SESSION_BUS_ADDRESS" > /tmp/nest-firefox/session.env
@@ -113,6 +120,7 @@ firefox \
   --profile "$HOME/.mozilla/firefox/nest-secure-browser" \
   --width "$FIREFOX_WIDTH" \
   --height "$FIREFOX_HEIGHT" \
+  $bidi_args \
   $APP_ARGS \
   "$LAUNCH_URL" &
 firefox_pid=$!

@@ -1,8 +1,8 @@
-"""Hermes adapter for the persistent, non-instrumented Firefox desktop.
+"""Hermes adapter for the persistent, owner-visible Firefox desktop.
 
-The browser is controlled only through the source-managed Firefox UI bridge
-inside the Kubernetes workload. The bridge uses X11 input, AT-SPI observation,
-and X11 screenshots; this module has no browser-debugging or profile-data path.
+The browser uses the source-managed Firefox UI bridge inside the Kubernetes
+workload. The bridge uses X11 input, AT-SPI observation, and X11 screenshots.
+Opt-in v2 adds a private BiDi page connector without exposing raw profile data.
 """
 
 from __future__ import annotations
@@ -63,7 +63,7 @@ def _workflow_id(args: dict[str, Any], task_id: str | None = None) -> str:
 
 
 def _bridge(command: str, payload: dict[str, Any], *, timeout: int | None = None) -> dict[str, Any]:
-    if CONTROL_MODE != "firefox-ui-v1":
+    if CONTROL_MODE not in {"firefox-ui-v1", "firefox-bidi-ui-v2"}:
         raise RuntimeError(f"unsupported secure browser control mode: {CONTROL_MODE}")
     kubeconfig = os.environ.get("KUBECONFIG", "").strip()
     if not kubeconfig:
@@ -106,7 +106,7 @@ def _bridge(command: str, payload: dict[str, Any], *, timeout: int | None = None
 
 
 def _check_secure_browser() -> bool:
-    return CONTROL_MODE == "firefox-ui-v1" and bool(WORKLOAD) and bool(BRIDGE_PATH)
+    return CONTROL_MODE in {"firefox-ui-v1", "firefox-bidi-ui-v2"} and bool(WORKLOAD) and bool(BRIDGE_PATH)
 
 
 def _safe_call(operation: str, callback: Any) -> str:
@@ -118,7 +118,7 @@ def _safe_call(operation: str, callback: Any) -> str:
             "status": "error",
             "error": "FIREFOX_UI_CONTROL_FAILED",
             "message": str(exc)[:1000],
-            "protocol": "firefox-ui-v1",
+            "protocol": CONTROL_MODE,
         })
 
 
@@ -137,7 +137,7 @@ def _save_screenshot(result: dict[str, Any], *, owner_only: bool = False) -> dic
     path.write_bytes(content)
     os.chmod(path, 0o600)
     result["image_path"] = str(path)
-    result["protocol"] = "firefox-ui-v1"
+    result["protocol"] = CONTROL_MODE
     if owner_only:
         result.update({
             "owner_only": True,
@@ -154,12 +154,18 @@ def _save_screenshot(result: dict[str, Any], *, owner_only: bool = False) -> dic
 def secure_browser_status_tool(args: dict[str, Any], **_kw: Any) -> str:
     return _safe_call("status", lambda: {
         **_bridge("status", {}),
+        "protocol": CONTROL_MODE,
+        "instrumentation": {
+            "webdriver": False, "marionette": CONTROL_MODE == "firefox-bidi-ui-v2",
+            "bidi": CONTROL_MODE == "firefox-bidi-ui-v2", "cdp": False,
+            "dom": CONTROL_MODE == "firefox-bidi-ui-v2",
+        },
         "public_browser_url": PUBLIC_URL,
         "authorization_boundary": "Joy's direction to Star for the workflow; no per-click, checkout, or purchase approval ceremony",
         "sensitive_state_boundary": "Secrets remain in Firefox/Bitwarden and must not be passed as tool text or exposed from profile storage",
         "compatibility": {
-            "version": "firefox-ui-v1",
-            "dom_selectors": False,
+            "version": CONTROL_MODE,
+            "dom_selectors": CONTROL_MODE == "firefox-bidi-ui-v2",
             "javascript_query": False,
             "accessibility_locators": True,
             "coordinate_input": True,
@@ -262,6 +268,12 @@ def secure_browser_owner_review_capture_tool(args: dict[str, Any], **_kw: Any) -
 
 
 def secure_browser_query_tool(args: dict[str, Any], **_kw: Any) -> str:
+    if CONTROL_MODE == "firefox-bidi-ui-v2":
+        def run() -> dict[str, Any]:
+            from importlib import import_module
+            secure_browser_bidi = import_module("tools.secure_browser_bidi")
+            return secure_browser_bidi.query(_bridge("snapshot", {}), str(args.get("expression") or ""))
+        return _safe_call("query", run)
     return _json({
         "operation": "query",
         "status": "unsupported",
@@ -287,6 +299,16 @@ def secure_browser_visual_evidence_tool(args: dict[str, Any], **_kw: Any) -> str
 
 def secure_browser_click_tool(args: dict[str, Any], task_id: str | None = None, **_kw: Any) -> str:
     def run() -> dict[str, Any]:
+        if CONTROL_MODE == "firefox-bidi-ui-v2" and args.get("selector"):
+            from importlib import import_module
+            secure_browser_bidi = import_module("tools.secure_browser_bidi")
+            point = secure_browser_bidi.selector_point(_bridge("snapshot", {}), str(args["selector"]))
+            return _bridge("click", {
+                "workflow_id": _workflow_id(args, task_id),
+                "coordinate": point,
+                "action_key": args.get("action_key") or args.get("idempotency_key"),
+                "max_wait_seconds": args.get("max_wait_seconds"),
+            }, timeout=BRIDGE_TIMEOUT + 15)
         if args.get("selector") and not args.get("locator"):
             return {
                 "operation": "click", "status": "unsupported",
@@ -311,6 +333,15 @@ def secure_browser_click_tool(args: dict[str, Any], task_id: str | None = None, 
 
 def secure_browser_type_tool(args: dict[str, Any], task_id: str | None = None, **_kw: Any) -> str:
     def run() -> dict[str, Any]:
+        if CONTROL_MODE == "firefox-bidi-ui-v2" and args.get("selector"):
+            from importlib import import_module
+            secure_browser_bidi = import_module("tools.secure_browser_bidi")
+            point = secure_browser_bidi.selector_point(_bridge("snapshot", {}), str(args["selector"]), field_only=True)
+            return _bridge("type", {
+                "workflow_id": _workflow_id(args, task_id),
+                "coordinate": point,
+                "text": args.get("text", ""),
+            })
         if args.get("selector") and not args.get("locator"):
             return {
                 "operation": "type", "status": "unsupported",

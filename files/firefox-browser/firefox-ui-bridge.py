@@ -909,6 +909,7 @@ def command_type(payload: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("text must contain 1..4096 characters")
     workflow_id = str(payload.get("workflow_id") or "default")[:160]
     locator = str(payload.get("locator") or "")
+    coordinate = payload.get("coordinate")
     with _locked_state() as state:
         snapshot = _snapshot()
         _reconcile_state(state, snapshot)
@@ -921,6 +922,8 @@ def command_type(payload: dict[str, Any]) -> dict[str, Any]:
             if not rect:
                 raise ValueError("accessibility control has no screen bounds")
             _xdotool("mousemove", "--sync", str(rect["x"] + rect["width"] // 2), str(rect["y"] + rect["height"] // 2), "click", "1")
+        elif isinstance(coordinate, list) and len(coordinate) == 2:
+            _xdotool("mousemove", "--sync", str(int(coordinate[0])), str(int(coordinate[1])), "click", "1")
         _xdotool("type", "--clearmodifiers", "--delay", "1", "--", text, timeout=45)
         readback = _readback()
         record["tab_name"] = readback["selected_tab"] or record["tab_name"]

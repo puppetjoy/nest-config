@@ -14,6 +14,7 @@ image: registry.gitlab.joyfullee.me/nest/tools/firefox:latest
 image_revision: '234428c2'
 launch_url: about:blank
 app_args: ''
+control_protocol: firefox-ui-v1
 vnc_options: '-disableBasicAuth'
 storage_class: owl-crypt
 profile_storage_size: 12Gi
@@ -202,6 +203,8 @@ resources:
                   value: '768'
                 - name: APP_ARGS
                   value: "%{lookup('app_args')}"
+                - name: FIREFOX_CONTROL_PROTOCOL
+                  value: "%{lookup('control_protocol')}"
                 - name: FIREFOX_UI_HARD_TAB_CAP
                   value: "%{lookup('ui_hard_tab_cap')}"
                 - name: FIREFOX_UI_LEASE_SECONDS
