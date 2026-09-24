@@ -44,19 +44,23 @@ def _read_script(expression: str) -> str:
         raise ValueError("selector must contain 1..512 characters")
     if FORBIDDEN_SOURCE.search(selector):
         raise ValueError("cannot inspect credential, profile, or secret fields")
-    if multiple:
-        if prop != "length":
-            raise ValueError("querySelectorAll supports length only")
+    if multiple and prop == "length":
         return "document.querySelectorAll(" + json.dumps(selector) + ").length"
-    if prop == "length":
+    if not multiple and prop == "length":
         raise ValueError("querySelector does not support length")
+    # The same per-element credential guard applies to a single match and to
+    # collections. This makes rendered text, variants, and controls readable
+    # across sites without making a collection a bypass for protected fields.
+    getter = ("e => {const hint=[e.name,e.id,e.getAttribute('aria-label'),e.getAttribute('autocomplete'),"
+              "...(e.labels?[...e.labels].map(l=>l.innerText):[])].join(' ');"
+              "if(e.matches('input[type=password],input[type=hidden]')||"
+              "/password|passcode|verification|one.time|security.code|cvv|cvc|card.number|account.number|routing.number|secret|token|recovery.code/i.test(hint))return '<redacted>';"
+              "return e." + prop + ";}")
+    if multiple:
+        return ("(() => {const nodes=document.querySelectorAll(" + json.dumps(selector) + ");"
+                "return {total:nodes.length,values:[...nodes].slice(0,120).map(" + getter + ")};})()")
     return ("(() => {const e=document.querySelector(" + json.dumps(selector) + ");"
-            "if(!e)return null;"
-            "const hint=[e.name,e.id,e.getAttribute('aria-label'),e.getAttribute('autocomplete'),"
-            "...(e.labels?[...e.labels].map(l=>l.innerText):[])].join(' ');"
-            "if(e.matches('input[type=password],input[type=hidden]')||"
-            "/password|passcode|verification|one.time|security.code|cvv|cvc|card.number|account.number|routing.number|secret|token|recovery.code/i.test(hint))return '<redacted>';"
-            "return e." + prop + ";})()")
+            "return e? (" + getter + ")(e) : null;})()")
 
 
 def _url_identity(value: str) -> str:
@@ -132,9 +136,12 @@ def query(ui_snapshot: dict[str, Any], expression: str) -> dict[str, Any]:
         if browser.protocol != "bidi":
             raise RuntimeError("Firefox did not expose the private BiDi session")
         context = _selected_context(browser, ui_snapshot)
-        value = _safe_result(_evaluate(browser, context, script))
+        raw = _evaluate(browser, context, script)
+        truncated = (isinstance(raw, dict) and isinstance(raw.get("total"), int)
+                     and raw["total"] > len(raw.get("values", [])))
+        value = _safe_result(raw)
         return {"operation": "query", "status": "ok", "protocol": "firefox-bidi-ui-v2", "value": value,
-                "source": "live DOM in uniquely matched visible Firefox tab", "truncated": len(str(value)) >= MAX_QUERY_CHARS}
+                "source": "live DOM in uniquely matched visible Firefox tab", "truncated": truncated or len(str(value)) >= MAX_QUERY_CHARS}
     return legacy._with_browser(run)
 
 

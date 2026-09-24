@@ -21,6 +21,8 @@ def load():
         def _bidi_value(value):
             if value["type"] == "object":
                 return {k: Session._bidi_value(v) for k, v in value["value"]}
+            if value["type"] == "array":
+                return [Session._bidi_value(item) for item in value["value"]]
             return value.get("value")
     legacy.CdpSession = Session
     tools.secure_browser_legacy_support = legacy
@@ -65,6 +67,38 @@ def test_unambiguous_visible_page_query_and_secret_guard():
             pass
         else:
             raise AssertionError("secret query was accepted")
+
+
+def test_general_collection_read_is_bounded_and_redacts_each_field():
+    module, legacy = load()
+    expression = 'document.querySelectorAll(".cart-row input, .cart-row .variant").value'
+    script = module._read_script(expression)
+    assert "nodes.length" in script and ".slice(0,120)" in script
+    assert "input[type=password],input[type=hidden]" in script
+    assert "e.value" in script
+    browser = Browser([{"context": "visible", "url": "https://fixture.example/shop"}])
+    def evaluate(method, payload):
+        assert method == "script.evaluate" and payload["expression"] == script
+        return {"result": {"type": "object", "value": [
+            ["total", {"type": "number", "value": 3}],
+            ["values", {"type": "array", "value": [
+                {"type": "string", "value": "Gray/Soft"},
+                {"type": "string", "value": "1"},
+                {"type": "string", "value": "<redacted>"},
+            ]}],
+        ]}}
+    browser._bidi = evaluate
+    legacy._with_browser = lambda fn: fn(browser)
+    result = module.query(snapshot(), expression)
+    assert result["value"] == {"total": 3, "values": ["Gray/Soft", "1", "<redacted>"]}
+    for forbidden in ('document.querySelectorAll("input[type=password]").value',
+                      'document.querySelectorAll(".cart-row").click()'):
+        try:
+            module.query(snapshot(), forbidden)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("unsafe collection expression was accepted")
 
 
 def test_duplicate_url_fails_without_script_execution():
@@ -171,10 +205,11 @@ def test_ui_bridge_rejects_displaced_tab_and_offscreen_coordinate():
 
 if __name__ == "__main__":
     test_unambiguous_visible_page_query_and_secret_guard()
+    test_general_collection_read_is_bounded_and_redacts_each_field()
     test_duplicate_url_fails_without_script_execution()
     test_same_path_different_query_fails_closed()
     test_visible_selector_point_uses_fixed_script()
     test_status_requires_live_bidi_not_just_launch_configuration()
     test_selector_click_keeps_ui_action_key_and_type_keeps_ui_value_redacted()
     test_ui_bridge_rejects_displaced_tab_and_offscreen_coordinate()
-    print("seven Firefox BiDi/UI source fixtures passed")
+    print("eight Firefox BiDi/UI source fixtures passed")
