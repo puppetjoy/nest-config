@@ -6,6 +6,7 @@ from __future__ import annotations
 import ast
 import importlib.util
 import json
+import subprocess
 import sys
 import tempfile
 import types
@@ -120,6 +121,26 @@ def test_missing_kubeconfig_reports_profile_configuration_error_without_kubectl_
     assert "localhost:8080" not in result["message"]
     assert "memcache.go" not in result["message"]
 
+
+def test_bridge_error_stdout_is_not_masked_by_kubectl_exit_line() -> None:
+    module, _ = load_tool()
+    original_kubeconfig = module.os.environ.get("KUBECONFIG")
+    original_run = module.subprocess.run
+    try:
+        with tempfile.NamedTemporaryFile() as kubeconfig:
+            module.os.environ["KUBECONFIG"] = kubeconfig.name
+            module.subprocess.run = lambda *_args, **_kwargs: subprocess.CompletedProcess(
+                [], 1, '{"status":"error","error":"RuntimeError","message":"canonical tab ownership is uncertain"}',
+                'command terminated with exit code 1',
+            )
+            result = parsed(module.secure_browser_navigate_tool({"url": "https://example.test/"}))
+    finally:
+        module.subprocess.run = original_run
+        if original_kubeconfig is None:
+            module.os.environ.pop("KUBECONFIG", None)
+        else:
+            module.os.environ["KUBECONFIG"] = original_kubeconfig
+    assert result["message"] == "canonical tab ownership is uncertain"
 
 def test_missing_kubeconfig_file_reports_exact_dependency_without_kubectl_noise() -> None:
     module, _ = load_tool()

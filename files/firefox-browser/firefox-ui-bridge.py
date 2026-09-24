@@ -675,8 +675,8 @@ def _selected_tab(snapshot: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def _matching_tabs(snapshot: dict[str, Any], record: dict[str, Any]) -> list[dict[str, Any]]:
-    """Prefer the exact same accessibility tab before title recovery."""
-    exact = [tab for tab in snapshot["tabs"] if tab.get("locator") == record.get("locator")]
+    """Do not treat a reused tab-strip index as durable tab identity."""
+    exact = [tab for tab in snapshot["tabs"] if tab.get("locator") == record.get("locator") and tab.get("name") == record.get("tab_name")]
     if exact:
         return exact
     return [tab for tab in snapshot["tabs"] if tab.get("name") == record.get("tab_name")]
@@ -691,18 +691,12 @@ def _reconcile_state(state: dict[str, Any], snapshot: dict[str, Any]) -> dict[st
         if float(record.get("lease_expires_at", 0)) <= now:
             report["expired"].append(workflow_id)
             if record.get("created_by_agent"):
-                matches = _matching_tabs(snapshot, record)
-                if len(matches) == 1:
-                    _, rect = _resolve_locator(matches[0]["locator"])
-                    if rect:
-                        _focus_browser()
-                        _xdotool("mousemove", "--sync", str(rect["x"] + rect["width"] // 2), str(rect["y"] + rect["height"] // 2), "click", "1")
-                        _xdotool("key", "--clearmodifiers", "ctrl+w")
-                        report["closed_expired"].append(workflow_id)
-                if workflow_id not in report["closed_expired"]:
-                    report["preserved_uncertain"].append(workflow_id)
-                    record["uncertain"] = True
-                    continue
+                # Accessibility locators encode a tab-strip index, not a
+                # durable tab id. After an old tab disappears, a new workflow
+                # can reuse that index. Expiry must never close that new tab.
+                report["preserved_uncertain"].append(workflow_id)
+                record["uncertain"] = True
+                continue
             del state["workflows"][workflow_id]
             continue
         matches = _matching_tabs(snapshot, record)
@@ -741,10 +735,13 @@ def _ensure_workflow(state: dict[str, Any], workflow_id: str, lease_seconds: int
     elif allow_create:
         if snapshot["tab_count"] >= DEFAULT_HARD_TAB_CAP:
             raise RuntimeError(f"local tab hard cap reached ({DEFAULT_HARD_TAB_CAP}); refusing to create a tab or close unowned tabs")
+        previous_count = snapshot["tab_count"]
         _focus_browser()
         _xdotool("key", "--clearmodifiers", "ctrl+t")
         snapshot = _snapshot()
         selected = _selected_tab(snapshot)
+        if snapshot["tab_count"] != previous_count + 1 or not selected or selected["name"] not in {"New Tab", "New Private Tab", "about:blank", "Firefox"}:
+            raise RuntimeError("new Firefox tab was not visibly selected after Ctrl+T; refusing to claim or navigate another tab")
         created = True
     else:
         raise RuntimeError("no safely claimable blank handoff tab; call tab_lifecycle acquire explicitly")
