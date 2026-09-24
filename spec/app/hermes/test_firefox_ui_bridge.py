@@ -116,6 +116,52 @@ def test_same_tab_continuity_and_readback_without_duplicate_tabs() -> None:
         tmp.cleanup()
 
 
+def test_acquire_refuses_to_bind_when_new_tab_is_not_visible() -> None:
+    module, fixture, tmp = configured_bridge()
+    try:
+        module._xdotool = lambda *args, **kwargs: None
+        try:
+            module.command_tabs({"action": "acquire", "workflow_id": "new-workflow"})
+        except RuntimeError as exc:
+            assert "not visibly selected" in str(exc)
+        else:
+            raise AssertionError("acquire claimed a tab that never opened")
+        with module._locked_state() as state:
+            assert "new-workflow" not in state["workflows"]
+    finally:
+        tmp.cleanup()
+
+def test_expired_tab_does_not_close_reused_locator() -> None:
+    module, fixture, tmp = configured_bridge()
+    try:
+        snapshot = fixture.snapshot()
+        stale = {"workflow_id": "old", "browser_generation": fixture.generation,
+                 "locator": snapshot["tabs"][0]["locator"], "tab_name": "Old tab",
+                 "created_by_agent": True, "lease_expires_at": 0}
+        state = {"workflows": {"old": stale}, "action_keys": {}}
+        report = module._reconcile_state(state, snapshot)
+        assert report["preserved_uncertain"] == ["old"]
+        assert report["closed_expired"] == []
+        assert fixture.tabs[0]["name"] == "Joy tab"
+        assert fixture.commands == []
+    finally:
+        tmp.cleanup()
+
+def test_active_workflow_does_not_navigate_reused_tab_index() -> None:
+    module, fixture, tmp = configured_bridge()
+    try:
+        module.command_tabs({"action": "acquire", "workflow_id": "w"})
+        fixture.tabs[1]["name"] = "Unrelated Joy tab"
+        try:
+            module.command_navigate({"workflow_id": "w", "url": "https://example.test/"})
+        except RuntimeError as exc:
+            assert "canonical tab identity" in str(exc)
+        else:
+            raise AssertionError("navigated a tab which replaced the claimed tab")
+        assert all(command[:3] != ("key", "--clearmodifiers", "ctrl+l") for command in fixture.commands)
+    finally:
+        tmp.cleanup()
+
 def test_page_tab_locator_survives_title_change() -> None:
     module = load_bridge()
     before = module._identity("page tab", "New Tab", (0, 22, 1, 4), 60)
@@ -241,7 +287,7 @@ def test_restart_reconciliation_and_ambiguous_tabs_are_fail_closed() -> None:
         tmp.cleanup()
 
 
-def test_owned_tab_expiry_closes_once_but_owner_tab_is_preserved() -> None:
+def test_owned_tab_expiry_preserves_tabs_when_identity_cannot_be_proven() -> None:
     module, fixture, tmp = configured_bridge()
     try:
         module.DEFAULT_HARD_TAB_CAP = 3
@@ -250,8 +296,9 @@ def test_owned_tab_expiry_closes_once_but_owner_tab_is_preserved() -> None:
         with module._locked_state() as state:
             state["workflows"]["w"]["lease_expires_at"] = 0
         status = module.command_status({})
-        assert status["reconciliation"]["closed_expired"] == ["w"]
-        assert [tab["name"] for tab in fixture.tabs] == ["Joy tab"]
+        assert status["reconciliation"]["preserved_uncertain"] == ["w"]
+        assert status["reconciliation"]["closed_expired"] == []
+        assert [tab["name"] for tab in fixture.tabs] == ["Joy tab", "New Tab"]
         again = module.command_status({})
         assert again["reconciliation"]["closed_expired"] == []
     finally:
