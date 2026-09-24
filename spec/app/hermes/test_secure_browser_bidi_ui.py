@@ -48,7 +48,7 @@ class Browser:
 
 
 def snapshot(url="https://fixture.example/shop"):
-    return {"url": url, "tabs": [{"selected": True}], "title": "Unrelated shop"}
+    return {"url": url, "tabs": [{"selected": True, "name": "Unrelated shop"}], "title": "Unrelated shop", "browser_generation": 100}
 
 
 def test_unambiguous_visible_page_query_and_secret_guard():
@@ -106,10 +106,34 @@ def test_selector_click_keeps_ui_action_key_and_type_keeps_ui_value_redacted():
     sys.modules["tools.secure_browser_bidi"] = bidi
     click = json.loads(tool.secure_browser_click_tool({"selector": "label[for=color]", "workflow_id": "test", "action_key": "once"}))
     assert click["status"] == "delivered"
-    assert calls[-1] == ("click", {"workflow_id": "test", "coordinate": [127, 438], "action_key": "once", "max_wait_seconds": None})
+    assert calls[-1] == ("click", {"workflow_id": "test", "coordinate": [127, 438], "expected_url": "https://fixture.example/shop", "expected_generation": 100, "expected_tab": "Unrelated shop", "action_key": "once", "max_wait_seconds": None})
     typed = json.loads(tool.secure_browser_type_tool({"selector": "#message", "workflow_id": "test", "text": "hello"}))
     assert typed["typed_chars"] == 5
-    assert calls[-1] == ("type", {"workflow_id": "test", "coordinate": [127, 438], "text": "hello"})
+    assert calls[-1] == ("type", {"workflow_id": "test", "coordinate": [127, 438], "expected_url": "https://fixture.example/shop", "expected_generation": 100, "expected_tab": "Unrelated shop", "text": "hello"})
+
+
+def test_ui_bridge_rejects_displaced_tab_and_offscreen_coordinate():
+    from test_firefox_ui_bridge import load_bridge
+    bridge = load_bridge()
+    bridge._snapshot = lambda: snapshot()
+    bridge._xdotool = lambda *args: "1365 768" if args == ("getdisplaygeometry",) else ""
+    expected = {"expected_url": "https://fixture.example/shop", "expected_generation": 100, "expected_tab": "Unrelated shop"}
+    bridge._assert_selector_precondition(expected)
+    for changed in ({"expected_url": "https://other.example/"}, {"expected_generation": 99}, {"expected_tab": "Different"}):
+        try:
+            bridge._assert_selector_precondition({**expected, **changed})
+        except RuntimeError:
+            pass
+        else:
+            raise AssertionError("stale selector precondition passed")
+    assert bridge._assert_screen_coordinate([127, 438]) == (127, 438)
+    for coordinate in ([-1, 1], [1365, 438], [10, 768]):
+        try:
+            bridge._assert_screen_coordinate(coordinate)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("offscreen coordinate accepted")
 
 
 if __name__ == "__main__":
@@ -117,4 +141,5 @@ if __name__ == "__main__":
     test_duplicate_url_fails_without_script_execution()
     test_visible_selector_point_uses_fixed_script()
     test_selector_click_keeps_ui_action_key_and_type_keeps_ui_value_redacted()
-    print("four Firefox BiDi/UI source fixtures passed")
+    test_ui_bridge_rejects_displaced_tab_and_offscreen_coordinate()
+    print("five Firefox BiDi/UI source fixtures passed")

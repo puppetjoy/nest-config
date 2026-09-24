@@ -825,6 +825,29 @@ def command_navigate(payload: dict[str, Any]) -> dict[str, Any]:
     return {"operation": "navigate", "status": "delivered", "created_tab": created, "workflow_id": workflow_id, "readback": readback}
 
 
+def _assert_selector_precondition(payload: dict[str, Any]) -> None:
+    """Reject selector input if the canonical workflow displaced its UI tab."""
+    if "expected_url" not in payload:
+        return
+    current = _snapshot()
+    selected = _selected_tab(current) or {}
+    if (not payload.get("expected_url") or not payload.get("expected_tab")
+            or current["url"] != payload["expected_url"]
+            or current["browser_generation"] != payload.get("expected_generation")
+            or selected.get("name") != payload["expected_tab"]):
+        raise RuntimeError("selector observation is stale or belongs to another workflow tab; no input sent")
+
+
+def _assert_screen_coordinate(coordinate: Any) -> tuple[int, int]:
+    if not isinstance(coordinate, list) or len(coordinate) != 2:
+        raise ValueError("coordinate must be [x,y]")
+    x, y = int(coordinate[0]), int(coordinate[1])
+    geometry = _xdotool("getdisplaygeometry").split()
+    if len(geometry) != 2 or not (0 <= x < int(geometry[0]) and 0 <= y < int(geometry[1])):
+        raise ValueError("coordinate is outside the visible desktop")
+    return x, y
+
+
 def command_click(payload: dict[str, Any]) -> dict[str, Any]:
     workflow_id = str(payload.get("workflow_id") or "default")[:160]
     locator = str(payload.get("locator") or "")
@@ -853,6 +876,7 @@ def command_click(payload: dict[str, Any]) -> dict[str, Any]:
                 "readback": _readback(float(payload.get("max_wait_seconds") or DEFAULT_STABLE_WAIT_SECONDS)),
             }
         _select_workflow_tab(record)
+        _assert_selector_precondition(payload)
         if locator:
             node, rect = _resolve_locator(locator)
             if not rect:
@@ -880,7 +904,7 @@ def command_click(payload: dict[str, Any]) -> dict[str, Any]:
                     raise ValueError("overlapping accessibility bounds; use a visible label coordinate after screenshot review")
             x, y = rect["x"] + rect["width"] // 2, rect["y"] + rect["height"] // 2
         elif isinstance(coordinate, list) and len(coordinate) == 2:
-            x, y = int(coordinate[0]), int(coordinate[1])
+            x, y = _assert_screen_coordinate(coordinate)
         else:
             raise ValueError("click requires an accessibility locator or [x,y] coordinate")
         if action_key:
@@ -917,13 +941,15 @@ def command_type(payload: dict[str, Any]) -> dict[str, Any]:
         if not record or record.get("uncertain"):
             raise RuntimeError("workflow has no unambiguous canonical handoff tab")
         _select_workflow_tab(record)
+        _assert_selector_precondition(payload)
         if locator:
             _, rect = _resolve_locator(locator)
             if not rect:
                 raise ValueError("accessibility control has no screen bounds")
             _xdotool("mousemove", "--sync", str(rect["x"] + rect["width"] // 2), str(rect["y"] + rect["height"] // 2), "click", "1")
         elif isinstance(coordinate, list) and len(coordinate) == 2:
-            _xdotool("mousemove", "--sync", str(int(coordinate[0])), str(int(coordinate[1])), "click", "1")
+            x, y = _assert_screen_coordinate(coordinate)
+            _xdotool("mousemove", "--sync", str(x), str(y), "click", "1")
         _xdotool("type", "--clearmodifiers", "--delay", "1", "--", text, timeout=45)
         readback = _readback()
         record["tab_name"] = readback["selected_tab"] or record["tab_name"]

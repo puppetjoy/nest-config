@@ -302,10 +302,14 @@ def secure_browser_click_tool(args: dict[str, Any], task_id: str | None = None, 
         if CONTROL_MODE == "firefox-bidi-ui-v2" and args.get("selector"):
             from importlib import import_module
             secure_browser_bidi = import_module("tools.secure_browser_bidi")
-            point = secure_browser_bidi.selector_point(_bridge("snapshot", {}), str(args["selector"]))
+            observed = _bridge("snapshot", {})
+            point = secure_browser_bidi.selector_point(observed, str(args["selector"]))
             return _bridge("click", {
                 "workflow_id": _workflow_id(args, task_id),
                 "coordinate": point,
+                "expected_url": observed.get("url"),
+                "expected_generation": observed.get("browser_generation"),
+                "expected_tab": next((tab.get("name") for tab in observed.get("tabs", []) if tab.get("selected")), None),
                 "action_key": args.get("action_key") or args.get("idempotency_key"),
                 "max_wait_seconds": args.get("max_wait_seconds"),
             }, timeout=BRIDGE_TIMEOUT + 15)
@@ -336,10 +340,14 @@ def secure_browser_type_tool(args: dict[str, Any], task_id: str | None = None, *
         if CONTROL_MODE == "firefox-bidi-ui-v2" and args.get("selector"):
             from importlib import import_module
             secure_browser_bidi = import_module("tools.secure_browser_bidi")
-            point = secure_browser_bidi.selector_point(_bridge("snapshot", {}), str(args["selector"]), field_only=True)
+            observed = _bridge("snapshot", {})
+            point = secure_browser_bidi.selector_point(observed, str(args["selector"]), field_only=True)
             return _bridge("type", {
                 "workflow_id": _workflow_id(args, task_id),
                 "coordinate": point,
+                "expected_url": observed.get("url"),
+                "expected_generation": observed.get("browser_generation"),
+                "expected_tab": next((tab.get("name") for tab in observed.get("tabs", []) if tab.get("selected")), None),
                 "text": args.get("text", ""),
             })
         if args.get("selector") and not args.get("locator"):

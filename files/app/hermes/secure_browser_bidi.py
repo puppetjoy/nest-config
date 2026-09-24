@@ -52,7 +52,10 @@ def _read_script(expression: str) -> str:
         raise ValueError("querySelector does not support length")
     return ("(() => {const e=document.querySelector(" + json.dumps(selector) + ");"
             "if(!e)return null;"
-            "if(e.matches('input[type=password],input[type=hidden],input[autocomplete*=one-time-code],input[autocomplete*=cc-],input[name*=pass i],input[name*=token i]'))return '<redacted>';"
+            "const hint=[e.name,e.id,e.getAttribute('aria-label'),e.getAttribute('autocomplete'),"
+            "...(e.labels?[...e.labels].map(l=>l.innerText):[])].join(' ');"
+            "if(e.matches('input[type=password],input[type=hidden]')||"
+            "/password|passcode|verification|one.time|security.code|cvv|cvc|card.number|account.number|routing.number|secret|token|recovery.code/i.test(hint))return '<redacted>';"
             "return e." + prop + ";})()")
 
 
@@ -133,7 +136,10 @@ def selector_point(ui_snapshot: dict[str, Any], selector: str, *, field_only: bo
         expression = ("(() => { const nodes = [...document.querySelectorAll(" + json.dumps(selector) + ")]; "
             "if (nodes.length !== 1) return {error:'selector must match exactly one element', count:nodes.length}; "
             "const e=nodes[0], r=e.getBoundingClientRect(), s=getComputedStyle(e); "
-            "if (e.matches('input[type=password],input[type=hidden],input[autocomplete*=one-time-code],input[autocomplete*=cc-],input[name*=pass i],input[name*=token i]') || !r.width || !r.height || "
+            "const hint=[e.name,e.id,e.getAttribute('aria-label'),e.getAttribute('autocomplete'),"
+            "...(e.labels?[...e.labels].map(l=>l.innerText):[])].join(' '); "
+            "if (/password|passcode|verification|one.time|security.code|cvv|cvc|card.number|account.number|routing.number|secret|token|recovery.code/i.test(hint) || "
+            "e.matches('input[type=password],input[type=hidden]') || !r.width || !r.height || "
             "s.visibility==='hidden' || s.display==='none') return {error:'not a visible public control'}; "
             + ("if(!e.matches('input,textarea,[contenteditable=true]'))return {error:'selector is not an editable field'};" if field_only else "") +
             "if(devicePixelRatio!==1)return {error:'unverified display scale; use accessibility or grounded visual coordinates'};"
