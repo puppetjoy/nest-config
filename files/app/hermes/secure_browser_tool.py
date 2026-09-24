@@ -152,25 +152,29 @@ def _save_screenshot(result: dict[str, Any], *, owner_only: bool = False) -> dic
 
 
 def secure_browser_status_tool(args: dict[str, Any], **_kw: Any) -> str:
-    return _safe_call("status", lambda: {
-        **_bridge("status", {}),
-        "protocol": CONTROL_MODE,
-        "instrumentation": {
-            "webdriver": False, "marionette": False,
-            "bidi": CONTROL_MODE == "firefox-bidi-ui-v2", "cdp": False,
-            "dom": CONTROL_MODE == "firefox-bidi-ui-v2",
-        },
-        "public_browser_url": PUBLIC_URL,
-        "authorization_boundary": "Joy's direction to Star for the workflow; no per-click, checkout, or purchase approval ceremony",
-        "sensitive_state_boundary": "Secrets remain in Firefox/Bitwarden and must not be passed as tool text or exposed from profile storage",
-        "compatibility": {
-            "version": CONTROL_MODE,
-            "dom_selectors": CONTROL_MODE == "firefox-bidi-ui-v2",
-            "javascript_query": False,
-            "accessibility_locators": True,
-            "coordinate_input": True,
-        },
-    })
+    def run() -> dict[str, Any]:
+        bridge_status = _bridge("status", {})
+        live_v2 = CONTROL_MODE == "firefox-bidi-ui-v2" and bridge_status.get("launch_protocol") == CONTROL_MODE
+        return {
+            **bridge_status,
+            "protocol": CONTROL_MODE,
+            "control_mode_matches_browser": bridge_status.get("launch_protocol") == CONTROL_MODE,
+            "instrumentation": {
+                "webdriver": False, "marionette": False,
+                "bidi": live_v2, "cdp": False, "dom": live_v2,
+            },
+            "public_browser_url": PUBLIC_URL,
+            "authorization_boundary": "Joy's direction to Star for the workflow; no per-click, checkout, or purchase approval ceremony",
+            "sensitive_state_boundary": "Secrets remain in Firefox/Bitwarden and must not be passed as tool text or exposed from profile storage",
+            "compatibility": {
+                "version": CONTROL_MODE,
+                "dom_selectors": live_v2,
+                "javascript_query": False,
+                "accessibility_locators": True,
+                "coordinate_input": True,
+            },
+        }
+    return _safe_call("status", run)
 
 
 def secure_browser_navigate_tool(args: dict[str, Any], task_id: str | None = None, **_kw: Any) -> str:

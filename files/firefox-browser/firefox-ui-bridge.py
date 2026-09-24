@@ -796,6 +796,7 @@ def command_status(_: dict[str, Any]) -> dict[str, Any]:
     return {
         "operation": "status", "status": "ok", "protocol": "firefox-ui-v1",
         "browser": {key: snapshot[key] for key in ("browser_generation", "title", "url", "tab_count")},
+        "launch_protocol": os.environ.get("FIREFOX_CONTROL_PROTOCOL", "firefox-ui-v1"),
         "workflows": workflows, "reconciliation": reconciliation,
         "instrumentation": {"webdriver": False, "marionette": False, "bidi": False, "cdp": False, "dom": False},
     }
