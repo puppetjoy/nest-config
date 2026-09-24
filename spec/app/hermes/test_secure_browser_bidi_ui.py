@@ -102,6 +102,24 @@ def test_visible_selector_point_uses_fixed_script():
     assert 'label[for=color]' in browser.calls[0][1]["expression"]
 
 
+def test_status_requires_live_bidi_not_just_launch_configuration():
+    import json
+    from test_secure_browser_firefox_ui import load_tool
+    module, legacy = load()
+    tool, _ = load_tool()
+    tool.CONTROL_MODE = "firefox-bidi-ui-v2"
+    tool._bridge = lambda _cmd, _payload: {"launch_protocol": "firefox-bidi-ui-v2", "status": "ok"}
+    legacy._with_browser = lambda _fn: (_ for _ in ()).throw(RuntimeError("endpoint unavailable"))
+    status = json.loads(tool.secure_browser_status_tool({}))
+    assert status["control_mode_matches_browser"] is False
+    assert status["compatibility"]["dom_selectors"] is False
+    assert status["instrumentation"]["bidi"] is False
+    legacy._with_browser = lambda fn: fn(Browser([]))
+    status = json.loads(tool.secure_browser_status_tool({}))
+    assert status["control_mode_matches_browser"] is True
+    assert status["compatibility"]["dom_selectors"] is True
+
+
 def test_selector_click_keeps_ui_action_key_and_type_keeps_ui_value_redacted():
     import json
     from test_secure_browser_firefox_ui import load_tool
@@ -156,6 +174,7 @@ if __name__ == "__main__":
     test_duplicate_url_fails_without_script_execution()
     test_same_path_different_query_fails_closed()
     test_visible_selector_point_uses_fixed_script()
+    test_status_requires_live_bidi_not_just_launch_configuration()
     test_selector_click_keeps_ui_action_key_and_type_keeps_ui_value_redacted()
     test_ui_bridge_rejects_displaced_tab_and_offscreen_coordinate()
-    print("six Firefox BiDi/UI source fixtures passed")
+    print("seven Firefox BiDi/UI source fixtures passed")

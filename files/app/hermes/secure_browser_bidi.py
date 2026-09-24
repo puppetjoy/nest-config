@@ -112,6 +112,18 @@ def _evaluate(browser: Any, context: str, expression: str) -> Any:
     return legacy.CdpSession._bidi_value(result.get("result") or {})
 
 
+def probe() -> bool:
+    """Report live BiDi connectivity, not merely a configured launch flag."""
+    def run(browser: Any) -> bool:
+        return browser.protocol == "bidi" and isinstance(browser._bidi_contexts(), list)
+    try:
+        return bool(legacy._with_browser(run))
+    except Exception:
+        # The status surface must not claim capability when the private
+        # connector raises a transport- or protocol-specific exception.
+        return False
+
+
 def query(ui_snapshot: dict[str, Any], expression: str) -> dict[str, Any]:
     if not expression or len(expression) > MAX_EXPRESSION_CHARS:
         raise ValueError("query must be bounded")

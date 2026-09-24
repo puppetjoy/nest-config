@@ -154,11 +154,14 @@ def _save_screenshot(result: dict[str, Any], *, owner_only: bool = False) -> dic
 def secure_browser_status_tool(args: dict[str, Any], **_kw: Any) -> str:
     def run() -> dict[str, Any]:
         bridge_status = _bridge("status", {})
-        live_v2 = CONTROL_MODE == "firefox-bidi-ui-v2" and bridge_status.get("launch_protocol") == CONTROL_MODE
+        live_v2 = False
+        if CONTROL_MODE == "firefox-bidi-ui-v2" and bridge_status.get("launch_protocol") == CONTROL_MODE:
+            from importlib import import_module
+            live_v2 = import_module("tools.secure_browser_bidi").probe()
         return {
             **bridge_status,
             "protocol": CONTROL_MODE,
-            "control_mode_matches_browser": bridge_status.get("launch_protocol") == CONTROL_MODE,
+            "control_mode_matches_browser": (live_v2 if CONTROL_MODE == "firefox-bidi-ui-v2" else bridge_status.get("launch_protocol") == CONTROL_MODE),
             "instrumentation": {
                 "webdriver": False, "marionette": False,
                 "bidi": live_v2, "cdp": False, "dom": live_v2,
