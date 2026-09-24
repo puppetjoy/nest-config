@@ -162,6 +162,25 @@ def test_active_workflow_does_not_navigate_reused_tab_index() -> None:
     finally:
         tmp.cleanup()
 
+def test_navigation_refuses_when_tab_click_did_not_select_workflow() -> None:
+    module, fixture, tmp = configured_bridge()
+    try:
+        module.command_tabs({"action": "acquire", "workflow_id": "w"})
+        fixture.tabs[0]["selected"] = True
+        fixture.tabs[1]["selected"] = False
+        # A click delivered to the tab strip can miss or be intercepted.
+        # The fixture leaves the Joy tab selected after XTest input.
+        try:
+            module.command_navigate({"workflow_id": "w", "url": "https://example.test/"})
+        except RuntimeError as exc:
+            assert "did not become visibly selected" in str(exc)
+        else:
+            raise AssertionError("navigation proceeded into the selected Joy tab")
+        assert all(command[:3] != ("key", "--clearmodifiers", "ctrl+l") for command in fixture.commands)
+    finally:
+        tmp.cleanup()
+
+
 def test_page_tab_locator_survives_title_change() -> None:
     module = load_bridge()
     before = module._identity("page tab", "New Tab", (0, 22, 1, 4), 60)

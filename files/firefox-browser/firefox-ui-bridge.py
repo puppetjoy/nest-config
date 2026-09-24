@@ -772,6 +772,11 @@ def _select_workflow_tab(record: dict[str, Any]) -> None:
         raise RuntimeError("canonical tab has no actionable screen bounds")
     _focus_browser()
     _xdotool("mousemove", "--sync", str(rect["x"] + rect["width"] // 2), str(rect["y"] + rect["height"] // 2), "click", "1")
+    # XTest delivery is not proof that Firefox switched tabs. Before Ctrl+L
+    # or any page input, observe the intended tab as the selected UI tab.
+    selected = _selected_tab(_snapshot())
+    if not selected or selected.get("locator") != matches[0]["locator"] or selected.get("name") != record.get("tab_name"):
+        raise RuntimeError("canonical tab did not become visibly selected; refusing input into another tab")
 
 
 def command_status(_: dict[str, Any]) -> dict[str, Any]:
