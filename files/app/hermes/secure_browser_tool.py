@@ -156,7 +156,7 @@ def secure_browser_status_tool(args: dict[str, Any], **_kw: Any) -> str:
         **_bridge("status", {}),
         "protocol": CONTROL_MODE,
         "instrumentation": {
-            "webdriver": False, "marionette": CONTROL_MODE == "firefox-bidi-ui-v2",
+            "webdriver": False, "marionette": False,
             "bidi": CONTROL_MODE == "firefox-bidi-ui-v2", "cdp": False,
             "dom": CONTROL_MODE == "firefox-bidi-ui-v2",
         },
