@@ -107,6 +107,8 @@ def test_selector_click_keeps_ui_action_key_and_type_keeps_ui_value_redacted():
     from test_secure_browser_firefox_ui import load_tool
     tool, _ = load_tool()
     tool.CONTROL_MODE = "firefox-bidi-ui-v2"
+    assert json.loads(tool.secure_browser_guardrail_check_tool({"operation": "browse"}))["protocol"] == "firefox-bidi-ui-v2"
+    assert json.loads(tool.secure_browser_guardrail_check_tool({"operation": "javascript_query"}))["status"] == "blocked"
     calls = []
     def bridge(command, payload, **_kw):
         calls.append((command, payload))
