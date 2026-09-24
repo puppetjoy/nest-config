@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import re
 from typing import Any
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import urlsplit
 
 from . import secure_browser_legacy_support as legacy
 
@@ -62,11 +62,13 @@ def _read_script(expression: str) -> str:
 def _url_identity(value: str) -> str:
     parsed = urlsplit(value)
     if parsed.scheme == "about":
-        return value if value in {"about:blank", "about:newtab", "about:home"} else "about:<redacted>"
-    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        return value if value in {"about:blank", "about:newtab", "about:home"} else ""
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
         return ""
-    host = parsed.hostname + (f":{parsed.port}" if parsed.port else "")
-    return urlunsplit((parsed.scheme, host, parsed.path[:300], "", ""))
+    # Compare in process only; never return either URL in a tool response.
+    # Dropping query/fragment or truncating paths could map a selected checkout
+    # tab to a different same-path BiDi context.
+    return value
 
 
 def _safe_result(value: Any) -> Any:

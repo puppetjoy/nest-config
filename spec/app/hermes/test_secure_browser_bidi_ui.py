@@ -55,7 +55,7 @@ def test_unambiguous_visible_page_query_and_secret_guard():
     module, legacy = load()
     browser = Browser([{"context": "visible", "url": "https://fixture.example/shop?order=private"}])
     legacy._with_browser = lambda fn: fn(browser)
-    result = module.query(snapshot(), "document.title")
+    result = module.query(snapshot("https://fixture.example/shop?order=private"), "document.title")
     assert result["value"] == "Unrelated shop"
     assert browser.calls[0][1]["target"] == {"context": "visible"}
     for expression in ("document.cookie", "localStorage.getItem('x')", "document.querySelector('input[type=password]').value", "document.querySelector(\"#add\").click()"):
@@ -77,6 +77,19 @@ def test_duplicate_url_fails_without_script_execution():
         assert "ambiguous" in str(exc)
     else:
         raise AssertionError("ambiguous tab was accepted")
+    assert browser.calls == []
+
+
+def test_same_path_different_query_fails_closed():
+    module, legacy = load()
+    browser = Browser([{"context": "wrong", "url": "https://fixture.example/shop?order=other"}])
+    legacy._with_browser = lambda fn: fn(browser)
+    try:
+        module.query(snapshot("https://fixture.example/shop?order=private"), "document.title")
+    except RuntimeError as exc:
+        assert "absent or ambiguous" in str(exc)
+    else:
+        raise AssertionError("same-path wrong-context query was accepted")
     assert browser.calls == []
 
 
@@ -139,7 +152,8 @@ def test_ui_bridge_rejects_displaced_tab_and_offscreen_coordinate():
 if __name__ == "__main__":
     test_unambiguous_visible_page_query_and_secret_guard()
     test_duplicate_url_fails_without_script_execution()
+    test_same_path_different_query_fails_closed()
     test_visible_selector_point_uses_fixed_script()
     test_selector_click_keeps_ui_action_key_and_type_keeps_ui_value_redacted()
     test_ui_bridge_rejects_displaced_tab_and_offscreen_coordinate()
-    print("five Firefox BiDi/UI source fixtures passed")
+    print("six Firefox BiDi/UI source fixtures passed")
