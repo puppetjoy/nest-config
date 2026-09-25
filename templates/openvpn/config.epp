@@ -68,6 +68,7 @@ keepalive 5 15
 
     <%- if $server == 'udp' { -%>
 # Sync with pushed options below
+dhcp-option DOMAIN home
 dhcp-option DOMAIN nest
 dhcp-option DOMAIN eyrie
 dhcp-option DOMAIN joyfullee.me
@@ -75,6 +76,7 @@ dhcp-option DNS 172.22.0.1
 
     <%- } -%>
 # Windows only honors the last domain pushed
+push "dhcp-option DOMAIN home"
 push "dhcp-option DOMAIN nest"
 push "dhcp-option DOMAIN eyrie"
 push "dhcp-option DOMAIN joyfullee.me"

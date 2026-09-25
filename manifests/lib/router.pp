@@ -10,6 +10,7 @@ class nest::lib::router {
     dhcp-option=option:classless-static-route,0.0.0.0/0,172.22.4.1,172.22.0.0/24,172.22.4.3
     local=/nest/
     local=/eyrie/
+    server=/home/172.22.1.1
     server=172.22.4.1
     | EOT
 
