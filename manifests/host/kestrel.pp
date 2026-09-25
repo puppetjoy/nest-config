@@ -1,6 +1,5 @@
-class nest::host::kestrel (
-  Sensitive[String[1]] $cloudns_dynamic_url,
-) {
+class nest::host::kestrel {
+  $cloudns_dynamic_url = Sensitive(lookup('nest::host::kestrel::cloudns_dynamic_url', String[1]))
   # Host images
   nest::lib::virtual_host { 'nest':
     servername  => 'nest.joyfullee.me',
