@@ -227,10 +227,6 @@ nest::host_records:
   pe.eyrie: '172.21.3.1'
   pe-compiler.eyrie: '172.21.3.2'
 
-nest::hosts:
-  unifi.home:
-    ip: '172.22.1.2'
-
 nest::nestfs_hostname: 'falcon.nest'
 
 nest::openvpn_servers:
