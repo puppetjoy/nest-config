@@ -140,7 +140,10 @@ def _redact_url(value: str) -> str:
     if not host:
         return ""
     port = f":{parsed.port}" if parsed.port else ""
-    return urlunsplit((parsed.scheme, host + port, parsed.path[:300], "", ""))
+    # AX may display an origin without '/', while WebDriver uses the
+    # canonical slash. Normalize only the empty path; /cart and /cart/
+    # remain distinct, and ambiguous sanitized URLs still fail closed.
+    return urlunsplit((parsed.scheme, host + port, (parsed.path or "/")[:300], "", ""))
 
 
 def _identity(role: str, name: str, path: tuple[int, ...], generation: int) -> str:
