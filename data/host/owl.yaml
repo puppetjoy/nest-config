@@ -229,7 +229,7 @@ nest::app::hermes::instances:
       SECURE_BROWSER_EXPECTED_APP_LABEL: 'firefox'
       SECURE_BROWSER_PUBLIC_URL: 'https://browser.eyrie/'
       SECURE_BROWSER_OPERATOR_URL: 'https://browser.eyrie'
-      SECURE_BROWSER_CONTROL_MODE: 'firefox-ui-v1'
+      SECURE_BROWSER_CONTROL_MODE: 'firefox-bidi-ui-v2'
       SECURE_BROWSER_UI_BRIDGE: '/opt/nest/firefox/bin/firefox-ui-bridge.py'
     voice_auto_tts: true
     stt_enabled: true
@@ -372,7 +372,7 @@ nest::app::hermes::instances:
       SECURE_BROWSER_EXPECTED_APP_LABEL: 'firefox'
       SECURE_BROWSER_PUBLIC_URL: 'https://browser.eyrie/'
       SECURE_BROWSER_OPERATOR_URL: 'https://browser.eyrie'
-      SECURE_BROWSER_CONTROL_MODE: 'firefox-ui-v1'
+      SECURE_BROWSER_CONTROL_MODE: 'firefox-bidi-ui-v2'
       SECURE_BROWSER_UI_BRIDGE: '/opt/nest/firefox/bin/firefox-ui-bridge.py'
       GITLAB_HOST: 'gitlab.joyfullee.me'
       GITLAB_URL: 'https://gitlab.joyfullee.me'
