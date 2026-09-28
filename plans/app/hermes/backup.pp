@@ -71,7 +71,7 @@ plan nest::app::hermes::backup (
     $helper_args = [
       $helper, 'prune',
       '--backup-dir', $backup_dir,
-      '--retain', $retain,
+      '--retain', String($retain),
     ] + $required_profile_args
     $description = 'Prune Hermes full-home backup generations'
   } elsif $cleanup_legacy {
@@ -96,7 +96,7 @@ plan nest::app::hermes::backup (
       $helper, 'backup',
       '--backup-dir', $backup_dir,
       '--hermes-bin', '/opt/hermes-agent/venv/bin/hermes',
-      '--retain', $retain,
+      '--retain', String($retain),
     ] + $required_profile_args + $checkpoint_args
     $description = 'Create or reuse Hermes full-home backup generation'
   }
