@@ -873,7 +873,9 @@ def command_click(payload: dict[str, Any]) -> dict[str, Any]:
     workflow_id = str(payload.get("workflow_id") or "default")[:160]
     locator = str(payload.get("locator") or "")
     coordinate = payload.get("coordinate")
-    action_key = str(payload.get("action_key") or "")[:200]
+    action_key = str(payload.get("action_key") or "")
+    if len(action_key) > 200:
+        raise ValueError("action_key must not exceed 200 characters")
     with _locked_state() as state:
         snapshot = _snapshot()
         _reconcile_state(state, snapshot)
@@ -958,7 +960,9 @@ def command_type(payload: dict[str, Any]) -> dict[str, Any]:
     workflow_id = str(payload.get("workflow_id") or "default")[:160]
     locator = str(payload.get("locator") or "")
     coordinate = payload.get("coordinate")
-    action_key = str(payload.get("action_key") or "")[:200]
+    action_key = str(payload.get("action_key") or "")
+    if len(action_key) > 200:
+        raise ValueError("action_key must not exceed 200 characters")
     with _locked_state() as state:
         snapshot = _snapshot()
         _reconcile_state(state, snapshot)

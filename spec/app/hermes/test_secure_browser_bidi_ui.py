@@ -304,6 +304,13 @@ def test_selector_typing_reserves_before_input_and_replay_never_retypes():
             raise AssertionError("stale type was delivered")
         assert len(desktop.commands) == before
         assert "type-failed" not in bridge._load_state()["action_keys"]
+        for operation in (bridge.command_type, bridge.command_click):
+            try:
+                operation({**payload, "action_key": "x" * 201})
+            except ValueError as exc:
+                assert "200 characters" in str(exc)
+            else:
+                raise AssertionError("overlong action key was silently truncated")
         def fail_after_reservation(*args, **_kw):
             if args[0] == "type":
                 raise RuntimeError("transport uncertain")
