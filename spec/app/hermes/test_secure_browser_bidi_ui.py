@@ -171,6 +171,9 @@ def test_selector_click_keeps_ui_action_key_and_type_keeps_ui_value_redacted():
     bidi = types.ModuleType("tools.secure_browser_bidi")
     bidi.selector_point = lambda _snap, _selector, **_kw: [127, 438]
     sys.modules["tools.secure_browser_bidi"] = bidi
+    missing_key = json.loads(tool.secure_browser_click_tool({"selector": "label[for=color]", "workflow_id": "test"}))
+    assert missing_key["status"] == "error" and "action_key" in missing_key["message"]
+    assert calls == []
     click = json.loads(tool.secure_browser_click_tool({"selector": "label[for=color]", "workflow_id": "test", "action_key": "once"}))
     assert click["status"] == "delivered"
     assert calls[-1] == ("click", {"workflow_id": "test", "coordinate": [127, 438], "expected_url": "https://fixture.example/shop", "expected_generation": 100, "expected_tab": "Unrelated shop", "action_key": "once", "max_wait_seconds": None})
