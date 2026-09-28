@@ -32,14 +32,15 @@ READ_EXPRESSION = re.compile(
 # Fixed, site-independent observation; accepting arbitrary JavaScript as a
 # "read" would let the caller mutate the page before any response filtering.
 DOM_SNAPSHOT = """(() => {
-  const max=120, scanLimit=1500, nodes=[], all=document.body?.querySelectorAll('*')||[];
+  const max=120, scanLimit=1500, start=__OFFSET__, nodes=[], all=document.body?.querySelectorAll('*')||[];
   const sensitive=/password|passcode|verification|one.time|security.code|cvv|cvc|card.number|account.number|routing.number|secret|token|recovery.code/i;
   const protectedNode=e=>{
     const hint=[e.name,e.id,e.getAttribute('aria-label'),e.getAttribute('autocomplete'),
       e.getAttribute('placeholder'),...(e.labels?[...e.labels].map(l=>l.innerText):[])].join(' ');
     return sensitive.test(hint)||e.matches('input[type=password],input[type=hidden]');
   };
-  for(let i=0;i<Math.min(all.length,scanLimit)&&nodes.length<max;i++){
+  let i=start;
+  for(;i<Math.min(all.length,start+scanLimit)&&nodes.length<max;i++){
     const e=all[i];
     if(e.closest('script,style,template,[hidden],[aria-hidden=true]'))continue;
     if(protectedNode(e)||e.isContentEditable)continue;
@@ -57,20 +58,28 @@ DOM_SNAPSHOT = """(() => {
     }
     nodes.push(row);
   }
-  return {total:all.length,nodes};
+  return {total:all.length,nextOffset:i<all.length?i:null,nodes};
 })()"""
 
 
 def _read_script(expression: str) -> str:
     if expression == "document.domSnapshot":
-        return DOM_SNAPSHOT
+        return DOM_SNAPSHOT.replace("__OFFSET__", "0")
+    # A long page may put its actual content after navigation/header nodes.
+    # Use raw DOM indices, not filtered result indices, so callers can read
+    # every part without a site-specific selector or an unbounded response.
+    if re.fullmatch(r"document\.domSnapshot\((?:0|[1-9][0-9]{0,5})\)", expression):
+        offset = int(expression[len("document.domSnapshot("):-1])
+        if offset > 100000:
+            raise ValueError("snapshot offset is too large")
+        return DOM_SNAPSHOT.replace("__OFFSET__", str(offset))
     if expression == "document.title":
         return "document.title"
     if expression == "document.body.innerText":
         return "document.body.innerText"
     match = READ_EXPRESSION.fullmatch(expression)
     if not match:
-        raise ValueError("unsupported read expression; use document.domSnapshot, document.title, document.body.innerText, or document.querySelector(All) with a JSON-quoted CSS selector and readable property")
+        raise ValueError("unsupported read expression; use document.domSnapshot(offset), document.title, document.body.innerText, or document.querySelector(All) with a JSON-quoted CSS selector and readable property")
     multiple, raw_selector, prop = match.groups()
     selector = json.loads(raw_selector)
     if not isinstance(selector, str) or not selector or len(selector) > 512:
@@ -170,8 +179,9 @@ def query(ui_snapshot: dict[str, Any], expression: str) -> dict[str, Any]:
             raise RuntimeError("Firefox did not expose the private BiDi session")
         context = _selected_context(browser, ui_snapshot)
         raw = _evaluate(browser, context, script)
-        truncated = (isinstance(raw, dict) and isinstance(raw.get("total"), int)
-                     and raw["total"] > len(raw.get("values", raw.get("nodes", []))))
+        truncated = (isinstance(raw, dict) and (
+            raw.get("nextOffset") is not None if "nextOffset" in raw else
+            isinstance(raw.get("total"), int) and raw["total"] > len(raw.get("values", []))))
         value = _safe_result(raw)
         return {"operation": "query", "status": "ok", "protocol": "firefox-bidi-ui-v2", "value": value,
                 "source": "live DOM in uniquely matched visible Firefox tab", "truncated": truncated or len(str(value)) >= MAX_QUERY_CHARS}

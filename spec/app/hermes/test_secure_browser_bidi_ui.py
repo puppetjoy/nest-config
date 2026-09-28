@@ -149,13 +149,44 @@ const document={body:{querySelectorAll:()=>nodes}};
 const getComputedStyle=()=>({display:'block',visibility:'visible'});
 const innerHeight=800,innerWidth=1200;
 """
-    result = subprocess.run(["node", "-e", source + "\nconsole.log(JSON.stringify(" + module.DOM_SNAPSHOT + "));"],
+    result = subprocess.run(["node", "-e", source + "\nconsole.log(JSON.stringify(" + module._read_script("document.domSnapshot") + "));"],
                             capture_output=True, text=True, check=True)
     assert "NEVER_EXPORT" not in result.stdout
     parsed = json.loads(result.stdout)
     assert parsed["total"] == 3 and len(parsed["nodes"]) == 2
     assert parsed["nodes"][0]["text"] == "Choose size"
     assert parsed["nodes"][1]["control"]["type"] == "text"
+
+def test_dom_snapshot_paginates_large_unrelated_page_without_skipping_nodes():
+    module, _ = load()
+    source = """
+const Node={TEXT_NODE:3};
+const all=Array.from({length:260},(_,i)=>({localName:'p',name:'',id:'',
+  isContentEditable:false,parentElement:null,childNodes:[{nodeType:3,textContent:'item '+i}],
+  getAttribute:()=>null,closest:()=>null,matches:()=>false,
+  getBoundingClientRect:()=>({width:10,height:10,bottom:20,right:20,top:10,left:10})}));
+const document={body:{querySelectorAll:()=>all}};
+const getComputedStyle=()=>({display:'block',visibility:'visible'});
+const innerHeight=800,innerWidth=1200;
+"""
+    observed, offset = [], 0
+    while offset is not None:
+        script = module._read_script(f"document.domSnapshot({offset})")
+        result = subprocess.run(["node", "-e", source + "\nconsole.log(JSON.stringify(" + script + "));"],
+                                capture_output=True, text=True, check=True)
+        page = json.loads(result.stdout)
+        observed.extend(row["text"] for row in page["nodes"])
+        assert page["total"] == 260
+        assert page["nextOffset"] is None or page["nextOffset"] > offset
+        offset = page["nextOffset"]
+    assert observed == [f"item {i}" for i in range(260)]
+    for malformed in ("document.domSnapshot(-1)", "document.domSnapshot(01)", "document.domSnapshot(100001)"):
+        try:
+            module._read_script(malformed)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("malformed or excessive offset accepted")
 
 
 def test_duplicate_url_fails_without_script_execution():
@@ -269,10 +300,11 @@ if __name__ == "__main__":
     test_general_collection_read_is_bounded_and_redacts_each_field()
     test_site_independent_dom_snapshot_is_generated_and_bounded()
     test_dom_snapshot_executes_without_exporting_credential_values()
+    test_dom_snapshot_paginates_large_unrelated_page_without_skipping_nodes()
     test_duplicate_url_fails_without_script_execution()
     test_same_path_different_query_fails_closed()
     test_visible_selector_point_uses_fixed_script()
     test_status_requires_live_bidi_not_just_launch_configuration()
     test_selector_click_keeps_ui_action_key_and_type_keeps_ui_value_redacted()
     test_ui_bridge_rejects_displaced_tab_and_offscreen_coordinate()
-    print("ten Firefox BiDi/UI source fixtures passed")
+    print("eleven Firefox BiDi/UI source fixtures passed")
