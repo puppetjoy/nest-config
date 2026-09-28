@@ -88,6 +88,14 @@ def _bridge(command: str, payload: dict[str, Any], *, timeout: int | None = None
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise RuntimeError(f"Firefox UI bridge invocation failed: {exc}") from exc
     if result.returncode != 0:
+        # The bridge emits structured errors on stdout. kubectl's generic
+        # exit-code stderr must not hide the actual workflow failure.
+        try:
+            failure = json.loads(result.stdout)
+        except (json.JSONDecodeError, TypeError):
+            failure = None
+        if isinstance(failure, dict) and failure.get("status") == "error":
+            raise RuntimeError(str(failure.get("message") or failure.get("error") or "Firefox UI bridge error")[:1000])
         message = result.stderr.strip() or result.stdout.strip()
         if "localhost:8080" in message:
             raise RuntimeError("Firefox UI bridge Kubernetes configuration is unusable; verify KUBECONFIG selects a reachable cluster")
