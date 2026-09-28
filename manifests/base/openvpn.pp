@@ -243,7 +243,11 @@ class nest::base::openvpn {
       group   => 'root',
       source  => 'puppet:///modules/nest/openvpn/route-up-nest.sh',
       require => Package[$openvpn_package_name],
-      before  => Service[$openvpn_service_name],
+      before  => [File[$openvpn_config_file], Service[$openvpn_service_name]],
+    }
+
+    if $nest::router {
+      File['/etc/openvpn/route-up-nest.sh'] -> File['/etc/openvpn/server/nest-tcp.conf']
     }
   }
 
