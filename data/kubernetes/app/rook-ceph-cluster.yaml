@@ -8,6 +8,8 @@ hdd_node_role: workstation
 hdd_osd_count: 3
 hdd_storage_class: nest-crypt-block
 hdd_volume_size: 1Ti
+hdd_metadata_storage_class: data-crypt-block
+hdd_metadata_volume_size: 32Gi
 service_name: "%{nest::kubernetes::service}"
 cert_issuer: eyrie-ca
 cert_issuer_kind: ClusterIssuer
@@ -162,7 +164,7 @@ values:
                 volumeMode: Block
                 accessModes:
                   - ReadWriteOnce
-        - name: set2
+        - name: set3
           count: "%{alias('hdd_osd_count')}"
           portable: false
           placement: &hdd_osd_placement
@@ -200,6 +202,16 @@ values:
                   requests:
                     storage: "%{lookup('hdd_volume_size')}"
                 storageClassName: "%{lookup('hdd_storage_class')}"
+                volumeMode: Block
+                accessModes:
+                  - ReadWriteOnce
+            - metadata:
+                name: metadata
+              spec:
+                resources:
+                  requests:
+                    storage: "%{lookup('hdd_metadata_volume_size')}"
+                storageClassName: "%{lookup('hdd_metadata_storage_class')}"
                 volumeMode: Block
                 accessModes:
                   - ReadWriteOnce
