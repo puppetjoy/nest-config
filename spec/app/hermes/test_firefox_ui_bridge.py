@@ -329,6 +329,27 @@ def test_release_preserves_claimed_owner_blank_and_hard_cap_blocks_creation() ->
         tmp.cleanup()
 
 
+def test_release_refuses_to_close_joy_tab_when_selection_click_is_missed() -> None:
+    module, fixture, tmp = configured_bridge()
+    try:
+        acquired = module.command_tabs({"action": "acquire", "workflow_id": "fixture"})
+        assert acquired["created_tab"] is True
+        fixture.tabs[0]["selected"] = True
+        fixture.tabs[1]["selected"] = False
+        fixture.commands.clear()
+        try:
+            module.command_tabs({"action": "release", "workflow_id": "fixture"})
+        except RuntimeError as exc:
+            assert "did not become visibly selected" in str(exc)
+        else:
+            raise AssertionError("missed tab selection closed the Joy tab")
+        assert len(fixture.tabs) == 2
+        assert fixture.tabs[0]["selected"] is True
+        assert all(command[:3] != ("key", "--clearmodifiers", "ctrl+w") for command in fixture.commands)
+    finally:
+        tmp.cleanup()
+
+
 def test_atspi_text_api_and_safe_commerce_canonicalization() -> None:
     module = load_bridge()
 

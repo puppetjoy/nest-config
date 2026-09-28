@@ -162,6 +162,9 @@ def selector_point(ui_snapshot: dict[str, Any], selector: str, *, field_only: bo
             "if (/password|passcode|verification|one.time|security.code|cvv|cvc|card.number|account.number|routing.number|secret|token|recovery.code/i.test(hint) || "
             "e.matches('input[type=password],input[type=hidden]') || !r.width || !r.height || "
             "s.visibility==='hidden' || s.display==='none') return {error:'not a visible public control'}; "
+            "if (e.matches(':disabled,[disabled],[aria-disabled=true]') || "
+            "(e.matches('input,textarea,[contenteditable]') && (e.readOnly || e.getAttribute('aria-readonly')==='true'))) "
+            "return {error:'control is disabled or read-only'}; "
             + ("if(!e.matches('input,textarea,[contenteditable=true]'))return {error:'selector is not an editable field'};" if field_only else "") +
             "if(devicePixelRatio!==1)return {error:'unverified display scale; use accessibility or grounded visual coordinates'};"
             "const x=r.x+r.width/2,y=r.y+r.height/2; "

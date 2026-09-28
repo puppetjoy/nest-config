@@ -773,6 +773,11 @@ def _select_workflow_tab(record: dict[str, Any]) -> None:
         raise RuntimeError("canonical tab has no actionable screen bounds")
     _focus_browser()
     _xdotool("mousemove", "--sync", str(rect["x"] + rect["width"] // 2), str(rect["y"] + rect["height"] // 2), "click", "1")
+    # A successful XTest call is not proof Firefox switched tabs. Never
+    # navigate or close a tab until the intended workflow tab is selected.
+    selected = _selected_tab(_snapshot())
+    if not selected or selected.get("locator") != matches[0]["locator"] or selected.get("name") != record.get("tab_name"):
+        raise RuntimeError("canonical tab did not become visibly selected; refusing input into another tab")
 
 
 def command_status(_: dict[str, Any]) -> dict[str, Any]:
@@ -1041,17 +1046,16 @@ def command_tabs(payload: dict[str, Any]) -> dict[str, Any]:
             if not record.get("created_by_agent"):
                 del state["workflows"][workflow_id]
                 return {"operation": "tab_lifecycle", "status": "released_preserved_tab", "action": action, "workflow_id": workflow_id}
+            if record.get("uncertain"):
+                return {"operation": "tab_lifecycle", "status": "preserved_uncertain", "action": action, "workflow_id": workflow_id}
             current = _snapshot()
             matches = _matching_tabs(current, record)
             if len(matches) != 1:
                 record["uncertain"] = True
                 return {"operation": "tab_lifecycle", "status": "preserved_uncertain", "action": action, "workflow_id": workflow_id}
-            node, rect = _resolve_locator(matches[0]["locator"])
-            if not rect:
-                record["uncertain"] = True
-                return {"operation": "tab_lifecycle", "status": "preserved_uncertain", "action": action, "workflow_id": workflow_id}
-            _focus_browser()
-            _xdotool("mousemove", "--sync", str(rect["x"] + rect["width"] // 2), str(rect["y"] + rect["height"] // 2), "click", "1")
+            # A tab-strip click may be dropped. Reuse the same selected-tab
+            # readback gate as navigation before Ctrl+W can close anything.
+            _select_workflow_tab(record)
             _xdotool("key", "--clearmodifiers", "ctrl+w")
             del state["workflows"][workflow_id]
             return {"operation": "tab_lifecycle", "status": "released_closed_owned_tab", "action": action, "workflow_id": workflow_id, "readback": _readback()}

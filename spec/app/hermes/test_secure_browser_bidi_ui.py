@@ -134,6 +134,7 @@ def test_visible_selector_point_uses_fixed_script():
     assert module.selector_point(snapshot(), "label[for=color]") == [127, 438]
     assert browser.calls[0][1]["target"] == {"context": "visible"}
     assert 'label[for=color]' in browser.calls[0][1]["expression"]
+    assert "control is disabled or read-only" in browser.calls[0][1]["expression"]
 
 
 def test_status_requires_live_bidi_not_just_launch_configuration():
