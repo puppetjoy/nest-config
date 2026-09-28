@@ -56,6 +56,7 @@ key <%= $key %>
 crl-verify <%= $crl %>
 script-security 2
 up /etc/openvpn/up.sh
+route-up /etc/openvpn/route-up-nest.sh
 down /etc/openvpn/down.sh
 down-pre
 verb 3

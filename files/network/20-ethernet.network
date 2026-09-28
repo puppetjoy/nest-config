@@ -3,6 +3,7 @@ Name=bond* br* en* eth* usb*
 
 [Network]
 DHCP=yes
+DNSSEC=no
 
 [DHCP]
 RouteMetric=10

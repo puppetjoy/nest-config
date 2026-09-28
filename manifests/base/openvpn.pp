@@ -236,6 +236,17 @@ class nest::base::openvpn {
     }
   }
 
+  if $facts['os']['family'] == 'Gentoo' {
+    file { '/etc/openvpn/route-up-nest.sh':
+      mode    => '0755',
+      owner   => 'root',
+      group   => 'root',
+      source  => 'puppet:///modules/nest/openvpn/route-up-nest.sh',
+      require => Package[$openvpn_package_name],
+      before  => Service[$openvpn_service_name],
+    }
+  }
+
   package { $openvpn_package_name:
     ensure          => installed,
     install_options => $openvpn_package_opts,
