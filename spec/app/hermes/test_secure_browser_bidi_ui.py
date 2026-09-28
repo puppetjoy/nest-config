@@ -72,6 +72,17 @@ def test_unambiguous_visible_page_query_and_secret_guard():
             raise AssertionError("secret query was accepted")
 
 
+def test_origin_address_bar_without_slash_matches_bidi_canonical_url():
+    module, legacy = load()
+    browser = Browser([{"context": "visible", "url": "https://example.com/"}])
+    legacy._with_browser = lambda fn: fn(browser)
+    result = module.query(snapshot("https://example.com"), "document.title")
+    assert result["status"] == "ok"
+    assert browser.calls[0][1]["target"] == {"context": "visible"}
+    assert module._url_identity("https://example.com?cart=one") == "https://example.com/?cart=one"
+    assert module._url_identity("https://example.com/?cart=two") != module._url_identity("https://example.com?cart=one")
+
+
 def test_general_collection_read_is_bounded_and_redacts_each_field():
     module, legacy = load()
     expression = 'document.querySelectorAll(".cart-row input, .cart-row .variant").value'

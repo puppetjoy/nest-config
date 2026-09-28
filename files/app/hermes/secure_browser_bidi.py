@@ -126,7 +126,10 @@ def _url_identity(value: str) -> str:
     # Compare in process only; never return either URL in a tool response.
     # Dropping query/fragment or truncating paths could map a selected checkout
     # tab to a different same-path BiDi context.
-    return value
+    # The address bar may display an origin without a trailing slash while
+    # BiDi reports its canonical URL with "/". Preserve the exact query and
+    # fragment; normalize only this empty-path spelling difference.
+    return parsed._replace(path=parsed.path or "/").geturl()
 
 
 def _safe_result(value: Any) -> Any:
