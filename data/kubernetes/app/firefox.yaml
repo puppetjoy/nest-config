@@ -11,10 +11,10 @@ cert_issuer_kind: ClusterIssuer
 ingress_class: contour-compute
 node_role: compute
 image: registry.gitlab.joyfullee.me/nest/tools/firefox:latest
-image_revision: '234428c2'
+image_revision: '9429'
 launch_url: about:blank
 app_args: ''
-control_protocol: firefox-ui-v1
+control_protocol: firefox-bidi-ui-v2
 vnc_options: '-disableBasicAuth'
 storage_class: owl-crypt
 profile_storage_size: 12Gi
@@ -101,12 +101,11 @@ resources:
 
         This canary exposes only the Nest Firefox/KasmVNC operator UI at
         https://%{lookup('operator_fqdn')}/. Hermes invokes the in-container
-        Firefox UI bridge through Kubernetes exec; there is no Remote
-        Debugging, WebDriver, Marionette, BiDi, CDP, or hidden browser-context
-        endpoint. The bridge uses only X11 input, AT-SPI readback, and visible
-        X11 screenshots. Raw VNC credentials, cookies, storage, profile files,
-        request headers, vault data, and payment/address secrets are never
-        exposed through the bridge.
+        Firefox UI bridge through Kubernetes exec. The v2 controller attaches
+        to the same visible Firefox via pod-local Marionette/BiDi; no automation
+        port is exposed by the Service or Ingress. X11/AT-SPI remain available
+        for browser chrome and visible screenshots. Credentials and payment
+        data stay in Firefox/Bitwarden, not in tool text or checkout evidence.
 
   profile-storage:
     apiVersion: v1
