@@ -671,6 +671,32 @@ def test_commerce_readback_sums_unlabelled_stepper_values_without_other_numeric_
         assert module._commerce_readback(snapshot, {"safe_item_nickname": "fixture"})["quantity"] == 3
 
 
+def test_commerce_readback_pairs_cart_section_variants_without_leaking_sensitive_values() -> None:
+    module = load_bridge()
+    nodes = [
+        {"role": "section", "name": name, "states": ["showing"]}
+        for name in (
+            "Hardness: Gray/Soft", "Type: Large (Upper)",
+            "Hardness: Gray/Soft", "Type: Small Step(Lower)",
+            "Hardness: joy@example.test", "Type: Owner's address",
+        )
+    ]
+    snapshot = {"url": "https://fivestride.example/cart", "nodes": nodes}
+    result = module._commerce_readback(snapshot, {"safe_item_nickname": "cushions"})
+    assert result["variant"] == ["Gray/Soft / Large (Upper)", "Gray/Soft / Small Step(Lower)"]
+    assert "joy@example.test" not in json.dumps(result)
+    snapshot["url"] = "https://fivestride.example/products/cushions"
+    assert module._commerce_readback(snapshot, {"safe_item_nickname": "cushions"})["variant"] == []
+    snapshot["url"] = "https://fivestride.example/cart"
+    nodes[0]["states"] = ["visible"]
+    assert module._commerce_readback(snapshot, {"safe_item_nickname": "cushions"})["variant"] == ["Gray/Soft / Small Step(Lower)"]
+    nodes[:] = [
+        {"role": "section", "name": name, "states": ["showing"]}
+        for name in ("Hardness: Gray/Soft", "Unrelated section", "Type: Large (Upper)")
+    ]
+    assert module._commerce_readback(snapshot, {"safe_item_nickname": "cushions"})["variant"] == []
+
+
 def test_commerce_readback_keeps_real_shipping_amount_when_banner_precedes_it() -> None:
     module = load_bridge()
     snapshot = {
