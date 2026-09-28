@@ -690,6 +690,11 @@ def test_commerce_readback_pairs_cart_section_variants_without_leaking_sensitive
     snapshot["url"] = "https://fivestride.example/cart"
     nodes[0]["states"] = ["visible"]
     assert module._commerce_readback(snapshot, {"safe_item_nickname": "cushions"})["variant"] == ["Gray/Soft / Small Step(Lower)"]
+    nodes[:] = [
+        {"role": "section", "name": name, "states": ["showing"]}
+        for name in ("Hardness: Gray/Soft", "Unrelated section", "Type: Large (Upper)")
+    ]
+    assert module._commerce_readback(snapshot, {"safe_item_nickname": "cushions"})["variant"] == []
 
 
 def test_commerce_readback_keeps_real_shipping_amount_when_banner_precedes_it() -> None:

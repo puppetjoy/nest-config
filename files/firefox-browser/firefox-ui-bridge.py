@@ -521,6 +521,8 @@ def _commerce_readback(snapshot: dict[str, Any], payload: dict[str, Any]) -> dic
                 if not SENSITIVE_RE.search(value) and not OWNER_SENSITIVE_RE.search(value) and value not in variants:
                     variants.append(value)
                 cart_hardness = None
+            elif not hardness:
+                cart_hardness = None
         if not states.intersection({"selected", "checked", "pressed", "active"}):
             continue
         match = re.match(r"(?:color|colour|size)\s*[:\-]\s*(.{1,80})$", name, re.IGNORECASE)
