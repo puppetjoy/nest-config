@@ -107,7 +107,8 @@ def test_site_independent_dom_snapshot_is_generated_and_bounded():
     script = module._read_script("document.domSnapshot")
     assert "querySelectorAll('*')" in script and "max=120" in script
     assert "input[type=password],input[type=hidden]" in script
-    assert "e.isContentEditable" in script and "e.value" not in script
+    assert "e.isContentEditable" in script and "row.control.value" in script
+    assert "input[type=file]" in script
     browser = Browser([{"context": "visible", "url": "https://fixture.example/shop"}])
     def evaluate(method, payload):
         assert method == "script.evaluate" and payload["expression"] == script
@@ -137,14 +138,14 @@ const Node={TEXT_NODE:3};
 function element(tag, opts={}) {
   return {localName:tag,name:opts.name||'',id:opts.id||'',type:opts.type||'',
     disabled:false,checked:false,isContentEditable:false,labels:[],parentElement:null,
-    childNodes:[{nodeType:3,textContent:opts.text||''}],
+    value:opts.value||'',childNodes:[{nodeType:3,textContent:opts.text||''}],
     getAttribute:k=>opts[k]||null,closest:()=>null,
     matches:s=>s==='input,textarea,select'?tag==='input':s==='input[type=password],input[type=hidden]'?opts.type==='password':false,
     getBoundingClientRect:()=>({width:100,height:30,bottom:40,right:110,top:10,left:10})};
 }
 const nodes=[element('button',{text:'Choose size'}),
   element('input',{name:'password',type:'password',value:'NEVER_EXPORT_ME'}),
-  element('input',{name:'publicField',type:'text',value:'NEVER_EXPORT_VALUE'})];
+  element('input',{name:'quantity',type:'number',value:'2','aria-label':'Quantity'})];
 const document={body:{querySelectorAll:()=>nodes}};
 const getComputedStyle=()=>({display:'block',visibility:'visible'});
 const innerHeight=800,innerWidth=1200;
@@ -155,7 +156,8 @@ const innerHeight=800,innerWidth=1200;
     parsed = json.loads(result.stdout)
     assert parsed["total"] == 3 and len(parsed["nodes"]) == 2
     assert parsed["nodes"][0]["text"] == "Choose size"
-    assert parsed["nodes"][1]["control"]["type"] == "text"
+    assert parsed["nodes"][1]["control"] == {"type": "number", "disabled": False, "checked": False, "value": "2"}
+    assert parsed["nodes"][1]["label"] == "Quantity"
 
 def test_dom_snapshot_paginates_large_unrelated_page_without_skipping_nodes():
     module, _ = load()

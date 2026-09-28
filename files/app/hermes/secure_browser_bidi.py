@@ -52,9 +52,15 @@ DOM_SNAPSHOT = """(() => {
     const row={tag:e.localName,depth:Math.min(32,(()=>{let n=e,d=0;while((n=n.parentElement)&&d<32)d++;return d})()),
       role:e.getAttribute('role')||null,text:ownText||null,
       visible:!!(r.width&&r.height&&r.bottom>0&&r.right>0&&r.top<innerHeight&&r.left<innerWidth)};
+    const label=e.getAttribute('aria-label');
+    if(label&&!sensitive.test(label))row.label=label.slice(0,200);
     if(e.matches('input,textarea,select')){
       row.control={type:e.getAttribute('type')||e.localName,disabled:!!e.disabled,
         checked:!!e.checked};
+      // Ordinary quantity/variant controls must be observable without a
+      // retailer-specific parser. Never export a secret/hidden input value.
+      if(e.matches('input,textarea,select')&&!e.matches('input[type=file]'))
+        row.control.value=String(e.value??'').slice(0,200);
     }
     nodes.push(row);
   }
