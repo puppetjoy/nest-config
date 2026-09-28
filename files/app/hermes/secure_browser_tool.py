@@ -1,8 +1,8 @@
-"""Hermes adapter for the persistent, non-instrumented Firefox desktop.
+"""Hermes adapter for the persistent, owner-visible Firefox desktop.
 
-The browser is controlled only through the source-managed Firefox UI bridge
-inside the Kubernetes workload. The bridge uses X11 input, AT-SPI observation,
-and X11 screenshots; this module has no browser-debugging or profile-data path.
+The browser uses the source-managed Firefox UI bridge inside the Kubernetes
+workload. The bridge uses X11 input, AT-SPI observation, and X11 screenshots.
+Opt-in v2 adds a private BiDi page connector without exposing raw profile data.
 """
 
 from __future__ import annotations
@@ -63,7 +63,7 @@ def _workflow_id(args: dict[str, Any], task_id: str | None = None) -> str:
 
 
 def _bridge(command: str, payload: dict[str, Any], *, timeout: int | None = None) -> dict[str, Any]:
-    if CONTROL_MODE != "firefox-ui-v1":
+    if CONTROL_MODE not in {"firefox-ui-v1", "firefox-bidi-ui-v2"}:
         raise RuntimeError(f"unsupported secure browser control mode: {CONTROL_MODE}")
     kubeconfig = os.environ.get("KUBECONFIG", "").strip()
     if not kubeconfig:
@@ -114,7 +114,7 @@ def _bridge(command: str, payload: dict[str, Any], *, timeout: int | None = None
 
 
 def _check_secure_browser() -> bool:
-    return CONTROL_MODE == "firefox-ui-v1" and bool(WORKLOAD) and bool(BRIDGE_PATH)
+    return CONTROL_MODE in {"firefox-ui-v1", "firefox-bidi-ui-v2"} and bool(WORKLOAD) and bool(BRIDGE_PATH)
 
 
 def _safe_call(operation: str, callback: Any) -> str:
@@ -126,7 +126,7 @@ def _safe_call(operation: str, callback: Any) -> str:
             "status": "error",
             "error": "FIREFOX_UI_CONTROL_FAILED",
             "message": str(exc)[:1000],
-            "protocol": "firefox-ui-v1",
+            "protocol": CONTROL_MODE,
         })
 
 
@@ -145,7 +145,7 @@ def _save_screenshot(result: dict[str, Any], *, owner_only: bool = False) -> dic
     path.write_bytes(content)
     os.chmod(path, 0o600)
     result["image_path"] = str(path)
-    result["protocol"] = "firefox-ui-v1"
+    result["protocol"] = CONTROL_MODE
     if owner_only:
         result.update({
             "owner_only": True,
@@ -160,19 +160,32 @@ def _save_screenshot(result: dict[str, Any], *, owner_only: bool = False) -> dic
 
 
 def secure_browser_status_tool(args: dict[str, Any], **_kw: Any) -> str:
-    return _safe_call("status", lambda: {
-        **_bridge("status", {}),
-        "public_browser_url": PUBLIC_URL,
-        "authorization_boundary": "Joy's direction to Star for the workflow; no per-click, checkout, or purchase approval ceremony",
-        "sensitive_state_boundary": "Secrets remain in Firefox/Bitwarden and must not be passed as tool text or exposed from profile storage",
-        "compatibility": {
-            "version": "firefox-ui-v1",
-            "dom_selectors": False,
-            "javascript_query": False,
-            "accessibility_locators": True,
-            "coordinate_input": True,
-        },
-    })
+    def run() -> dict[str, Any]:
+        bridge_status = _bridge("status", {})
+        live_v2 = False
+        if CONTROL_MODE == "firefox-bidi-ui-v2" and bridge_status.get("launch_protocol") == CONTROL_MODE:
+            from importlib import import_module
+            live_v2 = import_module("tools.secure_browser_bidi").probe()
+        return {
+            **bridge_status,
+            "protocol": CONTROL_MODE,
+            "control_mode_matches_browser": (live_v2 and bool(bridge_status.get("native_element_available")) if CONTROL_MODE == "firefox-bidi-ui-v2" else bridge_status.get("launch_protocol") == CONTROL_MODE),
+            "instrumentation": {
+                "webdriver": bool(bridge_status.get("native_element_available")), "marionette": bool(bridge_status.get("native_element_available")),
+                "bidi": live_v2, "cdp": False, "dom": live_v2,
+            },
+            "public_browser_url": PUBLIC_URL,
+            "authorization_boundary": "Joy's direction to Star for the workflow; no per-click, checkout, or purchase approval ceremony",
+            "sensitive_state_boundary": "Secrets remain in Firefox/Bitwarden and must not be passed as tool text or exposed from profile storage",
+            "compatibility": {
+                "version": CONTROL_MODE,
+                "dom_selectors": live_v2 and bool(bridge_status.get("native_element_available")),
+                "javascript_query": False,
+                "accessibility_locators": True,
+                "coordinate_input": True,
+            },
+        }
+    return _safe_call("status", run)
 
 
 def secure_browser_navigate_tool(args: dict[str, Any], task_id: str | None = None, **_kw: Any) -> str:
@@ -270,6 +283,12 @@ def secure_browser_owner_review_capture_tool(args: dict[str, Any], **_kw: Any) -
 
 
 def secure_browser_query_tool(args: dict[str, Any], **_kw: Any) -> str:
+    if CONTROL_MODE == "firefox-bidi-ui-v2":
+        def run() -> dict[str, Any]:
+            from importlib import import_module
+            secure_browser_bidi = import_module("tools.secure_browser_bidi")
+            return secure_browser_bidi.query(_bridge("snapshot", {}), str(args.get("expression") or ""))
+        return _safe_call("query", run)
     return _json({
         "operation": "query",
         "status": "unsupported",
@@ -295,6 +314,23 @@ def secure_browser_visual_evidence_tool(args: dict[str, Any], **_kw: Any) -> str
 
 def secure_browser_click_tool(args: dict[str, Any], task_id: str | None = None, **_kw: Any) -> str:
     def run() -> dict[str, Any]:
+        if CONTROL_MODE == "firefox-bidi-ui-v2" and args.get("selector"):
+            # A selector can resolve to a purchase or destructive control on
+            # any site. Require the UI bridge's durable action journal before
+            # resolving or delivering that click; never guess intent from CSS.
+            action_key = str(args.get("action_key") or args.get("idempotency_key") or "").strip()
+            if not action_key:
+                raise ValueError("selector clicks require an action_key for exactly-once delivery")
+            observed = _bridge("snapshot", {})
+            return _bridge("selector_action", {
+                "workflow_id": _workflow_id(args, task_id),
+                "operation": "click", "selector": str(args["selector"]),
+                "expected_url": observed.get("url"),
+                "expected_generation": observed.get("browser_generation"),
+                "expected_tab": next((tab.get("name") for tab in observed.get("tabs", []) if tab.get("selected")), None),
+                "action_key": action_key,
+                "max_wait_seconds": args.get("max_wait_seconds"),
+            }, timeout=BRIDGE_TIMEOUT + 15)
         if args.get("selector") and not args.get("locator"):
             return {
                 "operation": "click", "status": "unsupported",
@@ -319,6 +355,22 @@ def secure_browser_click_tool(args: dict[str, Any], task_id: str | None = None, 
 
 def secure_browser_type_tool(args: dict[str, Any], task_id: str | None = None, **_kw: Any) -> str:
     def run() -> dict[str, Any]:
+        if CONTROL_MODE == "firefox-bidi-ui-v2" and args.get("selector"):
+            # Input events may themselves trigger page actions (including
+            # auto-submit). Journal selector-backed typing just like clicks.
+            action_key = str(args.get("action_key") or args.get("idempotency_key") or "").strip()
+            if not action_key:
+                raise ValueError("selector typing requires an action_key for exactly-once delivery")
+            observed = _bridge("snapshot", {})
+            return _bridge("selector_action", {
+                "workflow_id": _workflow_id(args, task_id),
+                "operation": "type", "selector": str(args["selector"]),
+                "expected_url": observed.get("url"),
+                "expected_generation": observed.get("browser_generation"),
+                "expected_tab": next((tab.get("name") for tab in observed.get("tabs", []) if tab.get("selected")), None),
+                "text": args.get("text", ""),
+                "action_key": action_key,
+            })
         if args.get("selector") and not args.get("locator"):
             return {
                 "operation": "type", "status": "unsupported",
@@ -352,11 +404,15 @@ def secure_browser_guardrail_check_tool(args: dict[str, Any], **_kw: Any) -> str
     if operation in {"cookies", "storage", "profile", "raw_profile", "cdp", "webdriver", "bidi", "marionette", "javascript_query"}:
         return _json({
             "operation": "guardrail_check", "status": "blocked", "requested_operation": operation,
-            "protocol": "firefox-ui-v1", "reason": "browser-internal automation and raw profile/session state are outside the architecture boundary",
+            "protocol": CONTROL_MODE,
+            "reason": ("Raw profile/session state and arbitrary scripts bypass the visible UI action-key journal; "
+                       "v2 supports bounded DOM reads and selector-backed UI actions only"
+                       if CONTROL_MODE == "firefox-bidi-ui-v2" else
+                       "browser-internal automation and raw profile/session state are outside the v1 architecture boundary"),
         })
     return _json({
         "operation": "guardrail_check", "status": "allowed", "requested_operation": operation,
-        "protocol": "firefox-ui-v1",
+        "protocol": CONTROL_MODE,
         "authorization_boundary": "Joy's direction to Star for the workflow; no redundant platform approval gate",
         "correctness": "Use accessibility/visual readback after every mutation and an action_key for exactly-once destructive or financial controls.",
     })
@@ -395,13 +451,13 @@ SCHEMAS: list[tuple[dict[str, Any], Any]] = [
     ({"name": "secure_browser_checkout_readback", "description": "Return sanitized first-class checkout/post-purchase fields from visible AT-SPI readback: retailer, safe item nickname, selected variant, quantity, subtotal, shipping, tax, total, and confirmation state. Never returns owner identity, email, address, payment details, raw order IDs, or raw page text.", "parameters": {"type": "object", "properties": {"safe_item_nickname": {"type": "string", "maxLength": 120}, "max_wait_seconds": {"type": "number", "minimum": 0, "maximum": 15}}, "required": ["safe_item_nickname"]}}, secure_browser_checkout_readback_tool),
     ({"name": "secure_browser_scroll", "description": "Scroll the canonical owner-visible Firefox workflow by bounded visible page increments, then return transition-aware readback.", "parameters": {"type": "object", "properties": {"workflow_id": {"type": "string"}, "direction": {"type": "string", "enum": ["up", "down"]}, "amount": {"type": "integer", "minimum": 1, "maximum": 6}}}}, secure_browser_scroll_tool),
     ({"name": "secure_browser_owner_review_capture", "description": "Capture one visible pre-purchase Firefox viewport and pair it with sanitized structured checkout readback for owner-only delivery in the active trusted Joy Telegram chat. The image must never enter generic vision/OCR, logs, task evidence/artifacts, Talon notifications, or another recipient; capture multiple visible viewports with secure_browser_scroll when needed.", "parameters": {"type": "object", "properties": {"capture_label": {"type": "string", "maxLength": 80}, "safe_item_nickname": {"type": "string", "maxLength": 120}, "max_wait_seconds": {"type": "number", "minimum": 0, "maximum": 15}}, "required": ["safe_item_nickname"]}}, secure_browser_owner_review_capture_tool),
-    ({"name": "secure_browser_query", "description": "Versioned compatibility endpoint. firefox-ui-v1 deliberately rejects arbitrary JavaScript/DOM queries and directs callers to accessibility/visual observation.", "parameters": {"type": "object", "properties": {"expression": {"type": "string"}}}}, secure_browser_query_tool),
+    ({"name": "secure_browser_query", "description": "Versioned page read. v1 returns unsupported; opt-in v2 supports document.domSnapshot (bounded public DOM structure/control state) and generated selector reads, not arbitrary JavaScript or page mutation.", "parameters": {"type": "object", "properties": {"expression": {"type": "string"}}}}, secure_browser_query_tool),
     ({"name": "secure_browser_screenshot", "description": "Capture the visible persistent Firefox window through X11 and return a local PNG artifact.", "parameters": {"type": "object", "properties": {}}}, secure_browser_screenshot_tool),
     ({"name": "secure_browser_visual_evidence", "description": "Capture visible-window evidence from the persistent Firefox desktop without browser instrumentation.", "parameters": {"type": "object", "properties": {}}}, secure_browser_visual_evidence_tool),
-    ({"name": "secure_browser_click", "description": "Click a fresh accessibility locator or visible coordinate in the canonical Firefox handoff tab, then return bounded transition-aware readback. A delivered click is never confirmed completion. Joy's workflow direction is the authorization boundary; use action_key for exactly-once destructive/financial actions.", "parameters": {"type": "object", "properties": {"locator": {"type": "string"}, "coordinate": {"type": "array", "items": {"type": "integer"}, "minItems": 2, "maxItems": 2}, "workflow_id": {"type": "string"}, "action_key": {"type": "string"}, "idempotency_key": {"type": "string"}, "max_wait_seconds": {"type": "number", "minimum": 0, "maximum": 15}, "selector": {"type": "string", "description": "Legacy-only; rejected in firefox-ui-v1"}, "approved_effect": {"type": "string", "description": "Legacy audit label; not an approval gate"}}, "anyOf": [{"required": ["locator"]}, {"required": ["coordinate"]}, {"required": ["selector"]}]}}, secure_browser_click_tool),
-    ({"name": "secure_browser_type", "description": "Type bounded non-secret text into a fresh accessibility locator and return redacted readback. Never pass passwords, payment numbers, tokens, or other secrets; operate Firefox/Bitwarden UI instead.", "parameters": {"type": "object", "properties": {"locator": {"type": "string"}, "selector": {"type": "string", "description": "Legacy-only; rejected in firefox-ui-v1"}, "text": {"type": "string", "maxLength": 4096}, "workflow_id": {"type": "string"}}, "required": ["text"]}}, secure_browser_type_tool),
+    ({"name": "secure_browser_click", "description": "Click a fresh accessibility locator or visible coordinate (v1) or native CSS element (opt-in v2) in the canonical Firefox tab. A delivered click is never confirmed completion; use action_key and readback.", "parameters": {"type": "object", "properties": {"locator": {"type": "string"}, "coordinate": {"type": "array", "items": {"type": "integer"}, "minItems": 2, "maxItems": 2}, "workflow_id": {"type": "string"}, "action_key": {"type": "string"}, "idempotency_key": {"type": "string"}, "max_wait_seconds": {"type": "number", "minimum": 0, "maximum": 15}, "selector": {"type": "string", "description": "Native CSS element on opt-in v2; v1 rejects it"}, "approved_effect": {"type": "string", "description": "Legacy audit label; not an approval gate"}}, "anyOf": [{"required": ["locator"]}, {"required": ["coordinate"]}, {"required": ["selector"]}]}}, secure_browser_click_tool),
+    ({"name": "secure_browser_type", "description": "Type bounded non-secret text into a fresh accessibility locator (v1) or native CSS element (opt-in v2); selector actions require action_key. Never pass passwords, payment numbers, tokens, or other secrets.", "parameters": {"type": "object", "properties": {"locator": {"type": "string"}, "selector": {"type": "string", "description": "Native CSS element on opt-in v2; v1 rejects it"}, "text": {"type": "string", "maxLength": 4096}, "workflow_id": {"type": "string"}, "action_key": {"type": "string"}, "idempotency_key": {"type": "string"}}, "required": ["text"]}}, secure_browser_type_tool),
     ({"name": "secure_browser_tab_lifecycle", "description": "Acquire, keep open, inspect, or release the canonical workflow tab. Ownership is durable; uncertain or Joy-owned tabs are preserved; hard caps refuse new tabs rather than closing unowned tabs.", "parameters": {"type": "object", "properties": {"action": {"type": "string", "enum": ["status", "acquire", "keep_open", "release", "preview_cleanup", "cleanup", "mark_keep_open"]}, "workflow_id": {"type": "string"}, "lease_seconds": {"type": "integer"}}}}, secure_browser_tab_lifecycle_tool),
-    ({"name": "secure_browser_guardrail_check", "description": "Describe the firefox-ui-v1 boundary. Joy-directed browser UI actions are allowed without redundant approval gates; raw browser/profile/automation access is blocked.", "parameters": {"type": "object", "properties": {"operation": {"type": "string"}}}}, secure_browser_guardrail_check_tool),
+    ({"name": "secure_browser_guardrail_check", "description": "Describe the active versioned Firefox boundary: v1 visible UI only; opt-in v2 adds bounded DOM reads and selector-backed UI input but still denies raw session/profile access and arbitrary scripts.", "parameters": {"type": "object", "properties": {"operation": {"type": "string"}}}}, secure_browser_guardrail_check_tool),
     ({"name": "secure_browser_owner_checkout_review", "description": "Retired compatibility endpoint: owner review is no longer an extra approval gate.", "parameters": {"type": "object", "properties": {}}}, secure_browser_owner_checkout_review_tool),
     ({"name": "secure_browser_request_final_purchase_approval", "description": "Retired compatibility endpoint: Joy's workflow direction is the authorization boundary.", "parameters": {"type": "object", "properties": {}}}, secure_browser_request_final_purchase_approval_tool),
     ({"name": "secure_browser_execute_final_purchase", "description": "Retired compatibility endpoint. Use secure_browser_click with a fresh locator and action_key for exactly-once execution.", "parameters": {"type": "object", "properties": {}}}, secure_browser_execute_final_purchase_tool),
