@@ -359,6 +359,11 @@ def secure_browser_click_tool(args: dict[str, Any], task_id: str | None = None, 
 def secure_browser_type_tool(args: dict[str, Any], task_id: str | None = None, **_kw: Any) -> str:
     def run() -> dict[str, Any]:
         if CONTROL_MODE == "firefox-bidi-ui-v2" and args.get("selector"):
+            # Input events may themselves trigger page actions (including
+            # auto-submit). Journal selector-backed typing just like clicks.
+            action_key = str(args.get("action_key") or args.get("idempotency_key") or "").strip()
+            if not action_key:
+                raise ValueError("selector typing requires an action_key for exactly-once delivery")
             from importlib import import_module
             secure_browser_bidi = import_module("tools.secure_browser_bidi")
             observed = _bridge("snapshot", {})
@@ -370,6 +375,7 @@ def secure_browser_type_tool(args: dict[str, Any], task_id: str | None = None, *
                 "expected_generation": observed.get("browser_generation"),
                 "expected_tab": next((tab.get("name") for tab in observed.get("tabs", []) if tab.get("selected")), None),
                 "text": args.get("text", ""),
+                "action_key": action_key,
             })
         if args.get("selector") and not args.get("locator"):
             return {

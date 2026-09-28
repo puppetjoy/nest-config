@@ -265,12 +265,65 @@ def test_selector_click_keeps_ui_action_key_and_type_keeps_ui_value_redacted():
     missing_key = json.loads(tool.secure_browser_click_tool({"selector": "label[for=color]", "workflow_id": "test"}))
     assert missing_key["status"] == "error" and "action_key" in missing_key["message"]
     assert calls == []
+    missing_type_key = json.loads(tool.secure_browser_type_tool({"selector": "#message", "workflow_id": "test", "text": "hello"}))
+    assert missing_type_key["status"] == "error" and "action_key" in missing_type_key["message"]
+    assert calls == []
     click = json.loads(tool.secure_browser_click_tool({"selector": "label[for=color]", "workflow_id": "test", "action_key": "once"}))
     assert click["status"] == "delivered"
     assert calls[-1] == ("click", {"workflow_id": "test", "coordinate": [127, 438], "expected_url": "https://fixture.example/shop", "expected_generation": 100, "expected_tab": "Unrelated shop", "action_key": "once", "max_wait_seconds": None})
-    typed = json.loads(tool.secure_browser_type_tool({"selector": "#message", "workflow_id": "test", "text": "hello"}))
+    typed = json.loads(tool.secure_browser_type_tool({"selector": "#message", "workflow_id": "test", "text": "hello", "action_key": "type-once"}))
     assert typed["typed_chars"] == 5
-    assert calls[-1] == ("type", {"workflow_id": "test", "coordinate": [127, 438], "expected_url": "https://fixture.example/shop", "expected_generation": 100, "expected_tab": "Unrelated shop", "text": "hello"})
+    assert calls[-1] == ("type", {"workflow_id": "test", "coordinate": [127, 438], "expected_url": "https://fixture.example/shop", "expected_generation": 100, "expected_tab": "Unrelated shop", "text": "hello", "action_key": "type-once"})
+
+def test_selector_typing_reserves_before_input_and_replay_never_retypes():
+    from test_firefox_ui_bridge import configured_bridge
+    bridge, desktop, tmp = configured_bridge()
+    try:
+        bridge._xdotool = lambda *args, **_kw: "1365 768" if args == ("getdisplaygeometry",) else desktop.xdotool(*args)
+        bridge.command_tabs({"action": "acquire", "workflow_id": "w"})
+        payload = {"workflow_id": "w", "coordinate": [120, 300], "text": "ordinary text", "action_key": "type-1",
+                   "expected_url": "https://example.test/", "expected_generation": 100, "expected_tab": "New Tab"}
+        first = bridge.command_type(payload)
+        assert first["status"] == "delivered" and first["typed_chars"] == len(payload["text"])
+        assert sum(command[0] == "type" for command in desktop.commands) == 1
+        second = bridge.command_type(payload)
+        assert second["status"] == "already_delivered" and second["delivery"]["input_sent"] is False
+        assert sum(command[0] == "type" for command in desktop.commands) == 1
+        try:
+            bridge.command_click({"workflow_id": "w", "action_key": "type-1", "coordinate": [120, 300]})
+        except ValueError as exc:
+            assert "another operation" in str(exc)
+        else:
+            raise AssertionError("typed action key was reusable for a click")
+        before = len(desktop.commands)
+        try:
+            bridge.command_type({**payload, "action_key": "type-failed", "expected_url": "https://wrong.test/"})
+        except RuntimeError as exc:
+            assert "stale" in str(exc)
+        else:
+            raise AssertionError("stale type was delivered")
+        assert len(desktop.commands) == before
+        assert "type-failed" not in bridge._load_state()["action_keys"]
+        def fail_after_reservation(*args, **_kw):
+            if args[0] == "type":
+                raise RuntimeError("transport uncertain")
+            return desktop.xdotool(*args)
+        bridge._xdotool = lambda *args, **kw: "1365 768" if args == ("getdisplaygeometry",) else fail_after_reservation(*args, **kw)
+        try:
+            bridge.command_type({**payload, "action_key": "type-uncertain"})
+        except RuntimeError as exc:
+            assert "transport uncertain" in str(exc)
+        else:
+            raise AssertionError("transport failure was hidden")
+        replay = bridge.command_type({**payload, "action_key": "type-uncertain"})
+        assert replay["status"] == "delivery_uncertain" and replay["delivery"]["input_sent"] is False
+        # Legacy focused-field typing has no selector precondition; keep its
+        # existing behavior while v2 selector typing uses the journal.
+        bridge._xdotool = lambda *args, **kw: "1365 768" if args == ("getdisplaygeometry",) else desktop.xdotool(*args, **kw)
+        legacy = bridge.command_type({"workflow_id": "w", "text": "focused field"})
+        assert legacy["status"] == "delivered" and legacy["typed_chars"] == 13
+    finally:
+        tmp.cleanup()
 
 
 def test_ui_bridge_rejects_displaced_tab_and_offscreen_coordinate():
@@ -308,5 +361,6 @@ if __name__ == "__main__":
     test_visible_selector_point_uses_fixed_script()
     test_status_requires_live_bidi_not_just_launch_configuration()
     test_selector_click_keeps_ui_action_key_and_type_keeps_ui_value_redacted()
+    test_selector_typing_reserves_before_input_and_replay_never_retypes()
     test_ui_bridge_rejects_displaced_tab_and_offscreen_coordinate()
-    print("eleven Firefox BiDi/UI source fixtures passed")
+    print("twelve Firefox BiDi/UI source fixtures passed")

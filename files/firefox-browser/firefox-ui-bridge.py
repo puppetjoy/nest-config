@@ -884,6 +884,8 @@ def command_click(payload: dict[str, Any]) -> dict[str, Any]:
             delivered = state["action_keys"][action_key]
             if delivered.get("workflow_id") != workflow_id:
                 raise ValueError("action_key is already bound to another workflow")
+            if delivered.get("operation", "click") != "click":
+                raise ValueError("action_key is already bound to another operation")
             _select_workflow_tab(record)
             delivery_state = delivered.get("delivery_state", "delivered")
             return {
@@ -908,7 +910,7 @@ def command_click(payload: dict[str, Any]) -> dict[str, Any]:
                 action = node.get_action_iface()
                 if action and action.get_n_actions():
                     if action_key:
-                        state["action_keys"][action_key] = {"created_at": time.time(), "workflow_id": workflow_id, "delivery_state": "delivery_started"}
+                        state["action_keys"][action_key] = {"created_at": time.time(), "workflow_id": workflow_id, "operation": "click", "delivery_state": "delivery_started"}
                         _save_state(state)
                     if not action.do_action(0):
                         raise RuntimeError("accessibility action failed; inspect visible control before coordinate fallback")
@@ -931,6 +933,7 @@ def command_click(payload: dict[str, Any]) -> dict[str, Any]:
         if action_key:
             state["action_keys"][action_key] = {
                 "created_at": time.time(), "workflow_id": workflow_id,
+                "operation": "click",
                 "delivery_state": "delivery_started",
             }
             _save_state(state)
@@ -955,27 +958,53 @@ def command_type(payload: dict[str, Any]) -> dict[str, Any]:
     workflow_id = str(payload.get("workflow_id") or "default")[:160]
     locator = str(payload.get("locator") or "")
     coordinate = payload.get("coordinate")
+    action_key = str(payload.get("action_key") or "")[:200]
     with _locked_state() as state:
         snapshot = _snapshot()
         _reconcile_state(state, snapshot)
         record = state["workflows"].get(workflow_id)
         if not record or record.get("uncertain"):
             raise RuntimeError("workflow has no unambiguous canonical handoff tab")
+        if "expected_url" in payload and not action_key:
+            raise ValueError("selector typing requires an action_key")
+        if action_key and action_key in state["action_keys"]:
+            delivered = state["action_keys"][action_key]
+            if delivered.get("workflow_id") != workflow_id or delivered.get("operation") != "type":
+                raise ValueError("action_key is already bound to another workflow or operation")
+            _select_workflow_tab(record)
+            delivery_state = delivered.get("delivery_state", "delivery_started")
+            return {"operation": "type", "status": "already_delivered" if delivery_state == "delivered" else "delivery_uncertain",
+                    "action_key": action_key, "typed_chars": 0, "text_redacted": True,
+                    "delivery": {"state": "replayed" if delivery_state == "delivered" else "uncertain_replay_blocked", "input_sent": False},
+                    "readback": _readback()}
         _select_workflow_tab(record)
         _assert_selector_precondition(payload)
+        if "expected_url" in payload and not locator and not (isinstance(coordinate, list) and len(coordinate) == 2):
+            raise ValueError("type requires an accessibility locator or [x,y] coordinate")
         if locator:
             _, rect = _resolve_locator(locator)
             if not rect:
                 raise ValueError("accessibility control has no screen bounds")
-            _xdotool("mousemove", "--sync", str(rect["x"] + rect["width"] // 2), str(rect["y"] + rect["height"] // 2), "click", "1")
+            x, y = rect["x"] + rect["width"] // 2, rect["y"] + rect["height"] // 2
         elif isinstance(coordinate, list) and len(coordinate) == 2:
             x, y = _assert_screen_coordinate(coordinate)
+        else:
+            x, y = None, None
+        if action_key:
+            state["action_keys"][action_key] = {"created_at": time.time(), "workflow_id": workflow_id,
+                                                "operation": "type", "delivery_state": "delivery_started"}
+            _save_state(state)
+        if x is not None and y is not None:
             _xdotool("mousemove", "--sync", str(x), str(y), "click", "1")
         _xdotool("type", "--clearmodifiers", "--delay", "1", "--", text, timeout=45)
+        if action_key:
+            state["action_keys"][action_key]["delivery_state"] = "delivered"
+            _save_state(state)
         readback = _readback()
         record["tab_name"] = readback["selected_tab"] or record["tab_name"]
         record["locator"] = readback.get("selected_locator") or record["locator"]
-    return {"operation": "type", "status": "delivered", "typed_chars": len(text), "text_redacted": True, "readback": readback}
+    return {"operation": "type", "status": "delivered", "typed_chars": len(text), "text_redacted": True,
+            "action_key": action_key or None, "readback": readback}
 
 
 def command_wait(payload: dict[str, Any]) -> dict[str, Any]:
