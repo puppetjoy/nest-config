@@ -691,9 +691,9 @@ def _reconcile_state(state: dict[str, Any], snapshot: dict[str, Any]) -> dict[st
         if float(record.get("lease_expires_at", 0)) <= now:
             report["expired"].append(workflow_id)
             if record.get("created_by_agent"):
-                # Accessibility locators encode a tab-strip index, not a
-                # durable tab id. After an old tab disappears, a new workflow
-                # can reuse that index. Expiry must never close that new tab.
+                # An expired locator can point to a newer tab after index
+                # reuse. Never close an agent-created tab automatically.
+
                 report["preserved_uncertain"].append(workflow_id)
                 record["uncertain"] = True
                 continue
@@ -773,8 +773,9 @@ def _select_workflow_tab(record: dict[str, Any]) -> None:
         raise RuntimeError("canonical tab has no actionable screen bounds")
     _focus_browser()
     _xdotool("mousemove", "--sync", str(rect["x"] + rect["width"] // 2), str(rect["y"] + rect["height"] // 2), "click", "1")
-    # A successful XTest call is not proof Firefox switched tabs. Never
-    # navigate or close a tab until the intended workflow tab is selected.
+    # XTest delivery is not proof that Firefox switched tabs. Before Ctrl+L
+    # or any page input, observe the intended tab as the selected UI tab.
+
     selected = _selected_tab(_snapshot())
     if not selected or selected.get("locator") != matches[0]["locator"] or selected.get("name") != record.get("tab_name"):
         raise RuntimeError("canonical tab did not become visibly selected; refusing input into another tab")
