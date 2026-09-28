@@ -732,6 +732,27 @@ def test_commerce_readback_keeps_real_shipping_amount_when_banner_precedes_it() 
     assert module._commerce_readback(snapshot, {"safe_item_nickname": "fixture"})["shipping"] == "$5.00"
 
 
+def test_native_origin_url_mapping_normalizes_only_empty_path() -> None:
+    module = load_bridge()
+    assert module._redact_url("http://fixture.example:18765") == "http://fixture.example:18765/"
+    assert module._redact_url("http://fixture.example:18765/") == "http://fixture.example:18765/"
+    assert module._redact_url("http://fixture.example:18765/cart") != module._redact_url("http://fixture.example:18765/cart/")
+    calls = []
+    def command(method: str, path: str, data: Any = None) -> Any:
+        calls.append((method, path))
+        if path == "/window/handles":
+            return ["visible"]
+        if path == "/url":
+            return "http://fixture.example:18765/"
+        if path == "/elements":
+            return [{"element-6066-11e4-a52e-4f735466cecf": "public-element"}]
+        if path == "/execute/sync":
+            return True
+        return None
+    assert module._native_selector(command, {"url": module._redact_url("http://fixture.example:18765")}, "#public", False) == "public-element"
+    assert ("POST", "/elements") in calls
+
+
 if __name__ == "__main__":
     for test_name in sorted(name for name in globals() if name.startswith("test_")):
         globals()[test_name]()
