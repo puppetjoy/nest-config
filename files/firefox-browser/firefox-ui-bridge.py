@@ -503,11 +503,26 @@ def _commerce_readback(snapshot: dict[str, Any], payload: dict[str, Any]) -> dic
         return values[-1] if values else None
 
     variants: list[str] = []
+    cart_hardness: str | None = None
+    cart_page = urlsplit(str(snapshot.get("url") or "")).path.rstrip("/").lower() == "/cart"
     for node in snapshot.get("nodes", []):
         states = set(node.get("states") or [])
+        name = " ".join(str(node.get("name") or "").split())
+        # Cart rows expose chosen options as ordinary sections, not checked
+        # radios. Pair only adjacent Hardness/Type labels in cart reading order;
+        # never mistake promotional copy or unrelated page text for a variant.
+        if cart_page and node.get("role") == "section" and "showing" in states:
+            hardness = re.fullmatch(r"Hardness:\s*(.{1,80})", name, re.IGNORECASE)
+            kind = re.fullmatch(r"Type:\s*(.{1,80})", name, re.IGNORECASE)
+            if hardness:
+                cart_hardness = hardness.group(1).strip()
+            elif kind and cart_hardness:
+                value = f"{cart_hardness} / {kind.group(1).strip()}"
+                if not SENSITIVE_RE.search(value) and not OWNER_SENSITIVE_RE.search(value) and value not in variants:
+                    variants.append(value)
+                cart_hardness = None
         if not states.intersection({"selected", "checked", "pressed", "active"}):
             continue
-        name = " ".join(str(node.get("name") or "").split())
         match = re.match(r"(?:color|colour|size)\s*[:\-]\s*(.{1,80})$", name, re.IGNORECASE)
         if match and not SENSITIVE_RE.search(match.group(1)) and not OWNER_SENSITIVE_RE.search(match.group(1)):
             value = match.group(1).strip()
