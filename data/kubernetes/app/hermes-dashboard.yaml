@@ -34,6 +34,8 @@ resources:
       name: "%{nest::kubernetes::service}-backup"
       namespace: "%{nest::kubernetes::namespace}"
     spec:
+      # Own the resume state in KubeCM, not an untracked live CronJob patch.
+      suspend: false
       concurrencyPolicy: Forbid
       schedule: "%{nest::kubernetes::cron_job_offset} %{lookup('backup_hour')} * * *"
       timeZone: 'America/New_York'
