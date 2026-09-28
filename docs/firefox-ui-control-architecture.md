@@ -8,6 +8,17 @@ accessibility readback, and visible-window screenshots. The browser process has
 no WebDriver, Marionette, BiDi, CDP/Remote Debugging flags, automation extension,
 injected navigator changes, or hidden parallel context.
 
+This describes the deployed v1 mode. The opt-in, source-only
+`firefox-bidi-ui-v2` mode keeps the same desktop/profile and adds private BiDi
+for bounded page reads plus loopback Marionette/geckodriver for native CSS
+element interactions. It is not enabled by the default deployment data.
+Geckodriver connects to the existing Firefox and is torn down after an action;
+it cannot launch or replace the persistent profile. The bridge requires a
+unique selected tab, resolves a native element handle, reserves the action key
+durably before sending input, and refuses uncertain retries. WebDriver Element
+Click rejects intercepted elements instead of clicking a previously calculated
+X11 point. This is a source capability, not a deployment or purchasing gate.
+
 Joy's direction to Star for a workflow is the authorization boundary. The
 platform does not add per-click, cart, checkout, or purchase approval prompts.
 Fresh readback and stable action keys are correctness properties, not approval

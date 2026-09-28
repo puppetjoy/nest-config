@@ -29,6 +29,9 @@ class nest::tool::firefox (
     ensure => installed,
     before => Nest::Lib::Build['kasmvnc'],
   }
+  nest::lib::package { 'net-misc/geckodriver':
+    ensure => installed,
+  }
 
   nest::lib::src_repo { '/usr/src/KasmVNC':
     url => 'https://github.com/kasmtech/KasmVNC.git',

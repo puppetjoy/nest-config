@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """OS/accessibility control for the persistent browser.eyrie Firefox desktop.
 
-This process deliberately has no WebDriver, Marionette, BiDi, CDP, extension,
-profile-database, cookie, or page-script access. It observes Firefox through
-AT-SPI and X11 screenshots and sends input through XTest via xdotool.
+v1 observes Firefox through AT-SPI and X11 and sends XTest input. Opt-in v2
+attaches a short-lived local WebDriver session to the *same* Firefox for
+native, referenced-element interactions (never arbitrary caller scripts).
 """
 
 from __future__ import annotations
@@ -13,11 +13,14 @@ import base64
 import contextlib
 import fcntl
 import hashlib
+import http.client
 import importlib
 import json
 import os
 from pathlib import Path
 import re
+import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -197,7 +200,8 @@ def _safe_visible_commerce_text(value: str) -> str:
             "total": "Total", "order total": "Total", "grand total": "Total",
         }
         if label in canonical_labels:
-            return f"{canonical_labels[label]} {re.sub(r'\s+', '', money.group(1))}"
+            amount = re.sub(r"\s+", "", money.group(1))
+            return f"{canonical_labels[label]} {amount}"
     if re.fullmatch(r"shipping\s*[: -]?\s*free", compact, re.IGNORECASE):
         return "Shipping free"
     return ""
@@ -710,6 +714,7 @@ def _reconcile_state(state: dict[str, Any], snapshot: dict[str, Any]) -> dict[st
             if record.get("created_by_agent"):
                 # An expired locator can point to a newer tab after index
                 # reuse. Never close an agent-created tab automatically.
+
                 report["preserved_uncertain"].append(workflow_id)
                 record["uncertain"] = True
                 continue
@@ -791,6 +796,7 @@ def _select_workflow_tab(record: dict[str, Any]) -> None:
     _xdotool("mousemove", "--sync", str(rect["x"] + rect["width"] // 2), str(rect["y"] + rect["height"] // 2), "click", "1")
     # XTest delivery is not proof that Firefox switched tabs. Before Ctrl+L
     # or any page input, observe the intended tab as the selected UI tab.
+
     selected = _selected_tab(_snapshot())
     if not selected or selected.get("locator") != matches[0]["locator"] or selected.get("name") != record.get("tab_name"):
         raise RuntimeError("canonical tab did not become visibly selected; refusing input into another tab")
@@ -811,11 +817,20 @@ def command_status(_: dict[str, Any]) -> dict[str, Any]:
             }
             for key, value in state["workflows"].items()
         ]
+    native_available = False
+    if os.environ.get("FIREFOX_CONTROL_PROTOCOL") == "firefox-bidi-ui-v2" and shutil.which("geckodriver"):
+        try:
+            with socket.create_connection(("127.0.0.1", 2828), timeout=0.5):
+                native_available = True
+        except OSError:
+            pass
     return {
         "operation": "status", "status": "ok", "protocol": "firefox-ui-v1",
         "browser": {key: snapshot[key] for key in ("browser_generation", "title", "url", "tab_count")},
+        "launch_protocol": os.environ.get("FIREFOX_CONTROL_PROTOCOL", "firefox-ui-v1"),
         "workflows": workflows, "reconciliation": reconciliation,
-        "instrumentation": {"webdriver": False, "marionette": False, "bidi": False, "cdp": False, "dom": False},
+        "native_element_available": native_available,
+        "instrumentation": {"webdriver": native_available, "marionette": native_available, "bidi": False, "cdp": False, "dom": False},
     }
 
 
@@ -843,11 +858,175 @@ def command_navigate(payload: dict[str, Any]) -> dict[str, Any]:
     return {"operation": "navigate", "status": "delivered", "created_tab": created, "workflow_id": workflow_id, "readback": readback}
 
 
+def _assert_selector_precondition(payload: dict[str, Any]) -> None:
+    """Reject selector input if the canonical workflow displaced its UI tab."""
+    if "expected_url" not in payload:
+        return
+    current = _snapshot()
+    selected = _selected_tab(current) or {}
+    if (not payload.get("expected_url") or not payload.get("expected_tab")
+            or current["url"] != payload["expected_url"]
+            or current["browser_generation"] != payload.get("expected_generation")
+            or selected.get("name") != payload["expected_tab"]):
+        raise RuntimeError("selector observation is stale or belongs to another workflow tab; no input sent")
+
+
+def _assert_screen_coordinate(coordinate: Any) -> tuple[int, int]:
+    if not isinstance(coordinate, list) or len(coordinate) != 2:
+        raise ValueError("coordinate must be [x,y]")
+    x, y = int(coordinate[0]), int(coordinate[1])
+    geometry = _xdotool("getdisplaygeometry").split()
+    if len(geometry) != 2 or not (0 <= x < int(geometry[0]) and 0 <= y < int(geometry[1])):
+        raise ValueError("coordinate is outside the visible desktop")
+    return x, y
+
+
+@contextlib.contextmanager
+def _webdriver() -> Iterator[Any]:
+    """Attach locally to the running Firefox; never launch another profile."""
+    if os.environ.get("FIREFOX_CONTROL_PROTOCOL") != "firefox-bidi-ui-v2":
+        raise RuntimeError("native selector input requires opt-in v2 Firefox")
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        port = listener.getsockname()[1]
+    process = subprocess.Popen(
+        ["geckodriver", "--host", "127.0.0.1", "--port", str(port),
+         "--connect-existing", "--marionette-port", "2828"],
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    session = None
+    def request(method: str, path: str, data: Any = None) -> Any:
+        connection = http.client.HTTPConnection("127.0.0.1", port, timeout=15)
+        try:
+            connection.request(method, path, body=_json(data) if data is not None else None,
+                               headers={"Content-Type": "application/json"})
+            response = connection.getresponse()
+            result = json.loads(response.read(1_000_000))
+            value = result.get("value")
+            if response.status >= 400 or (isinstance(value, dict) and value.get("error")):
+                # WebDriver exceptions can include page text, URLs and field
+                # values. Never relay them into tool text or bridge logs.
+                raise RuntimeError("native browser element operation failed; inspect the visible page")
+            return value
+        finally:
+            connection.close()
+    try:
+        for _ in range(30):
+            if process.poll() is not None:
+                raise RuntimeError("native Firefox element driver did not start")
+            try:
+                request("GET", "/status")
+                break
+            except (OSError, http.client.HTTPException):
+                time.sleep(0.1)
+        else:
+            raise RuntimeError("native Firefox element driver did not become ready")
+        created = request("POST", "/session", {"capabilities": {"alwaysMatch": {"browserName": "firefox"}}})
+        session = created["sessionId"]
+        def command(method: str, path: str, data: Any = None) -> Any:
+            return request(method, f"/session/{session}{path}", data)
+        yield command
+    finally:
+        if session:
+            with contextlib.suppress(Exception):
+                request("DELETE", f"/session/{session}")
+        process.terminate()
+        with contextlib.suppress(subprocess.TimeoutExpired):
+            process.wait(timeout=3)
+        if process.poll() is None:
+            process.kill()
+            process.wait()
+
+
+def _native_selector(command: Any, snapshot: dict[str, Any], selector: str, field_only: bool) -> str:
+    """Select the uniquely visible tab and a native WebDriver element handle."""
+    if not selector or len(selector) > 512:
+        raise ValueError("selector must contain 1..512 characters")
+    handles = command("GET", "/window/handles")
+    matches = []
+    for handle in handles:
+        command("POST", "/window", {"handle": handle})
+        url = command("GET", "/url")
+        if _redact_url(url) == snapshot["url"]:
+            matches.append(handle)
+    if len(matches) != 1:
+        raise RuntimeError("native selected-tab mapping is absent or ambiguous; no input sent")
+    command("POST", "/window", {"handle": matches[0]})
+    if _redact_url(command("GET", "/url")) != snapshot["url"]:
+        raise RuntimeError("native selected tab changed; no input sent")
+    found = command("POST", "/elements", {"using": "css selector", "value": selector})
+    if len(found) != 1:
+        raise RuntimeError("selector must match exactly one element")
+    element = found[0]["element-6066-11e4-a52e-4f735466cecf"]
+    # Only this fixed, read-only guard runs; no caller-provided JS. WebDriver
+    # Element Click/Send Keys will independently check the referenced element
+    # for stale/intercepted/disabled state at input delivery.
+    allowed = command("POST", "/execute/sync", {"script": """
+      const e=arguments[0], field=arguments[1];
+      const hint=[e.name,e.id,e.getAttribute('aria-label'),e.getAttribute('autocomplete'),
+        e.getAttribute('placeholder'),...(e.labels?[...e.labels].map(l=>l.innerText):[])].join(' ');
+      if (/password|passcode|verification|one.time|security.code|cvv|cvc|card.number|account.number|routing.number|secret|token|recovery.code/i.test(hint)
+          || e.matches('input[type=password],input[type=hidden]') || e.isContentEditable && !field) return false;
+      if (field && !e.matches('input,textarea,[contenteditable=true]')) return false;
+      if (e.disabled || e.readOnly || e.getAttribute('aria-disabled')==='true') return false;
+      return true;
+    """, "args": [found[0], field_only]})
+    if not allowed:
+        raise RuntimeError("not a public, enabled control")
+    return element
+
+
+def command_selector_action(payload: dict[str, Any]) -> dict[str, Any]:
+    """Reserve before native input; never retry uncertain delivery."""
+    workflow_id = str(payload.get("workflow_id") or "default")[:160]
+    action_key = str(payload.get("action_key") or "")
+    operation = str(payload.get("operation") or "")
+    selector = str(payload.get("selector") or "")
+    if not action_key or len(action_key) > 200 or operation not in {"click", "type"}:
+        raise ValueError("native selector input needs an action_key (1..200) and click or type")
+    text = str(payload.get("text") or "")
+    if operation == "type" and (not text or len(text) > 4096):
+        raise ValueError("text must contain 1..4096 characters")
+    with _locked_state() as state:
+        snapshot = _snapshot()
+        _reconcile_state(state, snapshot)
+        record = state["workflows"].get(workflow_id)
+        if not record or record.get("uncertain"):
+            raise RuntimeError("workflow has no unambiguous canonical handoff tab")
+        prior = state["action_keys"].get(action_key)
+        if prior:
+            if prior.get("workflow_id") != workflow_id or prior.get("operation") != operation:
+                raise ValueError("action_key is already bound to another workflow or operation")
+            return {"operation": operation, "status": "already_delivered" if prior.get("delivery_state") == "delivered" else "delivery_uncertain",
+                    "action_key": action_key, "delivery": {"input_sent": False, "state": "replayed" if prior.get("delivery_state") == "delivered" else "uncertain_replay_blocked"},
+                    "readback": _readback()}
+        _select_workflow_tab(record)
+        _assert_selector_precondition(payload)
+        with _webdriver() as command:
+            element = _native_selector(command, snapshot, selector, operation == "type")
+            _assert_selector_precondition(payload)
+            state["action_keys"][action_key] = {"created_at": time.time(), "workflow_id": workflow_id,
+                                                "operation": operation, "delivery_state": "delivery_started"}
+            _save_state(state)
+            path = f"/element/{element}/click" if operation == "click" else f"/element/{element}/value"
+            command("POST", path, {} if operation == "click" else {"text": text})
+            state["action_keys"][action_key]["delivery_state"] = "delivered"
+            _save_state(state)
+        readback = _readback()
+        record["tab_name"] = readback["selected_tab"] or record["tab_name"]
+        record["locator"] = readback.get("selected_locator") or record["locator"]
+        return {"operation": operation, "status": "delivered", "action_key": action_key,
+                "delivery": {"state": "delivered", "input_sent": True, "via": "native_element"},
+                "typed_chars": len(text) if operation == "type" else None, "readback": readback}
+
+
 def command_click(payload: dict[str, Any]) -> dict[str, Any]:
     workflow_id = str(payload.get("workflow_id") or "default")[:160]
     locator = str(payload.get("locator") or "")
     coordinate = payload.get("coordinate")
-    action_key = str(payload.get("action_key") or "")[:200]
+    action_key = str(payload.get("action_key") or "")
+    if len(action_key) > 200:
+        raise ValueError("action_key must not exceed 200 characters")
     with _locked_state() as state:
         snapshot = _snapshot()
         _reconcile_state(state, snapshot)
@@ -858,6 +1037,8 @@ def command_click(payload: dict[str, Any]) -> dict[str, Any]:
             delivered = state["action_keys"][action_key]
             if delivered.get("workflow_id") != workflow_id:
                 raise ValueError("action_key is already bound to another workflow")
+            if delivered.get("operation", "click") != "click":
+                raise ValueError("action_key is already bound to another operation")
             _select_workflow_tab(record)
             delivery_state = delivered.get("delivery_state", "delivered")
             return {
@@ -871,6 +1052,7 @@ def command_click(payload: dict[str, Any]) -> dict[str, Any]:
                 "readback": _readback(float(payload.get("max_wait_seconds") or DEFAULT_STABLE_WAIT_SECONDS)),
             }
         _select_workflow_tab(record)
+        _assert_selector_precondition(payload)
         if locator:
             node, rect = _resolve_locator(locator)
             if not rect:
@@ -881,7 +1063,7 @@ def command_click(payload: dict[str, Any]) -> dict[str, Any]:
                 action = node.get_action_iface()
                 if action and action.get_n_actions():
                     if action_key:
-                        state["action_keys"][action_key] = {"created_at": time.time(), "workflow_id": workflow_id, "delivery_state": "delivery_started"}
+                        state["action_keys"][action_key] = {"created_at": time.time(), "workflow_id": workflow_id, "operation": "click", "delivery_state": "delivery_started"}
                         _save_state(state)
                     if not action.do_action(0):
                         raise RuntimeError("accessibility action failed; inspect visible control before coordinate fallback")
@@ -898,12 +1080,13 @@ def command_click(payload: dict[str, Any]) -> dict[str, Any]:
                     raise ValueError("overlapping accessibility bounds; use a visible label coordinate after screenshot review")
             x, y = rect["x"] + rect["width"] // 2, rect["y"] + rect["height"] // 2
         elif isinstance(coordinate, list) and len(coordinate) == 2:
-            x, y = int(coordinate[0]), int(coordinate[1])
+            x, y = _assert_screen_coordinate(coordinate)
         else:
             raise ValueError("click requires an accessibility locator or [x,y] coordinate")
         if action_key:
             state["action_keys"][action_key] = {
                 "created_at": time.time(), "workflow_id": workflow_id,
+                "operation": "click",
                 "delivery_state": "delivery_started",
             }
             _save_state(state)
@@ -927,23 +1110,56 @@ def command_type(payload: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("text must contain 1..4096 characters")
     workflow_id = str(payload.get("workflow_id") or "default")[:160]
     locator = str(payload.get("locator") or "")
+    coordinate = payload.get("coordinate")
+    action_key = str(payload.get("action_key") or "")
+    if len(action_key) > 200:
+        raise ValueError("action_key must not exceed 200 characters")
     with _locked_state() as state:
         snapshot = _snapshot()
         _reconcile_state(state, snapshot)
         record = state["workflows"].get(workflow_id)
         if not record or record.get("uncertain"):
             raise RuntimeError("workflow has no unambiguous canonical handoff tab")
+        if "expected_url" in payload and not action_key:
+            raise ValueError("selector typing requires an action_key")
+        if action_key and action_key in state["action_keys"]:
+            delivered = state["action_keys"][action_key]
+            if delivered.get("workflow_id") != workflow_id or delivered.get("operation") != "type":
+                raise ValueError("action_key is already bound to another workflow or operation")
+            _select_workflow_tab(record)
+            delivery_state = delivered.get("delivery_state", "delivery_started")
+            return {"operation": "type", "status": "already_delivered" if delivery_state == "delivered" else "delivery_uncertain",
+                    "action_key": action_key, "typed_chars": 0, "text_redacted": True,
+                    "delivery": {"state": "replayed" if delivery_state == "delivered" else "uncertain_replay_blocked", "input_sent": False},
+                    "readback": _readback()}
         _select_workflow_tab(record)
+        _assert_selector_precondition(payload)
+        if "expected_url" in payload and not locator and not (isinstance(coordinate, list) and len(coordinate) == 2):
+            raise ValueError("type requires an accessibility locator or [x,y] coordinate")
         if locator:
             _, rect = _resolve_locator(locator)
             if not rect:
                 raise ValueError("accessibility control has no screen bounds")
-            _xdotool("mousemove", "--sync", str(rect["x"] + rect["width"] // 2), str(rect["y"] + rect["height"] // 2), "click", "1")
+            x, y = rect["x"] + rect["width"] // 2, rect["y"] + rect["height"] // 2
+        elif isinstance(coordinate, list) and len(coordinate) == 2:
+            x, y = _assert_screen_coordinate(coordinate)
+        else:
+            x, y = None, None
+        if action_key:
+            state["action_keys"][action_key] = {"created_at": time.time(), "workflow_id": workflow_id,
+                                                "operation": "type", "delivery_state": "delivery_started"}
+            _save_state(state)
+        if x is not None and y is not None:
+            _xdotool("mousemove", "--sync", str(x), str(y), "click", "1")
         _xdotool("type", "--clearmodifiers", "--delay", "1", "--", text, timeout=45)
+        if action_key:
+            state["action_keys"][action_key]["delivery_state"] = "delivered"
+            _save_state(state)
         readback = _readback()
         record["tab_name"] = readback["selected_tab"] or record["tab_name"]
         record["locator"] = readback.get("selected_locator") or record["locator"]
-    return {"operation": "type", "status": "delivered", "typed_chars": len(text), "text_redacted": True, "readback": readback}
+    return {"operation": "type", "status": "delivered", "typed_chars": len(text), "text_redacted": True,
+            "action_key": action_key or None, "readback": readback}
 
 
 def command_wait(payload: dict[str, Any]) -> dict[str, Any]:
@@ -1032,17 +1248,16 @@ def command_tabs(payload: dict[str, Any]) -> dict[str, Any]:
             if not record.get("created_by_agent"):
                 del state["workflows"][workflow_id]
                 return {"operation": "tab_lifecycle", "status": "released_preserved_tab", "action": action, "workflow_id": workflow_id}
+            if record.get("uncertain"):
+                return {"operation": "tab_lifecycle", "status": "preserved_uncertain", "action": action, "workflow_id": workflow_id}
             current = _snapshot()
             matches = _matching_tabs(current, record)
             if len(matches) != 1:
                 record["uncertain"] = True
                 return {"operation": "tab_lifecycle", "status": "preserved_uncertain", "action": action, "workflow_id": workflow_id}
-            node, rect = _resolve_locator(matches[0]["locator"])
-            if not rect:
-                record["uncertain"] = True
-                return {"operation": "tab_lifecycle", "status": "preserved_uncertain", "action": action, "workflow_id": workflow_id}
-            _focus_browser()
-            _xdotool("mousemove", "--sync", str(rect["x"] + rect["width"] // 2), str(rect["y"] + rect["height"] // 2), "click", "1")
+            # A tab-strip click may be dropped. Reuse the same selected-tab
+            # readback gate as navigation before Ctrl+W can close anything.
+            _select_workflow_tab(record)
             _xdotool("key", "--clearmodifiers", "ctrl+w")
             del state["workflows"][workflow_id]
             return {"operation": "tab_lifecycle", "status": "released_closed_owned_tab", "action": action, "workflow_id": workflow_id, "readback": _readback()}
@@ -1056,6 +1271,7 @@ COMMANDS = {
     "snapshot": command_snapshot,
     "navigate": command_navigate,
     "click": command_click,
+    "selector_action": command_selector_action,
     "type": command_type,
     "wait": command_wait,
     "checkout_readback": command_checkout_readback,

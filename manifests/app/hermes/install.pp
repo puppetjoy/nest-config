@@ -226,6 +226,15 @@ class nest::app::hermes::install {
     require => Vcsrepo[$source_dir],
   }
 
+  file { "${source_dir}/tools/secure_browser_bidi.py":
+    ensure  => file,
+    source  => 'puppet:///modules/nest/app/hermes/secure_browser_bidi.py',
+    mode    => '0644',
+    owner   => 'root',
+    group   => 'root',
+    require => Vcsrepo[$source_dir],
+  }
+
   file { "${source_dir}/tools/secure_browser_legacy_support.py":
     ensure  => file,
     source  => 'puppet:///modules/nest/app/hermes/secure_browser_legacy_support.py',
