@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 from pathlib import Path
+import subprocess
 import sys
 import types
 
@@ -99,6 +101,61 @@ def test_general_collection_read_is_bounded_and_redacts_each_field():
             pass
         else:
             raise AssertionError("unsafe collection expression was accepted")
+
+def test_site_independent_dom_snapshot_is_generated_and_bounded():
+    module, legacy = load()
+    script = module._read_script("document.domSnapshot")
+    assert "querySelectorAll('*')" in script and "max=120" in script
+    assert "input[type=password],input[type=hidden]" in script
+    assert "e.isContentEditable" in script and "e.value" not in script
+    browser = Browser([{"context": "visible", "url": "https://fixture.example/shop"}])
+    def evaluate(method, payload):
+        assert method == "script.evaluate" and payload["expression"] == script
+        return {"result": {"type": "object", "value": [
+            ["total", {"type": "number", "value": 150}],
+            ["nodes", {"type": "array", "value": [
+                {"type": "object", "value": [["tag", {"type": "string", "value": "button"}],
+                                              ["text", {"type": "string", "value": "Select size"}]]},
+            ]}],
+        ]}}
+    browser._bidi = evaluate
+    legacy._with_browser = lambda fn: fn(browser)
+    result = module.query(snapshot(), "document.domSnapshot")
+    assert result["truncated"] is True
+    assert result["value"]["nodes"][0] == {"tag": "button", "text": "Select size"}
+    try:
+        module.query(snapshot(), "document.domSnapshot;fetch('https://other.example/')")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("caller-supplied script accepted")
+
+def test_dom_snapshot_executes_without_exporting_credential_values():
+    module, _ = load()
+    source = """
+const Node={TEXT_NODE:3};
+function element(tag, opts={}) {
+  return {localName:tag,name:opts.name||'',id:opts.id||'',type:opts.type||'',
+    disabled:false,checked:false,isContentEditable:false,labels:[],parentElement:null,
+    childNodes:[{nodeType:3,textContent:opts.text||''}],
+    getAttribute:k=>opts[k]||null,closest:()=>null,
+    matches:s=>s==='input,textarea,select'?tag==='input':s==='input[type=password],input[type=hidden]'?opts.type==='password':false,
+    getBoundingClientRect:()=>({width:100,height:30,bottom:40,right:110,top:10,left:10})};
+}
+const nodes=[element('button',{text:'Choose size'}),
+  element('input',{name:'password',type:'password',value:'NEVER_EXPORT_ME'}),
+  element('input',{name:'publicField',type:'text',value:'NEVER_EXPORT_VALUE'})];
+const document={body:{querySelectorAll:()=>nodes}};
+const getComputedStyle=()=>({display:'block',visibility:'visible'});
+const innerHeight=800,innerWidth=1200;
+"""
+    result = subprocess.run(["node", "-e", source + "\nconsole.log(JSON.stringify(" + module.DOM_SNAPSHOT + "));"],
+                            capture_output=True, text=True, check=True)
+    assert "NEVER_EXPORT" not in result.stdout
+    parsed = json.loads(result.stdout)
+    assert parsed["total"] == 3 and len(parsed["nodes"]) == 2
+    assert parsed["nodes"][0]["text"] == "Choose size"
+    assert parsed["nodes"][1]["control"]["type"] == "text"
 
 
 def test_duplicate_url_fails_without_script_execution():
@@ -210,10 +267,12 @@ def test_ui_bridge_rejects_displaced_tab_and_offscreen_coordinate():
 if __name__ == "__main__":
     test_unambiguous_visible_page_query_and_secret_guard()
     test_general_collection_read_is_bounded_and_redacts_each_field()
+    test_site_independent_dom_snapshot_is_generated_and_bounded()
+    test_dom_snapshot_executes_without_exporting_credential_values()
     test_duplicate_url_fails_without_script_execution()
     test_same_path_different_query_fails_closed()
     test_visible_selector_point_uses_fixed_script()
     test_status_requires_live_bidi_not_just_launch_configuration()
     test_selector_click_keeps_ui_action_key_and_type_keeps_ui_value_redacted()
     test_ui_bridge_rejects_displaced_tab_and_offscreen_coordinate()
-    print("eight Firefox BiDi/UI source fixtures passed")
+    print("ten Firefox BiDi/UI source fixtures passed")

@@ -29,15 +29,48 @@ READ_EXPRESSION = re.compile(
     r'^document\.querySelector(All)?\(("(?:[^"\\]|\\.)*")\)\.(innerText|textContent|value|checked|length)$'
 )
 
+# Fixed, site-independent observation; accepting arbitrary JavaScript as a
+# "read" would let the caller mutate the page before any response filtering.
+DOM_SNAPSHOT = """(() => {
+  const max=120, scanLimit=1500, nodes=[], all=document.body?.querySelectorAll('*')||[];
+  const sensitive=/password|passcode|verification|one.time|security.code|cvv|cvc|card.number|account.number|routing.number|secret|token|recovery.code/i;
+  const protectedNode=e=>{
+    const hint=[e.name,e.id,e.getAttribute('aria-label'),e.getAttribute('autocomplete'),
+      e.getAttribute('placeholder'),...(e.labels?[...e.labels].map(l=>l.innerText):[])].join(' ');
+    return sensitive.test(hint)||e.matches('input[type=password],input[type=hidden]');
+  };
+  for(let i=0;i<Math.min(all.length,scanLimit)&&nodes.length<max;i++){
+    const e=all[i];
+    if(e.closest('script,style,template,[hidden],[aria-hidden=true]'))continue;
+    if(protectedNode(e)||e.isContentEditable)continue;
+    const s=getComputedStyle(e);
+    if(s.display==='none'||s.visibility==='hidden')continue;
+    const r=e.getBoundingClientRect();
+    const ownText=[...e.childNodes].filter(n=>n.nodeType===Node.TEXT_NODE)
+      .map(n=>n.textContent).join(' ').trim().slice(0,300);
+    const row={tag:e.localName,depth:Math.min(32,(()=>{let n=e,d=0;while((n=n.parentElement)&&d<32)d++;return d})()),
+      role:e.getAttribute('role')||null,text:ownText||null,
+      visible:!!(r.width&&r.height&&r.bottom>0&&r.right>0&&r.top<innerHeight&&r.left<innerWidth)};
+    if(e.matches('input,textarea,select')){
+      row.control={type:e.getAttribute('type')||e.localName,disabled:!!e.disabled,
+        checked:!!e.checked};
+    }
+    nodes.push(row);
+  }
+  return {total:all.length,nodes};
+})()"""
+
 
 def _read_script(expression: str) -> str:
+    if expression == "document.domSnapshot":
+        return DOM_SNAPSHOT
     if expression == "document.title":
         return "document.title"
     if expression == "document.body.innerText":
         return "document.body.innerText"
     match = READ_EXPRESSION.fullmatch(expression)
     if not match:
-        raise ValueError("unsupported read expression; use document.title, document.body.innerText, or document.querySelector(All) with a JSON-quoted CSS selector and readable property")
+        raise ValueError("unsupported read expression; use document.domSnapshot, document.title, document.body.innerText, or document.querySelector(All) with a JSON-quoted CSS selector and readable property")
     multiple, raw_selector, prop = match.groups()
     selector = json.loads(raw_selector)
     if not isinstance(selector, str) or not selector or len(selector) > 512:
@@ -138,7 +171,7 @@ def query(ui_snapshot: dict[str, Any], expression: str) -> dict[str, Any]:
         context = _selected_context(browser, ui_snapshot)
         raw = _evaluate(browser, context, script)
         truncated = (isinstance(raw, dict) and isinstance(raw.get("total"), int)
-                     and raw["total"] > len(raw.get("values", [])))
+                     and raw["total"] > len(raw.get("values", raw.get("nodes", []))))
         value = _safe_result(raw)
         return {"operation": "query", "status": "ok", "protocol": "firefox-bidi-ui-v2", "value": value,
                 "source": "live DOM in uniquely matched visible Firefox tab", "truncated": truncated or len(str(value)) >= MAX_QUERY_CHARS}
