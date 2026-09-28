@@ -31,6 +31,9 @@ resources:
       name: "%{nest::kubernetes::service}-backup"
       namespace: "%{nest::kubernetes::namespace}"
     spec:
+      # Own the resume state in KubeCM; temporary storage holds must be
+      # explicitly reverted here after the storage safety gate clears.
+      suspend: false
       concurrencyPolicy: Forbid
       schedule: "%{lookup('backup_schedule')}"
       timeZone: 'America/New_York'
