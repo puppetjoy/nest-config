@@ -1,4 +1,4 @@
-# @summary Build updated Gentoo Stage 3 images containing Puppet
+# @summary Build updated Gentoo Stage 3 images containing OpenVox
 #
 # Use bin/build script to run this plan!
 #
@@ -77,14 +77,14 @@ plan nest::build::stage0 (
   if $build {
     run_command("podman start ${container}", 'localhost', 'Start build container')
 
-    # Prepare the base image for Puppet
+    # Prepare the base image for OpenVox
     if $from_image =~ /gentoo/ {
       run_command('sed -i "s@^sync-uri =.*@sync-uri = rsync://rsync.us.gentoo.org/gentoo-portage/@" /usr/share/portage/config/repos.conf', $target, 'Use Gentoo US rsync mirror')
       run_command('rm -rf /var/db/repos/gentoo/.git', $target, 'Prepare Gentoo repo for rsync')
       run_command('emerge --sync', $target, 'Sync Portage tree')
-      run_command('emerge --verbose app-admin/puppet app-portage/eix dev-ruby/sys-filesystem', $target, 'Install Puppet', _env_vars => {
+      run_command('emerge --verbose app-admin/openvox app-portage/eix dev-ruby/sys-filesystem', $target, 'Install OpenVox', _env_vars => {
         # Settings from Nest overlay
-        'ACCEPT_KEYWORDS'     => '*', # latest stable version
+        'ACCEPT_KEYWORDS'     => '~*', # latest version on all architectures
         'DISTDIR'             => '/nest/portage/distfiles',
         'EMERGE_DEFAULT_OPTS' => "${emerge_default_opts} --usepkg",
         'FEATURES'            => '-ipc-sandbox -pid-sandbox -network-sandbox -usersandbox',
@@ -94,6 +94,9 @@ plan nest::build::stage0 (
       run_command('eix-update', $target, 'Update package database')
     } else {
       run_command('eix-sync -aq', $target, 'Sync Portage repos')
+      run_command('emerge --deselect app-admin/puppet && emerge --verbose app-admin/openvox', $target, 'Replace Puppet world selection with OpenVox', _env_vars => {
+        'ACCEPT_KEYWORDS' => '~*',
+      })
     }
 
     # Set up the build environment
