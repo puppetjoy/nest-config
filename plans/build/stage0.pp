@@ -90,7 +90,7 @@ plan nest::build::stage0 (
     $emerge_env = {
       'ACCEPT_KEYWORDS'     => '~*', # latest version on all architectures
       'DISTDIR'             => '/nest/portage/distfiles',
-      'EMERGE_DEFAULT_OPTS' => "${emerge_default_opts} --usepkg",
+      'EMERGE_DEFAULT_OPTS' => "${emerge_default_opts} --usepkg --usepkg-exclude=dev-perl/*",
       'FEATURES'            => '-ipc-sandbox -pid-sandbox -network-sandbox -usersandbox',
       'MAKEOPTS'            => $makeopts,
       'PKGDIR'              => "/nest/portage/packages/${cpu}",
@@ -105,7 +105,8 @@ plan nest::build::stage0 (
       run_command('eix-update', $target, 'Update package database')
     } else {
       run_command('eix-sync -aq', $target, 'Sync Portage repos')
-      run_command('emerge --deselect app-admin/puppet && emerge --verbose app-admin/openvox', $target, 'Replace Puppet world selection with OpenVox', _env_vars => $emerge_env)
+      run_command('emerge --deselect app-admin/puppet', $target, 'Deselect Puppet from world')
+      run_command('emerge --verbose app-admin/openvox', $target, 'Install OpenVox', _env_vars => $emerge_env)
     }
 
     # Set up the build environment
@@ -126,9 +127,9 @@ plan nest::build::stage0 (
     run_command("eselect profile set nest:${cpu}/server", $target, 'Set profile')
     run_command('emerge --info', $target, 'Show Portage configuration')
     if $from_image =~ /gentoo/ {
-      run_command('emerge --emptytree --verbose @world', $target, 'Rebuild all packages')
+      run_command('emerge --emptytree --verbose --usepkg-exclude=dev-perl/* @world', $target, 'Rebuild all packages')
     } else {
-      run_command('emerge --deep --newuse --update --verbose --with-bdeps=y @world', $target, 'Update packages')
+      run_command('emerge --deep --newuse --update --verbose --with-bdeps=y --usepkg-exclude=dev-perl/* @world', $target, 'Update packages')
     }
     run_command('emerge --depclean', $target, 'Remove unused packages')
 
