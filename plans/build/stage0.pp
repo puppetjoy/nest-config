@@ -84,6 +84,7 @@ plan nest::build::stage0 (
       'FEATURES'            => '-ipc-sandbox -pid-sandbox -network-sandbox -usersandbox',
       'MAKEOPTS'            => $makeopts,
       'PKGDIR'              => "/nest/portage/packages/${cpu}",
+      'RUBY_TARGETS'        => 'ruby32', # match the Ruby interpreter already in the Stage 0 image for Bolt apply_prep
     }
 
     # Prepare the base image for OpenVox
