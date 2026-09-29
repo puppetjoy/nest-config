@@ -95,7 +95,8 @@ plan nest::build::stage0 (
       run_command('eix-update', $target, 'Update package database')
     } else {
       run_command('eix-sync -aq', $target, 'Sync Portage repos')
-      run_command('emerge --deselect app-admin/puppet && emerge --verbose app-admin/openvox', $target, 'Replace Puppet world selection with OpenVox', _env_vars => $emerge_env)
+      run_command('emerge --deselect app-admin/puppet', $target, 'Deselect Puppet from world')
+      run_command('emerge --verbose app-admin/openvox', $target, 'Install OpenVox', _env_vars => $emerge_env)
     }
 
     # Set up the build environment
