@@ -32,7 +32,17 @@ plan nest::build::stage0 (
 ) {
   $debug_volume = "${container}-debug"
   $repos_volume = "${container}-repos" # cached between builds
-  $target = Target.new(name => $container, uri => "podman://${container}")
+  $target = Target.new(
+    name   => $container,
+    uri    => "podman://${container}",
+    config => {
+      'podman' => {
+        'interpreters' => {
+          'rb' => ['/usr/bin/ruby33', '-r', 'puppet', '-e', 'Puppet[:tags] = File.open("/.apply_tags", &:gets) if File.exist? "/.apply_tags"; load ARGV.shift'],
+        },
+      },
+    }
+  )
   $qemu_args = $qemu_user_targets.map |$arch| { "--volume=/usr/bin/qemu-${arch}:/usr/bin/qemu-${arch}:ro" }.join(' ')
 
   if $deploy {
@@ -80,11 +90,10 @@ plan nest::build::stage0 (
     $emerge_env = {
       'ACCEPT_KEYWORDS'     => '~*', # latest version on all architectures
       'DISTDIR'             => '/nest/portage/distfiles',
-      'EMERGE_DEFAULT_OPTS' => "${emerge_default_opts} --usepkg",
+      'EMERGE_DEFAULT_OPTS' => "${emerge_default_opts} --usepkg --usepkg-exclude=dev-perl/*",
       'FEATURES'            => '-ipc-sandbox -pid-sandbox -network-sandbox -usersandbox',
       'MAKEOPTS'            => $makeopts,
       'PKGDIR'              => "/nest/portage/packages/${cpu}",
-      'RUBY_TARGETS'        => 'ruby32', # match the Ruby interpreter already in the Stage 0 image for Bolt apply_prep
     }
 
     # Prepare the base image for OpenVox
@@ -118,9 +127,9 @@ plan nest::build::stage0 (
     run_command("eselect profile set nest:${cpu}/server", $target, 'Set profile')
     run_command('emerge --info', $target, 'Show Portage configuration')
     if $from_image =~ /gentoo/ {
-      run_command('emerge --emptytree --verbose @world', $target, 'Rebuild all packages')
+      run_command('emerge --emptytree --verbose --usepkg-exclude=dev-perl/* @world', $target, 'Rebuild all packages')
     } else {
-      run_command('emerge --deep --newuse --update --verbose --with-bdeps=y @world', $target, 'Update packages')
+      run_command('emerge --deep --newuse --update --verbose --with-bdeps=y --usepkg-exclude=dev-perl/* @world', $target, 'Update packages')
     }
     run_command('emerge --depclean', $target, 'Remove unused packages')
 
