@@ -24,6 +24,11 @@ resources:
     spec:
       instances: 1
       imageName: "%{lookup('postgres_image')}"
+      plugins:
+        - name: barman-cloud.cloudnative-pg.io
+          isWALArchiver: true
+          parameters:
+            barmanObjectName: "%{nest::kubernetes::main_service}-cnpg-backups"
       managed:
         roles:
           - name: registry
@@ -64,6 +69,45 @@ resources:
       name: registry
       owner: registry
       databaseReclaimPolicy: retain
+
+  cnpg-backup-store:
+    apiVersion: barmancloud.cnpg.io/v1
+    kind: ObjectStore
+    metadata:
+      name: "%{nest::kubernetes::main_service}-cnpg-backups"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      configuration:
+        destinationPath: "s3://%{nest::service::gitlab::cnpg_backups_bucket_config.BUCKET_NAME}/"
+        endpointURL: "http://%{nest::service::gitlab::cnpg_backups_bucket_config.BUCKET_HOST}"
+        s3Credentials:
+          accessKeyId:
+            name: "%{nest::kubernetes::main_service}-cnpg-backups-bucket"
+            key: AWS_ACCESS_KEY_ID
+          secretAccessKey:
+            name: "%{nest::kubernetes::main_service}-cnpg-backups-bucket"
+            key: AWS_SECRET_ACCESS_KEY
+        wal:
+          compression: gzip
+        data:
+          compression: gzip
+      retentionPolicy: '14d'
+
+  cnpg-scheduled-backup:
+    apiVersion: postgresql.cnpg.io/v1
+    kind: ScheduledBackup
+    metadata:
+      name: "%{nest::kubernetes::main_service}-cnpg-backup"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      schedule: '0 0 2 * * *'
+      immediate: true
+      backupOwnerReference: self
+      cluster:
+        name: "%{nest::kubernetes::main_service}-cnpg"
+      method: plugin
+      pluginConfiguration:
+        name: barman-cloud.cloudnative-pg.io
 
   # The gitlab chart looks for Secrets as part of a helm install hook. Our
   # secrets need to exist first.
@@ -118,6 +162,20 @@ resources:
       namespace: "%{nest::kubernetes::namespace}"
     spec:
       generateBucketName: "%{nest::kubernetes::main_service}-backups-tmp"
+      storageClassName: "%{lookup('bucket_storage_class')}"
+      additionalConfig:
+        bucketOwner: "%{nest::kubernetes::main_service}"
+
+  # The logical-backup plan clears its own bucket before each backup; keep
+  # physical PostgreSQL base backups and WAL in a separate durable bucket.
+  cnpg-backups-bucket:
+    apiVersion: objectbucket.io/v1alpha1
+    kind: ObjectBucketClaim
+    metadata:
+      name: "%{nest::kubernetes::main_service}-cnpg-backups-bucket"
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      generateBucketName: "%{nest::kubernetes::main_service}-cnpg-backups"
       storageClassName: "%{lookup('bucket_storage_class')}"
       additionalConfig:
         bucketOwner: "%{nest::kubernetes::main_service}"

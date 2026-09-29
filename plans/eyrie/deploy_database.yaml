@@ -25,3 +25,16 @@ steps:
       wait: true
       deploy: $deploy
       render_to: $render_to
+
+  - description: 'Deploy CNPG Barman Cloud backup plugin'
+    plan: 'nest::kubernetes::deploy'
+    parameters:
+      service: 'plugin-barman-cloud'
+      app: 'plugin-barman-cloud'
+      chart: 'cnpg/plugin-barman-cloud'
+      namespace: 'cnpg-system'
+      repo_url: 'https://cloudnative-pg.github.io/charts'
+      version: '0.8.0'
+      wait: true
+      deploy: $deploy
+      render_to: $render_to

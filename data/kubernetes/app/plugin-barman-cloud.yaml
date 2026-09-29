@@ -1,0 +1,42 @@
+---
+# Eyrie disables namespaced cert-manager Issuer reconciliation. Issue the
+# plugin's self-signed mTLS certificates through the managed cluster issuer
+# instead (the plugin trusts the client leaf certificate as its CA).
+values:
+  certificate:
+    createIssuer: false
+    createClientCertificate: false
+    createServerCertificate: false
+
+resources:
+  client-certificate:
+    apiVersion: cert-manager.io/v1
+    kind: Certificate
+    metadata:
+      name: barman-cloud-client
+      namespace: cnpg-system
+    spec:
+      commonName: barman-cloud-client
+      secretName: barman-cloud-client-tls
+      issuerRef:
+        name: selfsigned
+        kind: ClusterIssuer
+      usages:
+        - client auth
+
+  server-certificate:
+    apiVersion: cert-manager.io/v1
+    kind: Certificate
+    metadata:
+      name: barman-cloud-server
+      namespace: cnpg-system
+    spec:
+      commonName: barman-cloud
+      dnsNames:
+        - barman-cloud
+      secretName: barman-cloud-server-tls
+      issuerRef:
+        name: selfsigned
+        kind: ClusterIssuer
+      usages:
+        - server auth

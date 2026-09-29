@@ -16,6 +16,11 @@ resources:
     spec:
       instances: 1
       imageName: "%{lookup('postgres_image')}"
+      plugins:
+        - name: barman-cloud.cloudnative-pg.io
+          isWALArchiver: true
+          parameters:
+            barmanObjectName: "%{nest::kubernetes::main_service}-cnpg-backups"
       managed:
         roles:
           - name: registry

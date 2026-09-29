@@ -16,6 +16,7 @@ class nest::service::gitlab (
   if defined(Class['nest::kubernetes']) {
     $ssh_load_balancer_ip = lookup('nest::host_records')["ssh.${nest::kubernetes::fqdn}"]
     $ssh_private_key_base64 = base64('encode', $ssh_private_key.unwrap)
+    $cnpg_backups_bucket_config = nest::kubernetes::bucket_config("${nest::kubernetes::main_service}-cnpg-backups")
 
     if $nest::kubernetes::service == $nest::kubernetes::main_service {
       $bucket_user = nest::kubernetes::bucket_user(lookup('ceph_object_store'), $nest::kubernetes::service, lookup('ceph_namespace'))
@@ -25,8 +26,8 @@ class nest::service::gitlab (
         undef   => $nest::kubernetes::namespace,
         default => $backups_namespace,
       }
-      $backups_bucket_config     = nest::kubernetes::bucket_config("${nest::kubernetes::service}-backups", $effective_backups_namespace)
-      $backups_tmp_bucket_config = nest::kubernetes::bucket_config("${nest::kubernetes::service}-backups-tmp")
+      $backups_bucket_config      = nest::kubernetes::bucket_config("${nest::kubernetes::service}-backups", $effective_backups_namespace)
+      $backups_tmp_bucket_config  = nest::kubernetes::bucket_config("${nest::kubernetes::service}-backups-tmp")
       $lfs_bucket_config         = nest::kubernetes::bucket_config("${nest::kubernetes::service}-lfs")
       $packages_bucket_config    = nest::kubernetes::bucket_config("${nest::kubernetes::service}-packages")
       $registry_bucket_config    = nest::kubernetes::bucket_config("${nest::kubernetes::service}-registry")
