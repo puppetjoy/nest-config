@@ -1,0 +1,19 @@
+# GitLab 19.4 upgrade recovery boundaries
+
+Applies to Eyrie `test` and `default` Helm releases and the independent Hawk Omnibus/Podman instance. This is an operational recovery plan, not permission to perform a destructive restore.
+
+## Before each Eyrie chart step
+
+Record the previous Helm revision and app version, confirm both CNPG clusters are Ready, both Ceph clusters are HEALTH_OK, and query the Rails batched background migration queue (must be zero before advancing). Verify the production scheduled `gitlab-backup` Job completed and its Bolt log says `Plan completed successfully with no result`; verify `/nest/backup/gitlab/latest_gitlab_backup.tar` resolves to a nonempty archive and `gitlab-secrets.yaml` exists on Falcon. The test restore from that same production backup must have succeeded. Record object-storage availability and the actual Workhorse OCI digest for the target app version. GitLab's backup plan skips artifacts and registry payloads because these remain in separately managed object storage; recovery also requires those buckets. CNPG currently has no native backup/WAL archive configured in the GitLab cluster resource, so do not claim point-in-time database recovery from CNPG. The GitLab backup archive's SQL dump is the database recovery point. If backup, object storage, database, or storage-health checks fail, do not migrate production.
+
+A Helm revision rollback alone does not undo schema or data migrations. After a migration failure, freeze writes, preserve logs and release/DB state, assess whether forward repair to the intended version is possible, and only then choose a coordinated restore: deploy the GitLab version matching the selected backup; restore its Rails secrets and GitLab backup through `nest::eyrie::gitlab::restore` in a contained maintenance window; recover the associated object-store contents and confirm registry/artifact availability. Test the recovery sequence in `test` before touching production. Recheck CNPG readiness, Rails version, GitLab migrations, HTTPS/API, SSH Git, and registry. A restore loses writes made after that backup; do not silently revert production to an old binary against a migrated database.
+
+## Hawk separately
+
+Check `sudo podman inspect gitlab` and Rails/DB versions, require zero batched migrations, run and verify a matching full GitLab backup and preserve `/srv/gitlab/config/gitlab-secrets.json` and `/srv/gitlab/gitlab.rb` with it outside the container's writable layer. Hawk's `/srv/gitlab` is a ZFS dataset; a pre-upgrade snapshot is an additional local recovery point, not a substitute for an independently stored archive. Verify `/nest/backup` NFS is mounted and copy the archive and secret/config to a restricted Hawk-specific directory there before applying the Puppet-managed image. Do not log secret contents. A post-migration binary/image rollback without restoring matching database and repositories is unsafe. On failure, freeze writes and use the version-matched backup with Omnibus `gitlab-backup restore` and its saved secrets/config (or an intact pre-upgrade ZFS snapshot if validated), then reapply source-managed Puppet and verify GitLab health. This is independent of Eyrie's CNPG and Ceph backup chain.
+
+## Version progression
+
+Eyrie starts at chart 10.2.1 / GitLab 19.2.1. Stage test before prod at 10.2.7 / 19.2.7, 10.3.4 / 19.3.3, then 10.4.1 / 19.4.1, draining migrations at each stage. Hawk starts at 19.3.2 and proceeds to 19.4.1 after its own backup. GitLab 19.2 is the required stop before 19.4; future stops are 19.5, 19.8, and 19.11. Check upstream release notes and chart mappings again at execution. Single-replica Eyrie workloads are not a zero-downtime GitLab deployment.
+
+References: https://docs.gitlab.com/update/upgrade_paths/ ; https://docs.gitlab.com/charts/installation/upgrade/ ; `plans/eyrie/gitlab/backup.pp` ; `plans/eyrie/gitlab/restore.pp`.
