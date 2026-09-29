@@ -17,10 +17,10 @@ RSpec.describe 'Hermes full-home backup generations' do
     expect(dashboard_data).to include('imagePullPolicy: Always')
   end
 
-  it 'hands the private uploaded helper to the unprivileged backup account' do
+  it 'hands the private helper to the backup account in its rootless container namespace' do
     expect(backup_plan).to include('chown ${user.shellquote}:${user.shellquote} ${helper.shellquote}')
     expect(backup_plan).to include('chmod 0700 ${helper.shellquote}')
-    expect(backup_plan).to include('runuser -u ${user.shellquote} -- ${helper_args.shellquote}')
+    expect(backup_plan).to include('runuser -u ${user.shellquote} -- podman unshare ${helper_args.shellquote}')
   end
 
   it 'stops every required profile service around a shared-root restore' do
