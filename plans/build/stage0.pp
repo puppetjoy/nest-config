@@ -126,6 +126,19 @@ plan nest::build::stage0 (
     # Rebuild the image with our profile
     run_command("eselect profile set nest:${cpu}/server", $target, 'Set profile')
     run_command('emerge --info', $target, 'Show Portage configuration')
+    # A fresh Stage 0 lacks a native compiler; resolving @world directly can
+    # bootstrap Rust through old slots all the way to a self-dependency.
+    # Older binpkgs may have changed-deps metadata after a tree sync; limit
+    # that override to this preinstall and retain USE/ABI/dependency checks.
+    # The 32-bit ARM profile deliberately masks source Rust in favor of rust-bin.
+    unless $cpu in ['arm1176', 'cortex-a8'] {
+      $rust_command = 'emerge --oneshot --usepkgonly --binpkg-changed-deps=n --binpkg-respect-use=y dev-lang/rust'
+      $rust_plan = run_command("${rust_command} --pretend --verbose --color=n", $target, 'Resolve native Rust binpkg', _env_vars => $emerge_env).first.value['stdout']
+      unless $rust_plan =~ /(?m)^\s*\[binary[^\n]*\]\s+dev-lang\/rust-[0-9]/ {
+        fail("No compatible native Rust binpkg resolved for ${cpu}; stop before @world")
+      }
+      run_command($rust_command, $target, 'Preinstall native Rust binpkg', _env_vars => $emerge_env)
+    }
     if $from_image =~ /gentoo/ {
       run_command('emerge --emptytree --verbose --usepkg-exclude=dev-perl/* @world', $target, 'Rebuild all packages')
     } else {
