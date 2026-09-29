@@ -107,7 +107,10 @@ plan nest::app::hermes::backup (
     install -d -m 0700 -o ${user.shellquote} -g ${user.shellquote} ${backup_dir.shellquote}
     chown ${user.shellquote}:${user.shellquote} ${helper.shellquote}
     chmod 0700 ${helper.shellquote}
-    runuser -u ${user.shellquote} -- ${helper_args.shellquote}
+    # Rootless Podman overlay files are owned by subordinate host UIDs. Enter
+    # the backup user's existing user namespace so the full-home archive can
+    # read them without changing their ownership or omitting any state.
+    runuser -u ${user.shellquote} -- podman unshare ${helper_args.shellquote}
     | COMMAND
 
   $result = run_command($command, $backup_target, $description, {
