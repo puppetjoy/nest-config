@@ -110,6 +110,9 @@ plan nest::app::hermes::backup (
     # Rootless Podman overlay files are owned by subordinate host UIDs. Enter
     # the backup user's existing user namespace so the full-home archive can
     # read them without changing their ownership or omitting any state.
+    # Bolt's root run-as shell may start in /root, which Podman cannot enter
+    # after runuser drops privileges.
+    cd /
     runuser -u ${user.shellquote} -- podman unshare ${helper_args.shellquote}
     | COMMAND
 
