@@ -32,7 +32,17 @@ plan nest::build::stage0 (
 ) {
   $debug_volume = "${container}-debug"
   $repos_volume = "${container}-repos" # cached between builds
-  $target = Target.new(name => $container, uri => "podman://${container}")
+  $target = Target.new(
+    name   => $container,
+    uri    => "podman://${container}",
+    config => {
+      'podman' => {
+        'interpreters' => {
+          'rb' => ['/usr/bin/ruby33', '-r', 'puppet', '-e', 'Puppet[:tags] = File.open("/.apply_tags", &:gets) if File.exist? "/.apply_tags"; load ARGV.shift'],
+        },
+      },
+    }
+  )
   $qemu_args = $qemu_user_targets.map |$arch| { "--volume=/usr/bin/qemu-${arch}:/usr/bin/qemu-${arch}:ro" }.join(' ')
 
   if $deploy {
