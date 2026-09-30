@@ -9,7 +9,7 @@ RSpec.describe 'Hermes main model assignments' do
   it 'assigns the requested GPT-6 main models' do
     expect(instances.fetch('talon')).to include(
       'model_provider' => 'openai-codex',
-      'model_name' => 'gpt-6-sol',
+      'model_name' => 'gpt-6.1-sol',
     )
     expect(instances.fetch('star')).to include(
       'model_provider' => 'openai-codex',
