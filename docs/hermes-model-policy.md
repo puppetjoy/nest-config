@@ -2,7 +2,7 @@
 
 The Owl Hermes profiles use explicit primary-model assignments:
 
-- Talon: `openai-codex/gpt-6-sol`
+- Talon: `openai-codex/gpt-6.1-sol`
 - Star: `openai-codex/gpt-6-astra`
 - Quill: `copilot/gpt-6-luna` with `agent.reasoning_effort: max` and
   `model.api_mode: codex_responses`

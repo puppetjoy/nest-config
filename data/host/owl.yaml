@@ -98,7 +98,7 @@ nest::app::hermes::instances:
     display_name: 'Talon'
     profile_icon: '🦉'
     model_provider: 'openai-codex'
-    model_name: 'gpt-6-sol'
+    model_name: 'gpt-6.1-sol'
     model_base_url: 'https://chatgpt.com/backend-api/codex'
     agent_max_turns: 180
     skin_name: 'talon-ops-dawn'
