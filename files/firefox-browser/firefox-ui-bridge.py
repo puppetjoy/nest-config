@@ -318,6 +318,15 @@ def _node_record(node: Any, path: tuple[int, ...], generation: int, observed_nam
     return record
 
 
+def _tab_identity(node: Any, generation: int) -> str:
+    """Process-scoped AT-SPI object identity, not a title or strip index."""
+    path = str(node.path or "")
+    bus_name = str(node.app.bus_name or "")
+    if not path.startswith("/org/a11y/atspi/accessible/") or not bus_name:
+        raise RuntimeError("Firefox tab has no accessibility object identity; refusing ownership")
+    return hashlib.sha256(f"{generation}\0{bus_name}\0{path}".encode()).hexdigest()
+
+
 def _snapshot() -> dict[str, Any]:
     generation = _browser_pid()
     nodes: list[dict[str, Any]] = []
@@ -332,6 +341,7 @@ def _snapshot() -> dict[str, Any]:
             extent = _extent(node)
             if role == "page tab":
                 tabs.append({
+                    "tab_identity": _tab_identity(node, generation),
                     "name": _safe_name(role, raw_name),
                     "selected": "selected" in states,
                     "locator": _identity(role, raw_name, path, generation),
@@ -701,6 +711,12 @@ def _selected_tab(snapshot: dict[str, Any]) -> dict[str, Any] | None:
 
 def _matching_tabs(snapshot: dict[str, Any], record: dict[str, Any]) -> list[dict[str, Any]]:
     """Do not treat a reused tab-strip index as durable tab identity."""
+    identity = record.get("tab_identity")
+    if identity or any(tab.get("tab_identity") for tab in snapshot["tabs"]):
+        if not identity or record.get("browser_generation") != snapshot["browser_generation"]:
+            return []
+        matches = [tab for tab in snapshot["tabs"] if tab.get("tab_identity") == identity]
+        return matches if len(matches) == 1 else []
     named = [tab for tab in snapshot["tabs"] if tab.get("name") == record.get("tab_name")]
     if len(named) != 1:
         return []
@@ -753,6 +769,7 @@ def _ensure_workflow(state: dict[str, Any], workflow_id: str, lease_seconds: int
         matching = _matching_tabs(snapshot, existing)
         if len(matching) == 1:
             existing["locator"] = matching[0]["locator"]
+            existing["tab_name"] = matching[0]["name"]
             existing["lease_expires_at"] = time.time() + lease_seconds
             return existing, False
         existing["uncertain"] = True
@@ -779,6 +796,7 @@ def _ensure_workflow(state: dict[str, Any], workflow_id: str, lease_seconds: int
         "workflow_id": workflow_id,
         "browser_generation": snapshot["browser_generation"],
         "tab_name": selected["name"],
+        "tab_identity": selected.get("tab_identity"),
         "locator": selected["locator"],
         "created_by_agent": created,
         "created_at": time.time(),
@@ -796,6 +814,7 @@ def _select_workflow_tab(record: dict[str, Any]) -> None:
     matches = _matching_tabs(snapshot, record)
     if len(matches) != 1:
         raise RuntimeError("canonical tab identity is ambiguous; preserving tabs and refusing input")
+    record["tab_name"] = matches[0]["name"]
     if matches[0].get("selected"):
         return
     node, rect = _resolve_locator(matches[0]["locator"])
@@ -807,7 +826,7 @@ def _select_workflow_tab(record: dict[str, Any]) -> None:
     # or any page input, observe the intended tab as the selected UI tab.
 
     selected = _selected_tab(_snapshot())
-    if not selected or selected.get("locator") != matches[0]["locator"] or selected.get("name") != record.get("tab_name"):
+    if not selected or selected.get("locator") != matches[0]["locator"] or selected.get("name") != record.get("tab_name") or (record.get("tab_identity") and selected.get("tab_identity") != record["tab_identity"]):
         raise RuntimeError("canonical tab did not become visibly selected; refusing input into another tab")
 
 

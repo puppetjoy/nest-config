@@ -95,10 +95,39 @@ image rollback has the same owner-disruption gate as deployment.
 
 ## Remaining limitations
 
-AX bindings still depend on unique title/locator observations, not durable
-Firefox session tab IDs. Native mapping still requires a unique sanitized URL;
-same-path contexts with different private queries intentionally fail closed.
-Automatic title changes outside a delivered action can require explicit binding
-recovery. This change does not assert complete durable identity across restart,
-reorder or indistinguishable tab replacement. A broader durable native identity
-redesign needs live isolated multi-tab verification before adoption.
+AX bindings now use a hash of the browser generation, accessibility application
+bus name and accessible object path. Numeric AT-SPI IDs are unsuitable: both live
+tabs reported ID 1. Object paths were distinct. Identity survives renames and
+does not adopt indistinguishable replacements. Live Firefox recreated the
+accessibility object on tab reorder, so reorder intentionally fails closed and
+requires explicit recovery. This is not durable session-tab identity. Browser restart
+or pre-upgrade bindings without object identity fail closed: recover explicitly,
+then acquire a blank tab. No journals are deleted. This is process-scoped
+identity, not cross-restart adoption of Firefox session tabs.
+
+Native mapping still requires a unique sanitized URL; same-path contexts with
+different private queries intentionally fail closed. This limitation is retained
+rather than using privileged chrome scripts or guessing between private URLs.
+Native editable-host typing works live. An inherited editable span passed the
+public-control guard but Firefox rejected native Send Keys; it is not silently
+retargeted to an ancestor, and its reserved key prevents uncertain replay.
+Target the actual editing host. Delivery alone never proves page completion.
+
+## Isolated live pre-deployment evidence
+
+Disposable pod `ai/firefox-hardening-t9590` uses the current production image
+digest with emptyDir profile/shm, no owner PVC, no service account token and no
+service/ingress. Source bridge and generated bounded link script were copied
+only into this disposable fixture, not the production runtime. This is a live
+browser source canary, not final image/runtime parity evidence.
+
+`spec/app/hermes/secure_browser_isolated_canary.py` requires the explicit
+`NEST_ISOLATED_BROWSER_CANARY=t_9590a2b9` environment acknowledgement. Run only in
+this disposable environment. It serves loopback-only generic HTML and exercises
+rename, native keyed typing, editable-host input, bounded credential-bearing
+href observation, delayed title change, ordinary completed/uncertain retries,
+owner-like selected-tab changes, replacement rejection and journal-preserving
+recovery. A new object-identity regression was reproduced failing before the
+fix; all 63 direct tests and pdk validate pass. No production UI input or
+restart occurred during these checks. Fresh exact-head CI, source-built image
+and production source/runtime hash checks remain deployment gates.

@@ -187,6 +187,24 @@ const e={name:'',id:'',labels:[],isContentEditable:true,disabled:false,readOnly:
         tmp.cleanup()
 
 
+def test_accessibility_object_identity_survives_rename_and_reorder_not_replacement():
+    bridge, desktop, tmp = configured_bridge()
+    try:
+        record = {"browser_generation": 100, "tab_identity": "opaque-original",
+                  "tab_name": "Fixture", "locator": "old"}
+        snapshot = {"browser_generation": 100, "tabs": [
+            {"name": "Fixture", "locator": "old", "tab_identity": "opaque-replacement"},
+            {"name": "Renamed", "locator": "new", "tab_identity": "opaque-original"}]}
+        assert bridge._matching_tabs(snapshot, record) == [snapshot["tabs"][1]]
+        snapshot["tabs"].pop()
+        assert bridge._matching_tabs(snapshot, record) == []
+        snapshot["tabs"][0]["tab_identity"] = "opaque-original"
+        snapshot["browser_generation"] = 101
+        assert bridge._matching_tabs(snapshot, record) == []
+    finally:
+        tmp.cleanup()
+
+
 if __name__ == "__main__":
     tests = [(name, fn) for name, fn in list(globals().items()) if name.startswith("test_")]
     for name, fn in tests:
