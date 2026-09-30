@@ -21,6 +21,7 @@ container="nest-${build}-${name}"
 case $build in
     stage0)
         extra_args=("cpu=${name}")
+        [[ -n $STAGE0_DISTCC_HOSTS ]] && extra_args+=("distcc_hosts=${STAGE0_DISTCC_HOSTS}")
         ;;
     stage1)
         cpu=${name%-*}
