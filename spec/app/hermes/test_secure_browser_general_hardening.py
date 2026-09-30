@@ -34,6 +34,23 @@ def test_duplicate_titles_and_multiple_selected_tabs_are_not_identity():
         tmp.cleanup()
 
 
+def test_ambiguous_selected_state_never_sends_input():
+    bridge, desktop, tmp = configured_bridge()
+    try:
+        bridge.command_tabs({"action": "acquire", "workflow_id": "w"})
+        desktop.tabs[0]["selected"] = True
+        before = list(desktop.commands)
+        try:
+            bridge.command_type({"workflow_id": "w", "text": "public text", "action_key": "once"})
+        except RuntimeError as exc:
+            assert "selected" in str(exc)
+        else:
+            raise AssertionError("ambiguous selected state received input")
+        assert desktop.commands == before
+    finally:
+        tmp.cleanup()
+
+
 def test_bridge_rejects_unjournaled_typing_before_input():
     bridge, desktop, tmp = configured_bridge()
     try:

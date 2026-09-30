@@ -2,7 +2,7 @@
 
 ## Scope and reproduced defects
 
-This change is site-independent. Eight generic regressions were run failing
+This change is site-independent. Nine generic regressions were run failing
 before their corresponding fixes, and now pass:
 
 - Ordinary typing dropped the supplied action key and coordinate at the Hermes
@@ -16,6 +16,8 @@ before their corresponding fixes, and now pass:
 - The bridge accepted unjournaled ordinary typing.
 - Native typing rejected inherited editable controls because it tested the literal
   `[contenteditable=true]` attribute rather than `isContentEditable`.
+- The workflow input gate accepted multiple selected AX tabs even after the
+  selected-tab helper was hardened; input now requires unique selected state.
 
 The editable guard is exercised as generated JavaScript against an unrelated
 synthetic element. Existing stale-element, overlay, cross-site and uncertain
@@ -59,10 +61,12 @@ regressions in the normal unit-test CI lane. Existing relevant script suites:
     python3 spec/app/hermes/test_firefox_ui_bridge.py
     python3 spec/app/hermes/test_secure_browser_bidi_ui.py
 
-A direct function-level run of all four modules passed 61 tests. `pdk validate`
-passed before adding the RSpec wrapper. The first focused PDK test attempt was
-blocked in spec_prep by GitLab HTTP 503/500 while cloning fixtures, not by a test
-assertion. Exact-head CI and live verification must pass before completion.
+A direct function-level run of all four modules passed 62 tests. `pdk validate`
+passed including the RSpec wrapper. Two focused PDK test attempts were blocked
+in spec_prep by GitLab HTTP 503/500 while cloning fixtures, not by a test
+assertion. Pipeline 9534 passed Validate and Unit Test for the initial source
+commit b861ba156a2d58cd64e29f2aa4fcf485f23a211f. The final follow-up commit must
+receive its own exact-head CI, and live verification is still required.
 
 ## Runtime follow-through and rollback gates
 

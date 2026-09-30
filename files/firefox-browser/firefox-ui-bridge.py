@@ -791,6 +791,8 @@ def _ensure_workflow(state: dict[str, Any], workflow_id: str, lease_seconds: int
 
 def _select_workflow_tab(record: dict[str, Any]) -> None:
     snapshot = _snapshot()
+    if _selected_tab(snapshot) is None:
+        raise RuntimeError("selected Firefox tab is absent or ambiguous; refusing input")
     matches = _matching_tabs(snapshot, record)
     if len(matches) != 1:
         raise RuntimeError("canonical tab identity is ambiguous; preserving tabs and refusing input")
