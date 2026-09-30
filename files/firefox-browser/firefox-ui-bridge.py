@@ -695,11 +695,15 @@ def _locked_state() -> Iterator[dict[str, Any]]:
 
 
 def _selected_tab(snapshot: dict[str, Any]) -> dict[str, Any] | None:
-    return next((tab for tab in snapshot["tabs"] if tab.get("selected")), None)
+    selected = [tab for tab in snapshot["tabs"] if tab.get("selected")]
+    return selected[0] if len(selected) == 1 else None
 
 
 def _matching_tabs(snapshot: dict[str, Any], record: dict[str, Any]) -> list[dict[str, Any]]:
     """Do not treat a reused tab-strip index as durable tab identity."""
+    named = [tab for tab in snapshot["tabs"] if tab.get("name") == record.get("tab_name")]
+    if len(named) != 1:
+        return []
     exact = [tab for tab in snapshot["tabs"] if tab.get("locator") == record.get("locator") and tab.get("name") == record.get("tab_name")]
     if exact:
         return exact
@@ -945,15 +949,22 @@ def _native_selector(command: Any, snapshot: dict[str, Any], selector: str, fiel
     """Select the uniquely visible tab and a native WebDriver element handle."""
     if not selector or len(selector) > 512:
         raise ValueError("selector must contain 1..512 characters")
-    handles = command("GET", "/window/handles")
-    matches = []
-    for handle in handles:
-        command("POST", "/window", {"handle": handle})
-        url = command("GET", "/url")
-        if _redact_url(url) == snapshot["url"]:
-            matches.append(handle)
-    if len(matches) != 1:
-        raise RuntimeError("native selected-tab mapping is absent or ambiguous; no input sent")
+    original = command("GET", "/window")
+    try:
+        handles = command("GET", "/window/handles")
+        matches = []
+        for handle in handles:
+            command("POST", "/window", {"handle": handle})
+            url = command("GET", "/url")
+            if _redact_url(url) == snapshot["url"]:
+                matches.append(handle)
+        if len(matches) != 1:
+            raise RuntimeError("native selected-tab mapping is absent or ambiguous; no input sent")
+    except Exception:
+        # Mapping is observation, not permission to leave the owner on an
+        # arbitrary scanned tab when it fails. Restoration never sends input.
+        command("POST", "/window", {"handle": original})
+        raise
     command("POST", "/window", {"handle": matches[0]})
     if _redact_url(command("GET", "/url")) != snapshot["url"]:
         raise RuntimeError("native selected tab changed; no input sent")
@@ -970,7 +981,7 @@ def _native_selector(command: Any, snapshot: dict[str, Any], selector: str, fiel
         e.getAttribute('placeholder'),...(e.labels?[...e.labels].map(l=>l.innerText):[])].join(' ');
       if (/password|passcode|verification|one.time|security.code|cvv|cvc|card.number|account.number|routing.number|secret|token|recovery.code/i.test(hint)
           || e.matches('input[type=password],input[type=hidden]') || e.isContentEditable && !field) return false;
-      if (field && !e.matches('input,textarea,[contenteditable=true]')) return false;
+      if (field && !e.matches('input,textarea') && !e.isContentEditable) return false;
       if (e.disabled || e.readOnly || e.getAttribute('aria-disabled')==='true') return false;
       return true;
     """, "args": [found[0], field_only]})
@@ -1005,6 +1016,7 @@ def command_selector_action(payload: dict[str, Any]) -> dict[str, Any]:
                     "readback": _readback()}
         _select_workflow_tab(record)
         _assert_selector_precondition(payload)
+        snapshot = _snapshot()
         with _webdriver() as command:
             element = _native_selector(command, snapshot, selector, operation == "type")
             _assert_selector_precondition(payload)
@@ -1123,8 +1135,8 @@ def command_type(payload: dict[str, Any]) -> dict[str, Any]:
         record = state["workflows"].get(workflow_id)
         if not record or record.get("uncertain"):
             raise RuntimeError("workflow has no unambiguous canonical handoff tab")
-        if "expected_url" in payload and not action_key:
-            raise ValueError("selector typing requires an action_key")
+        if not action_key:
+            raise ValueError("typing requires an action_key")
         if action_key and action_key in state["action_keys"]:
             delivered = state["action_keys"][action_key]
             if delivered.get("workflow_id") != workflow_id or delivered.get("operation") != "type":
@@ -1235,6 +1247,13 @@ def command_tabs(payload: dict[str, Any]) -> dict[str, Any]:
     with _locked_state() as state:
         snapshot = _snapshot()
         reconciliation = _reconcile_state(state, snapshot)
+        if action == "recover":
+            # Explicitly abandon only the binding. Never close or claim the
+            # owner-selected tab, and never erase uncertain input journals.
+            state["workflows"].pop(workflow_id, None)
+            return {"operation": "tab_lifecycle", "status": "recovered_preserved_tab",
+                    "action": action, "workflow_id": workflow_id,
+                    "next_action": "acquire a blank handoff tab explicitly"}
         if action == "acquire":
             record, created = _ensure_workflow(state, workflow_id, lease, allow_create=True)
             return {"operation": "tab_lifecycle", "status": "ok", "action": action, "created_tab": created, "workflow_id": workflow_id, "lease_expires_at": record["lease_expires_at"], "tab_count": _snapshot()["tab_count"]}
@@ -1265,7 +1284,7 @@ def command_tabs(payload: dict[str, Any]) -> dict[str, Any]:
             del state["workflows"][workflow_id]
             return {"operation": "tab_lifecycle", "status": "released_closed_owned_tab", "action": action, "workflow_id": workflow_id, "readback": _readback()}
         if action != "status":
-            raise ValueError("tab lifecycle action must be status, acquire, keep_open, or release")
+            raise ValueError("tab lifecycle action must be status, acquire, keep_open, release, or recover")
         return {"operation": "tab_lifecycle", "status": "ok", "action": action, "tab_count": snapshot["tab_count"], "workflows": list(state["workflows"]), "reconciliation": reconciliation, "hard_cap": DEFAULT_HARD_TAB_CAP}
 
 

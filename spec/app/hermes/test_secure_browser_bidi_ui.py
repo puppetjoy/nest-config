@@ -349,10 +349,10 @@ def test_selector_typing_reserves_before_input_and_replay_never_retypes():
             raise AssertionError("transport failure was hidden")
         replay = bridge.command_type({**payload, "action_key": "type-uncertain"})
         assert replay["status"] == "delivery_uncertain" and replay["delivery"]["input_sent"] is False
-        # Legacy focused-field typing has no selector precondition; keep its
-        # existing behavior while v2 selector typing uses the journal.
+        # Focused-field typing shares the durable journal without requiring
+        # a selector precondition.
         bridge._xdotool = lambda *args, **kw: "1365 768" if args == ("getdisplaygeometry",) else desktop.xdotool(*args, **kw)
-        legacy = bridge.command_type({"workflow_id": "w", "text": "focused field"})
+        legacy = bridge.command_type({"workflow_id": "w", "text": "focused field", "action_key": "focused-once"})
         assert legacy["status"] == "delivered" and legacy["typed_chars"] == 13
     finally:
         tmp.cleanup()
@@ -392,6 +392,8 @@ def test_native_selector_reorder_overlay_cross_site_and_uncertain_replay():
         ref = "element-6066-11e4-a52e-4f735466cecf"
         def command(method, path, data=None):
             native["queries"].append((method, path, data))
+            if path == "/window" and method == "GET":
+                return native.get("handle", "visible")
             if path == "/window/handles":
                 return ["visible", "unrelated"]
             if path == "/url":

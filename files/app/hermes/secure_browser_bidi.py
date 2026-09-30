@@ -31,7 +31,7 @@ VERIFICATION_VALUE = re.compile(
 )
 POTENTIAL_CODE = re.compile(r"(?<![\w.$€£])\d{4,8}(?![\w.,])")
 READ_EXPRESSION = re.compile(
-    r'^document\.querySelector(All)?\(("(?:[^"\\]|\\.)*")\)\.(innerText|textContent|value|checked|length)$'
+    r'^document\.querySelector(All)?\(("(?:[^"\\]|\\.)*")\)\.(innerText|textContent|value|checked|length|href)$'
 )
 
 # Fixed, site-independent observation; accepting arbitrary JavaScript as a
@@ -110,6 +110,13 @@ def _read_script(expression: str) -> str:
               "if(e.matches('input[type=password],input[type=hidden]')||e.querySelector('input[type=password],input[autocomplete=one-time-code]')||"
               "/password|passcode|verification|one.time|security.code|cvv|cvc|card.number|account.number|routing.number|secret|token|recovery.code/i.test(hint))return '<redacted>';"
               "return e." + prop + ";}")
+    if prop == "href":
+        # Credentials may live in arbitrary path segments as well as query
+        # parameters. Export only HTTP(S) origins, never a raw link URL.
+        getter = ("e => {if(!e.matches('a[href],area[href]'))return null;"
+                  "try{const u=new URL(e.href,document.baseURI);"
+                  "return ['http:','https:'].includes(u.protocol)&&!u.username&&!u.password"
+                  "?u.origin:'<redacted>';}catch{return '<redacted>';}}")
     if multiple:
         return ("(() => {const nodes=document.querySelectorAll(" + json.dumps(selector) + ");"
                 "return {total:nodes.length,values:[...nodes].slice(0,120).map(" + getter + ")};})()")
