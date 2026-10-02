@@ -323,7 +323,7 @@ define nest::lib::hermes (
         editor: null
         browser: null
         glamour_style: dark
-        check_update: true
+        check_update: false
         display_hyperlinks: false
         host: ${gitlab_host}
         no_prompt: true
