@@ -2,6 +2,7 @@
 nest::classes:
   - 'nest::app::codex'
   - 'nest::app::hermes'
+  - 'nest::lib::toolchains'
   - 'nest::service::gitlab_runner'
   - 'nest::service::kubernetes'
   - 'nest::service::rocm'
@@ -12,6 +13,11 @@ nest::bird_role: worker
 nest::distcc_server: true
 nest::dvorak: true
 nest::text_scaling_factor: 1.5
+
+# Bound only cross-compiler provisioning, not runner/build parallelism.
+nest::lib::toolchains::env:
+  MAKEOPTS: '-j4 -l4'
+  EMERGE_DEFAULT_OPTS: '--usepkg --jobs=1 --load-average=4'
 
 nest::app::hermes::git_ref: 'nest'
 nest::app::hermes::git_commit: '6256850d3adfe8eb453ddde9c80d6a77f1066d16'
