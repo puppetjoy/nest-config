@@ -24,10 +24,10 @@ define nest::lib::toolchain (
 
       if $gcc_only {
         $stage_arg = '--stage1'
-        $installed_check = "/usr/bin/${name}-gcc --version"
+        $installed_check = "/usr/bin/test -x /usr/bin/${name}-gcc"
       } else {
         $stage_arg = ''
-        $installed_check = "/usr/bin/${name}-gcc --version && /usr/bin/${name}-g++ --version"
+        $installed_check = "/usr/bin/test -x /usr/bin/${name}-gcc && /usr/bin/test -x /usr/bin/${name}-g++"
       }
 
       exec { "crossdev-install-${name}":
