@@ -1,4 +1,6 @@
 ---
+nest::linux_git_credential: 'ENC[PKCS7,MIIBuQYJKoZIhvcNAQcDoIIBqjCCAaYCAQAxggEhMIIBHQIBADAFMAACAQEwDQYJKoZIhvcNAQEBBQAEggEAUUxcZZjL0i2/57s0/7tnCDnM60i6Lb0r6+uIGc9R5sUGNYtQPa5Dxxx+kuKUqM7942Zi+V3VQRcALRe2e6RLsAdR6oxqigySkwQwgQ4TvyNMqGeHAchcpcrvdhbC/rCZ6nbE9mqqhPFag9Ci3BSQuR+2uw4MHsQvWUxgvUZEHdzJZiVAkZ1OqbNxsoHI+/dFKkBhKphZQsCKVbau3sXY3S8dV63CCbhvLv/rFgqG+QeJgYmNJIeTrn0drVCdOdxYrOkmcKuy+d2IHE9kNdbJzJfLZELCMBKBxlz96yr0oyOFoj5rFeCnUnCi93YY9NFu4IMuJE52lTVLEl2r7jg34DB8BgkqhkiG9w0BBwEwHQYJYIZIAWUDBAEqBBAtwaCYu0o1QdiTOoXz6FqdgFBy+TKonojdjeI0aIGEOmOlEJ4tfuEU8h/GmTihdxbI2Ed1o98LfmWKW2M9KsyY0W0IAEEFB3/RkP9TCNlwxrFdGmA9BLWNQ41mKlFaDKrvkg==]'
+
 lookup_options:
   nest::classes:
     merge: 'unique'
@@ -7,6 +9,8 @@ lookup_options:
   nest::distcc_hosts:
     merge: 'hash'
   nest::eyaml_private_key:
+    convert_to: 'Sensitive'
+  nest::linux_git_credential:
     convert_to: 'Sensitive'
   nest::app::hermes::gitlab_token:
     convert_to: 'Sensitive'
