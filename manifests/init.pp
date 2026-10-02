@@ -14,6 +14,8 @@ class nest (
   String               $user              = 'joy',
   String               $user_fullname     = 'Joyful Lee',
 
+  Optional[Sensitive[String]] $linux_git_credential = undef,
+
   # Service discovery configuration
   Hash[Stdlib::Fqdn, Stdlib::Fqdn]        $cnames                  = {},
   Array[Stdlib::Host]                     $cups_servers            = [],

@@ -40,8 +40,9 @@ class nest::base::bootloader::uroot {
   }
 
   nest::lib::src_repo { '/usr/src/u-root-linux':
-    url => 'https://gitlab.joyfullee.me/nest/forks/linux.git',
-    ref => $nest::kernel_tag,
+    url     => 'https://gitlab.joyfullee.me/nest/forks/linux.git',
+    ref     => $nest::kernel_tag,
+    require => Class['nest::base::kernel_git'],
   }
   ~>
   nest::lib::build { 'u-root-linux':

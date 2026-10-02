@@ -1,4 +1,6 @@
 class nest::base::kernel {
+  include nest::base::kernel_git
+
   Nest::Lib::Kconfig {
     config => '/usr/src/linux/.config',
   }
@@ -26,8 +28,9 @@ class nest::base::kernel {
   }
 
   nest::lib::src_repo { '/usr/src/linux':
-    url => 'https://gitlab.joyfullee.me/nest/forks/linux.git',
-    ref => $nest::kernel_tag,
+    url     => 'https://gitlab.joyfullee.me/nest/forks/linux.git',
+    ref     => $nest::kernel_tag,
+    require => Class['nest::base::kernel_git'],
   }
   ~>
   nest::lib::build { 'kernel':
