@@ -6,7 +6,6 @@
 # @param cpu Build for this CPU architecture
 # @param build Build the image
 # @param deploy Deploy the image
-# @param distcc_hosts Override distributed compiler hosts for this build only
 # @param emerge_default_opts Override default emerge options (e.g. --jobs=4)
 # @param from_image Build starting from this image
 # @param init Initialize the build container
@@ -21,7 +20,6 @@ plan nest::build::stage0 (
   String           $cpu,
   Boolean          $build                 = true,
   Boolean          $deploy                = false,
-  Optional[String] $distcc_hosts          = undef,
   Optional[String] $emerge_default_opts   = undef,
   String           $from_image            = "nest/stage0:${cpu}",
   Boolean          $init                  = true,
@@ -128,12 +126,6 @@ plan nest::build::stage0 (
     # Rebuild the image with our profile
     run_command("eselect profile set nest:${cpu}/server", $target, 'Set profile')
     run_command('emerge --info', $target, 'Show Portage configuration')
-    # Bound distributed work independently of local make/package concurrency.
-    # Keep the override process-local, not in the resulting image's config.
-    $build_env = $distcc_hosts ? {
-      undef   => {},
-      default => { 'DISTCC_HOSTS' => $distcc_hosts },
-    }
     # A fresh Stage 0 lacks a native compiler; resolving @world directly can
     # bootstrap Rust through old slots all the way to a self-dependency.
     # Older binpkgs may have changed-deps metadata after a tree sync; limit
@@ -148,9 +140,9 @@ plan nest::build::stage0 (
       run_command($rust_command, $target, 'Preinstall native Rust binpkg', _env_vars => $emerge_env)
     }
     if $from_image =~ /gentoo/ {
-      run_command('emerge --emptytree --verbose --usepkg-exclude=dev-perl/* @world', $target, 'Rebuild all packages', _env_vars => $build_env)
+      run_command('emerge --emptytree --verbose --usepkg-exclude=dev-perl/* @world', $target, 'Rebuild all packages')
     } else {
-      run_command('emerge --deep --newuse --update --verbose --with-bdeps=y --usepkg-exclude=dev-perl/* @world', $target, 'Update packages', _env_vars => $build_env)
+      run_command('emerge --deep --newuse --update --verbose --with-bdeps=y --usepkg-exclude=dev-perl/* @world', $target, 'Update packages')
     }
     run_command('emerge --depclean', $target, 'Remove unused packages')
 
