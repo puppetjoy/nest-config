@@ -1,20 +1,7 @@
 class nest::host::falcon {
   $talon_public_key = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKJ3ZH2elB6c0ors9H/mxWrJY1aXKzA4XxA6YCe3rpj9 talon@joyfullee.me'
 
-  nest::lib::toolchain {
-    [
-      'aarch64-unknown-linux-gnu',
-      'armv6j-unknown-linux-gnueabihf',
-      'armv7a-unknown-linux-gnueabihf',
-      'riscv64-unknown-linux-gnu',
-    ]:
-      # use defaults
-    ;
-
-    'arm-none-eabi':
-      gcc_only => true,
-    ;
-  }
+  include nest::lib::toolchains
 
   file { '/root/.ssh/letsencrypt-rsync.sh':
     ensure  => file,

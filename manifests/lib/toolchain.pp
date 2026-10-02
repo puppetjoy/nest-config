@@ -24,13 +24,15 @@ define nest::lib::toolchain (
 
       if $gcc_only {
         $stage_arg = '--stage1'
+        $installed_check = "/usr/bin/${name}-gcc --version"
       } else {
         $stage_arg = ''
+        $installed_check = "/usr/bin/${name}-gcc --version && /usr/bin/${name}-g++ --version"
       }
 
       exec { "crossdev-install-${name}":
         command => "/usr/bin/crossdev ${gcc_conf_args} --stable --portage '--usepkg' ${stage_arg} --target ${name}",
-        creates => "/usr/bin/${name}-gcc",
+        unless  => $installed_check,
         timeout => 0,
         require => Class['nest::lib::crossdev'],
       }
@@ -49,6 +51,10 @@ define nest::lib::toolchain (
         ]:
           ensure => file,
         ;
+      }
+
+      if $nest::distcc_server {
+        Exec["crossdev-install-${name}"] ~> Exec['update-distcc-compiler-links']
       }
 
       if $facts['llvm_clang'] {
