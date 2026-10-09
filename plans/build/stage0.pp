@@ -32,17 +32,7 @@ plan nest::build::stage0 (
 ) {
   $debug_volume = "${container}-debug"
   $repos_volume = "${container}-repos" # cached between builds
-  $target = Target.new(
-    name   => $container,
-    uri    => "podman://${container}",
-    config => {
-      'podman' => {
-        'interpreters' => {
-          'rb' => ['/usr/bin/ruby33', '-r', 'puppet', '-e', 'Puppet[:tags] = File.open("/.apply_tags", &:gets) if File.exist? "/.apply_tags"; load ARGV.shift'],
-        },
-      },
-    }
-  )
+  $target = Target.new(name => $container, uri => "podman://${container}")
   $qemu_args = $qemu_user_targets.map |$arch| { "--volume=/usr/bin/qemu-${arch}:/usr/bin/qemu-${arch}:ro" }.join(' ')
 
   if $deploy {
@@ -101,13 +91,23 @@ plan nest::build::stage0 (
       run_command('sed -i "s@^sync-uri =.*@sync-uri = rsync://rsync.us.gentoo.org/gentoo-portage/@" /usr/share/portage/config/repos.conf', $target, 'Use Gentoo US rsync mirror')
       run_command('rm -rf /var/db/repos/gentoo/.git', $target, 'Prepare Gentoo repo for rsync')
       run_command('emerge --sync', $target, 'Sync Portage tree')
-      run_command('emerge --verbose app-admin/openvox app-portage/eix dev-ruby/sys-filesystem', $target, 'Install OpenVox', _env_vars => $emerge_env)
-      run_command('eix-update', $target, 'Update package database')
     } else {
       run_command('eix-sync -aq', $target, 'Sync Portage repos')
-      run_command('emerge --deselect app-admin/puppet', $target, 'Deselect Puppet from world')
-      run_command('emerge --verbose app-admin/openvox', $target, 'Install OpenVox', _env_vars => $emerge_env)
     }
+
+    # These optional provider libraries are required by Stage 1, even when
+    # OpenVox USE flags do not pull them in. Retain them explicitly in world.
+    # Match the selected interpreter for bootstrap/apply_prep, not a fixed slot.
+    $ruby_target = run_command('/usr/bin/ruby -e \'puts "ruby#{RUBY_VERSION.split(".")[0, 2].join}"\'', $target, 'Find selected Ruby target').first.value['stdout'].strip
+    $runtime_env = $emerge_env + { 'RUBY_TARGETS' => $ruby_target }
+    $runtime_packages = 'dev-ruby/ruby-shadow dev-ruby/ruby-augeas dev-ruby/sys-filesystem'
+    if $from_image =~ /gentoo/ {
+      run_command("emerge --verbose app-admin/openvox app-portage/eix ${runtime_packages}", $target, 'Install configuration runtime', _env_vars => $runtime_env)
+      run_command('eix-update', $target, 'Update package database')
+    } else {
+      run_command("emerge --verbose ${runtime_packages}", $target, 'Retain Stage 1 runtime libraries', _env_vars => $runtime_env)
+    }
+    run_script('nest/build/stage0-runtime.rb', $target, 'Check selected Ruby runtime', _timeout => 120)
 
     # Set up the build environment
     $target.apply_prep
@@ -145,6 +145,10 @@ plan nest::build::stage0 (
       run_command('emerge --deep --newuse --update --verbose --with-bdeps=y --usepkg-exclude=dev-perl/* @world', $target, 'Update packages')
     }
     run_command('emerge --depclean', $target, 'Remove unused packages')
+
+    # Exercise the inventory interpreter, facts, native bindings and user
+    # provider after cleanup, before either normal or debug image is published.
+    run_script('nest/build/stage0-runtime.rb', $target, 'Check post-depclean Stage 1 runtime', _timeout => 120)
 
     run_command("podman stop ${container}", 'localhost', 'Stop build container')
   }
