@@ -20,7 +20,7 @@ nest::lib::toolchains::env:
   EMERGE_DEFAULT_OPTS: '--usepkg --jobs=1 --load-average=4'
 
 nest::app::hermes::git_ref: 'nest'
-nest::app::hermes::git_commit: '1d2e5031b079b18ab1f6d094f9ce4949b4d9ce4a'
+nest::app::hermes::git_commit: 'ce885d59f9b7bf6288b4d01ffdd1c43dd2b801a3'
 nest::app::hermes::auxiliary_provider: 'openai-codex'
 nest::app::hermes::auxiliary_compress_model: 'gpt-6-luna'
 nest::app::hermes::auxiliary_extract_model: 'gpt-6-luna'
