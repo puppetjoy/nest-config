@@ -24,7 +24,7 @@ Timeout.timeout(90) do
   os = Facter.value(:os)
   raise 'Cannot collect Gentoo OS facts' unless os && os['family'] == 'Gentoo'
   mounts = Facter.value(:mountpoints)
-  raise 'Cannot collect root mount facts' unless mounts && mounts.key?('/')
+  raise 'Cannot collect root mount facts' unless mounts&.key?('/')
   raise 'Cannot stat root filesystem' unless Sys::Filesystem.stat('/').block_size.positive?
 
   raise 'Puppet shadow feature unavailable' unless Puppet.features.libshadow?
