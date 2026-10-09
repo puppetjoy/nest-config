@@ -56,9 +56,11 @@ plan nest::build::stage0 (
     run_command("podman rm -f ${container}", 'localhost', 'Stop and remove existing build container')
     run_command("podman volume rm -f ${debug_volume}", 'localhost', 'Remove existing debug volume')
 
+    # Use Nest DNS like the config image/CI runners, not Podman's public fallback.
     # Note: initial LANG applies to all downstream containers
     $podman_create_cmd = @("CREATE"/L)
       podman create \
+      --dns=172.22.4.3 \
       --env=LANG \
       --init \
       --name=${container} \
