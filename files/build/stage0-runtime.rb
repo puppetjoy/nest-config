@@ -16,6 +16,17 @@ Timeout.timeout(90) do
 
   raise 'Expected OpenVox behind require puppet' unless Gem.loaded_specs.key?('openvox')
 
+  if ARGV.include?('--provider-dependencies')
+    installed = Dir.glob('/var/db/pkg/app-admin/openvox-*')
+    raise 'Expected one installed OpenVox package' unless installed.length == 1
+    use = File.read("#{installed.first}/USE").split
+    dependencies = File.read("#{installed.first}/RDEPEND")
+    ['augeas', 'shadow'].each do |feature|
+      raise "OpenVox lacks #{feature} USE" unless use.include?(feature)
+      raise "OpenVox lacks ruby-#{feature} dependency" unless dependencies.include?("dev-ruby/ruby-#{feature}")
+    end
+  end
+
   required = ['app-admin/openvox', 'dev-ruby/sys-filesystem']
   world = File.readlines('/var/lib/portage/world', chomp: true)
   missing = required - world

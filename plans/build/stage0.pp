@@ -149,12 +149,13 @@ plan nest::build::stage0 (
     }
     # Nest's OpenVox augeas/shadow USE dependencies now own these providers.
     # Deselect inherited world roots too; this does not uninstall packages.
+    run_script('nest/build/stage0-runtime.rb', $target, 'Check OpenVox provider dependencies', arguments => ['--provider-dependencies'], _timeout => 120)
     run_command('emerge --deselect dev-ruby/ruby-augeas dev-ruby/ruby-shadow', $target, 'Keep OpenVox providers dependency-owned')
     run_command('emerge --depclean', $target, 'Remove unused packages')
 
     # Exercise the inventory interpreter, facts, native bindings and user
     # provider after cleanup, before either normal or debug image is published.
-    run_script('nest/build/stage0-runtime.rb', $target, 'Check post-depclean Stage 1 runtime', arguments => ['--dependency-owned-providers'], _timeout => 120)
+    run_script('nest/build/stage0-runtime.rb', $target, 'Check post-depclean Stage 1 runtime', arguments => ['--dependency-owned-providers', '--provider-dependencies'], _timeout => 120)
 
     run_command("podman stop ${container}", 'localhost', 'Stop build container')
   }
