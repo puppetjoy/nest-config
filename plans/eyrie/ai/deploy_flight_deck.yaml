@@ -7,6 +7,11 @@ parameters:
     type: String
     default: 'flight-deck-dev'
 
+  source_revision:
+    description: 'Expected full lowercase SHA; must match the source-managed service pin'
+    type: "Variant[Pattern[/\\A[0-9a-f]{40}\\z/], Enum['']]"
+    default: ''
+
   namespace:
     description: 'Kubernetes namespace'
     type: String
@@ -28,6 +33,10 @@ parameters:
     default: ''
 
 steps:
+  - description: 'Verify the source-managed Flight Deck revision'
+    eval: |-
+      nest::kubernetes::flight_deck_source_revision($service, $source_revision)
+
   - description: 'Deploy Flight Deck'
     plan: nest::kubernetes::deploy
     parameters:
