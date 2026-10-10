@@ -13,12 +13,18 @@ index 3ef706f..b53e62e 100644
  #include <QtGui/QWindow>
  #include <QtGui/QGuiApplication>
  #include <QtGui/QScreen>
-@@ -67,6 +71,52 @@ constexpr auto kSystemAlertDuration = crl::time(1000);
- constexpr auto kSystemAlertDuration = crl::time(0);
- #endif // Q_OS_MAC
+@@ -69,4 +73,58 @@ constexpr auto kSystemAlertDuration = crl::time(1000);
  
 +void ActivateWindowFromNotification(QWindow *window) {
 +#ifndef DESKTOP_APP_DISABLE_X11_INTEGRATION
++#if __has_include("base/platform/linux/base_linux_xcb_library.h")
++	// Newer lib_base resolves XCB at runtime; older versions use libxcb.
++	using base::Platform::XCB::Library::xcb_connection_has_error;
++	using base::Platform::XCB::Library::xcb_request_check;
++	using base::Platform::XCB::Library::xcb_send_event_checked;
++	using base::Platform::XCB::Library::xcb_flush;
++#endif
++
 +	if (!window) {
 +		return;
 +	}
@@ -66,7 +72,7 @@ index 3ef706f..b53e62e 100644
  [[nodiscard]] QString PlaceholderReactionText() {
  	static const auto result = QString::fromUtf8("\xf0\x9f\x92\xad");
  	return result;
-@@ -1278,6 +1328,7 @@ Window::SessionController *Manager::openNotificationMessage(
+@@ -1278,6 +1336,7 @@ Window::SessionController *Manager::openNotificationMessage(
  		const auto window = history->session().tryResolveWindow();
  		if (window) {
  			window->widget()->showFromTray();
@@ -74,7 +80,7 @@ index 3ef706f..b53e62e 100644
  			window->widget()->setInnerFocus();
  			system()->clearAll();
  		}
-@@ -1347,6 +1398,7 @@ Window::SessionController *Manager::openNotificationMessage(
+@@ -1347,6 +1406,7 @@ Window::SessionController *Manager::openNotificationMessage(
  		: history->session().tryResolveWindow();
  	if (window) {
  		window->widget()->showFromTray();
