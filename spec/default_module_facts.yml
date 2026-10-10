@@ -1,4 +1,5 @@
 ---
+libdir: 'lib64'
 profile:
   architecture: 'amd64'
   variant: 'server'
