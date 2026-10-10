@@ -81,8 +81,10 @@ plan nest::build::stage1 (
 
     run_command($podman_debug_copy_cmd, 'localhost', 'Repopulate debug volume')
 
+    # Use Nest DNS like Stage 0/config images, not Podman's public fallback.
     $podman_create_cmd = @("CREATE"/L)
       podman create \
+      --dns=172.22.4.3 \
       --init \
       --name=${container} \
       --pids-limit=0 \
