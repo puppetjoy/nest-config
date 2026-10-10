@@ -4,7 +4,3 @@ nest::classes:
   - 'nest::base::distcc'
   - 'nest::base::locale'
   - 'nest::base::portage'
-nest::package_keywords:
-  # Keep the configuration runtime resolvable after build-time Portage setup.
-  app-admin/openvox: {}
-  dev-ruby/openfact: {}

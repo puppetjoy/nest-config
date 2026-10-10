@@ -16,7 +16,7 @@ class nest::base::packages {
         'app-portage/gentoolkit',
         'dev-debug/strace',
         'net-analyzer/openbsd-netcat',
-        'net-dns/bind-tools',
+        'net-dns/bind',
         'net-misc/iperf',
         'net-misc/s3cmd',
         'net-misc/whois',
