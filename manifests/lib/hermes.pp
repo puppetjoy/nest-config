@@ -41,6 +41,9 @@ define nest::lib::hermes (
   Optional[String[1]]  $image_gen_model            = undef,
   Array[String[1]]     $enabled_plugins            = [],
   Integer[1]           $compression_timeout        = 120,
+  Hash[String[1], Any] $compression_thresholds     = {},
+  Optional[Integer[1]] $compression_tokens         = undef,
+  Optional[Integer[1]] $compression_message_limit  = undef,
   Boolean              $responses_native           = true,
   Integer[1]           $responses_threshold        = 200000,
   Integer[1]           $web_extract_timeout        = 360,
@@ -752,6 +755,19 @@ define nest::lib::hermes (
     default => { 'agent' => $agent_values },
   }
 
+  $compression_tokens_config = $compression_tokens ? {
+    undef   => {},
+    default => { 'threshold_tokens' => $compression_tokens },
+  }
+  $compression_message_config = $compression_message_limit ? {
+    undef   => {},
+    default => { 'hygiene_hard_message_limit' => $compression_message_limit },
+  }
+  $compression_thresholds_config = empty($compression_thresholds) ? {
+    true    => {},
+    default => { 'model_thresholds' => $compression_thresholds },
+  }
+
   $managed_config = {
     'toolsets'         => $effective_toolsets,
     'command_allowlist' => $command_allowlist,
@@ -813,7 +829,7 @@ define nest::lib::hermes (
     'compression'      => {
       'codex_responses_native'            => $responses_native,
       'codex_responses_compact_threshold' => $responses_threshold,
-    },
+    } + $compression_thresholds_config + $compression_tokens_config + $compression_message_config,
     'platform_toolsets' => $platform_toolsets,
     'gateway'          => $telegram_gateway_config,
     'telegram'          => $telegram_config,
@@ -980,6 +996,7 @@ define nest::lib::hermes (
     owner   => $user,
     group   => $user,
     content => $managed_config.stdlib::to_yaml,
+    tag     => 'hermes_managed_config',
     require => File[$profile_dir],
   }
 
@@ -1038,6 +1055,7 @@ define nest::lib::hermes (
     unless      => "${venv_python} ${hermes_config_manager_path} check ${hermes_config_path} ${hermes_managed_config_path}",
     user        => $user,
     environment => ["HOME=/home/${user}"],
+    tag         => 'hermes_managed_config',
     require     => $configure_require,
   }
 
