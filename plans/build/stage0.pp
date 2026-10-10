@@ -97,17 +97,18 @@ plan nest::build::stage0 (
       run_command('eix-sync -aq', $target, 'Sync Portage repos')
     }
 
-    # These optional provider libraries are required by Stage 1, even when
-    # OpenVox USE flags do not pull them in. Retain them explicitly in world.
+    # sys-filesystem is not an OpenVox dependency; retain it in world.
     # Match the selected interpreter for bootstrap/apply_prep, not a fixed slot.
     $ruby_target = run_command('/usr/bin/ruby -e \'puts "ruby#{RUBY_VERSION.split(".")[0, 2].join}"\'', $target, 'Find selected Ruby target').first.value['stdout'].strip
     $runtime_env = $emerge_env + { 'RUBY_TARGETS' => $ruby_target }
-    $runtime_packages = 'dev-ruby/ruby-shadow dev-ruby/ruby-augeas dev-ruby/sys-filesystem'
     if $from_image =~ /gentoo/ {
-      run_command("emerge --verbose app-admin/openvox app-portage/eix ${runtime_packages}", $target, 'Install configuration runtime', _env_vars => $runtime_env)
+      run_command('emerge --verbose app-admin/openvox app-portage/eix dev-ruby/sys-filesystem', $target, 'Install configuration runtime', _env_vars => $runtime_env)
+      # Raw Gentoo has no Nest profile yet. Bootstrap providers without world
+      # roots until apply_prep installs the overlay and we select its profile.
+      run_command('emerge --oneshot --verbose dev-ruby/ruby-shadow dev-ruby/ruby-augeas', $target, 'Bootstrap OpenVox providers', _env_vars => $runtime_env)
       run_command('eix-update', $target, 'Update package database')
     } else {
-      run_command("emerge --verbose ${runtime_packages}", $target, 'Retain Stage 1 runtime libraries', _env_vars => $runtime_env)
+      run_command('emerge --verbose dev-ruby/sys-filesystem', $target, 'Retain Stage 1 filesystem library', _env_vars => $runtime_env)
     }
     run_script('nest/build/stage0-runtime.rb', $target, 'Check selected Ruby runtime', _timeout => 120)
 
@@ -142,15 +143,18 @@ plan nest::build::stage0 (
       run_command($rust_command, $target, 'Preinstall native Rust binpkg', _env_vars => $emerge_env)
     }
     if $from_image =~ /gentoo/ {
-      run_command('emerge --emptytree --verbose --usepkg-exclude=dev-perl/* @world', $target, 'Rebuild all packages')
+      run_command('emerge --emptytree --verbose --usepkg-exclude=dev-perl/* @world', $target, 'Rebuild all packages', _env_vars => { 'RUBY_TARGETS' => $ruby_target })
     } else {
-      run_command('emerge --deep --newuse --update --verbose --with-bdeps=y --usepkg-exclude=dev-perl/* @world', $target, 'Update packages')
+      run_command('emerge --deep --newuse --update --verbose --with-bdeps=y --usepkg-exclude=dev-perl/* @world', $target, 'Update packages', _env_vars => { 'RUBY_TARGETS' => $ruby_target })
     }
+    # Nest's OpenVox augeas/shadow USE dependencies now own these providers.
+    # Deselect inherited world roots too; this does not uninstall packages.
+    run_command('emerge --deselect dev-ruby/ruby-augeas dev-ruby/ruby-shadow', $target, 'Keep OpenVox providers dependency-owned')
     run_command('emerge --depclean', $target, 'Remove unused packages')
 
     # Exercise the inventory interpreter, facts, native bindings and user
     # provider after cleanup, before either normal or debug image is published.
-    run_script('nest/build/stage0-runtime.rb', $target, 'Check post-depclean Stage 1 runtime', _timeout => 120)
+    run_script('nest/build/stage0-runtime.rb', $target, 'Check post-depclean Stage 1 runtime', arguments => ['--dependency-owned-providers'], _timeout => 120)
 
     run_command("podman stop ${container}", 'localhost', 'Stop build container')
   }

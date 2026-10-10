@@ -16,10 +16,16 @@ Timeout.timeout(90) do
 
   raise 'Expected OpenVox behind require puppet' unless Gem.loaded_specs.key?('openvox')
 
-  required = ['app-admin/openvox', 'dev-ruby/ruby-shadow', 'dev-ruby/ruby-augeas', 'dev-ruby/sys-filesystem']
+  required = ['app-admin/openvox', 'dev-ruby/sys-filesystem']
   world = File.readlines('/var/lib/portage/world', chomp: true)
   missing = required - world
   raise "Runtime packages missing from world: #{missing.join(', ')}" unless missing.empty?
+
+  if ARGV.include?('--dependency-owned-providers')
+    providers = ['dev-ruby/ruby-augeas', 'dev-ruby/ruby-shadow']
+    retained = world.select { |atom| providers.any? { |provider| atom.match?(%r{\A[<>=~]*#{Regexp.escape(provider)}(?:\z|[-:\[])}) } }
+    raise "OpenVox providers still rooted in world: #{retained.join(', ')}" unless retained.empty?
+  end
 
   os = Facter.value(:os)
   raise 'Cannot collect Gentoo OS facts' unless os && os['family'] == 'Gentoo'
