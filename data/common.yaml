@@ -247,10 +247,11 @@ nest::ssh_host_keys:
 
 nest::package_keywords:
   # Install latest
-  app-admin/puppet: {}
+  app-admin/openvox: {}
   app-emulation/qemu: {}
   app-misc/tmux: {}
   dev-ruby/hiera-eyaml: {}
+  dev-ruby/openfact: {}
   media-libs/mesa: {}
   sys-apps/systemd: {}
   sys-cluster/kubeadm: {}
