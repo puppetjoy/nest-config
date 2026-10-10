@@ -28,6 +28,9 @@ Rakefile:
   requires:
     - './lib/puppet-lint/nest_config'
 
+spec/default_module_facts.yml:
+  unmanaged: true
+
 spec/default_facts.yml:
   extra_facts:
     chocolateyversion: '1.2.1'

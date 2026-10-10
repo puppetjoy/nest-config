@@ -31,9 +31,10 @@ class nest::base::certs {
       # Load CA certs from the system store for NSS consumers such as
       # Firefox, Chromium, and Hermes' Playwright/agent-browser sessions.
       # See: https://superuser.com/a/1836165
-      file { '/usr/lib64/libnssckbi.so':
+      $libdir = assert_type(Enum['lib', 'lib32', 'lib64'], $facts['libdir'])
+      file { "/usr/${libdir}/libnssckbi.so":
         ensure  => link,
-        target  => '/usr/lib64/pkcs11/p11-kit-trust.so',
+        target  => "/usr/${libdir}/pkcs11/p11-kit-trust.so",
         require => Nest::Lib::Package['app-crypt/p11-kit'],
       }
     }

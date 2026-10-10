@@ -184,6 +184,22 @@ describe 'nest' do
 
           it_should_and_should_not_contain_classes(stage1, stage2 + stage3 + windows + workstation + mobile)
 
+          { 'arm' => 'lib', 'amd64' => 'lib64', 'arm64' => 'lib64', 'riscv' => 'lib64' }.each do |architecture, libdir|
+            context "with the #{architecture} native library directory" do
+              let(:facts) { facts.merge(libdir: libdir, profile: { architecture: architecture, variant: 'server' }) }
+
+              it do
+                is_expected.to contain_file("/usr/#{libdir}/libnssckbi.so").with(
+                  ensure: 'link',
+                  target: "/usr/#{libdir}/pkcs11/p11-kit-trust.so",
+                  require: 'Nest::Lib::Package[app-crypt/p11-kit]',
+                )
+              end
+
+              it { is_expected.not_to contain_file("/usr/#{(libdir == 'lib') ? 'lib64' : 'lib'}/libnssckbi.so") }
+            end
+          end
+
           context 'in an offline container' do
             let(:facts) { facts.merge(build: 'stage1', is_container: true, systemd: false) }
 
