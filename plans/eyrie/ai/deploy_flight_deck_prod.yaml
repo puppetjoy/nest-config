@@ -7,6 +7,11 @@ parameters:
     type: Boolean
     default: true
 
+  source_revision:
+    description: 'Expected full lowercase SHA; must match the source-managed service pin'
+    type: "Variant[Pattern[/\\A[0-9a-f]{40}\\z/], Enum['']]"
+    default: ''
+
   init:
     description: 'Deploy initial revision'
     type: Boolean
@@ -22,6 +27,7 @@ steps:
     plan: nest::eyrie::ai::deploy_flight_deck
     parameters:
       service: 'flight-deck'
+      source_revision: $source_revision
       namespace: 'ai'
       deploy: $deploy
       init: $init
