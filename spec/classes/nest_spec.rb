@@ -184,6 +184,24 @@ describe 'nest' do
 
           it_should_and_should_not_contain_classes(stage1, stage2 + stage3 + windows + workstation + mobile)
 
+          context 'in an offline container' do
+            let(:facts) { facts.merge(build: 'stage1', is_container: true, systemd: false) }
+
+            it { is_expected.to contain_service('sshd').with(provider: 'systemd_offline', ensure: nil, enable: true) }
+          end
+
+          context 'on a live systemd host' do
+            let(:facts) { facts.merge(build: 'stage1', is_container: false, systemd: true) }
+
+            it { is_expected.to contain_service('sshd').with(provider: 'systemd', enable: true) }
+          end
+
+          context 'in a live systemd container' do
+            let(:facts) { facts.merge(build: 'stage1', is_container: true, systemd: true) }
+
+            it { is_expected.to contain_service('sshd').with(provider: 'systemd', ensure: nil, enable: true) }
+          end
+
           context 'and variant => workstation' do # rubocop:disable RSpec/EmptyExampleGroup
             let(:facts) do
               facts.merge({ build: 'stage1', profile: { variant: 'workstation' } })

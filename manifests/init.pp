@@ -200,6 +200,14 @@ class nest (
             ensure => undef,
           }
 
+          # OpenVox's live systemd provider requires systemd as PID 1.
+          # Keep image enablement policy without connecting to a live manager.
+          if !$facts['systemd'] {
+            Service <||> {
+              provider => 'systemd_offline',
+            }
+          }
+
           Sysctl <||> {
             apply => false,
           }
