@@ -27,7 +27,7 @@ CONFLICTS = ('BUILD', 'EXECUTOR_ONLY', 'EXECUTOR_BOOTSTRAP', 'RELEASE_BOOTSTRAP_
 def selected(env):
     requested = any(env.get(key) for key in ROUTE_KEYS)
     if requested:
-        require(env.get('RELEASE_ROUTE') == 'true', 'explicit candidate routing required')
+        require(env.get('RELEASE_ROUTE') in ('true', 'verify-inputs'), 'explicit release routing required')
         require(env.get('RELEASE_INPUTS') == 'true', 'routing requires frozen inputs')
         native_freezer = (env.get('CI_PIPELINE_SOURCE') == 'parent_pipeline'
                           and env.get('CI_JOB_NAME') == 'Freeze release inputs ' + str(env.get('RELEASE_ROUTE_MEMBER')))
@@ -47,6 +47,10 @@ def compile_bridge(expected, receipt, env, api):
     identifier = env['RELEASE_ROUTE_MEMBER']
     require(identifier in members, 'unknown routing member')
     member = members[identifier]
+    verifying = env['RELEASE_ROUTE'] == 'verify-inputs'
+    require(not verifying or (member['stage'] == 'stage0' and member['project'] == 'nest/stage0'
+                             and member['mode'] == 'refresh' and member['variant'] == 'server'),
+            'input verification only supports Stage 0 refresh')
     require(member['project'] in B['PROJECTS'] - {'nest/config'}, 'unsupported routing project')
     consumer = next(row for row in expected['consumers'] if row['project'] == member['project'])
     require(consumer['decision'] == 'rebuild', 'routing requires rebuild decision')
@@ -71,6 +75,9 @@ def compile_bridge(expected, receipt, env, api):
         'RELEASE_EXECUTOR_JOB_ID': str(job_id),
         'RELEASE_EXECUTOR_IMAGE': expected['executor']['image'],
     }
+    if verifying:
+        del variables['RELEASE_CANDIDATE']
+        variables.update(RELEASE_VERIFY_INPUTS='true', RELEASE_VALIDATE_ONLY='true')
     require(re.fullmatch(r'registry[.]gitlab[.]joyfullee[.]me/nest/config/[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}',
                          variables['RELEASE_EXECUTOR_IMAGE']) is not None, 'unsupported executor registry')
     if member['stage'] != 'stage0':
@@ -97,6 +104,8 @@ def compile_bridge(expected, receipt, env, api):
                         'forward': {'yaml_variables': True, 'pipeline_variables': False}},
         },
     }
+    if verifying:
+        graph['Verify frozen inputs'] = graph.pop('Build frozen member')
     # Re-read the independently selected executor resource and artifact before
     # permitting publication. No retries or mutable latest-success lookups.
     require(B['job'](api, 'nest/config', pipeline, job_id, expected['executor']['source']) == observed
