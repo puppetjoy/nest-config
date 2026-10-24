@@ -85,3 +85,32 @@ work. Verification alone never authorizes reset, reboot, cleanup, restore or
 release promotion. Existing captures and scheduled retention behavior are
 unchanged. Rollback stops using the added verification options; preserve prior
 archives, metadata and failure evidence rather than replaying capture or reset.
+
+## Scheduled retention writer source
+
+The four Hermes dashboard backup CronJobs select `backup_config_image`, not the
+general rolling `config_image`. The selected immutable multi-architecture index is
+`registry.eyrie/nest/config/main@sha256:0004a84df33b744de7660c47e9e9820ebfc0aaf9457f9d82c2f727a7a02dd220`.
+Its exact registry bytes and all three member digests match executor pipeline
+11922 at config source `0f9f746b4afe0d4206c147e0121844d4241d836b`.
+The included helper SHA256 is
+`8caf401da04daea60f3c1bed7fa4fd0a8867c746fb2e853648e4ced0950f769c`.
+It implements release-bound holds and refuses pruning on malformed hold records.
+The amd64 executor was exercised; ARM and RISC-V member publication is verified,
+not runtime execution on those architectures.
+
+KubeCM renders this same pin for Talon, Star, Beryl and Quill. Changing the
+CronJob template affects only future Jobs; it must not delete, restart or replace
+an existing capture merely to obtain uniform image IDs. Before relying on a
+production hold, inspect remaining active writers' actual helper bytes as well
+as future templates. A newer tag or ancestor source alone is not that evidence.
+The current source pin does not prove that arbitrary manual/external pruning
+writers are absent, that an application can be restored, or that the selected
+backup remains fresh. Existing release/hold checks still apply.
+
+Advance this pin only to a normally reviewed/published executor whose exact
+backup plan/helper and architecture receipts have been checked. General config
+publication does not automatically upgrade scheduled backup semantics. Rollback
+must retain a verified hold-aware executor until every release hold has been
+explicitly retired; never restore an old pruning writer to bypass a held backup.
+No new backup, hold, pruning or restore is required to deliver this template.

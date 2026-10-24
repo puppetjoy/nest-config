@@ -7,6 +7,7 @@ backend_ip: 172.22.4.4
 backend_port: 9119
 plan_base: 'nest::app::hermes'
 node_role: compute
+backup_config_image: 'registry.eyrie/nest/config/main@sha256:0004a84df33b744de7660c47e9e9820ebfc0aaf9457f9d82c2f727a7a02dd220'
 
 .affinity: &affinity
   nodeAffinity:
@@ -49,9 +50,9 @@ resources:
               tolerations: *tolerations
               containers:
                 - name: nest
-                  image: "%{lookup('config_image')}"
-                  # The config image uses the rolling main tag. Always pull so
-                  # backup-plan fixes are not hidden by a node-local old image.
+                  # Keep every scheduled retention writer on reviewed hold-aware
+                  # source, independently of the rolling general config image.
+                  image: "%{lookup('backup_config_image')}"
                   imagePullPolicy: Always
                   command:
                     - bolt
