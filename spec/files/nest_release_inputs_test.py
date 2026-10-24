@@ -26,7 +26,11 @@ class ReleaseInputsTest(unittest.TestCase):
         self.root = Path(temporary.name)
         self.checkout = self.root / 'checkout'
         self.checkout.mkdir()
-        self.env = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM='1',
+        # A disposable fixture must not inherit a real pipeline's release,
+        # route, graph or build selection (or its credentials). Keep only the
+        # command lookup and explicitly selected temporary-storage location.
+        self.env = {key: os.environ[key] for key in ('PATH', 'TMPDIR') if key in os.environ}
+        self.env.update(GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM='1',
                         PYTHONDONTWRITEBYTECODE='1')
         (self.checkout / 'tracked').write_text('Fixture only\n')
         self.git('init', '-b', 'main')
@@ -56,6 +60,23 @@ class ReleaseInputsTest(unittest.TestCase):
                              'members': [self.member['id']]}]}
         self.input = self.root / 'input.json'
         self.input.write_text(json.dumps(self.expected, indent=2))
+
+    def test_fixture_does_not_inherit_real_pipeline_selection_or_credentials(self):
+        outer = dict(RELEASE_ROUTE='verify-inputs', RELEASE_INPUTS='true',
+                     RELEASE_ROUTE_MEMBER='real-pipeline-member', RELEASE_GRAPH='true',
+                     EXECUTOR_BOOTSTRAP='true', NEST_DAG_FIXTURE='pass', BUILD='haswell',
+                     CPU='zen5', CI_JOB_TOKEN='fixture-private-token')
+        fixture = ReleaseInputsTest()
+        with patch.dict(os.environ, outer):
+            fixture.setUp()
+        try:
+            for key in outer:
+                if key != 'RELEASE_INPUTS':
+                    self.assertNotIn(key, fixture.env)
+            self.assertEqual(fixture.env['RELEASE_INPUTS'], 'true')
+            self.assertEqual(fixture.env['CI_PROJECT_DIR'], str(fixture.checkout))
+        finally:
+            fixture.doCleanups()
 
     def git(self, *args):
         return subprocess.check_output(['git', '-C', str(self.checkout), *args], env=self.env,
