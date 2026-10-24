@@ -63,6 +63,7 @@ stages:
     PYTHONDONTWRITEBYTECODE: '1'
   script:
     - 'python3 spec/tasks/retain_update_report_test.py'
+    - 'python3 spec/tasks/retain_update_scope_test.py'
     - 'python3 spec/tasks/retain_update_reboot_test.py'
     - 'python3 spec/tasks/retain_update_reboot_observation_test.py'
     - 'python3 spec/tasks/retain_update_finalize_test.py'

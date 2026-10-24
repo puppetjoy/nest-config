@@ -1,0 +1,15 @@
+{
+  "description": "Reopen every exact retained host report and publish a durable wave-policy scope index; never authorize reboot or acceptance",
+  "input_method": "stdin",
+  "supports_noop": false,
+  "files": ["nest/tasks/retain_update_report.py", "nest/tasks/update_observe_inputs.py", "nest/tasks/update_wave_plan.py"],
+  "parameters": {
+    "action": { "type": "Enum['check', 'retain']" },
+    "mode": { "type": "Enum['prepare', 'observe']" },
+    "policy": { "type": "Hash", "description": "Complete original wave policy, including exclusions and domains" },
+    "targets": { "type": "Array[String[1]]", "description": "Exact resolved inventory names" },
+    "observations": { "type": "Hash", "description": "Exact host-to-transaction map; transaction field only" },
+    "waves": { "type": "Optional[Array]", "description": "Complete ordered waves of existing native host report receipts; required for retain" },
+    "output_dir": { "type": "Stdlib::Absolutepath", "description": "Existing canonical persistent supervisor directory containing all indexed host reports" }
+  }
+}
