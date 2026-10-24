@@ -226,6 +226,17 @@ refuse without replacement. Before enclosing completion, reopen the caller-side
 file, verify its digest/bindings and retain it through the task artifact surface.
 The plan cannot prove that an arbitrary directory survives container/host loss.
 
+Transactional preparation supplies optional `binding` with exactly `transaction`,
+`policy_sha256` (the wave policy digest, not the generation-policy digest) and
+`stage` (`preflight` or `initiation`). This is allowed only with
+`verify_only=true` and `output_dir`. The supervisor validates context before
+the native command and retains it as `preparation` in both document and receipt;
+the plan rejects a lost or changed returned context. Transfer/placement checks
+cannot claim this preparation association. Standalone callers omitting binding
+retain their existing byte schema and result. Bound reports distinguish stages,
+transactions and wave policies but do not assert observation time, native
+transaction provenance or a continuing storage lease.
+
 A failed post-transfer retention step fails the plan, but does not undo or
 repeat the successful native transfer. Preserve the host's started/complete
 receipts and sealed generation. Recover the exact result through read-only

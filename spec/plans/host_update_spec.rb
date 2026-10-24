@@ -300,20 +300,27 @@ RSpec.describe 'nest::host::update' do
         entry['generation_policy'] = { 'hostname' => name, 'release' => bound['release'], 'destination' => '/fixture/root' }
       end
       inputs.each_key do |name|
-        allow_plan('nest::host::stage_generation').with_params(generation_params(name)).always_return('retained' => generation_receipt(name))
+        ['preflight', 'initiation'].each do |stage|
+          allow_plan('nest::host::stage_generation').with_params(generation_params(name, stage)).always_return('retained' => generation_receipt(name, stage))
+        end
       end
       allow_plan('nest::host::check_update_capacity').always_return('capacity_admitted' => true, 'readback_verified' => true)
       expect_plan('nest::host::reboot').not_be_called
       expect_plan('nest::puppet::run').not_be_called
     end
 
-    def generation_params(name)
-      { 'targets' => name, 'policy' => inputs[name]['generation_policy'], 'manifest' => manifest, 'verify_only' => true, 'output_dir' => '/fixture' }
+    def generation_binding(name, stage)
+      { 'transaction' => inputs[name]['transaction'], 'policy_sha256' => bound['policy_sha256'], 'stage' => stage }
     end
 
-    def generation_receipt(name)
+    def generation_params(name, stage = 'preflight')
+      { 'targets' => name, 'policy' => inputs[name]['generation_policy'], 'manifest' => manifest, 'verify_only' => true,
+        'output_dir' => '/fixture', 'binding' => generation_binding(name, stage) }
+    end
+
+    def generation_receipt(name, stage = 'preflight')
       { 'kind' => 'nest_generation_retention_receipt', 'readback_verified' => true, 'sealed' => true,
-        'hostname' => name, 'release' => bound['release'], 'reset_authorized' => false }
+        'hostname' => name, 'release' => bound['release'], 'reset_authorized' => false, 'preparation' => generation_binding(name, stage) }
     end
 
     context 'sealed local generation prerequisites' do
@@ -374,10 +381,11 @@ RSpec.describe 'nest::host::update' do
       it 'checks every exact seal before reset and repeats each affected check at initiation' do
         checked = Hash.new(0)
         inputs.each_key do |name|
-          verify = generation_params(name)
-          expect_plan('nest::host::stage_generation').with_params(verify).be_called_times(2).return do |**_options|
-            checked[name] += 1
-            Bolt::PlanResult.new({ 'retained' => generation_receipt(name) }, 'success')
+          ['preflight', 'initiation'].each do |stage|
+            expect_plan('nest::host::stage_generation').with_params(generation_params(name, stage)).return do |**_options|
+              checked[name] += 1
+              Bolt::PlanResult.new({ 'retained' => generation_receipt(name, stage) }, 'success')
+            end
           end
         end
         commands.each do |name, argv|
@@ -392,7 +400,7 @@ RSpec.describe 'nest::host::update' do
         result = run_plan('nest::host::update', params)
         expect(result.ok?).to be(true)
         expect(result.value['generation_preflight']).to eq(inputs.keys.map { |name| generation_receipt(name) })
-        expect(result.value['waves'][0][0]['generation_verification']).to eq(generation_receipt('update-good'))
+        expect(result.value['waves'][0][0]['generation_verification']).to eq(generation_receipt('update-good', 'initiation'))
       end
 
       it 'refuses the canary when a later selected generation fails preflight' do
@@ -404,18 +412,24 @@ RSpec.describe 'nest::host::update' do
       end
 
       it 'refuses reset when a seal changes between preflight and initiation' do
-        checks = 0
-        verify = generation_params('update-good')
-        expect_plan('nest::host::stage_generation').with_params(verify).be_called_times(2).return do |**_options|
-          checks += 1
-          (checks == 1) ? Bolt::PlanResult.new({ 'retained' => generation_receipt('update-good') }, 'success') : Bolt::PlanResult.new(Bolt::Error.new('Changed seal', 'fixture/seal'), 'failure')
-        end
+        verify = generation_params('update-good', 'initiation')
+        expect_plan('nest::host::stage_generation').with_params(verify).error_with('kind' => 'fixture/seal', 'msg' => 'Changed seal')
         allow_any_command.not_be_called
 
         expect(run_plan('nest::host::update', params).ok?).to be(false)
       end
 
       ['preflight', 'initiation'].each do |stage|
+        it "refuses the other preparation stage even with matching transaction and wave policy at #{stage}" do
+          name = (stage == 'preflight') ? 'update-failed' : 'update-good'
+          opposite = (stage == 'preflight') ? 'initiation' : 'preflight'
+          receipt = generation_receipt(name, opposite)
+          expect_plan('nest::host::stage_generation').with_params(generation_params(name, stage)).always_return('retained' => receipt)
+          allow_any_command.not_be_called
+
+          expect(run_plan('nest::host::update', params).ok?).to be(false)
+        end
+
         [
           { 'readback_verified' => false },
           { 'hostname' => 'other' },
@@ -423,16 +437,14 @@ RSpec.describe 'nest::host::update' do
           { 'sealed' => false },
           { 'reset_authorized' => true },
           { 'kind' => 'nest_generation_transfer_report' },
+          { 'preparation' => nil },
+          { 'preparation' => { 'transaction' => 'other', 'policy_sha256' => 'b' * 64, 'stage' => 'preflight' } },
+          { 'preparation' => { 'transaction' => 'good', 'policy_sha256' => 'c' * 64, 'stage' => 'initiation' } },
         ].each do |change|
           it "refuses reset when #{stage} generation retention is inconsistent: #{change}" do
             name = (stage == 'preflight') ? 'update-failed' : 'update-good'
-            checks = 0
-            expect_plan('nest::host::stage_generation').with_params(generation_params(name)).be_called_times((stage == 'preflight') ? 1 : 2).return do |**_options|
-              checks += 1
-              receipt = generation_receipt(name)
-              receipt = receipt.merge(change) if stage == 'preflight' || checks == 2
-              Bolt::PlanResult.new({ 'retained' => receipt }, 'success')
-            end
+            receipt = generation_receipt(name, stage).merge(change)
+            expect_plan('nest::host::stage_generation').with_params(generation_params(name, stage)).always_return('retained' => receipt)
             allow_any_command.not_be_called
 
             result = run_plan('nest::host::update', params)

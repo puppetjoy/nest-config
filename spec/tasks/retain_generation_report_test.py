@@ -111,6 +111,54 @@ class RetentionTests(unittest.TestCase):
             self.assertEqual(path.read_bytes(), b'conflict')
             self.assertNotIn('Traceback', failed.stdout + failed.stderr)
 
+    def test_preparation_binding_survives_publication_and_separates_stages_and_transactions(self):
+        policy, row = fixture(True)
+        with tempfile.TemporaryDirectory() as temporary:
+            params = dict(output_dir=str(Path(temporary).resolve()), policy=policy, report=json.dumps(row), check=True, verify_only=True)
+            paths = set()
+            for transaction, stage, digest in [('one', 'preflight', 'd'), ('one', 'initiation', 'd'),
+                                               ('two', 'preflight', 'd'), ('one', 'preflight', 'e')]:
+                bound = dict(transaction=transaction, stage=stage, policy_sha256=digest * 64)
+                preflight = self.call(dict(output_dir=params['output_dir'], binding=bound))
+                self.assertEqual(preflight.returncode, 0, preflight.stdout + preflight.stderr)
+                self.assertEqual(json.loads(preflight.stdout)['preparation'], bound)
+                published = self.call(dict(params, binding=bound))
+                self.assertEqual(published.returncode, 0, published.stdout + published.stderr)
+                receipt = json.loads(published.stdout)
+                raw = Path(receipt['path']).read_bytes()
+                self.assertEqual(receipt['preparation'], bound)
+                self.assertEqual(json.loads(raw)['preparation'], bound)
+                self.assertEqual(hashlib.sha256(raw).hexdigest(), receipt['sha256'])
+                self.assertEqual(len(raw), receipt['bytes'])
+                self.assertEqual(self.call(dict(params, binding=bound)).stdout, published.stdout)
+                paths.add(receipt['path'])
+            self.assertEqual(len(paths), 4)
+            legacy = self.call(params)
+            self.assertEqual(legacy.returncode, 0, legacy.stdout + legacy.stderr)
+            receipt = json.loads(legacy.stdout)
+            self.assertNotIn('preparation', receipt)
+            self.assertEqual(Path(receipt['path']).read_bytes(), M['R']['canonical'](M['project'](params['report'], policy, True, True)))
+
+    def test_invalid_preparation_binding_refuses_preflight_and_publication_without_artifacts(self):
+        policy, row = fixture(True)
+        good = dict(transaction='one', policy_sha256='d' * 64, stage='preflight')
+        bad = [None, [], {}, dict(good, transaction=True), dict(good, transaction='bad id'),
+               dict(good, transaction='x' * 65), dict(good, policy_sha256='D' * 64),
+               dict(good, stage=True), dict(good, stage='accepted'), dict(good, private='private-sentinel')]
+        with tempfile.TemporaryDirectory() as temporary:
+            target = str(Path(temporary).resolve())
+            for bound in bad:
+                for params in ({}, dict(report=json.dumps(row), policy=policy, check=True, verify_only=True)):
+                    result = self.call(dict(params, output_dir=target, binding=bound))
+                    self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                    self.assertNotIn('private-sentinel', result.stdout + result.stderr)
+                    self.assertEqual(list(Path(target).iterdir()), [])
+            for check in (True, False):
+                policy, row = fixture(False, check)
+                result = self.call(dict(output_dir=target, binding=good, report=json.dumps(row), policy=policy, check=check, verify_only=False))
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertEqual(list(Path(target).iterdir()), [])
+
     def test_missing_report_fields_and_private_errors_fail_without_artifacts(self):
         with tempfile.TemporaryDirectory() as temporary:
             for params in ({'policy': {}}, {'report': 'private-sentinel'}, {'extra': 'private-sentinel'}):

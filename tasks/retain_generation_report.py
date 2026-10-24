@@ -74,25 +74,40 @@ def project(raw, policy, check, verify_only):
     return result
 
 
+def binding(value):
+    """Caller context is an association, not native transaction provenance."""
+    R['fields'](value, 'transaction policy_sha256 stage', 'preparation binding')
+    R['match'](value['transaction'], r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}', 'transaction')
+    R['match'](value['policy_sha256'], HEX, 'wave policy digest')
+    require(value['stage'] in ('preflight', 'initiation'), 'Invalid preparation stage')
+    return dict(value)
+
+
 def main():
     try:
         raw = sys.stdin.buffer.read(65537)
         require(len(raw) <= 65536, 'Oversized task input')
         params = json.loads(raw, object_pairs_hook=R['unique_object'], parse_int=R['json_integer'],
                             parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
-        require(type(params) is dict and all(key in {'output_dir', 'report', 'policy', 'check', 'verify_only'}
+        require(type(params) is dict and all(key in {'output_dir', 'report', 'policy', 'check', 'verify_only', 'binding'}
                                             or isinstance(key, str) and key.startswith('_') for key in params), 'Invalid parameters')
+        bound = binding(params['binding']) if 'binding' in params else None
         target = directory(params['output_dir'])
         if 'report' not in params:
             require(not {'policy', 'check', 'verify_only'} & params.keys(), 'Incomplete retention input')
             result = dict(schema=1, kind='nest_generation_retention_preflight', output_dir=str(target), read_only=True)
         else:
             report = project(params['report'], params['policy'], params['check'], params['verify_only'])
+            if bound is not None:
+                require(params['verify_only'] is True, 'Preparation binding requires sealed verification')
+                report['preparation'] = bound
             payload = R['canonical'](report)
             path = R['retain'](target, payload)
             result = dict(schema=1, kind='nest_generation_retention_receipt', path=path, sha256=hashlib.sha256(payload).hexdigest(),
                           bytes=len(payload), hostname=report['hostname'], release=report['release'],
                           readback_verified=True, sealed=report['sealed'], reset_authorized=False)
+        if bound is not None:
+            result['preparation'] = bound
         print(R['canonical'](result).decode('ascii'), end='')
         return 0
     except (OSError, ValueError, TypeError, KeyError, UnicodeError, RecursionError):

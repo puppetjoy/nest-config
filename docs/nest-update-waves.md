@@ -276,12 +276,19 @@ empty preflight array and null initiation receipt without generation contact.
 
 The retained document projects the native generation-policy digest, pool and
 destination GUIDs, state/current/boot identities and transfer-receipt digest.
-The content-addressed publisher fsyncs and reopens exact bytes. It does not
-contain a transaction ID or wave-policy digest: the enclosing result associates
-the generation observation with its transaction and stage. Identical observations
-may share one retained file; that is not evidence of distinct observation times.
-Retain that enclosing association as well as the reopened reports before final
-handoff. Neither record is an approval, source-resource verification, storage
+Its `preparation` object additionally binds the exact transaction ID, wave-policy
+`policy_sha256` and stage (`preflight` or `initiation`). The same object appears
+in the returned receipt. Both stages require exact equality before proceeding;
+a missing or mismatched association refuses without reset or a native retry.
+The context validates on the supervisor before the generation command.
+The content-addressed publisher fsyncs and reopens exact bytes. Different
+transactions, wave policies or stages yield distinct retained documents even
+when the native observations are identical. Repeating identical context and
+observation remains idempotent; no observation timestamp or distinct execution
+is inferred. This is a supervisor association, not proof that the native
+generation verifier observed a transaction or locked the wave policy. Retain
+the enclosing result and reopened reports before final handoff.
+Neither record is an approval, source-resource verification, storage
 lease, capacity admission or A/B continuity proof. A retention failure never
 triggers another verification, transfer or reset to recover a missing report.
 Standalone read-only staging callers without `output_dir` remain unchanged.

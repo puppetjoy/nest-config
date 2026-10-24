@@ -104,6 +104,51 @@ RSpec.describe 'nest::host::stage_generation' do
     expect(result.value).to eq(verified)
   end
 
+  it 'passes exact preparation context through preflight and sealed verification retention' do
+    binding = { 'transaction' => 'fixture', 'policy_sha256' => 'd' * 64, 'stage' => 'initiation' }
+    verified = report.merge('kind' => 'nest_generation_verification_report', 'sealed' => true, 'reset_capacity_admitted' => false)
+    bound_receipt = receipt.merge('preparation' => binding)
+    expect_task('nest::retain_generation_report').with_params('output_dir' => output_dir, 'binding' => binding).always_return('read_only' => true)
+    expect_command("#{command(false)} --verify").with_targets('fixture-host').always_return('stdout' => verified.to_json)
+    expect_task('nest::retain_generation_report').with_params(
+      'output_dir' => output_dir, 'binding' => binding, 'report' => verified.to_json, 'policy' => policy, 'check' => true, 'verify_only' => true,
+    ).always_return(bound_receipt)
+    result = run_plan('nest::host::stage_generation', 'targets' => 'fixture-host', 'policy' => policy, 'manifest' => manifest,
+                      'verify_only' => true, 'output_dir' => output_dir, 'binding' => binding)
+
+    expect(result.ok?).to be(true)
+    expect(result.value['retained']).to eq(bound_receipt)
+  end
+
+  it 'refuses failed binding preflight before any native command' do
+    binding = { 'transaction' => 'bad id' }
+    expect_task('nest::retain_generation_report').with_params('output_dir' => output_dir, 'binding' => binding).error_with('kind' => 'fixture/context', 'msg' => 'Invalid context')
+    allow_any_command.not_be_called
+    result = run_plan('nest::host::stage_generation', 'targets' => 'fixture-host', 'policy' => policy, 'manifest' => manifest,
+                      'verify_only' => true, 'output_dir' => output_dir, 'binding' => binding)
+
+    expect(result.ok?).to be(false)
+  end
+
+  [{}, { 'verify_only' => true }, { 'output_dir' => '/persistent/reports' }, { 'check' => false, 'output_dir' => '/persistent/reports' }].each do |options|
+    it "refuses preparation context outside retained sealed verification #{options}" do
+      allow_any_command.not_be_called
+      result = run_plan('nest::host::stage_generation', options.merge('targets' => 'fixture-host', 'policy' => policy, 'manifest' => manifest, 'binding' => {}))
+
+      expect(result.ok?).to be(false)
+    end
+  end
+
+  it 'refuses a retainer that drops the context without replaying native verification' do
+    binding = { 'transaction' => 'fixture', 'policy_sha256' => 'd' * 64, 'stage' => 'initiation' }
+    verified = report.merge('kind' => 'nest_generation_verification_report', 'sealed' => true, 'reset_capacity_admitted' => false)
+    expect_command("#{command(false)} --verify").with_targets('fixture-host').always_return('stdout' => verified.to_json)
+    result = run_plan('nest::host::stage_generation', 'targets' => 'fixture-host', 'policy' => policy, 'manifest' => manifest,
+                      'verify_only' => true, 'output_dir' => output_dir, 'binding' => binding)
+
+    expect(result.ok?).to be(false)
+  end
+
   it 'refuses contradictory verification and transfer inputs before any command' do
     allow_any_command.not_be_called
     result = run_plan('nest::host::stage_generation', 'targets' => 'fixture-host', 'policy' => policy, 'manifest' => manifest, 'verify_only' => true, 'check' => false)
