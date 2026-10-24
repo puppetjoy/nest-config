@@ -157,8 +157,13 @@ RSpec.describe 'nest::host::update' do
         'waves' => [['update-good'], ['update-failed']] }
     end
     let(:params) { { 'targets' => targets, 'mode' => 'observe', 'policy' => {}, 'observations' => inputs, 'output_dir' => '/fixture' } }
+    let(:scope_receipt) do
+      { 'kind' => 'nest_update_scope_index', 'mode' => params['mode'], 'policy_sha256' => bound['policy_sha256'],
+        'readback_verified' => true, 'reboot_eligible' => [], 'execution_authorized' => false, 'acceptance_recorded' => false }
+    end
 
     before :each do
+      allow_task('nest::retain_update_scope').with_targets('localhost').always_return(scope_receipt)
       expect_task('nest::update_observe_inputs').with_targets('localhost').always_return(bound)
       expect_task('nest::update_prepare_inputs').not_be_called
       expect_plan('nest::host::reboot').not_be_called
@@ -172,13 +177,27 @@ RSpec.describe 'nest::host::update' do
       end
     end
 
+    def scope_context
+      { 'mode' => params['mode'], 'policy' => params['policy'], 'targets' => targets, 'observations' => inputs, 'output_dir' => '/fixture' }
+    end
+
     it 'retains observed stopped and prepared states without mutation or reboot eligibility' do
+      checked = false
+      expect_task('nest::retain_update_scope').with_params(scope_context.merge('action' => 'check')).return do |targets:, **_options|
+        checked = true
+        Bolt::ResultSet.new(targets.map { |target| Bolt::Result.new(target, value: { 'scope_checked' => true }) })
+      end
       expect_observation_preflight
       { 'update-good' => 'good', 'update-failed' => 'failed' }.each do |host, id|
-        expect_command("nest reset status #{id} --format=json").with_targets(host).always_return('stdout' => "#{id} status")
+        expect_command("nest reset status #{id} --format=json").with_targets(host).return do |targets:, command:, **_options|
+          expect(checked).to be(true)
+          Bolt::ResultSet.new(targets.map { |target| Bolt::Result.for_command(target, { 'stdout' => "#{id} status", 'stderr' => '', 'exit_code' => 0 }, 'command', command, []) })
+        end
         retain_params = { 'report' => "#{id} status", 'transaction' => id, 'release' => bound['release'], 'hostname' => host, 'output_dir' => '/fixture' }
         expect_task('nest::retain_update_report').with_params(retain_params).always_return('state' => 'stopped', 'observation_retained' => true)
       end
+      waves = [[{ 'state' => 'stopped', 'observation_retained' => true, 'backup_verification' => [], 'generation_verification' => nil }]] * 2
+      expect_task('nest::retain_update_scope').with_params(scope_context.merge('action' => 'retain', 'waves' => waves)).always_return(scope_receipt)
 
       result = run_plan('nest::host::update', params)
 
@@ -186,6 +205,35 @@ RSpec.describe 'nest::host::update' do
       expect(result.value['kind']).to eq('nest_update_observation')
       expect(result.value['reboot_eligible']).to eq([])
       expect(result.value['acceptance_recorded']).to be(false)
+      expect(result.value['retained_scope']).to eq(scope_receipt)
+    end
+
+    it 'refuses a bad scope destination before contacting any host' do
+      expect_task('nest::retain_update_scope').with_params(scope_context.merge('action' => 'check')).error_with('kind' => 'fixture/scope', 'msg' => 'Missing destination')
+      allow_any_command.not_be_called
+
+      expect(run_plan('nest::host::update', params).ok?).to be(false)
+    end
+
+    [
+      { 'readback_verified' => false }, { 'policy_sha256' => 'a' * 64 }, { 'mode' => 'prepare' },
+      { 'execution_authorized' => true }, { 'acceptance_recorded' => true }, { 'reboot_eligible' => ['update-good'] }
+    ].each do |change|
+      it "refuses a changed scope receipt #{change.inspect} without replaying observations" do
+        expect_observation_preflight
+        { 'update-good' => 'good', 'update-failed' => 'failed' }.each do |host, id|
+          expect_command("nest reset status #{id} --format=json").with_targets(host).be_called_times(1).always_return('stdout' => "#{id} status")
+          expect_task('nest::retain_update_report').with_params('report' => "#{id} status", 'transaction' => id, 'release' => bound['release'], 'hostname' => host,
+                                                              'output_dir' => '/fixture').always_return('observation_retained' => true)
+        end
+        waves = [[{ 'observation_retained' => true, 'backup_verification' => [], 'generation_verification' => nil }]] * 2
+        expect_task('nest::retain_update_scope').with_params(scope_context.merge('action' => 'retain', 'waves' => waves)).always_return(scope_receipt.merge(change))
+
+        result = run_plan('nest::host::update', params)
+
+        expect(result.ok?).to be(false)
+        expect(result.value.kind).to eq('nest/update-scope-retention')
+      end
     end
 
     it 'refuses a historical export lacking live observation without continuing' do
@@ -230,6 +278,10 @@ RSpec.describe 'nest::host::update' do
     let(:bound) { { 'release' => "sha256:#{'a' * 64}", 'policy_sha256' => 'b' * 64, 'inputs' => inputs, 'commands' => commands, 'waves' => [['update-good'], ['update-failed']] } }
     let(:manifest) { { 'kind' => 'fixture-manifest' } }
     let(:params) { { 'targets' => targets, 'mode' => 'prepare', 'policy' => {}, 'preparation' => inputs, 'output_dir' => '/fixture', 'release_manifest' => manifest } }
+    let(:scope_receipt) do
+      { 'kind' => 'nest_update_scope_index', 'mode' => params['mode'], 'policy_sha256' => bound['policy_sha256'],
+        'readback_verified' => true, 'reboot_eligible' => [], 'execution_authorized' => false, 'acceptance_recorded' => false }
+    end
 
     context 'control-plane maintenance admission' do
       let(:targets) { ['control3'] }
@@ -292,6 +344,7 @@ RSpec.describe 'nest::host::update' do
     end
 
     before :each do
+      allow_task('nest::retain_update_scope').with_targets('localhost').always_return(scope_receipt)
       allow_task('nest::update_prepare_inputs').with_targets('localhost').always_return(bound)
       allow_task('nest::update_generation_binding').with_targets('localhost').always_return('reset_authorized' => false)
       bound['backup_requirements'] = targets.each_with_object({}) { |name, entries| entries[name] = [] }

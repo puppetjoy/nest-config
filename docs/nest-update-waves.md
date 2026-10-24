@@ -215,6 +215,41 @@ reset, resume, reboot, Puppet, acceptance or finalize. Reboot eligibility remain
 empty and independent acceptance remains false, even when the native CLI has an
 accepted record. No live transaction is fabricated to test the interface.
 
+## Durable scope index
+
+Successful `mode=observe` and `mode=prepare` results additionally return
+`retained_scope`. Before host commands, the supervisor validates the complete
+policy, resolved target set, transaction-only observation map and existing output
+directory. After every wave succeeds, `nest::retain_update_scope` reopens each
+exact native report in that directory. Its filename, SHA256, byte count, host,
+transaction, release, state and receipt flags must match. Missing, corrupt,
+linked, substituted, reordered or incomplete reports refuse; no host command is
+replayed to recover an index. Failed preparation still leaves its individually
+retained reports but cannot produce a successful complete preparation index.
+
+The content-addressed `nest_update_scope_index`, schema 1, binds the complete
+policy and its digest, exact transaction map, ordered report receipts and host
+count. Unknown/private receipt fields and prerequisite payloads are omitted.
+Preparation indexes require unsubmitted `prepared` reports; observation indexes
+require retained live observations, not historical exports. The task reopens all
+host reports again before and after atomic index publication and reopens the
+index itself. If the final host readback fails, no success receipt is returned,
+even if an index file was already published; preserve it for diagnosis.
+
+This is a durable scope-to-report association, not native policy provenance,
+atomic multi-host state, a lease against later file deletion, source attestation,
+backup retention, current reboot eligibility or lifecycle acceptance. Its
+`reboot_eligible` remains empty, and `execution_authorized` and
+`acceptance_recorded` remain false. Generation/capacity/backup prerequisite
+receipts remain separate and must also be retained for their intended use.
+Existing host report bytes and legacy/planning interfaces are unchanged.
+
+Copy the index AND every referenced host report across execution/notification
+host boundaries, reopen them and verify their hashes at the destination before
+handoff. Paths alone are not portable. Rebase only receipt paths when moving
+an intact bundle; never rewrite the content-addressed index and keep its old
+digest. This index does not create a controller service or dispatch a reboot.
+
 ## Explicit transactional preparation
 
 `mode=prepare` is MUTATING, unlike `mode=plan`. Use only within an independently

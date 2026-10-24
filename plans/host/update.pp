@@ -90,6 +90,16 @@ plan nest::host::update (
     } elsif $maintenance != undef {
       fail_plan('Maintenance inputs apply only to controller preparation', 'nest/maintenance-scope')
     }
+    $scope_context = {
+      'mode'         => $mode,
+      'policy'       => $policy,
+      'targets'      => $nodes.map |$node| { $node.name },
+      'observations' => $bound['inputs'].reduce({}) |$memo, $entry| {
+        $memo + { $entry[0] => { 'transaction' => $entry[1]['transaction'] } }
+      },
+      'output_dir'   => $output_dir,
+    }
+    run_task('nest::retain_update_scope', 'localhost', $scope_context + { 'action' => 'check' })
     # Check ALL supervisor destinations before the first native reset. This is
     # read-only validation, not a promise of future disk space or writeability.
     $bound['inputs'].each |$name, $input| {
@@ -260,6 +270,16 @@ plan nest::host::update (
         $receipt + { 'backup_verification' => $backup_verification, 'generation_verification' => $generation_verification }
       }
     }
+    $scope_receipt = run_task('nest::retain_update_scope', 'localhost', $scope_context + {
+      'action' => 'retain',
+      'waves'  => $waves,
+    }).results[0].value
+    unless $scope_receipt['readback_verified'] == true and $scope_receipt['kind'] == 'nest_update_scope_index' and
+      $scope_receipt['mode'] == $mode and $scope_receipt['policy_sha256'] == $bound['policy_sha256'] and
+      $scope_receipt['reboot_eligible'] == [] and $scope_receipt['execution_authorized'] == false and
+      $scope_receipt['acceptance_recorded'] == false {
+      fail_plan('Update scope index was not retained; inspect existing reports without replaying host actions', 'nest/update-scope-retention')
+    }
     return({
       'kind'                 => $result_kind,
       'schema'               => 1,
@@ -268,6 +288,7 @@ plan nest::host::update (
       'generation_preflight' => $generation_preflight,
       'capacity_preflight'   => $capacity_preflight,
       'backup_preflight'     => $backup_preflight,
+      'retained_scope'       => $scope_receipt,
       'reboot_eligible'      => [],
       'acceptance_recorded'  => false,
     })
