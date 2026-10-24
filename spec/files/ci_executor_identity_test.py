@@ -50,7 +50,10 @@ class ExecutorIdentityTest(unittest.TestCase):
         podman = self.root / "podman"
         podman.write_text(FAKE)
         podman.chmod(0o755)
-        self.env = dict(os.environ, CI_PROJECT_PATH="nest/config", CI_COMMIT_SHA=SHA, CI_PIPELINE_ID="123",
+        # Real input/route selectors must not leak into the independent
+        # bootstrap fixture, nor should CI credentials reach its fake tools.
+        self.env = {key: os.environ[key] for key in ('PATH', 'TMPDIR') if key in os.environ}
+        self.env.update(CI_PROJECT_PATH="nest/config", CI_COMMIT_SHA=SHA, CI_PIPELINE_ID="123",
                         CI_REGISTRY_IMAGE="registry.example/nest/config", CI_COMMIT_REF_SLUG="main",
                         GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1",
                         CALLS=str(self.calls), PATH=str(self.root) + os.pathsep + os.environ["PATH"])
