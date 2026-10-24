@@ -60,7 +60,7 @@ for name in ["before", "after", "rejected"]:
         recovery = result["recovery"]
         assert recovery["input_replay_allowed"] is False
         assert recovery["retry_allowed"] is False
-        expected = {"before": "owner_reconciliation_required", "after": "verified", "rejected": "engineering_repair_required"}[name]
+        expected = {"before": "engineering_repair_required", "after": "verified", "rejected": "engineering_repair_required"}[name]
         assert recovery["recovery_state"] == expected
     assert len(engine._tree()) == before
     assert engine.acquire("owner")["context"] == root["context"]

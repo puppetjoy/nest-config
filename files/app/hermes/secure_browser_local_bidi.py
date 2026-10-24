@@ -27,6 +27,7 @@ class CdpSession:
         if websocket_url is None and os.environ.get('FIREFOX_CONTROL_PROTOCOL') == 'firefox-windows-v3':
             raise RuntimeError('FIREFOX_RESIDENT_SESSION_REQUIRED: attach the bridge-owned session; session.new is disabled')
         self.next_id = 0
+        self.pending = None
         self.lock = threading.RLock()
         self.owns_session = websocket_url is None
         self.ws = websockets.sync.client.connect(
@@ -46,20 +47,41 @@ class CdpSession:
 
     def _exchange(self, method: str, params: dict | None = None, *, on_reply=None) -> dict:
         if self.ws is None:
-            raise RuntimeError("private Firefox observer is closed")
+            raise NativeNotSent("private Firefox observer is closed")
+        # One outstanding creation per observer. Drain, never resend, before
+        # accepting any subsequent command on this transport.
+        self.drain_pending()
         self.next_id += 1
+        if on_reply is not None:
+            self.pending = {"id": self.next_id, "receipt": on_reply}
         self.ws.send(json.dumps({"id": self.next_id, "method": method, "params": params or {}}))
+        return self._receive(self.next_id, on_reply)
+
+    def drain_pending(self):
+        with self.lock:
+            if self.pending is not None:
+                return self._receive(self.pending["id"], self.pending["receipt"])
+
+    def _receive(self, command_id, on_reply):
+        if self.ws is None:
+            raise RuntimeError("private Firefox pending observer is closed")
         deadline = time.monotonic() + 10
         while True:
             remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise RuntimeError("private Firefox observation timed out")
-            reply = json.loads(self.ws.recv(timeout=remaining))
-            if reply.get("id") == self.next_id:
+            try:
+                if remaining <= 0:
+                    raise TimeoutError("private Firefox observation timed out")
+                reply = json.loads(self.ws.recv(timeout=remaining))
+            except TimeoutError:
+                if on_reply is not None:
+                    raise NativeReplyPending(command_id) from None
+                raise
+            if reply.get("id") == command_id:
                 # The resident owner fsyncs creation receipts before returning
                 # to its caller. HTTP disconnects do not cancel this commit.
                 if on_reply is not None:
                     on_reply(reply)
+                    self.pending = None  # Only after durable receipt commit.
                 if reply.get("type") == "error" or "error" in reply:
                     raise NativeReplyError(reply.get("error"))
                 return reply.get("result") or {}
@@ -88,6 +110,18 @@ class CdpSession:
             finally:
                 self.ws.close()
                 self.ws = None
+
+
+class NativeNotSent(RuntimeError):
+    native_outcome = "not_started"
+
+
+class NativeReplyPending(TimeoutError):
+    native_outcome = "reply_pending"
+
+    def __init__(self, command_id):
+        self.command_id = command_id
+        super().__init__("private Firefox creation reply pending; do not resend")
 
 
 def _with_browser(callback):

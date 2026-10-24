@@ -308,6 +308,12 @@ class Windows:
                 return self.browser._bidi(method, params or {}, on_reply=on_reply)
             return self.browser._bidi(method, params or {})
         except BaseException as exc:
+            if getattr(exc, "native_outcome", None) == "reply_pending":
+                # Retain the sole observer and correlated callback for bounded
+                # reconciliation. No command is replayed and no thread is added.
+                raise ControlError("FIREFOX_NATIVE_OUTCOME_UNCERTAIN", "native creation reply pending; recover the retained observer; do not resend", "uncertain") from exc
+            if on_reply is not None and getattr(exc, "native_outcome", None) == "not_started":
+                raise ControlError("FIREFOX_CREATE_REJECTED", "creation was not sent; route to existing browser repair") from exc
             if on_reply is not None and getattr(exc, "native_code", None) in {
                     "invalid argument", "unsupported operation", "no such frame", "no such user context"}:
                 raise ControlError("FIREFOX_CREATE_REJECTED", "native creation rejected without effect; route to existing browser repair") from exc
@@ -412,6 +418,56 @@ class Windows:
                 self.state = original_state
                 raise
 
+    def authorize_creation_recovery(self, grant):
+        """Local administrator only, under a NEW exclusive controller lease.
+
+        The operator must already have authority to abandon this exact missing
+        receipt and allocate once. This is not a public bridge command, and the
+        authorization label is provenance, not an approval-shaped capability.
+        Unknown native windows remain untouched. Input keys remain fenced.
+        """
+        with self.operation():
+            if not isinstance(grant, dict) or set(grant) != {
+                    "scope", "authorization", "epoch", "creation_id", "journal_sha256", "expires_at"}:
+                raise ValueError("exact local creation recovery grant required")
+            scope = valid_scope(grant["scope"])
+            if (scope == "owner" or not isinstance(grant["authorization"], str)
+                    or not re.fullmatch(r"ar-[A-Za-z0-9_-]+", grant["authorization"])
+                    or grant["epoch"] != self.epoch or type(grant["expires_at"]) is not int
+                    or not time.time() < grant["expires_at"] <= time.time() + 600):
+                raise ValueError("invalid scoped local creation recovery grant")
+            previous = self.state.get("creation_recoveries", {}).get(scope)
+            if previous:
+                if previous["grant"] != grant:
+                    raise RuntimeError("one bounded creation recovery per scope; no replacement loop")
+                return  # Even if the new creation failed: never create twice.
+            if self.browser is not None or not self._resumable() or self.orphaned:
+                raise RuntimeError("new exclusive controller in the same native generation required")
+            raw = self.path.read_bytes()
+            if (hashlib.sha256(raw).hexdigest() != grant["journal_sha256"]
+                    or json.loads(raw) != self.state):
+                raise RuntimeError("journal changed since scoped recovery safety read")
+            record = self.state["windows"].get(scope, {})
+            if (record.get("state") != "creating" or record.get("context") or record.get("terminal")
+                    or record.get("epoch") != self.epoch or record.get("creation_id") != grant["creation_id"]):
+                raise RuntimeError("exact nonterminal creation without native receipt required")
+            if any(r.get("state") != "delivered" for r in self.state["actions"].values()):
+                raise RuntimeError("pending or uncertain input prevents creation recovery")
+            # Preserve full old provenance in the same atomic transaction as
+            # the new admission. No old native identity is adopted or closed.
+            original = self.state
+            self.state = {**original,
+                          "creation_recoveries": {**original.get("creation_recoveries", {}),
+                                                 scope: {"grant": dict(grant), "original": dict(record)}},
+                          "binding_recoveries": {**original.get("binding_recoveries", {}), scope: dict(grant)},
+                          "windows": {**original["windows"], scope: {"state": "recovery_ready", "epoch": self.epoch,
+                                                                    "abandoned_creation_id": record["creation_id"]}}}
+            try:
+                self._save()
+            except BaseException:
+                self.state = original
+                raise
+
     def acquire(self, scope):
         valid_scope(scope)
         with self.lock:
@@ -448,7 +504,8 @@ class Windows:
             else:
                 if "owner" not in self.state["windows"]:
                     self.acquire("owner")
-                if sum(r.get("state") != "closed" for r in self.state["windows"].values()) >= 12:
+                if (sum(r.get("state") not in {"closed", "retired"} for r in self.state["windows"].values()) >= 12
+                        or len({c["clientWindow"] for c in tree if c.get("clientWindow")}) >= 12):
                     raise RuntimeError("owned window budget reached; no replacement created")
                 record = {"state": "creating", "epoch": self.epoch, "creation_id": secrets.token_hex(24),
                           "prior_windows": sorted({c["clientWindow"] for c in tree if c.get("clientWindow")})}
@@ -457,16 +514,38 @@ class Windows:
                 def receipt(reply):
                     # Only a transport-correlated native response can supply
                     # ownership, never URL/title or tree differences.
+                    before = dict(record)
                     if reply.get("type") == "error" or "error" in reply:
                         code = reply.get("error")
+                        record["native_error"] = code if code in {
+                            "invalid argument", "unsupported operation", "no such frame", "no such user context", "unknown error"} else "other_native_error"
                         if code in {"invalid argument", "unsupported operation", "no such frame", "no such user context"}:
                             record.update(state="create_failed", native_error=code)
                     else:
                         context = (reply.get("result") or {}).get("context")
                         if isinstance(context, str) and context:
                             record["context"] = context
-                    self._save()
-                self._call("browsingContext.create", {"type": "window", "background": True}, on_reply=receipt)
+                    record["native_receipt_id"] = reply.get("id")
+                    try:
+                        self._save()
+                    except BaseException:
+                        record.clear()
+                        record.update(before)
+                        raise
+                try:
+                    self._call("browsingContext.create", {"type": "window", "background": True}, on_reply=receipt)
+                except ControlError as exc:
+                    cause = exc.__cause__
+                    # Privacy-safe phase evidence, never native messages.
+                    phase = getattr(cause, "native_outcome", None)
+                    record["creation_outcome"] = phase or "transport_or_native_failure"
+                    if phase == "not_started":
+                        record.update(state="create_failed", native_error="transport_not_sent")
+                    if phase == "reply_pending":
+                        record["command_id"] = getattr(cause, "command_id", None)
+                    with contextlib.suppress(OSError):
+                        self._save()  # Diagnostics do not replace the original failure.
+                    raise
                 return self._finish_creation(record)
             record = {"state": "open", "epoch": self.epoch, "context": context["context"],
                       "window": context["clientWindow"], "viewer": secrets.token_urlsafe(32), "owner": scope == "owner"}
@@ -525,8 +604,21 @@ class Windows:
             return {**result, "recovery_state": "engineering_repair_required", "next_action": "route_to_existing_browser_repair",
                     "reason": "native_create_rejected_without_effect", "outcome": "not_started", "automatic_recovery_exhausted": True}
         if state == "creating":
+            if (reconcile and not record.get("context") and self.browser is not None
+                    and getattr(self.browser, "pending", None) is not None):
+                try:
+                    self.browser.drain_pending()
+                except TimeoutError:
+                    # One extra bounded receipt wait, not an indefinite loop.
+                    self.browser.close()
+                    self.broken = True
+                    return {**result, "recovery_state": "engineering_repair_required", "next_action": "route_to_existing_browser_repair",
+                            "reason": "correlated_reply_wait_exhausted", "outcome": "uncertain", "automatic_recovery_exhausted": True}
+                except Exception:
+                    return {**result, "recovery_state": "engineering_repair_required", "next_action": "route_to_existing_browser_repair",
+                            "reason": "creation_receipt_unavailable", "outcome": "uncertain", "automatic_recovery_exhausted": True}
             if not record.get("context"):
-                return {**result, "recovery_state": "owner_reconciliation_required", "next_action": "preserve_windows_and_request_scoped_owner_decision",
+                return {**result, "recovery_state": "engineering_repair_required", "next_action": "route_to_existing_browser_repair",
                         "reason": "creation_reply_not_retained", "outcome": "uncertain", "automatic_recovery_exhausted": True}
             if not reconcile:
                 return {**result, "recovery_state": "reconcile_available", "next_action": "recover"}
@@ -639,11 +731,13 @@ class Windows:
             if command in {"status", "diagnostics"} or (command == "tabs" and payload.get("action", "status") in {"status", "recover"}):
                 # Observation must not create a window (or orphan a scope).
                 recovery = self.recovery(scope, reconcile=command == "tabs" and payload.get("action") == "recover")
-                if recovery.get("reason") != "native_generation_lost":
+                available = recovery.get("reason") not in {
+                    "native_generation_lost", "creation_reply_not_retained", "creation_receipt_unavailable", "correlated_reply_wait_exhausted"}
+                if available:
                     self._tree()
                 return {"status": "ok", "scope": scope, "protocol": "firefox-windows-v3",
-                        "launch_protocol": "firefox-windows-v3", "bidi_available": recovery.get("reason") != "native_generation_lost",
-                        "native_element_available": recovery.get("reason") != "native_generation_lost",
+                        "launch_protocol": "firefox-windows-v3", "bidi_available": available,
+                        "native_element_available": available,
                         "browser_generation": self.epoch,
                         "window_source_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                         "scope_state": self.state["windows"].get(scope, {}).get("state", "unallocated"),

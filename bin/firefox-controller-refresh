@@ -106,6 +106,19 @@ def resident(data):
         check._save = lambda: None
         check.authorize_binding(grant)
         args += ['--recover-binding', json.dumps(grant)]
+    if data.get('creation_scope'):
+        # This explicit local administrator operation is separate from public
+        # lifecycle recovery. Never infer its authority from status or prose.
+        scope = module.valid_scope(data['creation_scope'])
+        record = state['windows'].get(scope, {})
+        grant = {'scope': scope, 'authorization': data['creation_authorization'],
+                 'epoch': controller['epoch'], 'creation_id': record.get('creation_id'),
+                 'journal_sha256': hashlib.sha256((state_dir / 'windows.json').read_bytes()).hexdigest(),
+                 'expires_at': int(time.time()) + 300}
+        check = module.Windows(state_dir / 'windows.json')
+        check._save = lambda: None
+        check.authorize_creation_recovery(grant)
+        args += ['--recover-creation', json.dumps(grant)]
     os.kill(pid, signal.SIGTERM)  # Observer/server only; driver and Firefox stay alive.
     deadline = time.monotonic() + 5
     lease = (state_dir / 'windows-controller.lock').open('a+')
@@ -137,10 +150,11 @@ def resident(data):
             if result.get('browser_generation') != controller['epoch'] or result.get('window_source_sha256') != hashes['firefox_windows.py']:
                 raise ValueError('controller readback differs from managed overlay')
             after = json.loads((state_dir / 'windows.json').read_bytes())
-            if after['controller'] != controller or any(after['windows'].get(k) != v for k, v in state['windows'].items() if k != data.get('scope')):
+            if after['controller'] != controller or any(after['windows'].get(k) != v for k, v in state['windows'].items() if k not in {data.get('scope'), data.get('creation_scope')}):
                 raise ValueError('unrelated binding changed during refresh')
             print(json.dumps({'status': 'ok', 'browser_restarted': False, 'generation': controller['epoch'],
-                              'overlay': revision, 'source_hashes': hashes, 'recovery_scope': data.get('scope')}))
+                              'overlay': revision, 'source_hashes': hashes,
+                              'recovery_scope': data.get('scope') or data.get('creation_scope')}))
             return
         except (OSError, urllib.error.URLError):
             if time.monotonic() >= deadline:
@@ -159,7 +173,13 @@ def main():
     parser.add_argument('--request-id')
     parser.add_argument('--approval-id')
     parser.add_argument('--proposal-hash')
+    parser.add_argument('--creation-recovery-scope', help='explicit administrator operation: preserve unknown creation, admit one new binding')
+    parser.add_argument('--creation-recovery-authorization', help='existing authorization request identifier, provenance only')
     args = parser.parse_args()
+    if bool(args.creation_recovery_scope) != bool(args.creation_recovery_authorization):
+        raise ValueError('exact creation scope and existing authorization provenance required')
+    if args.creation_recovery_scope and any((args.request_id, args.approval_id, args.proposal_hash)):
+        raise ValueError('do not combine distinct recovery operations')
     scope = None
     if any((args.request_id, args.approval_id, args.proposal_hash)):
         if not all((args.request_id, args.approval_id, args.proposal_hash)):
@@ -167,7 +187,8 @@ def main():
         scope = approved_request(args.request_id, args.approval_id, args.proposal_hash)
     data = {'sources': {name: (args.source_dir / name).read_text() for name in ASSETS},
             'expected_generation': args.expected_generation, 'expected_source': args.expected_source,
-            'scope': scope, 'approval_id': args.approval_id}
+            'scope': scope, 'approval_id': args.approval_id,
+            'creation_scope': args.creation_recovery_scope, 'creation_authorization': args.creation_recovery_authorization}
     # Fixed deployment and container, never accept arbitrary host/process targets.
     script = Path(__file__).read_text()
     code = 'import sys; sys.argv=["controller-refresh","--resident"]; exec(compile(' + repr(script) + ',"controller-refresh","exec"))'
