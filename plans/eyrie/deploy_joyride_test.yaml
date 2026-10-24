@@ -11,5 +11,7 @@ steps:
       app: joyride
       namespace: test
       init: false
+      # KubeCM uses Helm --wait --timeout 1h, longer than TEST's 1800s progress
+      # deadline. Keep its shared transport/wait policy and fail-closed readiness.
       wait: true
       render_to: $render_to

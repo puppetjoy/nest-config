@@ -115,7 +115,7 @@ class ControllerTests(unittest.TestCase):
             controller.run(client, clock=lambda: 0)
         client.deployment["status"].update(replicas=2, unavailableReplicas=1)
         self.assertFalse(controller.complete(client.deployment, client.journal))
-        times = iter([10, 10, 601])
+        times = iter([10, 10, 1801])
         with self.assertRaisesRegex(controller.DeliveryError, "rollout_deadline"):
             controller.run(client, clock=lambda: next(times), pause=lambda _: None)
         self.assertEqual(client.state, "failed")
@@ -245,14 +245,37 @@ class ControllerTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             controller.run(client, clock=lambda: 0)
         with self.assertRaisesRegex(controller.DeliveryError, "rollout_deadline"):
-            controller.run(client, clock=lambda: 601)
+            controller.run(client, clock=lambda: 1801)
         self.assertEqual(client.state, "failed")
         self.assertEqual(set(controller.images(client.deployment).values()), {NEW})
+
+    def test_full_admission_can_finish_after_ten_minutes_with_original_deadline(self):
+        client = FixtureClient()
+        client.crash_after_patch = True
+        with self.assertRaises(RuntimeError):
+            controller.run(client, clock=lambda: 0)
+        assert client.journal is not None
+        self.assertEqual(client.journal["deadline"], 1800)
+        self.assertEqual(controller.run(client, clock=lambda: 700), "succeeded")
+        self.assertEqual(client.patches, 1)
+
+    def test_resuming_does_not_extend_original_deadline(self):
+        client = FixtureClient()
+        client.crash_after_patch = True
+        with self.assertRaises(RuntimeError):
+            controller.run(client, clock=lambda: 0)
+        # An already journaled operation retains its exact deadline.
+        assert client.journal is not None
+        client.journal["deadline"] = 600
+        with self.assertRaisesRegex(controller.DeliveryError, "rollout_deadline"):
+            controller.run(client, clock=lambda: 601)
+        self.assertEqual(client.state, "failed")
+        self.assertEqual(client.patches, 1)
 
     def test_readiness_is_not_controller_success(self):
         client = FixtureClient()
         client.readiness = False
-        times = iter([0, 0, 0, 601])
+        times = iter([0, 0, 0, 1801])
         with self.assertRaisesRegex(controller.DeliveryError, "rollout_deadline"):
             controller.run(client, clock=lambda: next(times), pause=lambda _: None)
         self.assertEqual(client.state, "failed")

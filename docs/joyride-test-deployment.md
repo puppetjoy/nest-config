@@ -1,6 +1,46 @@
 # Joyride private TEST deployment
 
-## Trusted TEST member correction
+## Basemap v3 managed installation
+
+The current TEST baseline follows application MR 40, merged-main revision
+`6e7ebd228020f56e78fd1c7a9343300967eb9e0f`. Pipeline 11957 passed check,
+build and smoke; build job 50154 supplies the authoritative `image.json`:
+`sha256:bf6bf1128338399fdcb1d7483916d738a9e356b909d660f3599767a157883f6a`.
+It retains the trusted TEST member correction below. All application listeners,
+workers and initializers use this pin; the fixed controller interpreter and
+Stripe listener retain their independent pins. Production is unchanged.
+
+Installation registers immutable v3 without promotion. Require archive SHA256
+`7c65d1bffdca7f429369b9f97b33ae893be7b4ba7bc0b1f9857acbb5c354c91b`
+and manifest SHA256
+`9a5a4a456a2929378246c5428980c966cecbac5413379dacf9a9c33e40ad5d28`.
+Reuse the existing checksum-bound original sources. Retain v2, the older
+`dc-md-va-20261018` release, and refreshed frontend/content ActiveRelease pointers.
+V2 must remain active after this installation; promotion and external native-map
+acceptance belong to the original basemap request.
+
+Full v3 admission measured 617.410 seconds with one CPU and the existing 768 MiB
+initializer limit (cgroup peak 567,357,440 bytes). TEST Deployment progress and
+new delivery-operation deadlines are 1800 seconds, including download, admission,
+startup and readiness. The TEST controller Job allows 1860 seconds for terminal
+callback overhead; existing journaled deadlines are not extended or replayed.
+The documented Bolt wrapper sets `wait: true`; current KubeCM emits Helm
+`--wait --timeout 1h`, not a conflicting 600-second wait. That existing shared
+upper bound is unchanged: the workload's progress deadline and controller's
+installation observation remain bounded to 1800 seconds. Transport requests
+remain short (15 seconds in the controller). No CPU, memory, PVC, replica or surge
+budget is widened. Old-pod readiness cannot satisfy replacement completion.
+
+From the isolated Nest project root, install the declared modules with
+`bolt module install --no-resolve` if needed. The wrapper mounts that root as
+`/modules/nest`, uses its `inventory.yaml` and `.modules` modulepath, and forwards
+the current `KUBECONFIG`. Verify the intended Eyrie context, installed application
+images, idle deployment queue/journal, immutable map hashes and release pointers
+immediately before running `bolt plan run nest::eyrie::deploy_joyride_test`.
+Read back exact replacement images, completed generation/readiness, file hashes,
+v3 inactive/v2 active registry state and unchanged refreshed release pointers.
+
+### Retained trusted TEST member correction
 
 Application MR 41 is merged at `c37b2a3e32c9f00829fef9146483b0f411b16721`.
 Main pipeline 11893, build job 49671, supplies the authoritative `image.json`:
@@ -35,9 +75,10 @@ The basemap initializer requests 250 millicores and 192 MiB, with a 768 MiB
 memory limit and no CPU limit. It streams the fixed archive and retained original
 sources directly to the existing PVC, verifies hashes before atomic rename,
 then performs full native z16 admission before registration. It does not rebuild
-tiles or stage these downloads in the shared 1 GiB temporary volume. The existing
-600-second deployment progress budget remains; full admission measured about
-9.3 seconds independently, excluding downloads. Admission failure must retain
+tiles or stage these downloads in the shared 1 GiB temporary volume.
+The historical v2 full admission measured about
+9.3 seconds independently, excluding downloads; v3 uses the bounded budget above.
+Admission failure must retain
 the prior serving pod, not weaken validation or delete existing map data.
 
 Installing v2 does not promote it over an active map. Preserve the registered

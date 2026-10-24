@@ -242,7 +242,7 @@ def run(client, clock=time.time, pause=time.sleep):
         operation = {
             "id": item["id"], "image": item["image"], "environment": "test",
             "action": item["action"], "uid": deployment["metadata"]["uid"],
-            "original": images(deployment), "deadline": clock() + 600,
+            "original": images(deployment), "deadline": clock() + 1800,
             "footprint": footprint(deployment),
             "prior_annotation": deployment["spec"]["template"].get("metadata", {}).get("annotations", {}).get(ANNOTATION),
         }
