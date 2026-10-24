@@ -5,9 +5,9 @@ service_name: '%{nest::kubernetes::service}'
 fqdn: '%{nest::kubernetes::service}.eyrie'
 runtime_environment: test
 ingress_class: contour-test
-# Trusted TEST member correction; app MR 41, merged-main pipeline 11893, build 49671.
-# Authoritative image.json head c37b2a3e32c9f00829fef9146483b0f411b16721; retains newer main work.
-joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:b6c833d4f0356b5763488078677d1b76e0b00d8b27774127bbec46ab48445924
+# Admitted basemap v3; app MR 40, merged-main pipeline 11957, build 50154.
+# Authoritative image.json head 6e7ebd228020f56e78fd1c7a9343300967eb9e0f; retains trusted TEST member correction.
+joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:bf6bf1128338399fdcb1d7483916d738a9e356b909d660f3599767a157883f6a
 affinity: {}
 tolerations: []
 resources:
@@ -201,7 +201,8 @@ resources:
       jobTemplate:
         spec:
           backoffLimit: 0
-          activeDeadlineSeconds: 660
+          # Full v3 admission plus bounded rollout; allow terminal callback overhead.
+          activeDeadlineSeconds: 1860
           template:
             metadata:
               labels:
@@ -423,7 +424,7 @@ resources:
         matchLabels:
           app: '%{nest::kubernetes::service}'
       minReadySeconds: 10
-      progressDeadlineSeconds: 600
+      progressDeadlineSeconds: 1800
       template:
         metadata:
           labels:
