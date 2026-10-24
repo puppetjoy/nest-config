@@ -124,9 +124,11 @@ real files through the task artifact surface before worker cleanup.
 
 ### Host-local shared transaction state
 
-`nest::update_state` is an explicit host opt-in, initially selected only for
-Owl. The default is false, including excluded consoles. The `nest_update_state`
-tag delivers the helper and enabled `nest-update-state.service`. Offline host
+`nest::update_state` is an explicit host opt-in, selected for Owl and Builder1
+as the initial amd64 and arm64 tooling hosts. The default is false, including
+excluded consoles. This enables storage provisioning, not a reset or reboot.
+The `nest_update_state` tag delivers the helper and enabled
+`nest-update-state.service`. Offline host
 builds install/enable the unit but never provision storage. On a real host the
 oneshot runs after `zfs-mount.service` and the selected root's `/var/lib` mount.
 It creates only `PARENT/nest-updates`, where the unique current ZFS root is

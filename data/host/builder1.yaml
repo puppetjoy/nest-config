@@ -2,6 +2,9 @@
 # This host's staged identity uses the new CA; legacy hosts keep their default.
 puppet::agent_server_hostname: 'puppet.eyrie'
 
+# Host-local receipts remain outside ROOT across the ordinary A/B lifecycle.
+nest::update_state: true
+
 nest::service::gitlab_runner::instances:
   ghc:
     bolt: true
