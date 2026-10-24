@@ -7,6 +7,7 @@
     "hostname": { "type": "String[1]" },
     "release": { "type": "String[1]" },
     "inputs": { "type": "Hash" },
-    "output_dir": { "type": "Stdlib::Absolutepath" }
+    "output_dir": { "type": "Stdlib::Absolutepath" },
+    "binding": { "type": "Optional[Hash]", "description": "Optional exact caller association: transaction, wave policy_sha256 and preflight/initiation stage; not native provenance" }
   }
 }

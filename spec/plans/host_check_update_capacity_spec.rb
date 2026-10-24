@@ -39,6 +39,30 @@ RSpec.describe 'nest::host::check_update_capacity' do
     expect(run_plan('nest::host::check_update_capacity', params).ok?).to be(false)
   end
 
+  ['preflight', 'initiation'].each do |stage|
+    it "passes the exact optional preparation association at #{stage}" do
+      binding = { 'transaction' => 'fixture', 'policy_sha256' => 'e' * 64, 'stage' => stage }
+      allow_task('nest::retain_update_report')
+      expect_command(command).with_targets('fixture-host').always_return('stdout' => 'fixture plan')
+      expected = { 'report' => 'fixture plan', 'hostname' => 'fixture-host', 'release' => release,
+                   'inputs' => inputs, 'output_dir' => '/fixture/reports', 'binding' => binding }
+      expect_task('nest::retain_update_preflight').with_params(expected).always_return('preparation' => binding)
+      expect(run_plan('nest::host::check_update_capacity', params.merge('binding' => binding)).value).to eq('preparation' => binding)
+    end
+  end
+
+  [{}, { 'transaction' => 'other', 'policy_sha256' => 'e' * 64, 'stage' => 'preflight' },
+   { 'transaction' => 'fixture', 'policy_sha256' => 'invalid', 'stage' => 'preflight' },
+   { 'transaction' => 'fixture', 'policy_sha256' => 'e' * 64, 'stage' => 'accepted' },
+   { 'transaction' => 'fixture', 'policy_sha256' => 'e' * 64, 'stage' => 'preflight', 'extra' => true }].each do |binding|
+    it "refuses malformed association before host contact: #{binding.keys.join(', ')}" do
+      allow_any_command.not_be_called
+      expect_task('nest::retain_update_report').not_be_called
+      expect_task('nest::retain_update_preflight').not_be_called
+      expect(run_plan('nest::host::check_update_capacity', params.merge('binding' => binding)).ok?).to be(false)
+    end
+  end
+
   it 'does not retain or replay a native planner refusal' do
     allow_task('nest::retain_update_report')
     expect_command(command).return do |targets:, command:, **_options|

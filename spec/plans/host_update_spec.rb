@@ -304,7 +304,9 @@ RSpec.describe 'nest::host::update' do
           allow_plan('nest::host::stage_generation').with_params(generation_params(name, stage)).always_return('retained' => generation_receipt(name, stage))
         end
       end
-      allow_plan('nest::host::check_update_capacity').always_return('capacity_admitted' => true, 'readback_verified' => true)
+      inputs.each_key do |name|
+        allow_plan('nest::host::check_update_capacity').with_params(capacity_params(name)).always_return(capacity_receipt(name))
+      end
       expect_plan('nest::host::reboot').not_be_called
       expect_plan('nest::puppet::run').not_be_called
     end
@@ -323,14 +325,21 @@ RSpec.describe 'nest::host::update' do
         'hostname' => name, 'release' => bound['release'], 'reset_authorized' => false, 'preparation' => generation_binding(name, stage) }
     end
 
+    def capacity_params(name)
+      { 'target' => name, 'release' => bound['release'], 'inputs' => inputs[name], 'output_dir' => '/fixture', 'binding' => generation_binding(name, 'preflight') }
+    end
+
+    def capacity_receipt(name)
+      { 'capacity_admitted' => true, 'readback_verified' => true, 'reset_authorized' => false, 'preparation' => generation_binding(name, 'preflight') }
+    end
+
     context 'sealed local generation prerequisites' do
       it 'preflights every selected native capacity before the first reset and retains the receipts' do
         checked = []
-        inputs.each do |name, input|
-          capacity = { 'target' => name, 'release' => bound['release'], 'inputs' => input, 'output_dir' => '/fixture' }
-          expect_plan('nest::host::check_update_capacity').with_params(capacity).return do |**_options|
+        inputs.each_key do |name|
+          expect_plan('nest::host::check_update_capacity').with_params(capacity_params(name)).return do |**_options|
             checked << name
-            Bolt::PlanResult.new({ 'capacity_admitted' => true, 'readback_verified' => true }, 'success')
+            Bolt::PlanResult.new(capacity_receipt(name), 'success')
           end
         end
         commands.each_value do |argv|
@@ -345,8 +354,7 @@ RSpec.describe 'nest::host::update' do
       end
 
       it 'does not start even the canary when a later selected host has unknown capacity' do
-        capacity = { 'target' => 'update-failed', 'release' => bound['release'], 'inputs' => inputs['update-failed'], 'output_dir' => '/fixture' }
-        expect_plan('nest::host::check_update_capacity').with_params(capacity).error_with('kind' => 'fixture/capacity', 'msg' => 'Unknown finite limit')
+        expect_plan('nest::host::check_update_capacity').with_params(capacity_params('update-failed')).error_with('kind' => 'fixture/capacity', 'msg' => 'Unknown finite limit')
         allow_any_command.not_be_called
         expect_plan('nest::host::check_update_backup').not_be_called
         expect(run_plan('nest::host::update', params).ok?).to be(false)
@@ -362,6 +370,23 @@ RSpec.describe 'nest::host::update' do
         allow_any_command.not_be_called
         expect_task('nest::update_prepare_inputs').not_be_called
         expect(run_plan('nest::host::update', params.reject { |key, _value| key == 'release_manifest' }).ok?).to be(false)
+      end
+
+      ['missing', 'transaction', 'policy_sha256', 'stage', 'reset_authorized'].each do |changed|
+        it "refuses unrelated retained capacity context: #{changed}" do
+          receipt = capacity_receipt('update-failed')
+          if changed == 'missing'
+            receipt.delete('preparation')
+          elsif changed == 'reset_authorized'
+            receipt['reset_authorized'] = true
+          else
+            receipt['preparation'][changed] = { 'transaction' => 'other', 'policy_sha256' => 'e' * 64, 'stage' => 'initiation' }[changed]
+          end
+          expect_plan('nest::host::check_update_capacity').with_params(capacity_params('update-failed')).always_return(receipt)
+          allow_any_command.not_be_called
+          expect_plan('nest::host::check_update_backup').not_be_called
+          expect(run_plan('nest::host::update', params).ok?).to be(false)
+        end
       end
 
       it 'binds every generation and exact wave scope before contacting any host' do
