@@ -174,6 +174,128 @@ class ScopeRetentionTest(unittest.TestCase):
             self.assertEqual(result.returncode, 1)
             self.assertNotIn('private sentinel', result.stdout + result.stderr)
 
+    def read_arguments(self, receipt):
+        arguments = dict(self.arguments, action='read', receipt=receipt)
+        arguments.pop('waves')
+        return arguments
+
+    def read_task(self, receipt, **changes):
+        arguments = dict(self.read_arguments(receipt), **changes)
+        result = subprocess.run([sys.executable, '-B', str(TASK)], input=json.dumps(arguments),
+                                capture_output=True, text=True, timeout=10)
+        self.assertNotIn('private sentinel', result.stdout + result.stderr)
+        return result.returncode, json.loads(result.stdout)
+
+    def test_read_reopens_original_index_and_hosts_without_any_publication(self):
+        code, receipt = self.run_task()
+        self.assertEqual(code, 0)
+        before = {path.name: (path.read_bytes(), path.stat().st_ino, path.stat().st_mtime_ns)
+                  for path in self.directory.iterdir()}
+        with mock.patch.object(scope, 'publish_document', side_effect=AssertionError('No publication')):
+            report = scope.reopen_scope(self.read_arguments(receipt), scope.context(self.arguments))
+        self.assertTrue(report['scope_reopened'] and report['read_only'] and report['historical_only'])
+        self.assertFalse(report['host_action_performed'] or report['execution_authorized'] or report['acceptance_recorded'])
+        self.assertEqual(report['reboot_eligible'], [])
+        self.assertEqual(report['waves'], self.arguments['waves'])
+        self.assertEqual(report['observations'], self.observations)
+        self.assertEqual(self.read_task(receipt), (0, report))
+        self.assertEqual(before, {path.name: (path.read_bytes(), path.stat().st_ino, path.stat().st_mtime_ns)
+                                  for path in self.directory.iterdir()})
+
+    def test_read_observation_index_does_not_require_current_prepared_state(self):
+        for data in self.reports:
+            data['state'], data['success'] = 'stopped', False
+            data['observation'] = dict(boot_id=data['host']['boot_id'], boot_changed=False,
+                                       current=data['host']['current'], next_boot=data['host']['target'],
+                                       expected_target_booted=False, accepted=False)
+        self.refresh()
+        self.arguments['mode'] = 'observe'
+        code, receipt = self.run_task()
+        self.assertEqual(code, 0)
+        code, report = self.read_task(receipt)
+        self.assertEqual(code, 0, report)
+        self.assertTrue(report['historical_only'])
+        self.assertEqual(report['waves'][0][0]['state'], 'stopped')
+
+    def test_read_refuses_replacement_waves_wrong_scope_and_receipt(self):
+        _, receipt = self.run_task()
+        for changes in ({'waves': self.arguments['waves']}, {'waves': None}, {'mode': 'observe'},
+                        {'targets': self.hosts[:1]}, {'observations': {}},
+                        {'policy': dict(self.policy, config_source='c' * 40)}):
+            with self.subTest(changes=changes):
+                self.assertEqual(self.read_task(receipt, **changes)[0], 1)
+        for key, value in {'path': str(self.directory / 'other.json'), 'sha256': 'f' * 64, 'bytes': True,
+                           'host_count': True, 'readback_verified': False, 'kind': 'other',
+                           'mode': 'observe', 'policy_sha256': 'f' * 64, 'execution_authorized': True,
+                           'acceptance_recorded': True, 'reboot_eligible': self.hosts, 'private': 'private sentinel'}.items():
+            with self.subTest(key=key):
+                self.assertEqual(self.read_task(dict(receipt, **{key: value}))[0], 1)
+
+    def test_read_refuses_missing_corrupt_linked_special_or_oversized_index(self):
+        _, receipt = self.run_task()
+        path = Path(receipt['path'])
+        raw = path.read_bytes()
+        path.unlink()
+        self.assertEqual(self.read_task(receipt)[0], 1)
+        for content in (b'corrupt', b'x' * (scope.LIMIT + 1)):
+            path.write_bytes(content)
+            self.assertEqual(self.read_task(receipt)[0], 1)
+        path.unlink()
+        other = self.directory / 'other'
+        other.write_bytes(raw)
+        path.symlink_to(other)
+        self.assertEqual(self.read_task(receipt)[0], 1)
+        path.unlink()
+        os.link(other, path)
+        self.assertEqual(self.read_task(receipt)[0], 1)
+        path.unlink()
+        os.mkfifo(path)
+        self.assertEqual(self.read_task(receipt)[0], 1)
+
+    def test_read_refuses_missing_or_changed_referenced_host_without_republishing(self):
+        _, receipt = self.run_task()
+        path = Path(self.arguments['waves'][1][0]['path'])
+        raw = path.read_bytes()
+        path.unlink()
+        self.assertEqual(self.read_task(receipt)[0], 1)
+        path.write_bytes(b'corrupt')
+        self.assertEqual(self.read_task(receipt)[0], 1)
+        path.write_bytes(raw)
+        self.assertEqual(self.read_task(receipt)[0], 0)
+        self.assertEqual(len(list(self.directory.glob('scope-*.json'))), 1)
+
+    def test_read_rejects_self_hashed_but_noncanonical_or_unbound_index(self):
+        _, receipt = self.run_task()
+        document = json.loads(Path(receipt['path']).read_bytes())
+        variants = [dict(document, schema=True), dict(document, host_count=True),
+                    dict(document, execution_authorized=True), dict(document, private='private sentinel'),
+                    dict(document, waves=document['waves'][::-1]), dict(document, observations={}),
+                    dict(document, policy=dict(self.policy, config_source='c' * 40))]
+        for changed in variants:
+            raw = (json.dumps(changed, sort_keys=True, indent=2) + '\n').encode()
+            digest = hashlib.sha256(raw).hexdigest()
+            path = self.directory / ('scope-prepare-' + document['policy_sha256'] + '-' + digest + '.json')
+            path.write_bytes(raw)
+            with self.subTest(changed=changed):
+                self.assertEqual(self.read_task(dict(receipt, path=str(path), sha256=digest, bytes=len(raw)))[0], 1)
+
+    def test_read_refuses_index_or_host_changed_during_recovery(self):
+        _, receipt = self.run_task()
+        arguments = self.read_arguments(receipt)
+        original = scope.scope_document
+        for path in (Path(receipt['path']), Path(self.arguments['waves'][1][0]['path'])):
+            raw = path.read_bytes()
+
+            def disappear(*args):
+                document = original(*args)
+                path.unlink()
+                return document
+
+            with self.subTest(path=path.name), mock.patch.object(scope, 'scope_document', side_effect=disappear):
+                with self.assertRaises(OSError):
+                    scope.reopen_scope(arguments, scope.context(arguments))
+            path.write_bytes(raw)
+
 
 if __name__ == '__main__':
     unittest.main()
