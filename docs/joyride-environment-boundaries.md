@@ -27,6 +27,17 @@ Luna's token-free capability is specific to the isolated Tailscale-authenticated
 TEST path. It is not an alternative production authentication mechanism. Existing
 member sessions, ordinary ops tokens and CI delivery credentials remain intact.
 
+The trusted TEST member allowance uses only the exact GET member/audit and POST
+waiver/reset, waiver/record, subscription/cancel, membership/set and sessions/revoke
+routes on port 8002. Only audit accepts its single-valued cursor query. The private
+proxy strips Authorization and identity claims and has no port 8001 permission.
+The retired/disconnected stored-token Muse connector and scope list are not
+active registration metadata. Legacy bearer callers on 8001 remain separate.
+Audit identifies `trusted-test:tailscale-backchannel`, not an asserted person;
+IP or private network location alone never establishes that principal. Installed
+pre-SNAT Tailscale guards and all additive pod policies are required. See
+`joyride-luna-private-access.md` for exact pairs, encoding and admission bounds.
+
 ## Dormant production source preparation
 
 `data/kubernetes/app/joyride/joyride.yaml` prepares a distinct `joyride` service

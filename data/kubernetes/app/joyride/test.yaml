@@ -5,9 +5,9 @@ service_name: '%{nest::kubernetes::service}'
 fqdn: '%{nest::kubernetes::service}.eyrie'
 runtime_environment: test
 ingress_class: contour-test
-# Verified basemap v2 packaging repair; app MR 38, merged-main pipeline 11723.
-# Source b45e889639adec5c22087ff84550350caddca687; merge c48254adc6d3ad71ba569d8d436a38aefb12f36f.
-joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:5679ab0006f4b8ca7dd93ac069c23f1f08ef0728851c68cff06f9170cb83124f
+# Trusted TEST member correction; app MR 41, merged-main pipeline 11893, build 49671.
+# Authoritative image.json head c37b2a3e32c9f00829fef9146483b0f411b16721; retains newer main work.
+joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:b6c833d4f0356b5763488078677d1b76e0b00d8b27774127bbec46ab48445924
 affinity: {}
 tolerations: []
 resources:
@@ -993,8 +993,6 @@ resources:
               app: joyride-test-access
         ports:
         - protocol: TCP
-          port: 8001
-        - protocol: TCP
           port: 8003
         - protocol: TCP
           port: 8002
@@ -1139,8 +1137,6 @@ resources:
             matchLabels:
               app: '%{nest::kubernetes::service}'
         ports:
-        - protocol: TCP
-          port: 8001
         - protocol: TCP
           port: 8003
         - protocol: TCP

@@ -41,7 +41,7 @@ try:
     with socket.create_connection((target,8443),timeout=5) as raw:
         with context.wrap_socket(raw,server_hostname=sni) as sock:
             sock.sendall((method+' '+path+' HTTP/1.1\\r\\nHost: '+host+'\\r\\nConnection: close\\r\\n'+extra+'\\r\\n').encode())
-            response = http.client.HTTPResponse(sock)
+            response = http.client.HTTPResponse(sock, method=method)
             response.begin()
             data = response.read()
             status = response.status
@@ -165,19 +165,55 @@ class PrivateAccess(unittest.TestCase):
             limit = 64 * 1024 * 1024 if kind == "content" else 32 * 1024 * 1024
             self.assertEqual(self.request(path=path, method="POST", extra=f"Content-Length: {limit + 1}\r\n")[0], 413)
 
-    def test_member_routes_preserve_bearer_and_idempotency_not_identity(self):
-        for method, suffix in (("GET", ""), ("GET", "/audit?before=fixture"), ("POST", "/waiver/reset")):
-            status, data = self.request(path="/ops/members/synthetic@example.invalid" + suffix, method=method, extra=(
+    def test_member_routes_are_token_free_and_preserve_only_content_and_idempotency(self):
+        pairs = [("GET", ""), ("GET", "/audit")]
+        pairs += [("POST", "/" + op) for op in (
+            "waiver/reset", "waiver/record", "subscription/cancel", "membership/set", "sessions/revoke")]
+        for method, suffix in pairs:
+            path = "/ops/members/synthetic%2Bfixture%40example.invalid" + suffix
+            self.assertEqual(self.request(path=path, method=method)[0], 200)
+            status, data = self.request(path=path, method=method, extra=(
                 "Authorization: Bearer synthetic-fixture\r\nIdempotency-Key: fixture-member-1\r\n"
                 "Content-Type: application/json\r\nX-Joyride-Trusted-Test: forged\r\n"
-                "Tailscale-User-Login: forged\r\nForwarded: forged\r\n"))
+                "Tailscale-User-Login: forged\r\nForwarded: forged\r\n"
+                "X-Joyride-Identity: forged\r\nTrusted-Test-Listener: forged\r\nCookie: forged\r\n"))
             self.assertEqual(status, 200)
             headers = json.loads(data)["headers"]
-            self.assertEqual(headers["Authorization"], "Bearer synthetic-fixture")
+            self.assertNotIn("Authorization", headers)
+            self.assertEqual(json.loads(data)["path"], path)
             self.assertEqual(headers["Idempotency-Key"], "fixture-member-1")
             self.assertEqual(headers["Content-Type"], "application/json")
             self.assertNotIn(b"forged", data)
-        self.assertEqual(self.request(path="/ops/members/x", method="POST", extra="Content-Length: 8193\r\n")[0], 413)
+            wrong = "POST" if method == "GET" else "GET"
+            self.assertEqual(self.request(path=path, method=wrong)[0], 405)
+        self.assertEqual(self.request(path="/ops/members/x/waiver/reset", method="POST", extra="Content-Length: 8193\r\n")[0], 413)
+
+    def test_member_audit_cursor_contract(self):
+        base = "/ops/members/synthetic%40example.invalid/audit"
+        cursor = "bfa1494e-0443-4c8a-9aab-1074b615f2a3"
+        for query in ("", "?before=" + cursor, "?history_before=42",
+                      "?before=" + cursor + "&history_before=42",
+                      "?history_before=42&before=" + cursor):
+            status, data = self.request(path=base + query)
+            self.assertEqual(status, 200)
+            self.assertEqual(json.loads(data)["path"], base + query)
+        for query in ("?", "?before=1&before=2", "?history_before=1&history_before=2",
+                      "?unknown=1", "?before=1&unknown=2", "?%62efore=1", "?before=%2531"):
+            self.assertEqual(self.request(path=base + query)[0], 404)
+
+    def test_member_normalization_and_unknown_routes_are_refused(self):
+        for path in (
+            "/ops/members/x/unknown", "/ops/members/x/waiver/reset/", "/ops/members/x?",
+            "/ops/members/x?before=1", "/ops/members/x/waiver/reset?before=1",
+            "/ops/%6dembers/x", "//ops/members/x", "/ops//members/x",
+            "/other/../ops/members/x", "/ops/members/x/../x", "/ops/members/%2e%2e/x",
+            "/ops/members/x%2fy", "/ops/members/x%5cy", "/ops/members/x%252fy",
+            "/ops/members/x%2540example.invalid", "/ops/members/x%00", "/ops/members/x%0d%0a",
+        ):
+            with self.subTest(path=path):
+                self.assertIn(self.request(path=path)[0], (400, 404))
+        for method in ("HEAD", "PUT", "DELETE", "OPTIONS", "get"):
+            self.assertIn(self.request(path="/ops/members/x", method=method)[0], (400, 405))
 
     def test_isolated_status_is_token_free_and_strips_caller_identity(self):
         self.assertEqual(self.request(path="/ops/status")[0], 200)
