@@ -108,6 +108,48 @@ class RetainPreflightTest(unittest.TestCase):
             self.assertEqual(receipts[0], receipts[1])
             self.assertEqual(len(list(Path(directory).iterdir())), 1)
 
+    def test_preparation_context_is_retained_and_changes_content_identity(self):
+        inputs, row = fixture()
+        with tempfile.TemporaryDirectory() as directory:
+            params = {'report': json.dumps(row), 'hostname': 'fixture-host', 'release': RELEASE,
+                      'inputs': inputs, 'output_dir': directory}
+            receipts = []
+            for binding in [None, {'transaction': 'fixture', 'policy_sha256': 'e' * 64, 'stage': 'preflight'},
+                            {'transaction': 'fixture', 'policy_sha256': 'f' * 64, 'stage': 'preflight'},
+                            {'transaction': 'fixture', 'policy_sha256': 'e' * 64, 'stage': 'initiation'}]:
+                selected = dict(params, **({'binding': binding} if binding is not None else {}))
+                run = subprocess.run([sys.executable, str(ROOT / 'tasks/retain_update_preflight.py')],
+                                     input=json.dumps(selected), text=True, capture_output=True)
+                self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+                receipt = json.loads(run.stdout)
+                content = Path(receipt['path']).read_bytes()
+                report = json.loads(content)
+                self.assertEqual(receipt.get('preparation'), binding)
+                self.assertEqual(report.get('preparation'), binding)
+                self.assertEqual(hashlib.sha256(content).hexdigest(), receipt['sha256'])
+                self.assertTrue(receipt['readback_verified'])
+                self.assertFalse(receipt['reset_authorized'])
+                self.assertNotIn(b'private-sentinel', content)
+                receipts.append(receipt)
+            self.assertEqual(len({receipt['path'] for receipt in receipts}), 4)
+
+    def test_invalid_or_other_transaction_binding_never_publishes(self):
+        inputs, row = fixture()
+        binding = {'transaction': 'fixture', 'policy_sha256': 'e' * 64, 'stage': 'preflight'}
+        invalid = [None, [], {}, dict(binding, transaction='other'), dict(binding, transaction='bad id'),
+                   dict(binding, policy_sha256=True), dict(binding, policy_sha256='e' * 63),
+                   dict(binding, stage='accepted'), dict(binding, private='private-sentinel')]
+        with tempfile.TemporaryDirectory() as directory:
+            for value in invalid:
+                params = {'report': json.dumps(row), 'hostname': 'fixture-host', 'release': RELEASE,
+                          'inputs': inputs, 'output_dir': directory, 'binding': value}
+                run = subprocess.run([sys.executable, str(ROOT / 'tasks/retain_update_preflight.py')],
+                                     input=json.dumps(params), text=True, capture_output=True)
+                with self.subTest(binding=value):
+                    self.assertEqual(run.returncode, 1, run.stdout + run.stderr)
+                    self.assertNotIn('private-sentinel', run.stdout + run.stderr)
+            self.assertEqual(list(Path(directory).iterdir()), [])
+
     def test_invalid_stdin_or_directory_never_publishes(self):
         inputs, row = fixture()
         with tempfile.TemporaryDirectory() as directory:

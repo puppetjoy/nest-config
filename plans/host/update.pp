@@ -130,13 +130,20 @@ plan nest::host::update (
       # A seal is not reset capacity. Admit ALL hosts through the native read-only
       # planner before any reset; these observations are never execution leases.
       $capacity_preflight = $bound['inputs'].map |$name, $input| {
+        $capacity_binding = {
+          'transaction'   => $input['transaction'],
+          'policy_sha256' => $bound['policy_sha256'],
+          'stage'         => 'preflight',
+        }
         $retained = run_plan('nest::host::check_update_capacity', {
           'target'     => $name,
           'release'    => $bound['release'],
           'inputs'     => $input,
           'output_dir' => $output_dir,
+          'binding'    => $capacity_binding,
         })
-        if $retained['capacity_admitted'] != true or $retained['readback_verified'] != true {
+        if $retained['capacity_admitted'] != true or $retained['readback_verified'] != true or
+          $retained['reset_authorized'] != false or $retained['preparation'] != $capacity_binding {
           fail_plan('Native capacity admission was not retained; no reset started', 'nest/update-capacity-preflight')
         }
         $retained

@@ -90,7 +90,19 @@ def main():
         require(len(raw) <= 524288, 'Input too large')
         params = json.loads(raw, object_pairs_hook=unique_object)
         report = project(params['report'], params['hostname'], params['release'], params['inputs'])
+        if 'binding' in params:
+            binding = params['binding']
+            require(type(binding) is dict and set(binding) == {'transaction', 'policy_sha256', 'stage'},
+                    'Invalid preparation binding')
+            require(binding['transaction'] == report['transaction']
+                    and binding['stage'] in ('preflight', 'initiation'), 'Wrong preparation context')
+            token(binding['policy_sha256'], DIGEST)
+            # Caller-supplied association, not a native recorded transaction,
+            # observation timestamp, capacity lease or permission to reset.
+            report['preparation'] = binding
         receipt = publish_document(report, params['output_dir'], report['hostname'] + '-' + report['transaction'] + '-capacity')
+        if 'binding' in params:
+            receipt['preparation'] = report['preparation']
         print(json.dumps(dict(receipt, capacity_admitted=True, reset_authorized=False)))
         return 0
     except (KeyError, TypeError, ValueError, OSError, UnicodeError, RecursionError):

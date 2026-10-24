@@ -5,7 +5,18 @@ plan nest::host::check_update_capacity (
   Pattern[/\Asha256:[0-9a-f]{64}\z/] $release,
   Hash                              $inputs,
   Stdlib::Absolutepath               $output_dir,
+  Optional[Hash]                    $binding = undef,
 ) {
+  if $binding != undef and ($binding.keys.sort != ['policy_sha256', 'stage', 'transaction'] or
+    $binding['transaction'] != $inputs['transaction'] or
+    $binding['policy_sha256'] !~ Pattern[/\A[0-9a-f]{64}\z/] or
+    !($binding['stage'] in ['preflight', 'initiation'])) {
+    fail_plan('Invalid capacity preparation association; no host contacted', 'nest/update-capacity-binding')
+  }
+  $association = $binding ? {
+    undef   => {},
+    default => { 'binding' => $binding },
+  }
   $nodes = get_targets($target)
   if $nodes.length != 1 or $nodes[0].name =~ Pattern[/\A[^.]*-console(?:\.|\z)/] {
     fail_plan('Capacity observation requires one non-console inventory host', 'nest/update-capacity-target')
@@ -29,5 +40,5 @@ plan nest::host::check_update_capacity (
     'release'    => $release,
     'inputs'     => $inputs,
     'output_dir' => $output_dir,
-  }).results[0].value)
+  } + $association).results[0].value)
 }

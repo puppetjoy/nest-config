@@ -316,6 +316,22 @@ the exact bytes. Successful preparation returns these receipts in
 `capacity_preflight`; read-only stored observation returns an empty array.
 Native refusal produces a failed plan, not an invented admitted receipt.
 
+Preparation also supplies `binding` with exactly the native input `transaction`,
+the complete wave `policy_sha256` and `stage: preflight`. The subplan validates
+this association before host contact. The retainer independently checks it,
+stores it as `preparation` in the sanitized document, and returns it only after
+publication/readback. The enclosing plan requires that exact association and
+`reset_authorized: false` before admitting any reset. Missing or substituted
+transaction, policy or stage context stops the selection before backup checks.
+Different context changes the content-addressed report rather than overwriting
+an earlier observation. The standalone subplan still accepts no binding and
+preserves its old report/receipt bytes; explicitly bound standalone observations
+may use `preflight` or `initiation`, never acceptance or finalization.
+
+This is a supervisor-supplied association, not proof that the native read-only
+planner created or observed a transaction, and not an observation timestamp.
+The wave-policy digest is distinct from the native capacity-policy digest.
+
 These observations are NOT a reservation, approval, capacity algebra implemented
 by Bolt, or a lease across later waves. The CLI remains authoritative and repeats
 its locked admission before preparation and its critical native effects. A late
