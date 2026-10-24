@@ -18,7 +18,7 @@ import sys
 import stat
 import zipfile
 import zlib
-from typing import Any
+from typing import Any, NoReturn
 
 ROOT = Path(__file__).resolve().parents[1]
 RELEASE = runpy.run_path(str(ROOT / 'scripts/nest-release-manifest.py'))
@@ -49,9 +49,31 @@ class GitLab:
                              r'executor-receipts/(?:haswell|cortex-a53|sifive-u74)\.json|'
                              r'release-results/[a-z0-9][a-z0-9._-]{0,127}\.json))?)?)?', path) is not None,
                 'unsupported GitLab read')
-        result = subprocess.run(['glab', 'api', '--hostname', HOST, path], capture_output=True,
-                                timeout=60, check=False)
-        require(result.returncode == 0 and len(result.stdout) <= RELEASE['LIMIT'], 'GitLab read failed')
+        operation = 'artifact' if '/artifacts' in path else 'job' if '/jobs/' in path else 'project'
+
+        def refuse(failure) -> NoReturn:
+            # Never print the path, response body, command stderr or credentials.
+            # These fixed classifications diagnose native job-token admission
+            # without changing resource checks or substituting another identity.
+            print(json.dumps({'schema': 1, 'kind': 'nest_release_gitlab_read_failure',
+                              'operation': operation, 'failure': failure}, sort_keys=True), file=sys.stderr)
+            raise ValueError('GitLab read failed')
+
+        try:
+            result = subprocess.run(['glab', 'api', '--hostname', HOST, path], capture_output=True,
+                                    timeout=60, check=False)
+        except subprocess.TimeoutExpired:
+            refuse('timeout')
+        except OSError:
+            refuse('command_unavailable')
+        if result.returncode != 0:
+            # glab emits HTTP status in its diagnostic, but may also echo an
+            # arbitrary server body. Retain only one recognized status token.
+            statuses = set(re.findall(rb'\bHTTP (401|403|404|429|500|502|503|504)\b', result.stderr))
+            failure = 'http_' + next(iter(statuses)).decode('ascii') if len(statuses) == 1 else 'command_failed'
+            refuse(failure)
+        if len(result.stdout) > RELEASE['LIMIT']:
+            refuse('oversized_response')
         return result.stdout
 
 

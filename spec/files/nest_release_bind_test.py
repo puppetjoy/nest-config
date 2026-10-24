@@ -3,6 +3,7 @@
 
 import copy
 import base64
+from contextlib import redirect_stderr
 import hashlib
 import io
 import json
@@ -60,6 +61,59 @@ def receipt(expected, cpu='haswell'):
                             modules=[dict(name=name, git_head=expected['sources']['nest/config'] if name == 'nest' else None,
                                           content_digest='sha256:' + 'b' * 64)
                                      for name in ('nest', 'stdlib', 'reboot', 'ruby_task_helper', 'private', 'kubecm')]))
+
+
+class GitLabReadDiagnosticTest(unittest.TestCase):
+    def get(self, path, result=None, error=None):
+        stream = io.StringIO()
+        with patch('subprocess.run', return_value=result, side_effect=error) as command, redirect_stderr(stream):
+            with self.assertRaisesRegex(ValueError, '^GitLab read failed$'):
+                BIND['GitLab']().get(path)
+        diagnostic = json.loads(stream.getvalue())
+        self.assertEqual(set(diagnostic), {'schema', 'kind', 'operation', 'failure'})
+        self.assertEqual(diagnostic['schema'], 1)
+        self.assertEqual(diagnostic['kind'], 'nest_release_gitlab_read_failure')
+        self.assertNotIn('private-sentinel', stream.getvalue())
+        self.assertEqual(command.call_count, 1)
+        return diagnostic
+
+    def test_failed_reads_report_only_fixed_operation_and_http_status(self):
+        for suffix, operation in (('', 'project'), ('/jobs/901', 'job'),
+                                  ('/jobs/901/artifacts/executor-receipts/haswell.json', 'artifact')):
+            for status in (401, 403, 404, 429, 500, 502, 503, 504):
+                with self.subTest(operation=operation, status=status):
+                    result = subprocess.CompletedProcess([], 1, b'private-sentinel',
+                                                         f'private-sentinel (HTTP {status})'.encode())
+                    row = self.get('projects/nest%2Fconfig' + suffix, result=result)
+                    self.assertEqual((row['operation'], row['failure']), (operation, 'http_' + str(status)))
+
+    def test_unknown_or_ambiguous_stderr_never_becomes_public_prose(self):
+        for stderr in (b'private-sentinel', b'private-sentinel HTTP 401 HTTP 403', b'HTTP 200 private-sentinel'):
+            row = self.get('projects/nest%2Fconfig', result=subprocess.CompletedProcess([], 1, b'', stderr))
+            self.assertEqual(row['failure'], 'command_failed')
+
+    def test_timeout_and_unavailable_command_do_not_echo_exception_details(self):
+        for error, failure in ((OSError('private-sentinel'), 'command_unavailable'),
+                               (subprocess.TimeoutExpired(['private-sentinel'], 60, output=b'private-sentinel'), 'timeout')):
+            row = self.get('projects/nest%2Fconfig', error=error)
+            self.assertEqual(row['failure'], failure)
+
+    def test_oversized_success_is_still_refused(self):
+        row = self.get('projects/nest%2Fconfig', result=subprocess.CompletedProcess([], 0, b'x' * (R['LIMIT'] + 1), b''))
+        self.assertEqual(row['failure'], 'oversized_response')
+
+    def test_success_preserves_exact_bytes_and_has_no_diagnostic(self):
+        stream = io.StringIO()
+        payload = b'{"id":3,"path_with_namespace":"nest/config"}'
+        with patch('subprocess.run', return_value=subprocess.CompletedProcess([], 0, payload, b'')), redirect_stderr(stream):
+            self.assertEqual(BIND['GitLab']().get('projects/nest%2Fconfig'), payload)
+        self.assertEqual(stream.getvalue(), '')
+
+    def test_unsupported_path_still_refuses_before_command(self):
+        with patch('subprocess.run') as command:
+            with self.assertRaisesRegex(ValueError, '^unsupported GitLab read$'):
+                BIND['GitLab']().get('projects/nest%2Fconfig?private-sentinel')
+        command.assert_not_called()
 
 
 class FakeGitLab:

@@ -76,6 +76,17 @@ directory is created. This uses the existing `glab` authentication path. A CI jo
 without equivalent read access must fail; do not inject a user token or treat
 fixture success as production job-token admission.
 
+Failed allowlisted GitLab reads emit one sanitized JSON diagnostic on stderr,
+`kind=nest_release_gitlab_read_failure`, before the caller's ordinary refusal.
+`operation` is only `project`, `job` or `artifact`; `failure` is a fixed HTTP
+status classification, `command_failed`, `command_unavailable`, `timeout` or
+`oversized_response`. Paths, server bodies, raw command stderr and credentials
+are never included. This is failure localization, not permission proof: the
+reader does not retry, switch credentials, expand its endpoint allowlist or
+accept missing job/receipt evidence. Unknown or conflicting HTTP diagnostics
+remain `command_failed`. Successful reads preserve their exact bytes and do
+not emit this diagnostic.
+
 After any predecessor discovery, an executing route projects `expectations.json`
 to exactly its selected `rebuild` member. Source and executor pins, member content
 and policy reasons are unchanged. Other active consumers become deferred with no
