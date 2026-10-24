@@ -100,3 +100,51 @@ before/after reports. An intent cannot disappear, change or be added during
 finalization. Old no-reboot reports preserve their existing lifecycle semantics.
 Historical export remains possible when old BEs have since changed; export is not
 live eligibility. No live reset/reboot was performed by this source integration.
+
+## Observation after disconnect or controller restart
+
+`nest::host::observe_update_reboot` reopens an earlier original-boot receipt from
+`check_update_reboot`, then reads exactly `nest reset status ID --format=json` on
+one inventory target. It has no execute, wait, retry, prepare or acceptance option.
+Use it after a separately authorized native request loses its result, or after
+the existing external controller resumes. This is observation continuity, not an
+implemented external-controller dispatch or complete wave lifecycle.
+
+Supply `target`, `transaction`, `release`, `hostname` and `output_dir` as above,
+plus `admission`: the complete returned reboot-plan receipt for the original
+prepared boot. The original content-addressed admission file must still exist
+in that same canonical supervisor directory. Preserve both file and receipt
+across the controller boundary; copying only a path or reconstructing a receipt
+from memory is insufficient. If copying to a different execution host, verify
+the exact bytes and deliberately update the receipt's path to the same named
+file in its new mounted `output_dir`. The digest and byte count cannot change.
+
+    bolt plan run nest::host::observe_update_reboot --params @/absolute/path/reboot-observation.json
+
+Before contacting the host, the task reopens and checks the exact admission
+filename, digest, length, context, original boot and eligibility semantics.
+It rejects missing/corrupt files, symlinks, cross-directory paths and a receipt
+already collected on the changed boot. It reopens admission again during final
+publication. A valid status must preserve the original host/pool/BE GUID trees,
+shared-state/source/policy identities and every preparation phase. Existing
+intent may acquire completion but cannot disappear or change identity; returned
+completion cannot change or regress to intent. Native status independently owns
+live storage/policy validation, not this supervisor projection.
+
+The sanitized `nest_update_reboot_observation` retains the exact admission handle
+and native report. Its `submission_outcome` is one of `not_attempted`, `unknown`,
+`returned_success` or `returned_failure`. Separately, `target_boot_observed` is
+true only for an observed changed boot on the exact target with unchanged next
+selection and a native reboot object. A changed boot without that object cannot
+be attributed to this transaction's submission. A returned-success receipt on
+the original boot is not a completed boot; an unknown or failed submission can
+nevertheless later be observed on the changed target. None of these observations
+overrides the original command exit or independently verifies health/acceptance.
+
+`resubmission_allowed`, `execution_requested` and `acceptance_recorded` remain
+false in every result. `not_attempted` is not permission to submit: the wave,
+window, survivor, retention and external-controller gates remain separate.
+Transport refusal, wrong identity/boot, missing observation or failed publication
+halts the invocation. A later invocation repeats only the status read. Never
+retry preparation or reboot to recover evidence, edit intent, clear failures,
+or advance another failure-domain wave based on this receipt alone.
