@@ -21,4 +21,4 @@
     - if: '$CI_COMMIT_TAG'
       when: never
     - if: '$CI_PIPELINE_SOURCE == "pipeline" && $RELEASE_INPUTS == "true" && $RELEASE_GRAPH_NODE == "true"'
-    - if: '($CI_PIPELINE_SOURCE == "api" || $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "pipeline" || $CI_PIPELINE_SOURCE == "trigger") && $RELEASE_INPUTS == "true" && $RELEASE_ROUTE == "true"'
+    - if: '($CI_PIPELINE_SOURCE == "api" || $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "pipeline" || $CI_PIPELINE_SOURCE == "trigger") && $RELEASE_INPUTS == "true" && ($RELEASE_ROUTE == "true" || $RELEASE_ROUTE == "verify-inputs")'

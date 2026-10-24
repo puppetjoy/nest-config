@@ -86,6 +86,54 @@ class ReleaseRouteTest(unittest.TestCase):
         self.assertFalse(receipt['promotion_authorized'])
         self.assertEqual(self.f.expected['members'][0]['bases'], self.f.member['bases'])
 
+    def test_input_verification_uses_real_freezer_and_only_nonexecuting_native_flags(self):
+        receipt = self.publish(RELEASE_ROUTE='verify-inputs')
+        directory = self.f.checkout / 'release-inputs'
+        graph = R['load'](directory / 'candidate.yml')
+        self.assertNotIn('Build frozen member', graph)
+        job = graph['Verify frozen inputs']
+        self.assertEqual(job['trigger'], dict(project='nest/stage0', branch='main', strategy='mirror',
+                                             forward=dict(yaml_variables=True, pipeline_variables=False)))
+        self.assertIs(job['allow_failure'], False)
+        self.assertEqual(job['inherit'], dict(variables=False))
+        variables = job['variables']
+        self.assertEqual(set(variables), {'RELEASE_DAG', 'RELEASE_VERIFY_INPUTS', 'RELEASE_VALIDATE_ONLY',
+                                         'RELEASE_MEMBER', 'RELEASE_CPU', 'RELEASE_INPUT_JOB_ID',
+                                         'RELEASE_INPUT_SHA256', 'RELEASE_EXECUTOR_JOB_ID', 'RELEASE_EXECUTOR_IMAGE'})
+        for key in ('RELEASE_DAG', 'RELEASE_VERIFY_INPUTS', 'RELEASE_VALIDATE_ONLY'):
+            self.assertEqual(variables[key], 'true')
+        self.assertEqual(variables['RELEASE_INPUT_SHA256'], receipt['artifact_sha256'])
+        self.assertEqual(variables['RELEASE_INPUT_JOB_ID'], str(receipt['producer']['job']))
+        self.assertEqual(R['load'](directory / 'expectations.json'), self.f.expected)
+        provenance = R['load'](directory / 'provenance.json')
+        self.assertNotIn('candidate_route', provenance)
+        self.assertEqual(provenance['input_verification_route']['execution'], 'not_started')
+        self.assertFalse((self.f.checkout / 'release-results').exists())
+
+    def test_verification_mode_is_exact_and_never_falls_back_to_build(self):
+        for value in ('verify-input', 'verify-inputs ', ' verify-inputs', 'VERIFY-INPUTS', 'false'):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                self.publish(RELEASE_ROUTE=value)
+        for key in ROUTE['CONFLICTS']:
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                self.publish(RELEASE_ROUTE='verify-inputs', **{key: 'true'})
+        self.assertEqual(self.api.reads, [])
+        self.assertFalse((self.f.checkout / 'release-inputs').exists())
+
+    def test_verification_refuses_other_stages_or_fresh_before_executor_acquisition(self):
+        for stage in ('stage1', 'stage2', 'stage3', 'tool'):
+            self.f.member['stage'] = stage
+            self.save()
+            with self.subTest(stage=stage), self.assertRaises(ValueError):
+                self.publish(RELEASE_ROUTE='verify-inputs')
+        self.f.member['stage'] = 'stage0'
+        self.f.member['mode'] = 'fresh'
+        self.save()
+        with self.assertRaises(ValueError):
+            self.publish(RELEASE_ROUTE='verify-inputs')
+        self.assertEqual(self.api.reads, [])
+        self.assertFalse((self.f.checkout / 'release-inputs').exists())
+
     def multi_member(self):
         sibling = copy.deepcopy(self.f.member)
         sibling.update(id='sibling-stage0', cpu='cortex-a53')

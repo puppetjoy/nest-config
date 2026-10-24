@@ -132,6 +132,35 @@ alias, reset/reboot a host, retry a candidate, perform backup/restore or clean u
 storage. Build execution itself still requires the approved release scope;
 installing this interface is not new build or disruptive-canary authorization.
 
+## Nonexecuting Stage 0 input observation
+
+`RELEASE_ROUTE=verify-inputs` uses the same freezer, exact executor acquisition,
+member projection, closure, raw-byte digest and artifact-backed native bridge.
+It accepts only a Stage 0 server `refresh` member in `nest/stage0`. All other
+route parameters and conflicting-selector refusals remain unchanged. This value
+is exact; malformed values never fall back to candidate execution.
+
+The generated bridge is `Verify frozen inputs`, not `Build frozen member`.
+It sends `RELEASE_VERIFY_INPUTS=true`, `RELEASE_VALIDATE_ONLY=true` and
+`RELEASE_DAG=true`, with the exact frozen member/input/executor pins. It never
+sends `RELEASE_CANDIDATE`. Both native bridge layers still mirror failure and
+disable pipeline-variable forwarding. For compatibility the generated artifact
+is still `release-inputs/candidate.yml`; the provenance sidecar uses the distinct
+`input_verification_route` key rather than claiming a candidate route.
+
+Stage 0's supported `--verify-inputs` entry reacquires actual config resources
+with its own job token and invokes installed read-only preparation. It emits
+only `release-contracts/MEMBER.json`, with kind
+`nest_release_input_contract_observation`. It does not run a producer build,
+reserve an attempt, publish images or emit `release-results`. Its observation
+is not a member result and cannot satisfy ordinary discovery/assembly. No
+predicted image output or status-only fixture is substituted for real inputs.
+
+This optional route supports native job-token integration verification, not
+full flattened graph acceptance, image/ISA/ABI compatibility, bootstrap closure,
+release promotion or host authority. Production graph `--compile` remains
+refused until its separate complete acceptance contract is exercised.
+
 ## Verification and rollback
 
 Offline tests exercise strict source/conflict selection, independent executor

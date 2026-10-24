@@ -140,7 +140,8 @@ def publish(input_path, env, discovery=False, api=None, before_publication=None)
         graph = routing['compile_bridge'](expected, receipt, env,
                                           routing['B']['GitLab']() if api is None else api)
         records['candidate.yml'] = release['canonical'](graph)
-        provenance_receipt['candidate_route'] = {
+        route_kind = 'input_verification_route' if env['RELEASE_ROUTE'] == 'verify-inputs' else 'candidate_route'
+        provenance_receipt[route_kind] = {
             'artifact': 'release-inputs/candidate.yml',
             'artifact_sha256': hashlib.sha256(records['candidate.yml']).hexdigest(),
             'member': env['RELEASE_ROUTE_MEMBER'],
