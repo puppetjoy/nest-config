@@ -105,17 +105,24 @@ plan nest::host::update (
       # Verify ALL selected local seals before the first reset, without source
       # publication access, transfer, provisioning or automatic repair.
       $generation_preflight = $bound['inputs'].map |$name, $input| {
+        $generation_binding = {
+          'transaction'   => $input['transaction'],
+          'policy_sha256' => $bound['policy_sha256'],
+          'stage'         => 'preflight',
+        }
         $verified = run_plan('nest::host::stage_generation', {
           'targets'     => $name,
           'policy'      => $input['generation_policy'],
           'manifest'    => $release_manifest,
           'verify_only' => true,
           'output_dir'  => $output_dir,
+          'binding'     => $generation_binding,
         })
         $retained = $verified['retained']
         unless $retained =~ Hash and $retained['kind'] == 'nest_generation_retention_receipt' and
           $retained['readback_verified'] == true and $retained['sealed'] == true and
-          $retained['hostname'] == $name and $retained['release'] == $bound['release'] and $retained['reset_authorized'] == false {
+          $retained['hostname'] == $name and $retained['release'] == $bound['release'] and $retained['reset_authorized'] == false and
+          $retained['preparation'] == $generation_binding {
           fail_plan('Generation verification was not retained; no reset started', 'nest/update-generation-retention')
         }
         $retained
@@ -186,17 +193,24 @@ plan nest::host::update (
           }
           # A seal observation is not a lease. Repeat after readiness/backup
           # work, then re-admit time and exact inputs before native initiation.
+          $generation_binding = {
+            'transaction'   => $bound['inputs'][$name]['transaction'],
+            'policy_sha256' => $bound['policy_sha256'],
+            'stage'         => 'initiation',
+          }
           $verified = run_plan('nest::host::stage_generation', {
             'targets'     => $name,
             'policy'      => $bound['inputs'][$name]['generation_policy'],
             'manifest'    => $release_manifest,
             'verify_only' => true,
             'output_dir'  => $output_dir,
+            'binding'     => $generation_binding,
           })
           $generation_verification = $verified['retained']
           unless $generation_verification =~ Hash and $generation_verification['kind'] == 'nest_generation_retention_receipt' and
             $generation_verification['readback_verified'] == true and $generation_verification['sealed'] == true and
-            $generation_verification['hostname'] == $name and $generation_verification['release'] == $bound['release'] and $generation_verification['reset_authorized'] == false {
+            $generation_verification['hostname'] == $name and $generation_verification['release'] == $bound['release'] and $generation_verification['reset_authorized'] == false and
+            $generation_verification['preparation'] == $generation_binding {
             fail_plan('Generation verification was not retained; no new reset started', 'nest/update-generation-retention')
           }
           # Initial admission is not a lease. Maintenance, destination checks
