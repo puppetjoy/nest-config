@@ -156,7 +156,7 @@ revision must not receive the historical exact-version activation patch.
 
 ### Capacity-gated immutable revision
 
-`nest::base::cli` now selects `=app-admin/nest-cli-0.9.0_p20261021-r3::nest`
+The prior capacity revision is `=app-admin/nest-cli-0.9.0_p20261021-r3::nest`
 from overlay MR !7, merge `41608b752f9d3ea424453b4d48994ab85b3344be`.
 It packages CLI MR !12, merge `fe6271c03d683a0fc8b2c60f9f9b12922580aaf4`.
 The complete 30-library-file aggregate SHA256 is
@@ -188,8 +188,32 @@ Keep prior immutable packages and receipts. An unresolved capacity-gated
 transaction cannot be downgraded to the prior lifecycle revision or retrofitted
 with a different policy to bypass refusal. Historical accepted/finalized reports
 remain readable; their existence does not prove a new capacity admission.
-Historical accounting-contract-1 preparations remain exportable, but r3 refuses
+Historical accounting-contract-1 preparations remain exportable, but r3 and later refuse
 to resume their mutations. Do not rewrite old receipts to the new contract.
+
+### Durable native reboot revision
+
+`nest::base::cli` selects `=app-admin/nest-cli-0.9.0_p20261021-r4::nest`
+from overlay MR !8, merge `8e456c3d815b6f5188c328ca038a560f6fe9291a`.
+It packages CLI MR !13, merge `f64f45ef29519a414aa8e57d538b7848b0ef8229`.
+The complete 31-library-file aggregate SHA256 is
+`70b61aeb00d77ef0f118106158731c1c1d7011cb54574b93b6cde95d55e5226d`.
+Verify the installed full source identity and exact Portage revision; the Ruby
+version string alone does not distinguish r3 from r4.
+
+This revision retains capacity accounting contract 2 and the activation-safe
+floor. It adds the existing native transaction's explicit at-most-once reboot
+interface, documented in `nest-update-reboot-plan.md` and installed
+`reset-reboot.md`. The managed pin does not invoke it, enable wave execution,
+alter the no-reboot default, provision a generation or authorize disruption.
+Use `nest_cli_package` for a narrowly tagged inventory-backed Puppet installation;
+package changes alone do not require a host or service restart.
+
+Installing different CLI bytes changes the installed policy digest. Existing
+transactions bound to older source may correctly refuse mutation. Preserve their
+receipts and inspect them; never rewrite a digest, erase an intent, downgrade to
+bypass a refusal or submit another reboot after an ambiguous result. Keep prior
+immutable packages for inspected code rollback, not transaction replay.
 
 ## Fail-closed ZFS startup
 

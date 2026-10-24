@@ -16,6 +16,14 @@ new command rather than fall back to a different reboot mechanism. Installing
 new CLI bytes can invalidate a transaction's stored policy digest: never bypass
 that refusal or rewrite an existing transaction to adopt the new code.
 
+The managed package pin is `app-admin/nest-cli-0.9.0_p20261021-r4` from
+overlay MR !8, merge `8e456c3d815b6f5188c328ca038a560f6fe9291a`.
+Its complete installed native source aggregate must be
+`70b61aeb00d77ef0f118106158731c1c1d7011cb54574b93b6cde95d55e5226d`.
+The pin is desired state, not proof of installation on every host. Verify the
+exact installed revision and source on each intended consumer. Package delivery
+does not grant live reboot authority or make an old transaction eligible.
+
 ## Invocation
 
 Pass a private parameter file with exactly one `target` inventory selector,
