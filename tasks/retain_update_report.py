@@ -2,13 +2,16 @@
 """Materialize a bounded CLI report on the Bolt supervisor, never on the host."""
 
 from datetime import datetime
+from contextlib import contextmanager
+import errno
 import hashlib
 import json
 import os
 from pathlib import Path
 import re
+import secrets
+import stat
 import sys
-import tempfile
 
 
 ID = r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}"
@@ -212,6 +215,83 @@ def output_directory(directory):
     return directory
 
 
+def file_identity(value):
+    return (value.st_dev, value.st_ino, value.st_mode, value.st_nlink, value.st_size,
+            value.st_mtime_ns, value.st_ctime_ns)
+
+
+def directory_identity(directory, descriptor):
+    # Directory size/timestamps change during our own publication. Bind its
+    # location and inode, not those expected directory-entry mutations.
+    current = output_directory(directory).stat()
+    opened = os.fstat(descriptor)
+    require((current.st_dev, current.st_ino) == (opened.st_dev, opened.st_ino),
+            "report directory changed")
+
+
+@contextmanager
+def report_directory(directory):
+    directory = output_directory(directory)
+    descriptor = os.open(directory.anchor, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        # Resolve each component relative to its already opened parent. A
+        # canonical-path precheck alone cannot exclude a swapped ancestor.
+        for part in directory.parts[1:]:
+            child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=descriptor)
+            os.close(descriptor)
+            descriptor = child
+        directory_identity(directory, descriptor)
+        yield directory, descriptor
+        directory_identity(directory, descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def read_report_at(directory_fd, name, limit):
+    token(name, r"[A-Za-z0-9][A-Za-z0-9_.-]{0,480}")
+    require(type(limit) is int and limit > 0, "invalid report read bound")
+    # NONBLOCK prevents a substituted FIFO from hanging before fstat refuses it.
+    try:
+        descriptor = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory_fd)
+    except OSError as error:
+        if error.errno == errno.ELOOP:
+            raise ValueError("report must not be a symlink") from None
+        raise
+    try:
+        before = os.fstat(descriptor)
+        require(stat.S_ISREG(before.st_mode) and before.st_nlink == 1 and before.st_size <= limit,
+                "report must be a bounded single-link regular file")
+        observations = []
+        # Some filesystems expose coarse timestamps. Re-read the same inode so
+        # a same-size in-place mutation cannot rely on timestamp equality alone.
+        for _ in range(2):
+            os.lseek(descriptor, 0, os.SEEK_SET)
+            chunks = []
+            remaining = limit + 1
+            while remaining:
+                chunk = os.read(descriptor, min(65536, remaining))
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                remaining -= len(chunk)
+            observations.append(b"".join(chunks))
+        raw = observations[0]
+        after = os.fstat(descriptor)
+        named = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+        require(raw == observations[1] and len(raw) == before.st_size and len(raw) <= limit and
+                file_identity(before) == file_identity(after) == file_identity(named),
+                "report changed during readback")
+        return raw
+    finally:
+        os.close(descriptor)
+
+
+def read_report(path, limit):
+    path = Path(path)
+    with report_directory(path.parent) as (_, directory_fd):
+        return read_report_at(directory_fd, path.name, limit)
+
+
 def publish_document(report, directory, prefix):
     directory = output_directory(directory)
     token(prefix, r"[A-Za-z0-9][A-Za-z0-9_.-]{0,400}")
@@ -219,30 +299,33 @@ def publish_document(report, directory, prefix):
     digest = hashlib.sha256(payload).hexdigest()
     # Content-addressed versions retain pending, failed and completed reports;
     # later observations never overwrite an earlier phase's only receipt.
-    target = directory / (prefix + "-" + digest + ".json")
-    fd, name = tempfile.mkstemp(prefix=".nest-update-report-", dir=directory)
-    temporary = Path(name)
-    try:
-        os.fchmod(fd, 0o644)  # Only the sanitized allowlisted projection is public.
-        with os.fdopen(fd, "wb") as output:
-            output.write(payload)
-            output.flush()
-            os.fsync(output.fileno())
+    name = prefix + "-" + digest + ".json"
+    target = directory / name
+    with report_directory(directory) as (_, directory_fd):
+        temporary = ".nest-update-report-" + secrets.token_hex(16)
+        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=directory_fd)
         try:
-            os.link(temporary, target)
-        except FileExistsError:
-            require(target.is_file() and not target.is_symlink() and target.read_bytes() == payload,
-                    "existing report does not match")
-        directory_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
-        try:
+            with os.fdopen(fd, "wb") as output:
+                output.write(payload)
+                output.flush()
+                os.fchmod(output.fileno(), 0o644)  # Only sanitized projections are public.
+                os.fsync(output.fileno())
+            try:
+                os.link(temporary, name, src_dir_fd=directory_fd, dst_dir_fd=directory_fd, follow_symlinks=False)
+            except FileExistsError:
+                pass  # Read the existing inode below; never replace it.
+            os.unlink(temporary, dir_fd=directory_fd)
             os.fsync(directory_fd)
+            raw = read_report_at(directory_fd, name, len(payload))
+            require(raw == payload, "retained report readback mismatch")
+            require(json.loads(raw, object_pairs_hook=unique) == report, "retained report parse mismatch")
+            directory_identity(directory, directory_fd)
+            return {"path": str(target), "sha256": digest, "bytes": len(payload), "readback_verified": True}
         finally:
-            os.close(directory_fd)
-        require(not target.is_symlink() and target.read_bytes() == payload, "retained report readback mismatch")
-        require(json.loads(target.read_text(encoding="utf-8")) == report, "retained report parse mismatch")
-        return {"path": str(target), "sha256": digest, "bytes": len(payload), "readback_verified": True}
-    finally:
-        temporary.unlink(missing_ok=True)
+            try:
+                os.unlink(temporary, dir_fd=directory_fd)
+            except FileNotFoundError:
+                pass
 
 
 def publish(report, directory):

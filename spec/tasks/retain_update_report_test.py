@@ -5,6 +5,7 @@ import copy
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -335,6 +336,128 @@ class RetainUpdateReportTest(unittest.TestCase):
         path.write_text("corrupt fixture")
         self.assertEqual(self.run_task(args).returncode, 1)
         self.assertEqual(path.read_text(), "corrupt fixture")
+
+    def test_opened_readback_rejects_symlink_hardlink_fifo_and_oversize(self):
+        path = self.supervisor / 'report.json'
+        other = self.worker / 'original.json'
+        other.write_bytes(b'{}\n')
+        for kind in ('symlink', 'hardlink', 'fifo', 'directory', 'oversize'):
+            with self.subTest(kind=kind):
+                if kind == 'symlink':
+                    path.symlink_to(other)
+                elif kind == 'hardlink':
+                    os.link(other, path)
+                elif kind == 'fifo':
+                    os.mkfifo(path)
+                elif kind == 'directory':
+                    path.mkdir()
+                else:
+                    path.write_bytes(b'x' * 5)
+                try:
+                    with self.assertRaises((ValueError, OSError)):
+                        retainer.read_report(path, 4)
+                finally:
+                    path.rmdir() if path.is_dir() else path.unlink()
+
+    def test_opened_report_cannot_be_replaced_with_identical_bytes(self):
+        path = self.supervisor / 'report.json'
+        path.write_bytes(b'{}\n')
+        original = retainer.os.read
+        replaced = False
+
+        def replace_during_read(descriptor, count):
+            nonlocal replaced
+            raw = original(descriptor, count)
+            if not replaced:
+                replaced = True
+                path.rename(self.supervisor / 'old.json')
+                path.write_bytes(b'{}\n')
+            return raw
+
+        with mock.patch.object(retainer.os, 'read', replace_during_read):
+            with self.assertRaises(ValueError):
+                retainer.read_report(path, 4)
+        self.assertTrue(replaced)
+
+    def test_same_inode_in_place_change_during_read_refuses(self):
+        path = self.supervisor / 'report.json'
+        path.write_bytes(b'{}\n')
+        original = retainer.os.read
+        replaced = False
+
+        def mutate_during_read(descriptor, count):
+            nonlocal replaced
+            raw = original(descriptor, count)
+            if not replaced:
+                replaced = True
+                path.write_bytes(b'[]\n')
+            return raw
+
+        with mock.patch.object(retainer.os, 'read', mutate_during_read):
+            with self.assertRaises(ValueError):
+                retainer.read_report(path, 4)
+
+    def test_directory_replacement_during_publication_cannot_claim_readback(self):
+        original = retainer.os.link
+        moved = self.root / 'moved-supervisor'
+
+        def replace_directory(*args, **kwargs):
+            self.supervisor.rename(moved)
+            self.supervisor.mkdir()
+            return original(*args, **kwargs)
+
+        with mock.patch.object(retainer.os, 'link', replace_directory):
+            with self.assertRaises(ValueError):
+                retainer.publish_document({'kind': 'fixture'}, self.supervisor, 'fixture')
+        self.assertEqual(list(self.supervisor.iterdir()), [])
+        self.assertEqual(len(list(moved.glob('*.json'))), 1)
+        self.assertEqual(list(moved.glob('.nest-update-report-*')), [])
+
+    def test_swapped_ancestor_symlink_refuses_before_report_open(self):
+        path = self.supervisor / 'report.json'
+        path.write_bytes(b'{}\n')
+        original = retainer.os.open
+        moved = self.root / 'moved-supervisor'
+
+        def swap_before_traversal(name, *args, **kwargs):
+            if name == self.supervisor.name and not self.supervisor.is_symlink():
+                self.supervisor.rename(moved)
+                self.supervisor.symlink_to(moved)
+            return original(name, *args, **kwargs)
+
+        with mock.patch.object(retainer.os, 'open', swap_before_traversal):
+            with self.assertRaises(OSError):
+                retainer.read_report(path, 4)
+
+    def test_existing_target_symlink_is_not_followed_or_overwritten(self):
+        receipt = retainer.publish_document({'kind': 'fixture'}, self.supervisor, 'fixture')
+        path = Path(receipt['path'])
+        other = self.worker / 'original.json'
+        path.rename(other)
+        path.symlink_to(other)
+        with self.assertRaises(ValueError):
+            retainer.publish_document({'kind': 'fixture'}, self.supervisor, 'fixture')
+        self.assertTrue(path.is_symlink())
+        self.assertEqual(hashlib.sha256(other.read_bytes()).hexdigest(), receipt['sha256'])
+        self.assertEqual(list(self.supervisor.glob('.nest-update-report-*')), [])
+
+    def test_file_and_directory_fsync_failure_cannot_return_receipt(self):
+        for failure in (1, 2):
+            with self.subTest(failure=failure):
+                original = retainer.os.fsync
+                calls = 0
+
+                def failed_fsync(descriptor):
+                    nonlocal calls
+                    calls += 1
+                    if calls == failure:
+                        raise OSError('injected')
+                    return original(descriptor)
+
+                with mock.patch.object(retainer.os, 'fsync', failed_fsync):
+                    with self.assertRaises(OSError):
+                        retainer.publish_document({'kind': 'fixture'}, self.supervisor, 'fsync-' + str(failure))
+                self.assertEqual(list(self.supervisor.glob('.nest-update-report-*')), [])
 
 
 if __name__ == "__main__":

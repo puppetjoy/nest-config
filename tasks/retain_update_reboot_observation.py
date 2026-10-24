@@ -9,7 +9,7 @@ import sys
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from retain_update_reboot import context  # noqa: E402
-from retain_update_report import output_directory, project, publish_document, require, unique  # noqa: E402
+from retain_update_report import output_directory, project, publish_document, read_report, require, unique  # noqa: E402
 
 LIMIT = 262144
 BINDING = ("id", "release", "host", "host_identity_sha256", "shared_state", "source", "policy", "target_tree", "phases")
@@ -23,9 +23,8 @@ def admission(arguments):
         require(receipt.get(key) == arguments[key], "admission context mismatch")
     directory = output_directory(arguments["output_dir"])
     path = Path(receipt["path"])
-    require(path.parent == directory and not path.is_symlink() and path.is_file(), "invalid admission path")
-    with path.open("rb") as source:
-        raw = source.read(LIMIT + 1)
+    require(path.parent == directory, "invalid admission path")
+    raw = read_report(path, LIMIT)
     digest = hashlib.sha256(raw).hexdigest()
     require(len(raw) <= LIMIT and type(receipt["bytes"]) is int and len(raw) == receipt["bytes"] and
             digest == receipt["sha256"] and

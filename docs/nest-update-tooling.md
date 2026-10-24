@@ -92,6 +92,34 @@ No historical receipt is recreated by replaying production. Preparation alone
 does not prove boot, acceptance or finalize; do not infer those transitions from
 `success: true` on a preparation report.
 
+### Supervisor report readback
+
+The shared report publisher opens each canonical output-directory component
+without following symlinks, then performs temporary-file creation, exclusive
+hard-link publication, unlink and directory fsync relative to that opened
+directory. It never replaces an existing content-addressed report. Before it
+returns a receipt, it checks that the pathname still names that directory.
+
+Readback opens the report with `O_NOFOLLOW` and `O_NONBLOCK`, requires a bounded
+single-link regular file, reads the same opened inode twice and compares its
+device/inode, mode, link count, size and timestamps with the final directory
+entry. This prevents a pathname-check/open race, avoids blocking on a substituted
+FIFO, and refuses observed in-place changes or same-byte inode replacement.
+The original-boot reboot admission uses the same bounded reader before host
+contact and again during observation publication. Schemas, content-addressed
+filenames, mode 0644 and existing successful receipt fields remain unchanged.
+
+Do not hard-link reports when copying them across execution/notification hosts;
+copy the actual bytes, verify their digest and retain independent files. Symlink
+and hard-link report aliases now refuse even if their current bytes match.
+Concurrent modification may conservatively fail rather than produce a receipt;
+no retention failure retries a host action or overwrites prior evidence. A
+publication failure can leave a complete but unselected report after the native
+operation, which is not a successful enclosing lifecycle result. These bounded
+readbacks are observations, not filesystem snapshots, storage leases, continued
+protection against a privileged writer, or reset/reboot authority. Preserve the
+real files through the task artifact surface before worker cleanup.
+
 ## Lifecycle package and compatibility
 
 ### Host-local shared transaction state
