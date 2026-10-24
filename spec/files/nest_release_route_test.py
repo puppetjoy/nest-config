@@ -110,6 +110,24 @@ class ReleaseRouteTest(unittest.TestCase):
         self.assertEqual(provenance['input_verification_route']['execution'], 'not_started')
         self.assertFalse((self.f.checkout / 'release-results').exists())
 
+    def test_real_freezer_cli_localizes_read_refusal_without_publishing_or_leaking(self):
+        fake = self.f.root / 'glab'
+        fake.write_text('#!' + sys.executable + '\nimport sys\n'
+                        'sys.stderr.write("private-sentinel (HTTP 403)\\n")\n'
+                        'sys.stdout.write("private-sentinel")\nsys.exit(1)\n')
+        fake.chmod(0o700)
+        result = self.f.cli(PATH=str(self.f.root) + os.pathsep + self.f.env['PATH'],
+                            RELEASE_ROUTE='verify-inputs', CI_JOB_TOKEN='private-sentinel')
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stdout, '')
+        lines = result.stderr.splitlines()
+        self.assertEqual(json.loads(lines[0]), {'schema': 1, 'kind': 'nest_release_gitlab_read_failure',
+                                              'operation': 'project', 'failure': 'http_403'})
+        self.assertEqual(lines[1:], ['Frozen release input publication refused or failed'])
+        self.assertNotIn('private-sentinel', result.stdout + result.stderr)
+        self.assertFalse((self.f.checkout / 'release-inputs').exists())
+        self.assertFalse((self.f.checkout / 'release-results').exists())
+
     def test_verification_mode_is_exact_and_never_falls_back_to_build(self):
         for value in ('verify-input', 'verify-inputs ', ' verify-inputs', 'VERIFY-INPUTS', 'false'):
             with self.subTest(value=value), self.assertRaises(ValueError):
