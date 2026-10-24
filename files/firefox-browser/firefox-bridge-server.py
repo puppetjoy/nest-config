@@ -233,6 +233,7 @@ def main():
     parser.add_argument("--reconcile-generation", default=os.environ.get("FIREFOX_GENERATION_RECONCILIATION_GRANT"),
                         help="local operator JSON grant; requires exact owner approval and journal hash")
     parser.add_argument("--recover-binding", help="local operator JSON grant; requires independently verified scoped approval")
+    parser.add_argument("--recover-creation", help="local administrator JSON grant; requires authority for one scoped new binding")
     args = parser.parse_args()
     if args.worker:
         try:
@@ -257,6 +258,8 @@ def main():
             server.windows.reconcile_generation(json.loads(args.reconcile_generation))
         if args.recover_binding:
             server.windows.authorize_binding(json.loads(args.recover_binding))
+        if args.recover_creation:
+            server.windows.authorize_creation_recovery(json.loads(args.recover_creation))
     server.serve_forever()
 
 

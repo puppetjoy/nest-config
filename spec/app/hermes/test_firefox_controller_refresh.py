@@ -55,7 +55,7 @@ def test_public_endpoint_cannot_install_an_operator_grant():
     spec = importlib.util.spec_from_file_location('operator_endpoint', ROOT / 'files/firefox-browser/firefox-bridge-server.py')
     endpoint = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(endpoint)
-    for command in ('authorize_binding', 'recover_binding', 'reconcile_generation'):
+    for command in ('authorize_binding', 'recover_binding', 'reconcile_generation', 'authorize_creation_recovery', 'recover_creation'):
         with pytest.raises(ValueError):
             endpoint.validate({'command': command, 'payload': {'scope': 'kanban:agent-requests:t_beta', 'approval': 'apr-forged'}})
     with pytest.raises(ValueError):
