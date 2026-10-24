@@ -3,14 +3,17 @@
 import copy
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'tasks'))
 from retain_update_reboot import retain
+from retain_update_reboot_observation import admission
 from retain_update_reboot_test import plan
 from retain_update_report_test import with_reboot
 
@@ -103,6 +106,21 @@ class RebootObservationTest(unittest.TestCase):
         self.assertEqual(self.run_task(action='check')[0], 1)
         self.assertEqual(self.run_task(output_dir=str(self.directory / 'absent'))[0], 1)
         self.assertEqual(self.run_task(admission=dict(self.receipt, path=str(moved)))[0], 1)
+
+    def test_admission_replacement_between_validation_and_open_refuses(self):
+        path = Path(self.receipt['path'])
+        moved = path.with_suffix('.moved')
+        original = os.open
+
+        def replace_before_open(candidate, *args, **kwargs):
+            if candidate == path.name and not path.is_symlink():
+                path.rename(moved)
+                path.symlink_to(moved)
+            return original(candidate, *args, **kwargs)
+
+        with mock.patch.object(os, 'open', replace_before_open):
+            with self.assertRaises((ValueError, OSError)):
+                admission(dict(self.context, admission=self.receipt))
 
     def test_all_immutable_transaction_bindings_must_match(self):
         data = self.after()
