@@ -79,6 +79,39 @@ Repeating the inventory command and the documented
 `./bin/bolt-wrapper command run 'id -un && hostname -f' --targets owl --stream`
 passed as joy on owl. No direct SSH or ad-hoc Puppet fallback was used.
 
-Exact-head CI, merge, managed image publication, installed controller parity,
-original consumer recovery and a genuinely resumed original owner are pending.
-No Luna client acceptance or member mutation is claimed by this report.
+All required exact-head CI jobs passed in pipeline 11914 at
+dadeb98ba16c5f4c8d476e51ab78ea58414d46d6. MR !548 merged as
+2e43b765c21b5176276fbf7615d1512d3d507720. The focused lifecycle suite passed
+106 tests; all ten compatibility scripts and the Node viewer suite passed.
+The full native window canary additionally verified shared synthetic login,
+input/screenshot isolation, no accidental sends, owner focus and exact cleanup.
+
+The documented `nest::build::firefox` plan applied only the three changed
+controller assets, passed the real Firefox/Kasm navigation/input/click/tab/PNG
+smoke check and published the managed image. Pull-back by the exact registry
+manifest succeeded:
+
+- Image: registry.gitlab.joyfullee.me/nest/tools/firefox@sha256:b0e89162d5f1f90d7d701eb7afeebc5e5b6d7e8dc53dc1dc4313105f8f3c5670
+- Image config: a0202e6be6ef2acc04b7052d4c33441ba04b41bc74b8a942f2184925c6f9d6a5
+- Controller: ed5755809bcf91d21163c4a8cacce8ee9d1684482051db91a8f4821459c3ccce
+- Endpoint: c569b05b6b2746524b9fc34c2e20505e91f1dd5470653bc81ecca0429c4a7b61
+- Transport: 5f4840fe9341c43d311f0d0e3af988bc3dd71180bfa4c9506f45d40951ea9965
+
+All three extracted payload hashes match reviewed source. Podman's additional
+local RepoDigests alias a89e58bdc7f71c223dd028f73e78034889b9d4cebab48a8dd575d8b3276bb70e
+was not available from the registry; it is not the shipped identity. The exact
+manifest above was independently pulled successfully instead.
+
+Managed Puppet code deployment verified the merged source in both test and
+production OpenVox. No host profile service was restarted: the changed private
+transport executes inside Firefox, not in the public HTTPS host adapter. The
+KubeCM image pin advances the future container baseline. The accepted
+controller-only managed overlay operation avoids an unnecessary Recreate of
+the live browser/profile and installs the same extracted payload.
+
+Before activation, this task's distinct native window confirmed the exact
+existing Muse URL and title Chat — Luna, readable chat and an enabled Message
+composer. That is supplementary client evidence, not recovery of the other
+scope. Installed controller parity, original consumer recovery and a genuinely
+resumed original owner remain pending. No Luna client acceptance or member
+mutation is claimed by this report.
