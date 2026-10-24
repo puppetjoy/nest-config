@@ -218,6 +218,26 @@ validate default isolation, whitespace guards, root/node source admission,
 fixture conflicts and generated child job/needs/trigger syntax without creating
 pipelines. These are not real candidate build/resource/host acceptance.
 
+`GraphArtifactFlowTest` in `spec/files/nest_release_graph_test.py` additionally
+carries the compiler function's emitted request and generated job variables
+through separate disposable Git checkouts and real `--freeze-node` and
+`--accept` subprocesses. The root freezer's actual projection becomes the
+simulated Stage 0 input; its digest-named fixture result binds the descendant's
+actual bases and projection. Final acceptance reopens both emitted inputs and
+assembles those exact simulated outputs. Changed compiler bytes, a failed
+predecessor and a self-consistent changed descendant policy refuse publication.
+The compiler CLI is deliberately not bypassed or enabled by this test.
+
+These GitLab resources, executor receipts and leaf outputs are explicitly fake
+and confined to the disposable test. The closed fake `glab` serves only fixture
+GET replies. The test performs no image build, publication, host operation or
+live job-token acquisition. Run it with `python3 spec/files/nest_release_graph_test.py`;
+the existing release fixture CI job includes it. This closes an offline
+cross-job artifact-flow gap, not the still-required live nonpublishing contract
+exercise. Stage consumers' existing status-only fixture cannot supply those
+live input/result artifacts, and another status-only topology run would not
+close that gap. Keep executing graph compilation disabled.
+
 ## Nonpublishing nested topology exercise
 
 After this source is installed at `main`, the existing status fixture also

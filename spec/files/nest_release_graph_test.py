@@ -583,5 +583,190 @@ class GraphTest(unittest.TestCase):
             self.api.bridges[600][0]['downstream_pipeline']['id'] = 650
 
 
+class GraphArtifactFlowTest(unittest.TestCase):
+    """Carry emitted artifacts across isolated jobs; all GitLab resources are fake.
+
+    Unlike the independent reader fixtures, no freezer input or leaf projection
+    is precomputed. Production compilation stays disabled at its CLI boundary.
+    This exercises its compiler function, then the real freezer/acceptance CLIs;
+    it is not live scheduling, job-token or image-publication acceptance.
+    """
+
+    def setUp(self):
+        self.fixture = GraphTest()
+        self.fixture.setUp()
+        self.addCleanup(self.fixture.doCleanups)
+        self.api = self.fixture.api
+        self.root = self.fixture.f.root
+        self.compiler = self.fixture.f.checkout
+        self.publication = G['compile_graph'](self.api.graph, self.fixture.env)
+        self.graph = R['load'](self.compiler / 'release-graph/graph.yml')
+        self.request_raw = (self.compiler / 'release-graph/request.json').read_bytes()
+        self.assertEqual(hashlib.sha256(self.request_raw).hexdigest(), self.publication['request_sha256'])
+        # Populate the fake API only from the compiler's retained publication.
+        self.api.graph = R['load'](self.compiler / 'release-graph/request.json')
+        self.api.artifacts = {key: row for key, row in self.api.artifacts.items()
+                              if key[0] == 'nest/config' and key[1] in (601, 901)}
+        self.api.artifacts[('nest/config', 601, 'release-graph/request.json')] = self.api.graph
+        self.api.bridges = {600: self.api.bridges[600], 650: []}
+        self.api.pipelines = {key: row for key, row in self.api.pipelines.items() if key in (600, 650)}
+        self.api.jobs = {key: row for key, row in self.api.jobs.items() if key[0] == 'nest/config'}
+        self.api.jobs[('nest/config', 801)]['status'] = 'running'
+        self.api.pipeline_jobs = {650: [self.api.jobs[('nest/config', 801)], self.api.jobs[('nest/config', 9011)]]}
+        self.binary = self.root / 'flow-bin'
+        self.binary.mkdir()
+        self.attempts = []
+
+    def replies(self):
+        """Expose a closed GET-only inventory, never the real glab or network."""
+        paths = set()
+        for project, job in self.api.jobs:
+            prefix = G['B']['prefix'](project)
+            paths.update((prefix, prefix + '/jobs/' + str(job), prefix + '/jobs/' + str(job) + '/artifacts'))
+        for project, job, name in self.api.artifacts:
+            paths.add(G['B']['prefix'](project) + '/jobs/' + str(job) + '/artifacts/' + name)
+        for identifier, pipeline in self.api.pipelines.items():
+            project = 'nest/config' if pipeline['project_id'] == 3 else (
+                'nest/stage0' if identifier == 1 else 'nest/stage1')
+            prefix = G['B']['prefix'](project) + '/pipelines/' + str(identifier)
+            paths.add(prefix)
+            if identifier in self.api.bridges:
+                paths.add(prefix + '/bridges?per_page=100&page=1')
+            if identifier in self.api.pipeline_jobs:
+                paths.add(prefix + '/jobs?per_page=100&page=1')
+        return {path: self.api.get(path) for path in sorted(paths)}
+
+    def invoke(self, name, action, variables, job):
+        checkout = self.root / (str(len(self.attempts)) + '-' + name)
+        subprocess.run(['git', 'clone', '--no-hardlinks', '--local', str(self.compiler), str(checkout)],
+                       env=self.fixture.f.env, capture_output=True, check=True)
+        # Use the variables emitted by the actual compiler, not a parallel
+        # hand-authored environment that might conceal broken variable wiring.
+        variables = {key: '650' if value == '$CI_PIPELINE_ID' else value for key, value in variables.items()}
+        env = dict(self.fixture.f.env, **variables, CI_PROJECT_DIR=str(checkout),
+                   CI_PIPELINE_SOURCE='parent_pipeline', CI_PIPELINE_ID='650',
+                   CI_JOB_NAME=name, CI_JOB_ID=str(job),
+                   PATH=str(self.binary) + os.pathsep + self.fixture.f.env['PATH'])
+        F['fake_glab'](self.binary / 'glab', self.replies())
+        result = subprocess.run([sys.executable, str(ROOT / 'scripts/nest-release-graph.py'), action],
+                                cwd=checkout, env=env, capture_output=True, check=False)
+        self.attempts.append((checkout, result))
+        self.assertNotIn(b'Traceback', result.stderr)
+        return checkout, result
+
+    def freeze(self, name, job):
+        title = 'Freeze release inputs ' + name
+        return self.invoke(title, '--freeze-node', self.graph[title]['variables'], job)
+
+    def leaf(self, name, checkout, freezer, pipeline, job, route, bridge) -> Any:
+        """Simulate a leaf, explicitly not a build or a published OCI output."""
+        frozen = R['load'](checkout / 'release-inputs/expectations.json')
+        member = frozen['members'][0]
+        project = member['project']
+        candidate = R['load'](checkout / 'release-inputs/candidate.yml')['Build frozen member']
+        self.assertEqual(candidate['trigger']['project'], project)
+        self.assertEqual(candidate['variables']['RELEASE_INPUT_JOB_ID'], str(freezer))
+        self.assertEqual(candidate['variables']['RELEASE_INPUT_SHA256'],
+                         hashlib.sha256((checkout / 'release-inputs/expectations.json').read_bytes()).hexdigest())
+        self.assertNotIn('RELEASE_GRAPH_NODE', candidate['variables'])
+        self.api.artifacts[('nest/config', freezer, 'release-inputs/expectations.json')] = frozen
+        self.api.jobs[('nest/config', freezer)]['status'] = 'success'
+        self.api.pipelines[route] = self.api.pipeline(route, 'parent_pipeline', 'success')
+        self.api.pipelines[pipeline] = self.api.pipeline(pipeline, 'pipeline', 'success', project=project)
+        self.api.bridges[650].append(self.api.bridge(bridge, 'Release node ' + name, 650, route))
+        self.api.bridges[route] = [self.api.bridge(bridge + 100, 'Build frozen member', route, pipeline)]
+        self.api.bridges[pipeline] = []
+        node = next(row for row in self.api.graph['nodes'] if row['member'] == name)
+        native = self.api.make_job(project, pipeline, job, node['job_name'])
+        native['allow_failure'] = False
+        self.api.jobs[(project, job)] = native
+        self.api.pipeline_jobs[pipeline] = [native]
+        # These digests are inert fixture data; only the contract readers run.
+        artifacts = dict(normal=F['MANIFEST']['image'](500 + job), debug=F['MANIFEST']['image'](600 + job))
+        result = dict(schema=1, kind='nest_release_member_result', release=frozen['release'],
+                      expectations_digest=R['digest'](frozen), executor_receipt=self.api.executor,
+                      output=dict(member=copy.deepcopy(member), executor=frozen['executor'],
+                                  producer=dict(project=project, sha=frozen['sources'][project], pipeline=pipeline, job=job),
+                                  artifacts=artifacts))
+        emitted = {(project, job, 'release-results/' + name + '.json'): result}
+        F['digest_results'](emitted)
+        self.api.artifacts.update(emitted)
+        return result
+
+    def root_leaf(self) -> Any:
+        checkout, result = self.freeze('stage0', 801)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(R['load'](checkout / 'release-inputs/expectations.json'),
+                         G['I']['project_member'](self.api.graph['expectations'], 'stage0'))
+        return self.leaf('stage0', checkout, 801, 1, 101, 850, 660)
+
+    def acceptance(self):
+        row = self.api.make_job('nest/config', 650, 699, 'Accept release graph')
+        row.update(status='running', allow_failure=False)
+        self.api.pipeline_jobs[650].append(row)
+        return self.invoke('Accept release graph', '--accept', self.graph['Accept release graph']['variables'], 699)
+
+    def test_emitted_compiler_root_descendant_and_acceptance_bytes_cross_job_boundaries(self):
+        upstream = self.root_leaf()
+        checkout, result = self.freeze('stage1', 9011)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        frozen = R['load'](checkout / 'release-inputs/expectations.json')
+        self.assertEqual(frozen['members'][0]['bases'], upstream['output']['artifacts'])
+        downstream = self.leaf('stage1', checkout, 9011, 2, 102, 9050, 661)
+        checkout, result = self.acceptance()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        receipt = R['load'](checkout / 'release-graph-acceptance/receipt.json')
+        self.assertEqual(receipt['inputs'], R['load'](self.compiler / 'release-graph/request.json'))
+        self.assertEqual(receipt['graph_sha256'], self.publication['request_sha256'])
+        self.assertEqual(receipt['rebuilt']['manifest']['candidate']['outputs'], [upstream['output'], downstream['output']])
+        self.assertFalse(receipt['promotion_authorized'])
+        self.assertEqual(len({path for path, _ in self.attempts}), 3)
+
+    def test_failed_predecessor_refuses_descendant_publication(self):
+        self.root_leaf()
+        self.api.pipelines[1]['status'] = 'failed'
+        self.api.jobs[('nest/stage0', 101)]['status'] = 'failed'
+        checkout, result = self.freeze('stage1', 9011)
+        self.assertEqual(result.returncode, 1)
+        self.assertFalse((checkout / 'release-inputs').exists())
+
+    def test_failed_predecessor_refuses_acceptance_even_with_both_leaf_artifacts(self):
+        self.root_leaf()
+        checkout, result = self.freeze('stage1', 9011)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.leaf('stage1', checkout, 9011, 2, 102, 9050, 661)
+        self.api.pipelines[1]['status'] = 'failed'
+        self.api.jobs[('nest/stage0', 101)]['status'] = 'failed'
+        checkout, result = self.acceptance()
+        self.assertEqual(result.returncode, 1)
+        self.assertFalse((checkout / 'release-graph-acceptance').exists())
+
+    def test_self_consistent_changed_descendant_projection_refuses_final_publication(self):
+        self.root_leaf()
+        checkout, result = self.freeze('stage1', 9011)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        leaf = self.leaf('stage1', checkout, 9011, 2, 102, 9050, 661)
+        frozen = self.api.artifacts[('nest/config', 9011, 'release-inputs/expectations.json')]
+        frozen['consumers'][0]['reason'] = 'Changed fixture policy outside the selected member'
+        leaf['expectations_digest'] = R['digest'](frozen)
+        # Reseal the simulated leaf filename too, so the refusal cannot be
+        # explained by the simpler raw archive byte-hash guard alone.
+        key = next(key for key in self.api.artifacts if key[0] == 'nest/stage1')
+        del self.api.artifacts[key]
+        emitted = {('nest/stage1', 102, 'release-results/stage1.json'): leaf}
+        F['digest_results'](emitted)
+        self.api.artifacts.update(emitted)
+        checkout, result = self.acceptance()
+        self.assertEqual(result.returncode, 1)
+        self.assertFalse((checkout / 'release-graph-acceptance').exists())
+
+    def test_changed_retained_compiler_bytes_refuse_root_without_leaf_artifacts(self):
+        self.api.graph['expectations']['release'] = 'changed-fixture'
+        checkout, result = self.freeze('stage0', 801)
+        self.assertEqual(result.returncode, 1)
+        self.assertFalse((checkout / 'release-inputs').exists())
+        self.assertFalse(any(project != 'nest/config' for project, _, _ in self.api.artifacts))
+
+
 if __name__ == '__main__':
     unittest.main()
