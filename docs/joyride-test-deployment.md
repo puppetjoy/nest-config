@@ -1,5 +1,26 @@
 # Joyride private TEST deployment
 
+## Trusted TEST member correction
+
+Application MR 41 is merged at `c37b2a3e32c9f00829fef9146483b0f411b16721`.
+Main pipeline 11893, build job 49671, supplies the authoritative `image.json`:
+`sha256:b6c833d4f0356b5763488078677d1b76e0b00d8b27774127bbec46ab48445924`.
+This baseline retains later accepted main work. It does not interrupt the
+independent v3 producer/archive, promote v3, replace v2 or publish frontend/content.
+Every application listener, worker and initializer uses this single pin.
+Require main check/build/smoke success and refresh installed identity before
+deploying, so a newer accepted deployment is never overwritten silently.
+
+The private member proxy now uses exact no-bearer routes on trusted port 8002,
+not the former generic bearer prefix on 8001. Authorization and caller identity
+claims are stripped, and private-access port 8001 network permissions are removed.
+Legacy ordinary ops credentials/listeners remain unchanged. See
+`joyride-luna-private-access.md` for methods, encoded email, audit cursors and
+the mandatory installed pre-SNAT Tailscale/network-policy trust boundary.
+The stored-token Muse connector/scope list is retired/disconnected. Parent-owned
+Luna read/reset/readback/audit acceptance remains distinct from engineering
+synthetic HTTP and installed-route verification; do not claim it from fixtures.
+
 ## Basemap v2 runtime baseline
 
 The TEST pin follows application MR 37, source

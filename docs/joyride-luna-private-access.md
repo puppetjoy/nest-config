@@ -1,9 +1,10 @@
 # Luna's isolated Joyride TEST access
 
-Existing exact release/status routes use Tailscale authentication only. Member
-administration additionally requires the existing TEST ops bearer token; the
-proxy never injects it. Luna needs no new Muse connector credential, synthetic
-identity header, secret bridge or routine ops CI job. Existing CI preview credentials and ordinary application
+Existing exact release/status and member routes use Tailscale authentication only.
+The former stored-token Muse connector and member scope list are retired and
+disconnected, not active registration metadata. Luna needs no bearer, new Muse
+connector credential, synthetic identity header, secret bridge or routine ops CI
+job. Existing CI preview credentials and ordinary application
 member/admin authentication remain unchanged. Production and public launch are
 outside this TEST change.
 
@@ -46,7 +47,7 @@ capabilities and bounded tmpfs. Access logs are disabled.
 `joyride-test-access` terminates TLS with the managed TEST certificate. Unknown
 SNI fails TLS; wrong Host returns 421. Fixed upstreams cannot be chosen from
 caller headers or URLs. Public/member requests retain ordinary authentication.
-Only these exact raw method/path pairs, with no query or normalized variants,
+Only these exact raw method/path pairs, with no normalized variants,
 reach the separate `joyride.trusted_test_wsgi:application` process on port 8002:
 
 - `GET /ops/status`: sanitized TEST-only deployment status.
@@ -58,36 +59,55 @@ All caller headers are discarded on these ops upstream requests; only the fixed
 Host, connection handling and JSON content type for deployment are supplied.
 There is no injected credential or trusted identity header. Ops requests have
 bounded bodies, deadlines, connection concurrency and request rate. Responses
-remain the bounded application schema. Roster, controller, admin, member and
-production authority are absent on the dedicated listener. An HTTP 202 is queue
+remain the bounded application schema. Roster, controller, admin and production
+authority are absent; only the exact TEST member operations below are added.
+An HTTP 202 is queue
 acceptance, not succeeded delivery.
 
 Only the exact private-access pod selector may connect to port 8002. Neither
 shared ingress nor the TEST deployment adapter is allowed that port; their
-8000/8001 access remains unchanged. The ordinary ops Service still requires its
+8000/8001 access remains unchanged. Private access has no port 8001 permission.
+The ordinary ops Service still requires its
 existing bearer credentials; the public listener exposes no ops routes. Other
 cluster pods and direct PodIP/Service calls must fail network admission. Inspect
 all additive NetworkPolicies, not merely the named policy. Kubernetes node-local
 and same-pod processes are privileged trust roots, not untrusted network clients.
 
-### Bearer member administration
+### Trusted TEST member administration
 
-Only the private `/ops/members/` prefix additionally reaches the authenticated
-ops listener on port 8001. It preserves `Authorization`, `Idempotency-Key` and
-`Content-Type`, discarding all other caller headers. Bodies are bounded to 8 KiB;
-existing TLS, rate, connection and timeout limits remain in effect. The exact
-trusted release routes above still use port 8002 and never receive bearer tokens.
-The private-access pod has narrowly selected ingress/egress permission for 8001;
-no new public ingress, tailnet grant or forwarded identity trust is introduced.
+The raw method/path allowance reaches only port 8002:
 
-The existing TEST token retains `status,diagnostics,deploy:test,member:read,release`
-and adds `member:admin` without rotation. Production is unchanged. GET member
-and audit require `member:read`; mutations require `member:admin` and an
-`Idempotency-Key`. All member endpoints independently enforce TEST environment.
+- `GET /ops/members/<email>`
+- `GET /ops/members/<email>/audit`
+- `POST /ops/members/<email>/waiver/reset`
+- `POST /ops/members/<email>/waiver/record`
+- `POST /ops/members/<email>/subscription/cancel`
+- `POST /ops/members/<email>/membership/set`
+- `POST /ops/members/<email>/sessions/revoke`
+
+Only audit admits single-valued `before` (UUID) and `history_before` (integer)
+cursors, in either order. Other queries, unknown routes, wrong verbs, traversal,
+nested escapes and normalized route variants fail closed. Printable ASCII email
+escapes such as `%40` and `%2B` retain their original upstream encoding; separators,
+percent, controls and query delimiters cannot be escaped into email authority.
+The proxy preserves only `Idempotency-Key` and `Content-Type`, discarding
+Authorization, cookies and every caller identity claim. Bodies remain bounded to
+8 KiB with the existing TLS, rate, connection and timeout limits. Private-access
+ingress/egress permission for 8001 is removed; no public ingress or tailnet grant
+is added. Status, diagnostics and releases retain their existing contracts.
+
+Legacy TEST bearer services/scopes remain distinct and unchanged on port 8001;
+they are not Luna's delivered interface. Production is unchanged. Trusted
+mutations require an `Idempotency-Key` and record the actual service principal
+`trusted-test:tailscale-backchannel`, never a named person or `ops:<HMAC>` token
+actor. Transactional replay/conflicts remain scoped to actor plus key, target,
+operation and payload. All member endpoints independently enforce TEST environment.
 The application contract in Joyride `docs/test-member-administration.md` defines
 payloads, atomic audit/replay, historical waiver retention and session epochs.
-Public/internal web and trusted listeners do not register member ops routes.
-Verify with a nonexistent synthetic member, never real account mutations.
+Public/internal web do not register member ops routes. Engineering verification
+uses a nonexistent synthetic member, never real account mutations. Parent-owned
+Luna acceptance separately performs only Joy's explicitly authorized TEST
+read/reset/readback/audit sequence; synthetic checks do not claim that delivery.
 
 Deploy the authoritative merged-main image to every application listener and
 worker before exposing the new private route. After waiver reset or session
