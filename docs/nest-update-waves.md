@@ -246,9 +246,44 @@ Existing host report bytes and legacy/planning interfaces are unchanged.
 
 Copy the index AND every referenced host report across execution/notification
 host boundaries, reopen them and verify their hashes at the destination before
-handoff. Paths alone are not portable. Rebase only receipt paths when moving
-an intact bundle; never rewrite the content-addressed index and keep its old
-digest. This index does not create a controller service or dispatch a reboot.
+handoff. Paths alone are not portable. Preserve the same canonical absolute
+report-directory path (or caller-backed container mount) for supported recovery:
+host receipt paths are inside the hashed index. Rewriting them changes its
+identity; do not relabel rewritten bytes with the old digest. Relocation to a
+different directory is not supported by the recovery interface. This index
+does not create a controller service or dispatch a reboot.
+
+### Read-only recovery without host contact
+
+After a supervisor restart, use the same installed task to reopen the original
+index and all referenced host reports, without replaying observation or prepare:
+
+    bolt task run nest::retain_update_scope --targets localhost --params @/absolute/path/read-scope.json
+
+The parameter document contains `action: "read"`, the original `mode` (`prepare`
+or `observe`), complete `policy`, exact resolved inventory-name array `targets`,
+transaction-only `observations`, existing canonical `output_dir`, and `receipt`
+equal to the original returned `retained_scope`. Omit `waves`; even an explicit
+null refuses. Only the original index may select the historical host reports.
+The `--targets localhost` option selects the task execution host, not the hosts
+in the `targets` parameter. This task does not resolve or contact those hosts.
+
+The reader checks exact index path, hash, byte count, canonical schema, complete
+policy and transaction bindings, deterministic wave order, host count and every
+receipt flag. It reopens every referenced report using the existing bounded,
+nonblocking, no-symlink/single-link reader, rechecks index and host bytes before
+return, and pins the directory identity across acquisition. Missing, changed,
+linked, substituted or incomplete evidence refuses with a sanitized error.
+It creates no file, directory, lock or replacement index. Recovery failure never
+requests another status, prepare, reboot, catalog apply or cleanup command.
+
+The result preserves the original scope receipt and returns validated `waves`
+and `observations`, with `scope_reopened`, `read_only` and `historical_only` true.
+`host_action_performed`, `execution_authorized` and `acceptance_recorded` remain
+false, and `reboot_eligible` remains empty. Byte integrity is not live freshness,
+native policy provenance, a continuing lease or permission to resume a phase.
+Use the separately scoped live native observation interface when current host
+state is needed; never substitute recovered prepared bytes for current admission.
 
 ## Explicit transactional preparation
 
