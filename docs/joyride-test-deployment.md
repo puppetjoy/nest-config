@@ -5,8 +5,8 @@
 Application MR 41 is merged at `c37b2a3e32c9f00829fef9146483b0f411b16721`.
 Main pipeline 11893, build job 49671, supplies the authoritative `image.json`:
 `sha256:b6c833d4f0356b5763488078677d1b76e0b00d8b27774127bbec46ab48445924`.
-This baseline retains later main work, including the v3 producer implementation;
-it does not promote v3, replace the active v2 map or publish frontend/content.
+This baseline retains later accepted main work. It does not interrupt the
+independent v3 producer/archive, promote v3, replace v2 or publish frontend/content.
 Every application listener, worker and initializer uses this single pin.
 Require main check/build/smoke success and refresh installed identity before
 deploying, so a newer accepted deployment is never overwritten silently.

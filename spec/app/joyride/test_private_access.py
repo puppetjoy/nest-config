@@ -207,6 +207,7 @@ class PrivateAccess(unittest.TestCase):
             "/ops/members/x?before=1", "/ops/members/x/waiver/reset?before=1",
             "/ops/%6dembers/x", "//ops/members/x", "/ops//members/x",
             "/other/../ops/members/x", "/ops/members/x/../x", "/ops/members/%2e%2e/x",
+            "/ops/members/x/../../../", "/ops/members/x/../../../admin",
             "/ops/members/x%2fy", "/ops/members/x%5cy", "/ops/members/x%252fy",
             "/ops/members/x%2540example.invalid", "/ops/members/x%00", "/ops/members/x%0d%0a",
         ):
