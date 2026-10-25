@@ -19,7 +19,7 @@ def prepare(policy: Any, targets: Any, inputs: Any):
     result = plan(policy, targets)
     # Old policies remain inspectable but cannot initiate another reset without
     # explicitly binding release-long retention for every backup prerequisite.
-    require(policy['schema'] == 4)
+    require(policy['schema'] in (4, 5))
     start, end = preparation_window(policy['preparation_window'])
     require(start <= current_time() < end)
     require(type(inputs) is dict and set(inputs) == {host['name'] for host in policy['hosts']})

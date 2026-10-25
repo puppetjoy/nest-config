@@ -82,6 +82,7 @@ stages:
     - 'python3 spec/tasks/update_prepare_window_test.py'
     - 'python3 spec/tasks/update_backup_policy_test.py'
     - 'python3 spec/tasks/update_observe_inputs_test.py'
+    - 'python3 spec/tasks/update_lifecycle_test.py'
     - 'python3 spec/files/run_puppet_exit_test.py'
     - 'python3 spec/files/nest_update_state_test.py'
     - 'python3 spec/files/hermes_backup_generation_test.py'

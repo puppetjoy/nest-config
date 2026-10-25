@@ -2,7 +2,7 @@
   "description": "Publish or read back a durable wave-policy index and every exact retained host report; never authorize reboot or acceptance",
   "input_method": "stdin",
   "supports_noop": false,
-  "files": ["nest/tasks/retain_update_report.py", "nest/tasks/update_observe_inputs.py", "nest/tasks/update_wave_plan.py"],
+  "files": ["nest/tasks/retain_update_report.py", "nest/tasks/update_observe_inputs.py", "nest/tasks/update_wave_plan.py", "nest/tasks/update_lifecycle_policy.py", "nest/tasks/update_network_health.py"],
   "parameters": {
     "action": { "type": "Enum['check', 'retain', 'read']" },
     "mode": { "type": "Enum['prepare', 'observe']" },

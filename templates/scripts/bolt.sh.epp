@@ -164,6 +164,7 @@ podman run --rm --cidfile "$cidfile" "${podman_tty_args[@]}" -e TERM \
     -e GEM_SOURCE_PUPPETCORE \
     -e PUPPET_FORGE_TOKEN \
     -e KUBECONFIG \
+    --env "NEST_BOLT_CONTROLLER=$(hostname)" \
     "${git_identity_args[@]}" \
     "${ssh_auth_sock_args[@]}" \
     "${podman_sock_args[@]}" \
