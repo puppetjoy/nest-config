@@ -240,6 +240,57 @@ class CompilerCandidateTest(unittest.TestCase):
         execute.assert_not_called()
         self.assertEqual(self.output.read_text(), 'prior')
 
+    def test_pin_accepts_only_native_zstd_descriptor_additions_with_exact_pushed_digest(self):
+        value, _previous = self.selection_fixture()
+        remote = copy.deepcopy(self.index)
+        for item in remote['manifests']:
+            item['annotations'] = {'io.github.containers.compression.zstd': 'true'}
+        self.pin_calls, self.pin_digest = [], 'sha256:' + 'f' * 64
+
+        def command(argv, phase, timeout=180):
+            if argv[:3] == ['podman', 'manifest', 'push']:
+                return self.pin_command(argv, phase, timeout)
+            return json.dumps(self.index if argv[-1] == REPOSITORY + ':manifest-123' else remote)
+
+        with patch.dict(MODULE['pin'].__globals__, command=command):
+            result = self.pin(value)
+        self.assertTrue(result['published_digest_verified'])
+        self.assertTrue(result['tag_readback_verified'])
+
+    def test_pin_refuses_other_descriptor_drift_and_conflicting_compression_hints(self):
+        value, _previous = self.selection_fixture()
+        for mutate in (lambda item: item.update(annotations={'io.github.containers.compression.zstd': 'false'}),
+                       lambda item: item.update(annotations={'unknown': 'true'}),
+                       lambda item: item.update(size=1001),
+                       lambda item: item['platform'].update(variant='v8')):
+            remote = copy.deepcopy(self.index)
+            mutate(remote['manifests'][1])
+            calls = []
+
+            def command(argv, phase, timeout=180):
+                calls.append(argv)
+                return json.dumps(self.index if argv[-1] == REPOSITORY + ':manifest-123' else remote)
+
+            with patch.dict(MODULE['pin'].__globals__, command=command), self.assertRaises(ValueError):
+                self.pin(value)
+            self.assertFalse(any('push' in call for call in calls))
+            self.assertFalse(self.output.exists())
+
+        local = copy.deepcopy(self.index)
+        local['manifests'][0]['annotations'] = {'io.github.containers.compression.zstd': 'false'}
+        remote = copy.deepcopy(self.index)
+        remote['manifests'][0]['annotations'] = {'io.github.containers.compression.zstd': 'true'}
+        calls = []
+
+        def conflicting(argv, phase, timeout=180):
+            calls.append(argv)
+            return json.dumps(local if argv[-1] == REPOSITORY + ':manifest-123' else remote)
+
+        with patch.dict(MODULE['pin'].__globals__, command=conflicting), self.assertRaises(ValueError):
+            self.pin(value)
+        self.assertFalse(any('push' in call for call in calls))
+        self.assertFalse(self.output.exists())
+
     def test_pin_refuses_local_list_drift_before_push(self):
         value, _previous = self.selection_fixture()
         calls = []

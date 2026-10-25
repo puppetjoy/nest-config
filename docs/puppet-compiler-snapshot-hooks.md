@@ -147,6 +147,13 @@ receipt and fails the publishing job, blocking dependent environment deployment.
 The digest-named tag is an additive GC root, not a cryptographic tag lock or a
 lease against manual registry deletion. Existing authentication/TLS is unchanged.
 
+Podman's native push adds `io.github.containers.compression.zstd: "true"`
+to zstd member descriptors without changing their digests. The pre-push local
+comparison admits only that exact addition; conflicting hints, other annotations
+or descriptor changes still refuse. This does not normalize the expected index
+digest: the pushed digest and complete remote tag readback must still match
+the originally published candidate exactly.
+
 This prevents future ordinary `latest` replacements from orphaning newly
 published compiler indexes under the existing mirror GC policy. It does not
 retroactively pin historical indexes: retain all existing digest selections and

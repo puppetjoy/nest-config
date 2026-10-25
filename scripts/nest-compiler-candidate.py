@@ -220,7 +220,16 @@ def pin(candidate_path, local_list, output):
     # reconstruct a historical index from members: that may change its digest.
     verify_index(reference, value['members'])
     remote = load_index(reference)
-    require(load_index(local_list) == remote)
+    local = load_index(local_list)
+    # Native pushes add this compression hint to zstd member descriptors.
+    # It is absent from the original local list, even though member digests
+    # are unchanged. Admit only that exact addition, never arbitrary metadata
+    # drift. The push digest and complete remote readback below remain exact.
+    for before, after in zip(local.get('manifests', []), remote['manifests']):
+        key = 'io.github.containers.compression.zstd'
+        if after.get('annotations', {}).get(key) == 'true':
+            before.setdefault('annotations', {}).setdefault(key, 'true')
+    require(local == remote)
     with tempfile.TemporaryDirectory(prefix='nest-compiler-pin-') as directory:
         digest_path = Path(directory) / 'digest'
         command(['podman', 'manifest', 'push', '--all', '--digestfile', str(digest_path),
