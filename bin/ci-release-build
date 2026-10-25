@@ -114,6 +114,12 @@ def prepare(expected, member_id, receipt, placement=None):
         params["root_publication"].update(release=expected["release"], expectations=release.digest(expected))
         if remote:
             params["root_publication"].update(target=placement["target"], archive=placement["archive"])
+        # Preserve the existing Stage 3 CI resource controls for shared builders.
+        # Omitting them keeps the plan's normal profile-selected defaults.
+        for variable, parameter in (("CI_HOST_MAKEOPTS", "makeopts"),
+                                    ("CI_HOST_EMERGE_DEFAULT_OPTS", "emerge_default_opts")):
+            if os.environ.get(variable):
+                params[parameter] = os.environ[variable]
     elif stage == "stage1":
         params.update(variant=member["variant"], refresh=member["mode"] == "refresh",
                       from_image=member["bases"]["normal"], from_image_debug=member["bases"]["debug"])
