@@ -1,10 +1,8 @@
 # Deploy the Puppet control repo to test and production OpenVox
 plan nest::puppet::deploy ( # lint:ignore:deploy_plan_boundary -- code rollout plan, not Kubernetes stack initialization
-  Enum['test', 'prod', 'kubernetes', 'both', 'all'] $backend            = 'kubernetes',
-  Optional[String[1]]                               $environment        = 'main',
-  Boolean                                           $all_environments   = false,
-  Optional[String[1]]                               $compiler_candidate = undef,
-  String[1]                                         $compiler_output    = 'rollout-evidence/compiler',
+  Enum['test', 'prod', 'kubernetes', 'both', 'all'] $backend          = 'kubernetes',
+  Optional[String[1]]                               $environment      = 'main',
+  Boolean                                           $all_environments = false,
 ) {
   $environment_args = $all_environments ? {
     true    => [],
@@ -36,26 +34,6 @@ plan nest::puppet::deploy ( # lint:ignore:deploy_plan_boundary -- code rollout p
     default      => [],
   }
 
-  # Do not update r10k and report success while an immutable compiler continues
-  # serving its prior selected snapshot. Preflight every backend before writes.
-  $selected_openvox_backends.each |$openvox_backend| {
-    $namespace = $openvox_backends[$openvox_backend]['namespace']
-    $inspect_cmd = [
-      'kubectl', 'get', 'deployment', '-n', $namespace, 'puppet-puppetserver',
-      '-o', 'jsonpath={.spec.template.spec.containers[0].volumeMounts[?(@.name=="compiler-snapshots")].name}',
-    ].shellquote
-    $frozen = run_command($inspect_cmd, 'localhost', 'Inspect compiler deployment mode').first.value['stdout'].strip
-    if $frozen != '' {
-      if !$compiler_candidate or $all_environments or $environment != 'main' {
-        fail('Immutable compiler selected: supply its exact main compiler_candidate; mutable r10k deployment refused')
-      }
-      $preflight_cmd = [
-        'python3', 'scripts/nest-compiler-rollout.py', $compiler_candidate, $namespace,
-        "${compiler_output}/${namespace}", '--check',
-      ].shellquote
-      run_command($preflight_cmd, 'localhost', 'Preflight additive immutable compiler selection')
-    }
-  }
 
   $selected_openvox_backends.each |$openvox_backend| {
     $openvox     = $openvox_backends[$openvox_backend]
@@ -63,24 +41,6 @@ plan nest::puppet::deploy ( # lint:ignore:deploy_plan_boundary -- code rollout p
     $description = $openvox['description']
     $deployment  = 'deploy/puppet-puppetserver'
 
-    # Reinspect before choosing a writer: a concurrent mode change must not
-    # make the old mutable writer refresh a frozen compiler silently.
-    $mode_cmd = [
-      'kubectl', 'get', 'deployment', '-n', $namespace, 'puppet-puppetserver',
-      '-o', 'jsonpath={.spec.template.spec.containers[0].volumeMounts[?(@.name=="compiler-snapshots")].name}',
-    ].shellquote
-    $mode = run_command($mode_cmd, 'localhost', 'Reinspect compiler deployment mode').first.value['stdout'].strip
-    if $mode != '' {
-      if !$compiler_candidate or $all_environments or $environment != 'main' {
-        fail('Compiler mode changed; mutable r10k deployment refused')
-      }
-      $rollout_cmd = [
-        'python3', 'scripts/nest-compiler-rollout.py', $compiler_candidate, $namespace,
-        "${compiler_output}/${namespace}", '--deploy',
-      ].shellquote
-      run_command($rollout_cmd, 'localhost', "Roll out accepted immutable compiler to ${description}")
-      next()
-    }
 
     $wait_cmd = [
       'kubectl', 'wait', '-n', $namespace,
