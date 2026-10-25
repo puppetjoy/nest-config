@@ -82,11 +82,20 @@ def selected(rows, name):
     return row
 
 
-def edge(api, config_source, producer_source, selector):
-    """Resolve one direct native edge; refuse child trigger loops and failure hiding."""
+def selector_fields(selector):
+    """Validate a complete native selector without contacting GitLab."""
     fields(selector, 'project member root_pipeline bridge job_name input_pipeline', 'discovery selector')
     require(selector['project'] in BIND['PROJECTS'] - {'nest/config'}, 'unsupported member project')
     R['match'](selector['member'], R['TOKEN'], 'member ID')
+    for key in ('root_pipeline', 'input_pipeline'):
+        BIND['positive'](selector[key])
+    for key in ('bridge', 'job_name'):
+        R['text'](selector[key], 'resource name')
+
+
+def edge(api, config_source, producer_source, selector):
+    """Resolve one direct native edge; refuse child trigger loops and failure hiding."""
+    selector_fields(selector)
     root = pipeline(api, 'nest/config', selector['root_pipeline'], config_source, root=True)
     bridge = selected(listing(api, 'nest/config', root['id'], 'bridges'), selector['bridge'])
     require(bridge['pipeline']['id'] == root['id'] and bridge['pipeline']['sha'] == config_source
@@ -128,14 +137,19 @@ def discover(request: Any, api):
     require(type(request['schema']) is int and request['schema'] == 1
             and request['kind'] == 'nest_release_base_discovery', 'unsupported discovery request')
     R['expectations'](request['expectations'])
-    producers = request['producers']
+    producers: dict[str, Any] = request['producers']
     require(type(producers) is dict and 0 < len(producers) <= 32, 'invalid discovery inventory')
     binding = copy.deepcopy(request)
     binding['kind'] = 'nest_release_base_binding'
     observations = {}
     sources = request['expectations']['sources']
+    # Admit the entire inventory before the first external read. In particular,
+    # a malformed later predecessor must not acquire earlier valid resources.
     for name, selector in producers.items():
         R['match'](name, R['TOKEN'], 'predecessor name')
+        selector_fields(selector)
+        require(selector['project'] in sources, 'predecessor source missing')
+    for name, selector in producers.items():
         binding['producers'][name], observations[name] = edge(
             api, sources['nest/config'], sources[selector['project']], selector)
     expected, provenance = BIND['bind'](binding, api)

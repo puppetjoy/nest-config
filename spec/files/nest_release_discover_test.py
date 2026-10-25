@@ -185,6 +185,18 @@ class DiscoverTest(unittest.TestCase):
         self.assertFalse(result['promotion_authorized'])
         self.assertEqual(result['publication'], 'not_performed')
 
+    def test_all_predecessor_selectors_validate_before_any_external_read(self):
+        for key, value in [('project', 'nest/unknown'), ('member', ''),
+                           ('root_pipeline', True), ('input_pipeline', 0),
+                           ('bridge', ''), ('job_name', []), ('unexpected', 'fixture')]:
+            with self.subTest(key=key):
+                self.api = NativeGitLab()
+                later = copy.deepcopy(self.api.request['producers']['upstream'])
+                later[key] = value
+                self.api.request['producers']['later'] = later
+                with self.assertRaises(ValueError): self.discover()
+                self.assertEqual(self.api.native_reads, [])
+
     def test_generated_child_bridge_can_use_original_parent_input_pipeline(self):
         # Artifact-backed routing creates a config child containing the direct
         # member bridge; the unique input publisher remains in its parent.
