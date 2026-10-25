@@ -29,8 +29,7 @@ def deployment(value=PRIOR):
                           volumeMounts=[dict(name='compiler-snapshots', mountPath='/compiler')],
                           securityContext=dict(readOnlyRootFilesystem=True)))
     mounts = [dict(name='compiler-snapshots', mountPath='/compiler', readOnly=True)]
-    for path, sub in (('/docker-custom-entrypoint.d/20-compiler.sh', 'runtime/entrypoint'),
-                      ('/etc/puppetlabs/puppetserver/conf.d/versioned-code.conf', 'runtime/versioned-code.conf')):
+    for path, sub in (('/docker-custom-entrypoint.d/20-compiler.sh', 'runtime/entrypoint'),):
         mounts.append(dict(name='compiler-snapshots', mountPath=path, subPath=sub, readOnly=True))
     return dict(apiVersion='apps/v1', kind='Deployment', metadata=dict(name='puppet-puppetserver', namespace='test',
                 uid='fixture-deployment-uid', resourceVersion='123', generation=4),

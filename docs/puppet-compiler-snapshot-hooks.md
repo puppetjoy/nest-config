@@ -302,6 +302,11 @@ Only the compiler mounts that volume after init, read-only. Neither the r10k
 sidecar nor any other pod can write it. The mutable code-volume mount is removed
 from the compiler. The startup entrypoint sets the fixed environment root and
 an empty base module path using the explicit server configuration directory.
+After the image's standard recursive permissions setup, the custom entrypoint
+links conf.d/versioned-code.conf to the paired hook configuration on the
+read-only snapshot. Do not put a read-only submount beneath the image's chown
+paths: that prevents the standard startup from completing. The configuration
+bytes remain immutable; only the local configuration-directory link is writable.
 The code-ID wrapper refers only to current; static content selects current or
 retained by exact ID. The patch checks the pinned chart's container and mount
 layout before removing anything, refusing chart-layout drift.
@@ -340,8 +345,10 @@ accepted executor images and exact server image already present locally:
 
 It executes the actual rendered init commands without a source overlay, then
 the paired wrappers in the server image as UID 999. It verifies server JAR
-identity, isolated paths, static-content digest, wrong-ID refusal and an EROFS
-write refusal. Private copied module bytes remain only in a disposable named
+identity, isolated paths, static-content digest, wrong-ID refusal and EROFS
+write refusals through both the store and the linked hook configuration. It
+runs the image's actual permissions script and generated hook twice to cover
+startup and restart ordering. Private copied module bytes remain only in a disposable named
 volume removed on exit; the output contains safe receipts, not the rendered
 manifest or source payload. This is not a native JAR catalog compile, live
 deployment, ordinary main apply or complete compiler attestation.

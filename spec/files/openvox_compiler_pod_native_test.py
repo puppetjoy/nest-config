@@ -50,13 +50,20 @@ try:
         if index==len(inits)-1:
             result=json.loads(output)
             assert result['code_id']==expected['code_id'] and result['compiler_attestation'] is False
-    probe='''require 'json'; require 'digest'; require 'open3'
+    probe='''require 'json'; require 'digest'; require 'open3'; require 'fileutils'
 expected=JSON.parse(ARGV.fetch(0))
 raise unless Digest::SHA256.file('/opt/puppetlabs/server/apps/puppetserver/puppet-server-release.jar').hexdigest==ARGV.fetch(2)
 base='/compiler/store/'+expected.fetch('code_id').delete_prefix('sha256:')
 raise unless File.stat('/compiler/store').uid==999 && File.stat(base+'/expected.json').uid==999
-output,status=Open3.capture2e('/compiler/runtime/entrypoint')
-raise output unless status.success?
+FileUtils.mkdir_p('/etc/puppetlabs/puppetserver/conf.d')
+2.times do
+ output,status=Open3.capture2e('/docker-entrypoint.d/30-set-permissions.sh')
+ raise output unless status.success?
+ output,status=Open3.capture2e('/compiler/runtime/entrypoint')
+ raise output unless status.success?
+ raise unless File.symlink?('/etc/puppetlabs/puppetserver/conf.d/versioned-code.conf')
+ raise unless File.realpath('/etc/puppetlabs/puppetserver/conf.d/versioned-code.conf')=='/compiler/runtime/versioned-code.conf'
+end
 Process::GID.change_privilege(999)
 Process::UID.change_privilege(999)
 settings,status=Open3.capture2e('puppet','config','print','environmentpath','basemodulepath','--section','server','--confdir','/etc/puppetlabs/puppet')
@@ -67,14 +74,19 @@ content,status=Open3.capture2('/compiler/runtime/content','main',expected.fetch(
 raise unless status.success? && Digest::SHA256.hexdigest(content)==ARGV.fetch(1)
 _wrong,_stderr,status=Open3.capture3('/compiler/runtime/content','main','sha256:'+('0'*64),'.modules/nest/files/puppet-versioned-code.rb')
 raise if status.success?
-begin
- File.write('/compiler/store/write-probe','no')
- raise 'Snapshot writable'
-rescue Errno::EROFS
+['/compiler/store/write-probe','/etc/puppetlabs/puppetserver/conf.d/versioned-code.conf'].each do |path|
+ begin
+  File.write(path,'no')
+  raise 'Snapshot or linked hook configuration writable'
+ rescue Errno::EROFS
+ end
 end
-puts JSON.generate('source'=>expected.fetch('source'),'code_id'=>identity.strip,'uid'=>Process.euid,'paired_wrappers'=>true,'read_only_refusal'=>true,'isolated_module_paths'=>true,'static_content_digest_verified'=>true,'wrong_static_id_refused'=>true,'native_jar_catalog_requested'=>false,'compiler_attestation'=>false)
+puts JSON.generate('source'=>expected.fetch('source'),'code_id'=>identity.strip,'uid'=>Process.euid,'paired_wrappers'=>true,'read_only_refusal'=>true,'isolated_module_paths'=>true,'native_permissions_and_hook_repeat'=>true,'static_content_digest_verified'=>true,'wrong_static_id_refused'=>true,'native_jar_catalog_requested'=>false,'compiler_attestation'=>false)
 '''
     server_args=common+['--user=0:0','--cap-drop=ALL','--cap-add=SETUID','--cap-add=SETGID','--cap-add=CHOWN','--cap-add=DAC_OVERRIDE','--tmpfs','/etc/puppetlabs/puppet:rw,mode=777,size=16m',
+                 '--tmpfs','/etc/puppetlabs/puppetserver:rw,mode=755,size=16m',
+                 '--tmpfs','/opt/puppetlabs/server/data/puppetserver:rw,mode=755,size=16m,notmpcopyup',
+                 '--tmpfs','/var/log/puppetlabs/puppetserver:rw,mode=755,size=16m',
                  '--tmpfs','/work:rw,mode=777,size=32m','--env','HOME=/work','--env','TMPDIR=/work',
                  '--volume',volume+':/compiler:ro','--entrypoint','ruby',server,'-e',probe,json.dumps(expected),
                  hashlib.sha256((ROOT/'files/puppet-versioned-code.rb').read_bytes()).hexdigest(),jar_sha256]
@@ -86,6 +98,7 @@ puts JSON.generate('source'=>expected.fetch('source'),'code_id'=>identity.strip,
         receipts=[json.loads(init['command'][3]) for init in inits]
         http_args=common+['--memory=3g','--user=0:0','--cap-drop=ALL','--cap-add=SETUID','--cap-add=SETGID','--cap-add=CHOWN','--cap-add=DAC_OVERRIDE',
                           '--tmpfs','/etc/puppetlabs/puppet:rw,mode=777,size=16m',
+                          '--tmpfs','/etc/puppetlabs/puppetserver/conf.d:rw,mode=755,size=16m',
                           '--tmpfs','/work:rw,mode=777,size=256m','--env','HOME=/work','--env','TMPDIR=/work',
                           '--volume',volume+':/compiler:ro',
                           '--volume',str(ROOT/'spec/files/openvox_compiler_http_native.rb')+':/probe.rb:ro',

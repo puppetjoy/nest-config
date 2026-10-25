@@ -28,7 +28,7 @@ describe 'nest::openvox_compiler_patches' do
     expect(init['volumeMounts']).to eq([{ 'name' => 'compiler-snapshots', 'mountPath' => '/compiler' }])
     mounts = rendered.select { |op| op['path'] == '/spec/template/spec/containers/0/volumeMounts/-' }.map { |op| op['value'] }
     expect(mounts).to all(include('readOnly' => true))
-    expect(mounts.map { |mount| mount['mountPath'] }).to include('/compiler', '/docker-custom-entrypoint.d/20-compiler.sh', '/etc/puppetlabs/puppetserver/conf.d/versioned-code.conf')
+    expect(mounts.map { |mount| mount['mountPath'] }).to eq(['/compiler', '/docker-custom-entrypoint.d/20-compiler.sh'])
   end
 
   it 'removes only the proven mutable compiler code mount and refuses chart layout drift' do
@@ -115,6 +115,7 @@ describe 'nest::openvox_compiler_patches' do
       File.write(File.join(input, 'main/modules/fixture/files/probe'), 'changed input')
       expect(File.read(File.join(root, 'modules/fixture/files/probe'))).to eq("frozen\n")
       expect(File.read(File.join(volume, 'runtime/entrypoint'))).to include('environmentpath', 'basemodulepath', '/empty-modules')
+      expect(File.read(File.join(volume, 'runtime/entrypoint'))).to include("ln -sfn #{volume}/runtime/versioned-code.conf /etc/puppetlabs/puppetserver/conf.d/versioned-code.conf")
       expect(File.read(File.join(volume, 'runtime/versioned-code.conf'))).to include('code-id-command:', 'code-content-command:')
       expect(File.read(File.join(volume, 'runtime/content'))).to include('puppet-compiler-store.rb content')
       _stdout, _stderr, repeat = execute_init
