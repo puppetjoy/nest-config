@@ -93,10 +93,65 @@ construction of the preceding OpenBolt release or the complete release graph.
 No aliases, served Puppet code, hosts or ordinary builds change in route mode.
 Rollback stops selecting `route` and preserves all predecessor/successor artifacts.
 
-## Request schema 1
+## Native predecessor discovery in route mode
 
-The request has exactly `schema`, `kind`, `successor_source`, `successor_cpu`,
+The existing `EXECUTOR_BOOTSTRAP=route` compiler also accepts a schema-1
+`nest_executor_bootstrap_discovery` object in `RELEASE_BOOTSTRAP_FILE`. There
+are no new CI variables or trigger services. Its fields are exactly `schema`,
+`kind`, `successor_source`, `successor_cpu`, `config_source`, `bolt_source`
 and `producer`:
+
+- Successor source and CPU have the same meaning as the exact request below.
+- `config_source` is the exact 40-character prior config source, distinct from
+  the successor. `bolt_source` is the exact OpenBolt source; neither is a ref.
+- `producer` is the existing native discovery selector, with exactly `project`
+  (`nest/tools/bolt`), `member`, `root_pipeline`, `input_pipeline`, `bridge`
+  and `job_name`. The positive integer root identifies the config pipeline
+  containing the completed direct OpenBolt bridge. The input pipeline identifies
+  its original unique freezer. For a standalone frozen route these are the
+  artifact-backed route child and its input-publishing parent, respectively.
+  Use actual completed identities, not predicted or latest-success resources.
+
+As in ordinary discovery, the config root may still be running while unrelated
+jobs finish. Its selected required bridge and the entire OpenBolt leaf must have
+succeeded. This is exact-edge acceptance, not whole-root or release acceptance.
+
+The compiler discovers the actual downstream pipeline, member/input jobs and
+hashes of their original artifact bytes using the existing bounded reader. It
+then performs the full independent old-executor/OpenBolt acquisition. Exact
+native parent/child/source/required-success relationships, complete job inventories,
+artifact hashes and source closure are reacquired before local publication.
+Malformed static selectors refuse before any GitLab read. No new permission,
+credential fallback, mutable alias or artifact format for OpenBolt is introduced.
+
+The retained `request.json` is the ordinary resolved bootstrap request with an
+optional `native` object containing exactly `config_source`, `bolt_source` and
+the original native `producer` selector. That object is covered by the canonical
+request hash sent to the child. `discovery.json` additionally retains the original
+submitted request and edge observation. The child independently reopens the native
+edge before and after old-executor acquisition, and retains its observed identity
+as `native_edge` in the bootstrap input receipt. Completed-successor acceptance
+reopens this same edge rather than trusting the compiler's stored discovery or
+silently dropping native provenance. A changed bridge retry refuses, even when
+it points to the same successful output. Explicit requests without `native` retain
+their existing schema and byte shape; older readers refuse the added field.
+
+Only the route compiler accepts the discovery object. Direct `--ci-base` calls
+and successor acceptance take the resolved `nest_executor_bootstrap` request,
+including `native` when present, not an unresolved discovery object. All generated
+files retain the existing no-clobber/fsync/readback behavior. The six child variables
+and mirror trigger are unchanged. Compilation does not start a pipeline, and
+selecting the route in CI still requires separate build authority.
+
+This closes manual job/hash copying between the already completed prior native
+OpenBolt route and successor compilation. It does not schedule the preceding
+OpenBolt build, enable the full release graph, prove production job-token access
+or resource/ISA/ABI compatibility, or authorize a build merely for evidence.
+
+## Exact bootstrap request schema 1
+
+The request has `schema`, `kind`, `successor_source`, `successor_cpu`,
+and `producer`, plus only the optional `native` object described above:
 
 - `schema` is integer 1; `kind` is `nest_executor_bootstrap`.
 - `successor_source` is the exact new config Git SHA. It must match the actual
@@ -229,6 +284,12 @@ CLI acquisition with fake glab. Fake Podman tests bind actual successor input
 observations before writing a schema-2 receipt. They build/publish nothing.
 Real GitLab merged-YAML dry runs verify admission and ordinary compatibility
 without creating pipelines or artifacts.
+
+Native discovery tests exercise every executor CPU, exact/digest-named results,
+complete static pre-acquisition refusal, changed/failed/erased native resources,
+bridge retries during acquisition, real compiler CLI retention with fake glab,
+and independent native-edge reopening during completed-successor acceptance.
+These are isolated fixtures, not actual OpenBolt or successor production builds.
 
 The completed-successor tests exercise all three architecture selections,
 independent old/new acquisition, digest-named prior results, failed/erased/changed

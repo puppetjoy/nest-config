@@ -10,6 +10,7 @@ import runpy
 import subprocess
 import sys
 import unittest
+from typing import Any
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -20,6 +21,9 @@ R = M['R']
 
 
 class ExecutorRouteTest(unittest.TestCase):
+    native_request: dict[str, Any]
+    native_bridge: dict[str, Any]
+
     def setUp(self):
         self.f = T['ExecutorBootstrapTest']()
         self.f.setUp()
@@ -240,6 +244,178 @@ class ExecutorRouteTest(unittest.TestCase):
         other.f.input.unlink()
         self.assertEqual(json.loads((other.f.checkout / 'executor-bootstrap-route/request.json').read_bytes()), request)
         self.assertNotIn('Traceback', child.stderr)
+
+    def native_discovery(self):
+        expected = self.api.expected
+        self.native_root = dict(id=850, project_id=3, sha=expected['sources']['nest/config'],
+                                ref='main', source='parent_pipeline', status='success')
+        self.native_bridge = dict(id=851, name='Build frozen member', status='success', allow_failure=False,
+                                  pipeline=copy.deepcopy(self.native_root), downstream_pipeline=copy.deepcopy(self.api.pipeline))
+        self.native_request = dict(schema=1, kind='nest_executor_bootstrap_discovery',
+                                   successor_source=self.f.f.sha, successor_cpu=self.f.request['successor_cpu'],
+                                   config_source=expected['sources']['nest/config'],
+                                   bolt_source=expected['sources']['nest/tools/bolt'],
+                                   producer=dict(project='nest/tools/bolt', member='tool', root_pipeline=850,
+                                                 input_pipeline=800, bridge='Build frozen member', job_name='Candidate haswell'))
+        original = self.api.get
+        def get(path):
+            if '/pipelines/850' in path or '/pipelines/800/jobs?' in path:
+                self.api.reads.append(path)
+                if '/pipelines/800/jobs?' in path:
+                    return R['canonical']([self.api.jobs[('nest/config', 801)]])
+                return R['canonical']([self.native_bridge] if '/bridges?' in path else self.native_root)
+            return original(path)
+        self.api.get = get
+        self.f.f.input.write_bytes(R['canonical'](self.native_request))
+
+    def discover(self):
+        return M['discover_route'](self.native_request, self.f.f.sha, self.native_request['successor_cpu'], self.api)
+
+    def test_discovery_resolves_native_bridge_and_retains_reopenable_canonical_request(self):
+        self.native_discovery()
+        original = copy.deepcopy(self.native_request)
+        canonical, evidence, acquired = self.discover()
+        self.assertEqual(canonical['producer'], self.f.request['producer'])
+        self.assertEqual(canonical['native']['producer'], original['producer'])
+        self.assertEqual(evidence['edge']['bridge']['id'], 851)
+        self.assertEqual(acquired['successor']['base_image'], self.api.result['output']['artifacts']['image'])
+        receipt = self.compile()
+        directory = self.f.f.checkout / 'executor-bootstrap-route'
+        self.assertEqual(json.loads((directory / 'request.json').read_bytes()), canonical)
+        self.assertEqual(json.loads((directory / 'discovery.json').read_bytes())['request'], original)
+        self.assertEqual(receipt['request_sha256'], hashlib.sha256((directory / 'request.json').read_bytes()).hexdigest())
+        self.f.f.input.unlink()
+        self.assertEqual(M['acquire'](canonical, self.f.f.sha, 'haswell', self.api), acquired)
+        self.assertEqual(self.native_request, original)
+
+    def test_discovery_all_native_cpus_and_digest_named_results(self):
+        self.native_discovery()
+        for cpu in M['CPUS']:
+            with self.subTest(cpu=cpu):
+                self.api.expected['members'][0]['cpu'] = cpu
+                self.api.result['output']['member']['cpu'] = cpu
+                self.api.executor['cpu'] = cpu
+                self.api.jobs[('nest/config', 901)]['name'] = 'Build ' + cpu
+                self.api.artifacts = {('nest/config', 901, 'executor-receipts/' + cpu + '.json'): self.api.executor,
+                                      ('nest/config', 801, 'release-inputs/expectations.json'): self.api.expected,
+                                      ('nest/tools/bolt', 105, 'release-results/tool.json'): self.api.result}
+                self.native_request['successor_cpu'] = cpu
+                self.f.reseal()
+                T['T']['digest_results'](self.api.artifacts)
+                canonical, _, acquired = self.discover()
+                self.assertEqual(acquired['successor']['cpu'], cpu)
+                self.assertEqual(canonical['producer']['job'], 105)
+
+    def test_discovery_running_root_requires_successful_required_completed_leaf(self):
+        self.native_discovery()
+        self.native_root['status'] = 'running'
+        canonical, _, acquired = self.discover()
+        self.assertEqual(acquired['native_edge']['root']['status'], 'running')
+        self.assertEqual(canonical['producer']['pipeline'], 5)
+        self.native_bridge['status'] = 'running'
+        with self.assertRaises(ValueError): self.discover()
+
+    def test_discovery_complete_static_admission_precedes_external_reads(self):
+        self.native_discovery()
+        mutations = [('schema', True), ('kind', 'other'), ('successor_source', 'f' * 40),
+                     ('successor_cpu', 'zen5'), ('config_source', self.f.f.sha),
+                     ('config_source', 'a' * 40 + '\n'), ('bolt_source', None), ('extra', 'field')]
+        for key, value in mutations:
+            request = copy.deepcopy(self.native_request); request[key] = value
+            with self.subTest(key=key), self.assertRaises((ValueError, TypeError)):
+                M['discover_route'](request, self.f.f.sha, 'haswell', self.api)
+        for key, value in [('project', 'nest/stage0'), ('root_pipeline', True), ('input_pipeline', 0),
+                           ('member', '../tool'), ('bridge', '$SECRET'), ('job_name', ''), ('extra', 'field')]:
+            request = copy.deepcopy(self.native_request); request['producer'][key] = value
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                M['discover_route'](request, self.f.f.sha, 'haswell', self.api)
+        self.assertEqual(self.api.reads, [])
+
+    def test_discovery_failed_erased_ambiguous_wrong_source_or_native_lineage_refuses(self):
+        self.native_discovery()
+        cases = [(self.native_root, 'sha', 'f' * 40), (self.native_root, 'status', 'failed'),
+                 (self.native_bridge, 'status', 'failed'), (self.native_bridge, 'allow_failure', True),
+                 (self.native_bridge['downstream_pipeline'], 'id', 6),
+                 (self.api.pipeline, 'source', 'api'), (self.api.pipeline, 'sha', 'f' * 40),
+                 (self.api.jobs[('nest/config', 801)], 'erased_at', 'fixture')]
+        for target, key, value in cases:
+            old = target[key]; target[key] = value
+            with self.subTest(key=key), self.assertRaises((ValueError, TypeError)): self.discover()
+            target[key] = old
+        self.api.extra_jobs.append(copy.deepcopy(self.api.jobs[('nest/tools/bolt', 105)]))
+        with self.assertRaises(ValueError): self.discover()
+
+    def test_discovery_detects_bridge_retry_during_old_executor_acquisition(self):
+        self.native_discovery()
+        original = self.api.get
+        def get(path):
+            raw = original(path)
+            if path.endswith('/jobs/901/artifacts/executor-receipts/haswell.json'):
+                self.native_bridge['id'] += 1
+            return raw
+        with patch.object(self.api, 'get', get), self.assertRaises(ValueError): self.compile()
+        self.assertFalse((self.f.f.checkout / 'executor-bootstrap-route').exists())
+
+    def test_retained_native_request_rechecks_lineage_and_admits_all_fields_before_reads(self):
+        self.native_discovery()
+        canonical, _, _ = self.discover()
+        self.api.reads.clear()
+        for key, value in [('config_source', self.f.f.sha), ('bolt_source', 'malformed'), ('extra', 'field')]:
+            bad = copy.deepcopy(canonical); bad['native'][key] = value
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                M['acquire'](bad, self.f.f.sha, 'haswell', self.api)
+        self.assertEqual(self.api.reads, [])
+        self.native_bridge['status'] = 'failed'
+        with self.assertRaises(ValueError): M['acquire'](canonical, self.f.f.sha, 'haswell', self.api)
+
+    def test_discovered_route_real_cli_retains_exact_native_context_after_exit(self):
+        self.native_discovery()
+        replies = {}
+        original = self.api.get
+        def get(path):
+            raw = original(path); replies[path] = raw; return raw
+        with patch.object(self.api, 'get', get): self.compile()
+        other = T['ExecutorBootstrapTest'](); other.setUp()
+        self.addCleanup(other.doCleanups)
+        binary = other.f.root / 'bin'; binary.mkdir()
+        T['T']['fake_glab'](binary / 'glab', replies)
+        submitted = dict(self.native_request, successor_source=other.f.sha)
+        other.f.input.write_bytes(R['canonical'](submitted))
+        env = dict(other.env, EXECUTOR_BOOTSTRAP='route', CI_COMMIT_BRANCH='main',
+                   CI_JOB_NAME='Compile executor bootstrap', PATH=str(binary) + os.pathsep + os.environ['PATH'])
+        child = subprocess.run([sys.executable, str(ROOT / 'scripts/nest-executor-bootstrap.py'), '--compile-route'],
+                               env=env, capture_output=True, text=True)
+        self.assertEqual(child.returncode, 0, child.stderr)
+        other.f.input.unlink()
+        directory = other.f.checkout / 'executor-bootstrap-route'
+        canonical = json.loads((directory / 'request.json').read_bytes())
+        self.assertEqual(canonical['native']['producer'], submitted['producer'])
+        self.assertEqual(json.loads((directory / 'discovery.json').read_bytes())['request'], submitted)
+        self.assertNotIn('Traceback', child.stderr)
+
+    def test_successor_acceptance_reopens_original_discovered_native_edge(self):
+        fixture = A['ExecutorAcceptanceTest'](); fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        self.f, self.api = fixture.f, fixture.api
+        self.native_discovery()
+        canonical, _, acquired = self.discover()
+        fixture.request['bootstrap'] = canonical
+        fixture.bootstrap = acquired
+        fixture.bootstrap['successor'].update(pipeline=1000, job=1001)
+        fixture.reseal()
+        accepted = fixture.accept()
+        self.assertEqual(accepted['request']['bootstrap']['native'], canonical['native'])
+        original = self.api.get
+        calls = 0
+        def get(path):
+            nonlocal calls
+            if path.endswith('/pipelines/1000'):
+                calls += 1
+                if calls == 2: self.native_bridge['id'] += 1
+            return original(path)
+        with patch.object(self.api, 'get', get), self.assertRaises(ValueError): fixture.accept()
+        self.native_bridge['status'] = 'failed'
+        with self.assertRaises(ValueError): fixture.accept()
 
     def test_completed_routed_successor_accepts_only_its_actual_native_lineage(self):
         fixture = A['ExecutorAcceptanceTest'](); fixture.setUp()

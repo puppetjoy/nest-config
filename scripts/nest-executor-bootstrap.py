@@ -100,9 +100,20 @@ def identity(env):
     return checkout, source
 
 
+def native_selection(value, source):
+    R['fields'](value, 'config_source bolt_source producer', 'native bootstrap edge')
+    for key in ('config_source', 'bolt_source'):
+        R['match'](value[key], R['SHA'], 'prior native source')
+    require(value['config_source'] != source, 'discovery requires distinct config sources')
+    D['selector_fields'](value['producer'])
+    require(value['producer']['project'] == 'nest/tools/bolt', 'discovery requires OpenBolt')
+    require(b'$' not in R['canonical'](value), 'variable expansion in bootstrap discovery')
+
+
 def selection(request, source, cpu):
     """Admit the complete bootstrap selector before any external acquisition."""
-    R['fields'](request, 'schema kind successor_source successor_cpu producer', 'bootstrap request')
+    names = 'schema kind successor_source successor_cpu producer'
+    R['fields'](request, names + (' native' if type(request) is dict and 'native' in request else ''), 'bootstrap request')
     require(type(request['schema']) is int and request['schema'] == 1
             and request['kind'] == 'nest_executor_bootstrap', 'unsupported bootstrap request')
     R['match'](source, R['SHA'], 'successor source')
@@ -118,12 +129,22 @@ def selection(request, source, cpu):
         B['positive'](selector[key])
     for key in ('input_sha256', 'result_sha256'):
         R['match'](selector[key], r'[0-9a-f]{64}', 'OpenBolt artifact digest')
+    if 'native' in request:
+        native_selection(request['native'], source)
+        native = request['native']['producer']
+        require(native['member'] == selector['member'] and native['input_pipeline'] == selector['input_pipeline'],
+                'native bootstrap selector mismatch')
     return selector
 
 
 def acquire(request, source, cpu, api) -> dict[str, Any]:
     """Keep old expectations/result untouched; cross-source only at this boundary."""
     selector = selection(request, source, cpu)
+    native = request.get('native')
+    observation = None
+    if native is not None:
+        resolved, observation = D['edge'](api, native['config_source'], native['bolt_source'], native['producer'])
+        require(resolved == selector, 'native bootstrap producer mismatch')
     input_path = 'release-inputs/expectations.json'
     raw_input = api.get(B['prefix']('nest/config') + '/jobs/' + str(selector['input_job']) + '/artifacts/' + input_path)
     require(hashlib.sha256(raw_input).hexdigest() == selector['input_sha256'], 'OpenBolt input bytes changed')
@@ -132,6 +153,9 @@ def acquire(request, source, cpu, api) -> dict[str, Any]:
     old_source = expected['sources']['nest/config']
     old_executor_source = expected['executor']['source']
     require(old_source != source and old_executor_source != source, 'bootstrap requires distinct config sources')
+    if native is not None:
+        require(old_source == native['config_source']
+                and expected['sources']['nest/tools/bolt'] == native['bolt_source'], 'native source closure mismatch')
     require(selector['member'] in members, 'missing OpenBolt member')
     member = members[selector['member']]
     require(member['stage'] == 'tool' and member['project'] == 'nest/tools/bolt'
@@ -167,7 +191,10 @@ def acquire(request, source, cpu, api) -> dict[str, Any]:
             'bootstrap artifact changed during acquisition')
     require(leaf(api, selector, expected['sources']['nest/tools/bolt']) == observed_leaf,
             'OpenBolt pipeline changed during acquisition')
-    return dict(schema=1, kind='nest_executor_bootstrap_input', request_digest=R['digest'](request),
+    if native is not None:
+        again, fresh = D['edge'](api, native['config_source'], native['bolt_source'], native['producer'])
+        require(again == selector and fresh == observation, 'native bootstrap predecessor changed')
+    evidence: dict[str, Any] = dict(schema=1, kind='nest_executor_bootstrap_input', request_digest=R['digest'](request),
                 successor=dict(source=source, cpu=cpu, base_image=image, build='not_started'),
                 predecessor=dict(expectations=expected, input_sha256=selector['input_sha256'],
                                  result_sha256=selector['result_sha256'], result=result,
@@ -175,6 +202,9 @@ def acquire(request, source, cpu, api) -> dict[str, Any]:
                                  native_pipeline=observed_leaf),
                 resource_verification='successful_gitlab_jobs_and_exact_artifact_bytes_only',
                 image_compatibility_verification='not_performed', promotion_authorized=False)
+    if native is not None:
+        evidence['native_edge'] = observation
+    return evidence
 
 
 def route_input(selector, source, child_id, api, status):
@@ -212,16 +242,49 @@ def route_input(selector, source, child_id, api, status):
     return request
 
 
+def discover_route(request, source, cpu, api):
+    """Resolve a completed old-source native edge, never a latest-success job."""
+    R['fields'](request, 'schema kind successor_source successor_cpu config_source bolt_source producer',
+                'bootstrap discovery request')
+    require(type(request['schema']) is int and request['schema'] == 1
+            and request['kind'] == 'nest_executor_bootstrap_discovery', 'unsupported bootstrap discovery')
+    R['match'](source, R['SHA'], 'successor source')
+    require(request['successor_source'] == source and request['successor_cpu'] == cpu
+            and cpu in CPUS, 'wrong discovered successor')
+    native = {key: request[key] for key in ('config_source', 'bolt_source', 'producer')}
+    native_selection(native, source)
+    selector = request['producer']
+    resolved, observation = D['edge'](api, request['config_source'], request['bolt_source'], selector)
+    canonical = dict(schema=1, kind='nest_executor_bootstrap', successor_source=source,
+                     successor_cpu=cpu, producer=resolved, native=native)
+    # Discovery is not acceptance: acquire the actual old executor independently.
+    acquired = acquire(canonical, source, cpu, api)
+    sources = acquired['predecessor']['expectations']['sources']
+    require(sources['nest/config'] == request['config_source']
+            and sources['nest/tools/bolt'] == request['bolt_source'], 'discovered source closure mismatch')
+    again, fresh = D['edge'](api, request['config_source'], request['bolt_source'], selector)
+    require(again == resolved and fresh == observation, 'native bootstrap predecessor changed')
+    return canonical, dict(request=request, edge=observation), acquired
+
+
 def compile_route(env, api):
     checkout, source = identity(env)
     require(env['EXECUTOR_BOOTSTRAP'] == 'route' and env.get('CI_COMMIT_BRANCH') == 'main'
             and env.get('CI_JOB_NAME') == 'Compile executor bootstrap', 'wrong bootstrap compilation job')
     request_path = Path(env['RELEASE_BOOTSTRAP_FILE'])
     require(request_path.is_file() and not request_path.is_symlink(), 'invalid bootstrap file')
-    request = R['load'](request_path)
+    submitted = R['load'](request_path)
+    discovery = None
+    if type(submitted) is dict and submitted.get('kind') == 'nest_executor_bootstrap_discovery':
+        request, discovery, acquired = discover_route(submitted, source, env['CPU'], api)
+    else:
+        request = submitted
+        selection(request, source, env['CPU'])
+        acquired = None
     raw = R['canonical'](request)
     require(b'$' not in raw, 'variable expansion in bootstrap route')
-    acquired = acquire(request, source, env['CPU'], api)
+    if acquired is None:
+        acquired = acquire(request, source, env['CPU'], api)
     variables = dict(EXECUTOR_BOOTSTRAP='true', EXECUTOR_ONLY='true', BUILD=env['CPU'],
                      RELEASE_BOOTSTRAP_PIPELINE=env['CI_PIPELINE_ID'], RELEASE_BOOTSTRAP_JOB=env['CI_JOB_ID'],
                      RELEASE_BOOTSTRAP_SHA256=hashlib.sha256(raw).hexdigest())
@@ -229,14 +292,20 @@ def compile_route(env, api):
     # this exact commit; the child selects a leaf, never another route compiler.
     child = dict(include=[dict(local='.gitlab-ci.yml')], variables=variables,
                  workflow=dict(rules=[{'if': '$CI_PIPELINE_SOURCE == "parent_pipeline"'}, {'when': 'never'}]))
+    if discovery is not None:
+        fresh_request, fresh_discovery, fresh_acquired = discover_route(submitted, source, env['CPU'], api)
+        require((fresh_request, fresh_discovery, fresh_acquired) == (request, discovery, acquired),
+                'native bootstrap discovery changed before routing')
     require(acquire(request, source, env['CPU'], api) == acquired
-            and R['load'](request_path) == request and identity(env) == (checkout, source),
+            and R['load'](request_path) == submitted and identity(env) == (checkout, source),
             'bootstrap boundary changed before routing')
     receipt = dict(schema=1, kind='nest_executor_bootstrap_route', source=source,
                    pipeline=int(env['CI_PIPELINE_ID']), job=int(env['CI_JOB_ID']),
                    request_sha256=hashlib.sha256(raw).hexdigest(), child_sha256=hashlib.sha256(R['canonical'](child)).hexdigest(),
                    acquired=acquired, execution='not_started', promotion_authorized=False)
     records = {'request.json': raw, 'child.yml': R['canonical'](child), 'receipt.json': R['canonical'](receipt)}
+    if discovery is not None:
+        records['discovery.json'] = R['canonical'](discovery)
     directory = checkout / 'executor-bootstrap-route'
     directory.mkdir(mode=0o700)
     for name, payload in records.items():

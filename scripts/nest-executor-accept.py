@@ -33,7 +33,8 @@ def selection(request):
     require(type(request['schema']) is int and request['schema'] == 1
             and request['kind'] == 'nest_executor_successor_request', 'wrong successor request')
     bootstrap, successor = request['bootstrap'], request['successor']
-    R['fields'](bootstrap, 'schema kind successor_source successor_cpu producer', 'bootstrap request')
+    names = 'schema kind successor_source successor_cpu producer'
+    R['fields'](bootstrap, names + (' native' if type(bootstrap) is dict and 'native' in bootstrap else ''), 'bootstrap request')
     source, cpu = bootstrap['successor_source'], bootstrap['successor_cpu']
     M['selection'](bootstrap, source, cpu)
     R['fields'](successor, 'pipeline job image executor_sha256 bootstrap_sha256', 'successor selector')
