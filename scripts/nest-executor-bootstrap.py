@@ -18,7 +18,8 @@ B = runpy.run_path(str(Path(__file__).with_name('nest-release-bind.py')))
 D = runpy.run_path(str(Path(__file__).with_name('nest-release-discover.py')))
 R = B['RELEASE']
 require = R['require']
-KEYS = ('EXECUTOR_BOOTSTRAP', 'RELEASE_BOOTSTRAP_FILE')
+ROUTE_KEYS = ('RELEASE_BOOTSTRAP_PIPELINE', 'RELEASE_BOOTSTRAP_JOB', 'RELEASE_BOOTSTRAP_SHA256')
+KEYS = ('EXECUTOR_BOOTSTRAP', 'RELEASE_BOOTSTRAP_FILE') + ROUTE_KEYS
 CONFLICTS = ('RELEASE_INPUTS', 'RELEASE_ROUTE', 'RELEASE_ROUTE_MEMBER',
              'RELEASE_ROUTE_EXECUTOR_PIPELINE', 'RELEASE_ROUTE_EXECUTOR_JOB',
              'RELEASE_ROUTE_PLACEMENT', 'RELEASE_EXPECTATIONS_FILE', 'RELEASE_DISCOVERY_FILE',
@@ -26,8 +27,19 @@ CONFLICTS = ('RELEASE_INPUTS', 'RELEASE_ROUTE', 'RELEASE_ROUTE_MEMBER',
              'NEST_DAG_FIXTURE', 'RELEASE_MEMBER', 'RELEASE_CPU', 'RELEASE_PLATFORM',
              'RELEASE_VARIANT', 'RELEASE_HOST', 'RELEASE_INPUT_JOB_ID', 'RELEASE_INPUT_SHA256',
              'RELEASE_EXECUTOR_IMAGE', 'RELEASE_EXECUTOR_JOB_ID', 'BOLT_IMAGE',
-             'REFRESH', 'NEST_LEGACY_BUILD', 'FROM_GENTOO', 'STAGE0_RESUME', 'RUNNER_SMOKE_TAG')
+             'REFRESH', 'NEST_LEGACY_BUILD', 'FROM_GENTOO', 'STAGE0_RESUME', 'RUNNER_SMOKE_TAG',
+             'RELEASE_GRAPH', 'RELEASE_GRAPH_FILE', 'RELEASE_GRAPH_NODE', 'RELEASE_GRAPH_MEMBER',
+             'RELEASE_GRAPH_INPUT_PIPELINE', 'RELEASE_GRAPH_INPUT_JOB', 'RELEASE_GRAPH_INPUT_SHA256',
+             'RELEASE_GRAPH_ROOT_PIPELINE')
 CPUS = ('haswell', 'cortex-a53', 'sifive-u74')
+
+
+class GitLab(D['GitLab']):
+    def get(self, path):
+        if re.fullmatch(r'projects/nest%2Fconfig/jobs/[1-9][0-9]{0,19}/artifacts/'
+                        r'executor-bootstrap-route/request.json', path):
+            return self._read(path, 'artifact')
+        return super().get(path)
 
 
 def leaf(api, selector, source):
@@ -44,12 +56,24 @@ def leaf(api, selector, source):
 def selected(env):
     requested = any(env.get(key) for key in KEYS)
     if requested:
-        require(env.get('EXECUTOR_BOOTSTRAP') == 'true' and env.get('RELEASE_BOOTSTRAP_FILE'),
-                'explicit bootstrap and input file required')
+        mode = env.get('EXECUTOR_BOOTSTRAP')
+        routed = any(env.get(key) for key in ROUTE_KEYS)
+        require(mode in ('true', 'route'), 'explicit bootstrap required')
+        require(mode != 'route' or env.get('CI_COMMIT_BRANCH') == 'main', 'bootstrap routing requires main')
+        if routed:
+            require(mode == 'true' and not env.get('RELEASE_BOOTSTRAP_FILE')
+                    and env.get('CI_PIPELINE_SOURCE') == 'parent_pipeline', 'invalid routed bootstrap')
+            for key in ROUTE_KEYS[:2]:
+                R['match'](env.get(key), r'[1-9][0-9]{0,19}', 'bootstrap route resource')
+            R['match'](env.get(ROUTE_KEYS[2]), r'[0-9a-f]{64}', 'bootstrap route digest')
+        else:
+            require(env.get('RELEASE_BOOTSTRAP_FILE')
+                    and env.get('CI_PIPELINE_SOURCE') in (('api', 'web', 'trigger') if mode == 'route'
+                                                         else ('api', 'web', 'pipeline', 'trigger')),
+                    'explicit bootstrap file and supported source required')
         require(env.get('EXECUTOR_ONLY') == 'true' and env.get('BUILD') in CPUS,
                 'bootstrap requires one explicit executor architecture')
-        require(env.get('CI_PIPELINE_SOURCE') in ('api', 'web', 'pipeline', 'trigger')
-                and not env.get('CI_COMMIT_TAG'), 'unsupported bootstrap source')
+        require(not env.get('CI_COMMIT_TAG'), 'unsupported bootstrap source')
         require(not any(env.get(key) for key in CONFLICTS), 'conflicting bootstrap selection')
     return requested
 
@@ -153,11 +177,100 @@ def acquire(request, source, cpu, api) -> dict[str, Any]:
                 image_compatibility_verification='not_performed', promotion_authorized=False)
 
 
+def route_input(selector, source, child_id, api, status):
+    """Bind exact compiler bytes to its native child; never follow a latest job."""
+    R['fields'](selector, 'pipeline job sha256', 'bootstrap route selector')
+    for key in ('pipeline', 'job'):
+        B['positive'](selector[key])
+    B['positive'](child_id)
+    R['match'](selector['sha256'], r'[0-9a-f]{64}', 'bootstrap route digest')
+    require(child_id != selector['pipeline'], 'bootstrap route cannot be its own child')
+    job = B['job'](api, 'nest/config', selector['pipeline'], selector['job'], source)
+    require(job['name'] == 'Compile executor bootstrap', 'wrong bootstrap compiler')
+    path = B['prefix']('nest/config') + '/jobs/' + str(selector['job']) + '/artifacts/executor-bootstrap-route/request.json'
+    raw = api.get(path)
+    require(hashlib.sha256(raw).hexdigest() == selector['sha256'], 'bootstrap route bytes changed')
+    request = B['decode'](raw)
+    selection(request, source, request['successor_cpu'])
+    parent = D['pipeline'](api, 'nest/config', selector['pipeline'], source, root=True)
+    require(parent['source'] in ('api', 'web', 'trigger') and parent['ref'] == 'main', 'recursive bootstrap route')
+    rows = D['listing'](api, 'nest/config', parent['id'], 'bridges')
+    require(len(rows) == 1, 'unexpected bootstrap route fan-out')
+    bridge = rows[0]
+    child = D['pipeline'](api, 'nest/config', child_id, source, root=True)
+    require(bridge['name'] == 'Run executor bootstrap' and bridge['status'] == status
+            and bridge.get('allow_failure') is False
+            and bridge['pipeline']['id'] == parent['id'] and bridge['pipeline']['sha'] == source
+            and bridge['pipeline']['project_id'] == 3
+            and child['source'] == 'parent_pipeline' and child['project_id'] == 3 and child['ref'] == 'main'
+            and all(bridge['downstream_pipeline'][k] == child[k] for k in ('id', 'project_id', 'sha', 'ref', 'status')),
+            'bootstrap child is not the published route')
+    require(child['status'] == status and not D['listing'](api, 'nest/config', child_id, 'bridges'),
+            'bootstrap successor must be an isolated leaf')
+    require(B['job'](api, 'nest/config', selector['pipeline'], selector['job'], source) == job
+            and api.get(path) == raw, 'bootstrap compiler changed during acquisition')
+    return request
+
+
+def compile_route(env, api):
+    checkout, source = identity(env)
+    require(env['EXECUTOR_BOOTSTRAP'] == 'route' and env.get('CI_COMMIT_BRANCH') == 'main'
+            and env.get('CI_JOB_NAME') == 'Compile executor bootstrap', 'wrong bootstrap compilation job')
+    request_path = Path(env['RELEASE_BOOTSTRAP_FILE'])
+    require(request_path.is_file() and not request_path.is_symlink(), 'invalid bootstrap file')
+    request = R['load'](request_path)
+    raw = R['canonical'](request)
+    require(b'$' not in raw, 'variable expansion in bootstrap route')
+    acquired = acquire(request, source, env['CPU'], api)
+    variables = dict(EXECUTOR_BOOTSTRAP='true', EXECUTOR_ONLY='true', BUILD=env['CPU'],
+                     RELEASE_BOOTSTRAP_PIPELINE=env['CI_PIPELINE_ID'], RELEASE_BOOTSTRAP_JOB=env['CI_JOB_ID'],
+                     RELEASE_BOOTSTRAP_SHA256=hashlib.sha256(raw).hexdigest())
+    # Same-project trigger:project is invalid. One artifact-backed child retains
+    # this exact commit; the child selects a leaf, never another route compiler.
+    child = dict(include=[dict(local='.gitlab-ci.yml')], variables=variables,
+                 workflow=dict(rules=[{'if': '$CI_PIPELINE_SOURCE == "parent_pipeline"'}, {'when': 'never'}]))
+    require(acquire(request, source, env['CPU'], api) == acquired
+            and R['load'](request_path) == request and identity(env) == (checkout, source),
+            'bootstrap boundary changed before routing')
+    receipt = dict(schema=1, kind='nest_executor_bootstrap_route', source=source,
+                   pipeline=int(env['CI_PIPELINE_ID']), job=int(env['CI_JOB_ID']),
+                   request_sha256=hashlib.sha256(raw).hexdigest(), child_sha256=hashlib.sha256(R['canonical'](child)).hexdigest(),
+                   acquired=acquired, execution='not_started', promotion_authorized=False)
+    records = {'request.json': raw, 'child.yml': R['canonical'](child), 'receipt.json': R['canonical'](receipt)}
+    directory = checkout / 'executor-bootstrap-route'
+    directory.mkdir(mode=0o700)
+    for name, payload in records.items():
+        require(len(payload) <= R['LIMIT'], 'bootstrap route evidence exceeds size limit')
+        with (directory / name).open('xb') as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+    descriptor = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    require(all((directory / name).read_bytes() == payload for name, payload in records.items()),
+            'bootstrap route readback failed')
+    return receipt
+
+
 def publish(request_path, env, api):
     checkout, source = identity(env)
-    request_path = Path(request_path)
-    require(request_path.is_file() and not request_path.is_symlink(), 'invalid bootstrap file')
-    result = acquire(R['load'](request_path), source, env['CPU'], api)
+    require(env['EXECUTOR_BOOTSTRAP'] == 'true', 'bootstrap build not selected')
+    route = None
+    if any(env.get(key) for key in ROUTE_KEYS):
+        route = dict(pipeline=int(env[ROUTE_KEYS[0]]), job=int(env[ROUTE_KEYS[1]]), sha256=env[ROUTE_KEYS[2]])
+        request = route_input(route, source, int(env['CI_PIPELINE_ID']), api, 'running')
+    else:
+        request_path = Path(request_path)
+        require(request_path.is_file() and not request_path.is_symlink(), 'invalid bootstrap file')
+        request = R['load'](request_path)
+    result = acquire(request, source, env['CPU'], api)
+    if route:
+        require(route_input(route, source, int(env['CI_PIPELINE_ID']), api, 'running') == request,
+                'bootstrap route changed before publication')
+        result['route'] = route
     result['successor'].update(pipeline=int(env['CI_PIPELINE_ID']), job=int(env['CI_JOB_ID']))
     raw = R['canonical'](result)
     require(len(raw) <= R['LIMIT'], 'bootstrap evidence exceeds size limit')
@@ -198,14 +311,18 @@ def main():
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument('--check-selection', action='store_true')
     mode.add_argument('--ci-base', action='store_true')
+    mode.add_argument('--compile-route', action='store_true')
     args = parser.parse_args()
     try:
         enabled = selected(os.environ)
         if args.check_selection:
             require(enabled, 'bootstrap not selected')
             print('Exact executor bootstrap selected; no build or trigger performed')
+        elif args.compile_route:
+            compile_route(os.environ, GitLab())
+            print('Exact bootstrap route retained; no build or trigger performed by compiler')
         elif enabled:
-            print(publish(os.environ['RELEASE_BOOTSTRAP_FILE'], os.environ, D['GitLab']()))
+            print(publish(os.environ.get('RELEASE_BOOTSTRAP_FILE'), os.environ, GitLab()))
         else:
             # Ordinary build compatibility: the existing pipeline still resolves
             # and records a mutable default once. Bootstrap never takes this path.

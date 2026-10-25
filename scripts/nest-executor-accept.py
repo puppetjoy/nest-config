@@ -18,7 +18,7 @@ B, D, R = M['B'], M['D'], M['R']
 require = R['require']
 
 
-class GitLab(D['GitLab']):
+class GitLab(M['GitLab']):
     """Only the config build's two bootstrap artifacts extend ordinary reads."""
 
     def get(self, path):
@@ -49,7 +49,7 @@ def selection(request):
 def observe(request, api):
     bootstrap, successor, source, cpu = selection(request)
     pipeline = D['pipeline'](api, 'nest/config', successor['pipeline'], source, root=True)
-    require(pipeline['status'] == 'success' and pipeline['source'] in ('api', 'web', 'pipeline', 'trigger'),
+    require(pipeline['status'] == 'success' and pipeline['source'] in ('api', 'web', 'pipeline', 'trigger', 'parent_pipeline'),
             'successor pipeline has not completed or has unsupported source')
     require(not D['listing'](api, 'nest/config', pipeline['id'], 'bridges'), 'unexpected successor fan-out')
     jobs = D['listing'](api, 'nest/config', pipeline['id'], 'jobs')
@@ -76,6 +76,11 @@ def observe(request, api):
     # retained by the new build. Never require the successor to produce itself.
     acquired = M['acquire'](bootstrap, source, cpu, api)
     acquired['successor'].update(pipeline=pipeline['id'], job=successor['job'])
+    if pipeline['source'] == 'parent_pipeline':
+        require('route' in retained, 'missing bootstrap route evidence')
+        require(M['route_input'](retained['route'], source, pipeline['id'], api, 'success') == bootstrap,
+                'successor bootstrap route mismatch')
+        acquired['route'] = retained['route']
     require(retained == acquired, 'successor retained another bootstrap boundary')
     require(executor['inputs']['base_image'] == acquired['successor']['base_image']
             and reference_raw == (acquired['successor']['base_image'] + '\n').encode('ascii'),

@@ -148,6 +148,24 @@ class ReleaseDagFixtureTest(unittest.TestCase):
         for source in ('api', 'web', 'pipeline', 'trigger'):
             self.assertIn('$CI_PIPELINE_SOURCE == "' + source + '"', selection)
 
+    def test_bootstrap_route_is_isolated_from_status_fixtures_and_caller_variables(self):
+        route = yaml.safe_load((ROOT / '.gitlab/ci/executor-bootstrap.yml').read_text())
+        compiler, bridge = route['Compile executor bootstrap'], route['Run executor bootstrap']
+        self.assertIn({'local': '.gitlab/ci/executor-bootstrap.yml'}, self.config['include'])
+        self.assertEqual(compiler['rules'], bridge['rules'])
+        self.assertEqual(compiler['rules'][0], {'if': r'$NEST_DAG_FIXTURE =~ /[\s\S]/', 'when': 'never'})
+        self.assertEqual(compiler['rules'][1], {'if': '$CI_COMMIT_TAG', 'when': 'never'})
+        self.assertIn('$CI_COMMIT_BRANCH == "main"', compiler['rules'][-1]['if'])
+        self.assertIn('$EXECUTOR_BOOTSTRAP == "route"', compiler['rules'][-1]['if'])
+        self.assertNotIn('script', bridge)
+        self.assertEqual(bridge['needs'], ['Compile executor bootstrap'])
+        self.assertEqual(bridge['inherit'], {'variables': False})
+        self.assertFalse(bridge['allow_failure'])
+        self.assertEqual(bridge['trigger'], dict(include=[dict(artifact='executor-bootstrap-route/child.yml',
+                                                              job='Compile executor bootstrap')],
+                                               strategy='mirror', forward=dict(yaml_variables=False, pipeline_variables=False)))
+        self.assertNotIn('variables', bridge)
+
     def test_any_routing_field_prevents_default_executor_build_and_deployment(self):
         routing = runpy.run_path(str(ROOT / 'scripts/nest-release-route.py'))
         for name in ('.template', 'Deploy image', 'Deploy environment'):
