@@ -249,6 +249,42 @@ to bypass a refused release-aware lifecycle. Reopen and retain exact caller-side
 files before completion as described above. No real host apply is needed to
 exercise manifest validation, staging or isolated composition tests.
 
+## Optional native catalog code identity
+
+The same `expectations` object also accepts optional `code_id`, spelled exactly
+`sha256:` followed by 64 lowercase hexadecimal digits. This is separate from
+the Git `configuration_version`. The value must come from an independently
+reviewed compiler/release identity; never adopt the current report's value as
+its own expectation or substitute an executor digest for the compiler's identity.
+OpenVox carries the native catalog code ID into `Puppet::Transaction::Report`;
+the collector reads that scalar without instantiating YAML objects.
+
+With this expectation, the read-only report task requires an exact native
+`code_id`. The bound apply task checks it on each invocation-private report.
+A missing, null or different first ID retains the native exit and stops before
+the repeat. A changed or missing repeat ID cannot converge and never causes a
+third apply. Invalid expectation syntax refuses before any apply. The supervisor
+preflight and retainer validate the same expectation and both selected report
+scalars; the existing atomic publication/readback preserves the IDs and the
+expectation in the retained document. Stripping a required ID during transport
+refuses instead of silently falling back to the older source-only contract.
+
+Callers omitting `code_id` retain the original output shape and checks, including
+deliberately omitting any unsolicited native code ID from the selected output.
+This compatibility path must not bypass a refused release-aware operation.
+Existing native reports without a code ID cannot satisfy the opt-in contract;
+do not replay real catalogs merely to create evidence for this feature.
+
+This adds native identity reconciliation, not a compiler attestation. It does not
+configure a server code-ID command, freeze a mutable server module tree, prove
+compiler-cache identity or establish what a server-generated digest represents.
+`served_source_verified`, `release_binding_verified` and `acceptance_recorded`
+remain false. Trusted served-module/release identity and full lifecycle admission
+still require independent implementation and real verification. Tests use actual
+OpenVox report serialization and inert apply runners, not production catalogs.
+Rollback omits the optional field only for explicitly legacy callers, preserving
+retained receipts and all ambiguity; it cannot undo a prior apply.
+
 ## Wrapper compatibility and rollback
 
 Ordinary `nest::puppet::run` callers still receive the historical wrapper mapping

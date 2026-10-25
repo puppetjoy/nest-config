@@ -28,8 +28,10 @@ def unique(pairs):
 
 
 def expectations(value: Any):
-    require(type(value) is dict and set(value) == {"hostname", "certname", "boot_id", "configuration_version"},
+    require(type(value) is dict and set(value) - {"code_id"} == {"hostname", "certname", "boot_id", "configuration_version"},
             "invalid catalog expectations")
+    if "code_id" in value:
+        token(value["code_id"], "sha256:" + DIGEST)
     for key in ("hostname", "certname"):
         token(value[key], NAME)
     token(value["boot_id"], UUID)
@@ -46,7 +48,10 @@ def invocation(value: Any, expected: Any):
     if value["report_bound"]:
         require(code in (0, 2), "failed bound invocation")
         report: Any = value["report"]
-        require(type(report) is dict and set(report) == FIELDS, "invalid native report fields")
+        fields = FIELDS | {"code_id"} if "code_id" in expected else FIELDS
+        require(type(report) is dict and set(report) == fields, "invalid native report fields")
+        if "code_id" in expected:
+            require(report["code_id"] == expected["code_id"], "catalog code identity mismatch")
         require(report["host"] == expected["certname"] and report["environment"] == "main"
                 and report["configuration_version"] == expected["configuration_version"], "report identity mismatch")
         for key in ("transaction_uuid", "catalog_uuid"):

@@ -13,6 +13,7 @@ module NestUpdateCatalogReport
   LIMIT = 32 * 1024 * 1024
   UUID = %r{\A[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\z}
   SHA = %r{\A[0-9a-f]{40}\z}
+  CODE_ID = %r{\Asha256:[0-9a-f]{64}\z}
   NAME = %r{\A[A-Za-z0-9][A-Za-z0-9_.-]{0,252}\z}
   FIELDS = ['host', 'environment', 'configuration_version', 'transaction_uuid', 'catalog_uuid',
             'time', 'status', 'noop', 'cached_catalog_status', 'transaction_completed'].freeze
@@ -25,7 +26,8 @@ module NestUpdateCatalogReport
 
   def self.expectations(value)
     names = ['hostname', 'certname', 'boot_id', 'configuration_version', 'transaction_uuid', 'status', 'not_before', 'not_after']
-    require_value(value.is_a?(Hash) && value.keys.sort == names.sort)
+    require_value(value.is_a?(Hash) && (value.keys - ['code_id']).sort == names.sort)
+    require_value(!value.key?('code_id') || (value['code_id'].is_a?(String) && CODE_ID.match?(value['code_id'])))
     ['hostname', 'certname'].each { |key| require_value(value[key].is_a?(String) && NAME.match?(value[key])) }
     ['boot_id', 'transaction_uuid'].each { |key| require_value(value[key].is_a?(String) && UUID.match?(value[key])) }
     require_value(value['configuration_version'].is_a?(String) && SHA.match?(value['configuration_version']))
@@ -35,8 +37,9 @@ module NestUpdateCatalogReport
     value
   end
 
-  def self.scalars(raw)
+  def self.scalars(raw, code_id: false)
     require_value(raw.bytesize <= LIMIT)
+    fields = code_id ? FIELDS + ['code_id'] : FIELDS
     stream = Psych.parse_stream(raw)
     require_value(stream.children.length == 1)
     root = stream.children.first.root
@@ -46,8 +49,9 @@ module NestUpdateCatalogReport
     root.children.each_slice(2) do |key, node|
       require_value(key.is_a?(Psych::Nodes::Scalar) && !keys.include?(key.value))
       keys << key.value
-      next unless FIELDS.include?(key.value)
+      next unless fields.include?(key.value)
       require_value(node.is_a?(Psych::Nodes::Scalar) && node.anchor.nil?)
+      require_value([nil, 'tag:yaml.org,2002:str'].include?(node.tag)) if key.value == 'code_id'
       if ['noop', 'transaction_completed'].include?(key.value)
         require_value(node.plain && ['true', 'false'].include?(node.value) && [nil, 'tag:yaml.org,2002:bool'].include?(node.tag))
         result[key.value] = node.value == 'true'
@@ -56,13 +60,14 @@ module NestUpdateCatalogReport
         result[key.value] = node.value
       end
     end
-    require_value(result.keys.sort == FIELDS.sort)
+    require_value(result.keys.sort == fields.sort)
     result
   end
 
   def self.bind(raw, expected)
     expected = expectations(expected)
-    report = scalars(raw)
+    report = scalars(raw, code_id: expected.key?('code_id'))
+    require_value(!expected.key?('code_id') || report['code_id'] == expected['code_id'])
     require_value(report['host'] == expected['certname'] && report['environment'] == 'main')
     require_value(report['configuration_version'] == expected['configuration_version'])
     require_value(report['transaction_uuid'] == expected['transaction_uuid'] && UUID.match?(report['catalog_uuid']))

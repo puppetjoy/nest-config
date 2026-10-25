@@ -49,6 +49,41 @@ RSpec.describe NestUpdateCatalogReport do
     expect { collect }.to raise_error(described_class::Unavailable)
   end
 
+  it 'binds the actual native catalog code ID only when independently expected' do
+    expected['code_id'] = "sha256:#{'c' * 64}"
+    report.code_id = expected['code_id']
+    expect(collect['report']['code_id']).to eq(expected['code_id'])
+    expect(collect['acceptance_recorded']).to be(false)
+    expected.delete('code_id')
+    expect(collect['report']).not_to have_key('code_id')
+  end
+
+  [nil, '', 'a' * 40, "sha256:#{'d' * 64}"].each do |code_id|
+    it "refuses a missing or different expected native code ID #{code_id.inspect}" do
+      expected['code_id'] = "sha256:#{'c' * 64}"
+      report.code_id = code_id
+      expect { collect }.to raise_error(described_class::Unavailable)
+    end
+  end
+
+  [nil, false, 7, '', 'c' * 64, "sha256:#{'C' * 64}"].each do |code_id|
+    it "refuses invalid code ID expectation #{code_id.inspect} before reading" do
+      expected['code_id'] = code_id
+      expect { collect(reader: ->(_path) { raise 'must not read' }) }.to raise_error(described_class::Unavailable)
+    end
+  end
+
+  it 'refuses absent, duplicate, aliased, anchored, object-tagged and collection code IDs' do
+    expected['code_id'] = "sha256:#{'c' * 64}"
+    report.code_id = expected['code_id']
+    missing = raw.lines.reject { |line| line.start_with?('code_id:') }.join
+    invalid = [missing, raw + "code_id: #{expected['code_id']}\n"]
+    ['*missing', "&code #{expected['code_id']}", "!ruby/object:Other #{expected['code_id']}", '[]', '{}'].each do |replacement|
+      invalid << missing + "code_id: #{replacement}\n"
+    end
+    invalid.each { |yaml| expect { described_class.bind(yaml, expected) }.to raise_error(described_class::Unavailable) }
+  end
+
   it 'distinguishes changed from unchanged without accepting either' do
     report.instance_variable_set('@status', 'changed')
     expect { collect }.to raise_error(described_class::Unavailable)

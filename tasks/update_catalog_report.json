@@ -4,7 +4,7 @@
   "supports_noop": true,
   "parameters": {
     "expectations": {
-      "description": "Exact hostname, certname, boot_id, full configuration_version SHA, native transaction_uuid, changed or unchanged status, and integer report-start epoch bounds not_before and not_after. Bounds span at most one day. Caller must retain actual invocation provenance; expectations alone are not acceptance.",
+      "description": "Exact hostname, certname, boot_id, full configuration_version SHA, native transaction_uuid, changed or unchanged status, and integer report-start epoch bounds not_before and not_after. Optional code_id is an independently expected sha256: digest carried by the native catalog. Bounds span at most one day. Caller must retain actual invocation provenance; expectations alone are not acceptance.",
       "type": "Hash[String, Data]"
     }
   }

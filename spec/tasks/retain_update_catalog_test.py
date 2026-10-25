@@ -115,6 +115,50 @@ class RetainCatalogTest(unittest.TestCase):
                 self.assertEqual(json.loads(Path(receipt["path"]).read_bytes()), value)
         self.assertEqual(len(list(self.supervisor.iterdir())), 5)
 
+    def test_expected_native_code_id_survives_real_task_publication_and_readback(self):
+        arguments = self.arguments()
+        arguments["expectations"] = dict(EXPECTED, code_id="sha256:" + "d" * 64)
+        value = fixture()
+        for phase in ("main", "repeat"):
+            value[phase]["report"]["code_id"] = arguments["expectations"]["code_id"]
+        arguments["report"] = json.dumps(value)
+        result = self.run_task(arguments)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        receipt = json.loads(result.stdout)
+        raw = Path(receipt["path"]).read_bytes()
+        self.assertEqual(receipt["sha256"], hashlib.sha256(raw).hexdigest())
+        retained = json.loads(raw)
+        self.assertEqual(retained["expectations"], arguments["expectations"])
+        self.assertEqual(retained["catalog"], value)
+        self.assertFalse(retained["served_source_verified"])
+
+    def test_code_id_missing_changed_unsolicited_or_invalid_refuses_without_publication(self):
+        code_id = "sha256:" + "d" * 64
+        for phase in ("main", "repeat"):
+            for replacement in (None, False, "sha256:" + "e" * 64):
+                arguments = self.arguments()
+                arguments["expectations"] = dict(EXPECTED, code_id=code_id)
+                value = fixture()
+                for name in ("main", "repeat"):
+                    value[name]["report"]["code_id"] = code_id
+                if replacement is None:
+                    del value[phase]["report"]["code_id"]
+                else:
+                    value[phase]["report"]["code_id"] = replacement
+                arguments["report"] = json.dumps(value)
+                self.assertEqual(self.run_task(arguments).returncode, 1)
+        for invalid in (None, False, 7, "main", "d" * 64, "sha256:" + "D" * 64):
+            arguments = self.arguments()
+            arguments["expectations"] = dict(EXPECTED, code_id=invalid)
+            self.assertEqual(self.run_task(arguments).returncode, 1)
+            arguments.pop("report")
+            arguments["action"] = "check"
+            self.assertEqual(self.run_task(arguments).returncode, 1)
+        value = fixture()
+        value["main"]["report"]["code_id"] = code_id
+        self.assertEqual(self.run_task(self.arguments(value)).returncode, 1)
+        self.assertEqual(list(self.supervisor.iterdir()), [])
+
     def test_idempotent_concurrent_publication_and_conflicting_target_refusal(self):
         arguments = self.arguments()
         children = [subprocess.Popen([sys.executable, str(TASKS / "retain_update_catalog.py")], stdin=subprocess.PIPE,

@@ -14,7 +14,7 @@ module NestUpdateCatalogApply
           '--no-usecacheonfailure', '--tags=', '--skip_tags='].freeze
 
   def self.expectations(value)
-    REPORT.require_value(value.is_a?(Hash) && value.keys.sort == KEYS.sort)
+    REPORT.require_value(value.is_a?(Hash) && (value.keys - ['code_id']).sort == KEYS.sort)
     REPORT.expectations(value.merge('transaction_uuid' => value['boot_id'], 'status' => 'unchanged', 'not_before' => 1, 'not_after' => 1))
     value
   end
