@@ -43,12 +43,12 @@ def selected(env):
     if not any(env.get(k) for k in KEYS):
         return None
     require(not any(env.get(k) for k in CONFLICTS) and not env.get('CI_COMMIT_TAG'), 'conflicting graph selection')
-    if env.get('RELEASE_GRAPH') == 'true':
+    if env.get('RELEASE_GRAPH') in ('true', 'verify-inputs'):
         require(env.get('CI_PIPELINE_SOURCE') in ('api', 'web', 'trigger'), 'unsupported graph source')
         require(env.get('RELEASE_GRAPH_FILE') and not env.get('RELEASE_INPUTS')
                 and not any(env.get(k) for k in KEYS[2:]), 'invalid graph compilation selection')
         return 'compile'
-    require(env.get('RELEASE_GRAPH_NODE') == 'true' and env.get('RELEASE_INPUTS') == 'true'
+    require(env.get('RELEASE_GRAPH_NODE') in ('true', 'verify-inputs') and env.get('RELEASE_INPUTS') == 'true'
             and env.get('CI_PIPELINE_SOURCE') == 'parent_pipeline'
             and not env.get('RELEASE_GRAPH') and not env.get('RELEASE_GRAPH_FILE'), 'invalid graph node selection')
     R['match'](env.get('RELEASE_GRAPH_MEMBER'), R['TOKEN'], 'graph member')
@@ -113,9 +113,22 @@ def selection(request: Any) -> tuple[dict[str, Any], dict[str, Any], dict[str, s
     return indexed, {n['member']: n for n in nodes}, dependencies, order
 
 
+def verification_selection(request):
+    """A real scoped freezer, but no candidate or invented predecessor output."""
+    indexed, nodes, dependencies, order = selection(request)
+    require(len(nodes) == 1, 'input verification requires exactly one independent node')
+    member = indexed[order[0]]
+    require(not dependencies[order[0]] and member['stage'] == 'stage0'
+            and member['project'] == 'nest/stage0' and member['variant'] == 'server'
+            and member['mode'] == 'refresh', 'input verification only supports independent Stage 0 refresh')
+
+
 def compile_graph(request: Any, env):
     require(selected(env) == 'compile', 'graph compilation not selected')
     indexed, nodes, dependencies, order = selection(request)
+    verifying = env.get('RELEASE_GRAPH') == 'verify-inputs'
+    if verifying:
+        verification_selection(request)
     source = I['identity'](dict(env, RELEASE_INPUTS='true'), Path(env.get('CI_PROJECT_DIR', '')))
     require(source == request['expectations']['sources']['nest/config']
             and env.get('CI_JOB_NAME') == 'Compile release graph'
@@ -131,7 +144,7 @@ def compile_graph(request: Any, env):
             'allow_failure': False, 'inherit': {'variables': False},
             'image': image, 'tags': ['owl'],
             'script': ['python3 scripts/nest-release-graph.py --freeze-node'],
-            'variables': {'RELEASE_INPUTS': 'true', 'RELEASE_GRAPH_NODE': 'true', 'RELEASE_GRAPH_MEMBER': name,
+            'variables': {'RELEASE_INPUTS': 'true', 'RELEASE_GRAPH_NODE': 'verify-inputs' if verifying else 'true', 'RELEASE_GRAPH_MEMBER': name,
                           'RELEASE_GRAPH_INPUT_PIPELINE': env['CI_PIPELINE_ID'],
                           'RELEASE_GRAPH_INPUT_JOB': env['CI_JOB_ID'],
                           'RELEASE_GRAPH_INPUT_SHA256': hashlib.sha256(raw).hexdigest(),
@@ -152,12 +165,18 @@ def compile_graph(request: Any, env):
                       'RELEASE_GRAPH_INPUT_SHA256': hashlib.sha256(raw).hexdigest(),
                       'RELEASE_GRAPH_ROOT_PIPELINE': '$CI_PIPELINE_ID'},
         'artifacts': {'when': 'on_success', 'paths': ['release-graph-acceptance/']}}
+    if verifying:
+        # Input observations are not member results. Never send them to the
+        # production assembler or emit a misleading graph acceptance receipt.
+        del graph['Accept release graph']
     # Public source policy is checked before any graph can schedule Stage 3.
     I['identity_trust'](request['expectations'], Path(env['CI_PROJECT_DIR']), source)
     receipt = dict(schema=1, kind='nest_release_graph_publication', source=source,
                    pipeline=int(env['CI_PIPELINE_ID']), job=int(env['CI_JOB_ID']), nodes=len(nodes),
                    request_sha256=hashlib.sha256(raw).hexdigest(), graph_sha256=hashlib.sha256(R['canonical'](graph)).hexdigest(),
                    execution='not_started', promotion_authorized=False)
+    if verifying:
+        receipt['kind'] = 'nest_release_graph_input_verification_publication'
     publish(Path(env['CI_PROJECT_DIR']) / 'release-graph',
             {'request.json': raw, 'graph.yml': R['canonical'](graph), 'receipt.json': R['canonical'](receipt)})
     return receipt
@@ -251,6 +270,9 @@ def freeze_node(env, api):
     require(hashlib.sha256(raw).hexdigest() == env['RELEASE_GRAPH_INPUT_SHA256'], 'graph input bytes changed')
     request = B['decode'](raw)
     indexed, nodes, dependencies, _ = selection(request)
+    verifying = env.get('RELEASE_GRAPH_NODE') == 'verify-inputs'
+    if verifying:
+        verification_selection(request)
     require(request['expectations']['sources']['nest/config'] == source, 'graph uses another source')
     name = env['RELEASE_GRAPH_MEMBER']
     require(name in nodes, 'unknown graph node')
@@ -286,7 +308,7 @@ def freeze_node(env, api):
         stream.write(R['canonical'](selected_input))
         stream.flush()
         os.fsync(stream.fileno())
-    route_env = dict(env, RELEASE_ROUTE='true', RELEASE_ROUTE_MEMBER=name,
+    route_env = dict(env, RELEASE_ROUTE='verify-inputs' if verifying else 'true', RELEASE_ROUTE_MEMBER=name,
                      RELEASE_ROUTE_EXECUTOR_PIPELINE=str(request['executor_job']['pipeline']),
                      RELEASE_ROUTE_EXECUTOR_JOB=str(request['executor_job']['job']))
     # The ordinary route sees no graph selection and never recursively schedules it.
@@ -410,6 +432,10 @@ def main():
         if args.check_selection:
             require(selected(os.environ) is not None, 'no graph selected')
         elif args.compile:
+            if os.environ.get('RELEASE_GRAPH') == 'verify-inputs':
+                compile_graph(R['load'](os.environ['RELEASE_GRAPH_FILE']), os.environ)
+                print('Graph input verification route retained; no candidate execution authorized')
+                return 0
             # The compiler/freezer/acceptance source now uses two child levels.
             # Retain refusal until the exact contracts, not only the prior
             # status-only nesting fixture, pass nonpublishing live acceptance.

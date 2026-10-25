@@ -121,6 +121,93 @@ class GraphTest(unittest.TestCase):
         self.assertIn('flattened graph acceptance pending', completed.stderr)
         self.assertFalse((self.f.checkout / 'release-graph').exists())
 
+    def verification_request(self):
+        expected = G['I']['project_member'](self.request['expectations'], 'stage0')
+        expected['members'][0]['mode'] = 'refresh'
+        self.request.clear()
+        self.request.update(request(expected))
+        self.env['RELEASE_GRAPH'] = 'verify-inputs'
+        self.node_env.update(RELEASE_GRAPH_NODE='verify-inputs', RELEASE_GRAPH_MEMBER='stage0',
+                             CI_JOB_ID='801', CI_JOB_NAME='Freeze release inputs stage0',
+                             RELEASE_GRAPH_INPUT_SHA256=hashlib.sha256(R['canonical'](self.request)).hexdigest())
+        self.api.jobs[('nest/config', 801)]['status'] = 'running'
+        return self.request
+
+    def test_nonexecuting_compile_cli_retains_actual_flattened_freezer_only(self):
+        self.verification_request()
+        submitted = self.f.root / 'graph.json'
+        submitted.write_bytes(R['canonical'](self.request))
+        env = dict(self.env, RELEASE_GRAPH_FILE=str(submitted))
+        completed = subprocess.run([sys.executable, str(ROOT / 'scripts/nest-release-graph.py'), '--compile'],
+                                   env=env, capture_output=True, text=True, check=False)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        directory = self.f.checkout / 'release-graph'
+        graph = R['load'](directory / 'graph.yml')
+        self.assertEqual(set(graph), {'workflow', 'stages', 'Freeze release inputs stage0', 'Release node stage0'})
+        freezer = graph['Freeze release inputs stage0']
+        self.assertEqual(freezer['variables']['RELEASE_GRAPH_NODE'], 'verify-inputs')
+        self.assertEqual(freezer['needs'], [])
+        self.assertEqual(freezer['script'], ['python3 scripts/nest-release-graph.py --freeze-node'])
+        self.assertEqual(graph['Release node stage0']['trigger']['strategy'], 'mirror')
+        receipt = R['load'](directory / 'receipt.json')
+        self.assertEqual(receipt['kind'], 'nest_release_graph_input_verification_publication')
+        self.assertEqual(receipt['request_sha256'], hashlib.sha256((directory / 'request.json').read_bytes()).hexdigest())
+        self.assertEqual(receipt['graph_sha256'], hashlib.sha256((directory / 'graph.yml').read_bytes()).hexdigest())
+        self.assertEqual(receipt['execution'], 'not_started')
+        self.assertFalse(receipt['promotion_authorized'])
+
+    def test_nonexecuting_freezer_uses_real_lineage_and_projection_without_candidate(self):
+        self.verification_request()
+        G['freeze_node'](self.node_env, self.api)
+        directory = self.f.checkout / 'release-inputs'
+        route = R['load'](directory / 'candidate.yml')
+        self.assertEqual(set(route), {'workflow', 'stages', 'Verify frozen inputs'})
+        variables = route['Verify frozen inputs']['variables']
+        self.assertEqual(variables['RELEASE_VERIFY_INPUTS'], 'true')
+        self.assertEqual(variables['RELEASE_VALIDATE_ONLY'], 'true')
+        self.assertNotIn('RELEASE_CANDIDATE', variables)
+        self.assertEqual(R['load'](directory / 'closure.json'), self.request['expectations'])
+        self.assertIn('input_verification_route', R['load'](directory / 'provenance.json'))
+        for path in ('/pipelines/650', '/pipelines/650/jobs?', '/pipelines/600/bridges?',
+                     '/jobs/601/artifacts/release-graph/request.json'):
+            self.assertTrue(any(path in p for p in self.api.reads), path)
+
+    def test_nonexecuting_selection_refuses_dependent_graph_before_publication(self):
+        self.env['RELEASE_GRAPH'] = 'verify-inputs'
+        with self.assertRaises(ValueError): G['compile_graph'](self.request, self.env)
+        self.assertFalse((self.f.checkout / 'release-graph').exists())
+        self.node_env['RELEASE_GRAPH_NODE'] = 'verify-inputs'
+        with self.assertRaises(ValueError): G['freeze_node'](self.node_env, self.api)
+        self.assertFalse((self.f.checkout / 'release-inputs').exists())
+
+    def test_nonexecuting_mode_refuses_conflicts_unsupported_sources_and_nonrefresh_input(self):
+        self.verification_request()
+        for value in ('false', 'verify-inputs ', 'VERIFY-INPUTS', ' '):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                G['selected'](dict(self.env, RELEASE_GRAPH=value))
+        for source in ('pipeline', 'parent_pipeline', 'push', 'merge_request_event', 'schedule'):
+            with self.subTest(source=source), self.assertRaises(ValueError):
+                G['selected'](dict(self.env, CI_PIPELINE_SOURCE=source))
+        for key in G['CONFLICTS']:
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                G['selected'](dict(self.env, **{key: 'false'}))
+        self.request['expectations']['members'][0]['mode'] = 'fresh'
+        with self.assertRaises(ValueError): G['compile_graph'](self.request, self.env)
+        self.assertFalse((self.f.checkout / 'release-graph').exists())
+
+    def test_nonexecuting_freezer_refuses_changed_compiler_bridge_before_publication(self):
+        self.verification_request()
+        reads = 0
+        def after(path):
+            nonlocal reads
+            if '/artifacts/executor-receipts/' in path:
+                reads += 1
+                self.api.bridges[600][0]['id'] += 1
+        self.api.after_get = after
+        with self.assertRaises(ValueError): G['freeze_node'](self.node_env, self.api)
+        self.assertGreater(reads, 0)
+        self.assertFalse((self.f.checkout / 'release-inputs').exists())
+
     def test_compiles_exact_native_dependencies_and_reopens_no_clobber_artifacts(self):
         before = copy.deepcopy(self.request)
         self.env['CI_JOB_TOKEN'] = 'fixture-private-value'
