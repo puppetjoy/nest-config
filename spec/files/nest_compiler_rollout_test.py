@@ -34,7 +34,7 @@ def deployment(value=PRIOR):
         mounts.append(dict(name='compiler-snapshots', mountPath=path, subPath=sub, readOnly=True))
     return dict(apiVersion='apps/v1', kind='Deployment', metadata=dict(name='puppet-puppetserver', namespace='test',
                 uid='fixture-deployment-uid', resourceVersion='123', generation=4),
-                spec=dict(replicas=1, template=dict(metadata=dict(annotations={MODULE['ANNOTATION']: json.dumps(value)}),
+                spec=dict(replicas=1, strategy=dict(type='Recreate'), template=dict(metadata=dict(annotations={MODULE['ANNOTATION']: json.dumps(value)}),
                     spec=dict(initContainers=inits, containers=[dict(name='puppet-puppetserver', volumeMounts=mounts),
                                                                dict(name='r10k-code', volumeMounts=[])],
                               volumes=[dict(name='compiler-snapshots', emptyDir={})]))),
@@ -180,6 +180,7 @@ class CompilerRolloutTest(unittest.TestCase):
 
     def test_missing_annotation_layout_drift_and_writable_or_shared_volume_refuse(self):
         changes = [lambda d: d['spec']['template']['metadata']['annotations'].clear(),
+                   lambda d: d['spec'].update(strategy=dict(type='RollingUpdate')),
                    lambda d: d['metadata'].update(namespace='default'),
                    lambda d: d['spec']['template']['spec']['initContainers'][0].update(image='mutable:latest'),
                    lambda d: d['spec']['template']['spec']['initContainers'][0]['command'].__setitem__(3, '{}'),
@@ -216,6 +217,7 @@ class CompilerRolloutTest(unittest.TestCase):
     def test_rendered_helm_namespace_may_be_implicit_but_live_identity_must_be_explicit(self):
         value = deployment()
         del value['metadata']['namespace']
+        value['spec']['strategy']['rollingUpdate'] = None
         self.assertEqual(MODULE['predecessor'](value, 'test', live=False), PRIOR)
         with self.assertRaises(ValueError):
             MODULE['predecessor'](value, 'test')
