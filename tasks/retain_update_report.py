@@ -71,7 +71,7 @@ def reboot_receipt(data, phases, prepared):
             receipt["boot_id"] == data["host"]["boot_id"], "invalid reboot binding")
     capacity = data.get("capacity")
     require(prepared and isinstance(capacity, dict) and type(capacity.get("accounting_contract")) is int and
-            capacity["accounting_contract"] == 2, "missing reboot preparation provenance")
+            capacity["accounting_contract"] in (2, 3), "missing reboot preparation provenance")
     requested = reboot_time(receipt["requested_at"])
     for phase in phases:
         require(phase["state"] == "complete" and phase["native_exit"] in (None, 0) and

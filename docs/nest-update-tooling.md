@@ -245,6 +245,35 @@ receipts and inspect them; never rewrite a digest, erase an intent, downgrade to
 bypass a refusal or submit another reboot after an ambiguous result. Keep prior
 immutable packages for inspected code rollback, not transaction replay.
 
+### Finite shared-ancestor source and report compatibility
+
+CLI MR !14 is accepted as merge
+`aaae2dbdc064ca14a46c03344ef4fb80ac507671`, with accounting contract 3.
+This is source acceptance, not a new installed package or live capacity result;
+the managed r4 pin above still has contract 2 until immutable packaging and
+managed delivery explicitly supersede it.
+
+Contract 3 supports finite quota/refquota only on strict shared ancestors of
+both current and target roots. Each finite quota minus native used, each finite
+refquota minus native referenced, and every affected available value must cover
+the entire write plus promotion budget. Physical reserve/slop, source lower
+bound and promotion bound remain independent gates. Affected reservations,
+finite BE-root/descendant/source-only limits and unsupported layouts still
+refuse. No quota copying, relaxation or rollback reclamation is introduced.
+Every preparation boundary rereads accounting; shared ancestor GUIDs and limits
+must remain bound, even when a limit increases or becomes unlimited.
+
+The supervisor preflight retainer accepts native accounting contracts 2 and 3,
+preserves the observed contract and accounting digest without exporting raw
+accounting, and always records `reset_authorized: false`. The report retainer
+accepts reboot provenance from either readable contract without converting
+command success into boot acceptance. Unknown contracts and noninteger values
+refuse. These transport readers do not grant native execution eligibility:
+contract 3 CLI can export valid contract 2 history, but cannot resume its
+preparation or make it newly reboot-eligible. Never relabel a historical receipt,
+replace its bound policy or downgrade to bypass refusal. Actual A/B and finite
+limit behavior still require the separately approved disruptive canary.
+
 ## Fail-closed ZFS startup
 
 `nest` manages the existing activation preflight before `zfs mount -al`:

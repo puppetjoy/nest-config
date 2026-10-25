@@ -66,11 +66,35 @@ class RetainPreflightTest(unittest.TestCase):
             row['capacity']['admission'] = value
             with self.subTest(value=value), self.assertRaises(ValueError):
                 project(json.dumps(row), 'fixture-host', RELEASE, inputs)
-        for value in [1, True, None, '2']:
+        for value in [1, 4, True, 2.0, 3.0, None, '2', '3']:
             inputs, row = fixture()
             row['capacity']['observations']['accounting_contract'] = value
             with self.subTest(value=value), self.assertRaises(ValueError):
                 project(json.dumps(row), 'fixture-host', RELEASE, inputs)
+
+    def test_readable_contracts_are_retained_without_relabeling_or_authorization(self):
+        for contract in (2, 3):
+            inputs, row = fixture()
+            observed = row['capacity']['observations']
+            observed['accounting_contract'] = contract
+            if contract == 3:
+                observed['shared_ancestors'] = {'tank': {'private': 'private-sentinel'}}
+            row['capacity']['observations_sha256'] = hashlib.sha256(
+                json.dumps(observed, separators=(',', ':')).encode()).hexdigest()
+            with self.subTest(contract=contract), tempfile.TemporaryDirectory() as directory:
+                params = {'report': json.dumps(row), 'hostname': 'fixture-host', 'release': RELEASE,
+                          'inputs': inputs, 'output_dir': directory}
+                run = subprocess.run([sys.executable, str(ROOT / 'tasks/retain_update_preflight.py')],
+                                     input=json.dumps(params), text=True, capture_output=True)
+                self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+                receipt = json.loads(run.stdout)
+                content = Path(receipt['path']).read_bytes()
+                retained = json.loads(content)
+                self.assertEqual(retained['accounting_contract'], contract)
+                self.assertEqual(hashlib.sha256(content).hexdigest(), receipt['sha256'])
+                self.assertTrue(receipt['readback_verified'])
+                self.assertFalse(retained['reset_authorized'])
+                self.assertNotIn(b'private-sentinel', content)
 
     def test_corrupt_or_wrong_identity_refuses(self):
         for section, key, value in [('host', 'hostname', 'other-host'), ('host', 'pool_guid', '999'),
