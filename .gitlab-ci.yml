@@ -301,6 +301,7 @@ stages:
     - 'mkdir compiler-candidates'
     - 'podman manifest push --all --digestfile compiler-candidates/index.digest "$LOCAL_IMAGE" "registry.eyrie/${IMAGE}:latest"'
     - 'if [ "$CI_COMMIT_BRANCH" = "main" ] && [ "$EXECUTOR_ONLY" != "true" ]; then python3 scripts/nest-compiler-candidate.py candidate executor-receipts "registry.eyrie/${IMAGE}@$(tr -d "\n" < compiler-candidates/index.digest)" compiler-candidates/candidate.json; fi'
+    - 'if [ "$CI_COMMIT_BRANCH" = "main" ] && [ "$EXECUTOR_ONLY" != "true" ]; then python3 scripts/nest-compiler-candidate.py pin compiler-candidates/candidate.json "$LOCAL_IMAGE" compiler-candidates/image-pin.json; fi'
   artifacts:
     when: on_success
     paths: ['compiler-candidates/']
