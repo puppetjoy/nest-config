@@ -1,0 +1,40 @@
+---
+# Explicit successor routing only; never an ordinary source-event build.
+'Compile executor bootstrap':
+  stage: 'Build'
+  image: 'registry.gitlab.joyfullee.me/nest/tools/agent@sha256:820cc8a130309a07db90685958bb9cac87d8376ab63f2d45457e87431ad93e34'
+  tags: ['owl']
+  variables:
+    CPU: '$BUILD'
+  script:
+    - 'python3 scripts/nest-executor-bootstrap.py --compile-route'
+  artifacts:
+    when: on_success
+    paths: ['executor-bootstrap-route/']
+  rules:
+    - if: '$NEST_DAG_FIXTURE =~ /[\s\S]/'
+      when: never
+    - if: '$CI_COMMIT_TAG'
+      when: never
+    - if: '$CI_COMMIT_BRANCH == "main" && ($CI_PIPELINE_SOURCE == "api" || $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "trigger") && $EXECUTOR_BOOTSTRAP == "route" && $RELEASE_BOOTSTRAP_FILE && $EXECUTOR_ONLY == "true" && ($BUILD == "haswell" || $BUILD == "cortex-a53" || $BUILD == "sifive-u74")'
+
+'Run executor bootstrap':
+  stage: 'Deploy'
+  needs: ['Compile executor bootstrap']
+  allow_failure: false
+  inherit:
+    variables: false
+  trigger:
+    include:
+      - artifact: 'executor-bootstrap-route/child.yml'
+        job: 'Compile executor bootstrap'
+    strategy: mirror
+    forward:
+      yaml_variables: false
+      pipeline_variables: false
+  rules:
+    - if: '$NEST_DAG_FIXTURE =~ /[\s\S]/'
+      when: never
+    - if: '$CI_COMMIT_TAG'
+      when: never
+    - if: '$CI_COMMIT_BRANCH == "main" && ($CI_PIPELINE_SOURCE == "api" || $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "trigger") && $EXECUTOR_BOOTSTRAP == "route" && $RELEASE_BOOTSTRAP_FILE && $EXECUTOR_ONLY == "true" && ($BUILD == "haswell" || $BUILD == "cortex-a53" || $BUILD == "sifive-u74")'
