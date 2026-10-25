@@ -1,0 +1,12 @@
+{
+  "description": "Read only: observe sanitized native main catalog cache identity for compiler adoption and retention reconciliation; never compile, apply, accept or delete a catalog",
+  "input_method": "stdin",
+  "supports_noop": true,
+  "files": ["nest/tasks/update_catalog_report.rb"],
+  "parameters": {
+    "expectations": {
+      "description": "Exact hostname, certname and configured Puppet server. Linux and root escalation required. Missing, unsafe, changing or non-main caches refuse; a present null code_id is legacy mutable content, not unknown or an immutable release.",
+      "type": "Hash[String, Data]"
+    }
+  }
+}
