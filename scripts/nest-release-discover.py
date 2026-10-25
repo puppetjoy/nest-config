@@ -30,10 +30,8 @@ class GitLab(BIND['GitLab']):
                    r'(?:/(?:jobs|bridges)\?per_page=100&page=[1-9][0-9]?)?')
         if re.fullmatch(pattern, path) is None:
             return super().get(path)
-        result = subprocess.run(['glab', 'api', '--hostname', BIND['HOST'], path],
-                                capture_output=True, timeout=60, check=False)
-        require(result.returncode == 0 and len(result.stdout) <= R['LIMIT'], 'GitLab read failed')
-        return result.stdout
+        operation = 'job' if '/jobs?' in path else 'bridge' if '/bridges?' in path else 'pipeline'
+        return self._read(path, operation)
 
 
 def listing(api, project, identifier, kind):

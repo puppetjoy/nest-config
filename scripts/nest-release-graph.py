@@ -35,10 +35,7 @@ CONFLICTS = ('EXECUTOR_BOOTSTRAP', 'RELEASE_BOOTSTRAP_FILE', 'BUILD', 'EXECUTOR_
 class GitLab(D['GitLab']):
     def get(self, path):
         if re.fullmatch(r'projects/nest%2Fconfig/jobs/[1-9][0-9]{0,19}/artifacts/release-graph/request.json', path):
-            result = subprocess.run(['glab', 'api', '--hostname', B['HOST'], path],
-                                    capture_output=True, timeout=60, check=False)
-            require(result.returncode == 0 and len(result.stdout) <= R['LIMIT'], 'graph read failed')
-            return result.stdout
+            return self._read(path, 'artifact')
         return super().get(path)
 
 

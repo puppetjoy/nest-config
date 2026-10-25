@@ -87,12 +87,19 @@ matching numeric job ID. Existing project, pipeline, source, success, erased-job
 and archive identity checks still apply. Access denial fails closed and never
 changes allowlists or permission settings. Cross-project allowlists and effective
 fine-grained permissions require separate native verification; offline fixtures
-are not access proof. Discovery's wider pipeline/bridge reader is a separate
-remaining admission boundary, not made CI-compatible by this producer reader.
+are not access proof. Native discovery now uses the same ephemeral transport for
+its exact pipeline, paginated job and bridge reads; graph compiler request
+artifacts use it too. These paths no longer invoke an unauthenticated `glab` in
+CI. Their path allowlists, bounded inventories, resource and race checks remain
+unchanged. `READ_PIPELINES` covers pipeline and bridge metadata; `READ_JOBS`
+covers job inventories and artifacts. This source does not modify permissions.
+The wider pipeline/bridge and graph-request paths have offline transport and
+artifact-flow coverage, not actual native access acceptance. The accepted Stage
+0 input observation proves only its narrower producer/input boundary.
 
 Failed allowlisted GitLab reads emit one sanitized JSON diagnostic on stderr,
 `kind=nest_release_gitlab_read_failure`, before the caller's ordinary refusal.
-`operation` is only `project`, `job` or `artifact`; `failure` is a fixed HTTP
+`operation` is only `project`, `job`, `pipeline`, `bridge` or `artifact`; `failure` is a fixed HTTP
 status classification, `command_failed`, `command_unavailable`, `timeout` or
 `oversized_response`; native transport also reports `http_refused` (including
 redirects) or `transport_failed`. Paths, server bodies, raw command stderr and credentials

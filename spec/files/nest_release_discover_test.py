@@ -2,6 +2,8 @@
 """Offline native graph acquisition, exact-artifact and real CLI fixtures."""
 
 import copy
+from contextlib import redirect_stderr
+import io
 import json
 import os
 from pathlib import Path
@@ -11,7 +13,7 @@ import sys
 import tempfile
 import unittest
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[2]
 D = runpy.run_path(str(ROOT / 'scripts/nest-release-discover.py'))
@@ -58,6 +60,106 @@ class NativeGitLab(F['FakeGitLab']):
         if path.endswith('/jobs/101/artifacts') and self.after_result:
             self.after_result(self)
         return result
+
+
+class NativeTransportTest(unittest.TestCase):
+    def setUp(self):
+        environment = patch.dict(os.environ, CI_JOB_TOKEN='nonsecret-fixture-token', GITLAB_TOKEN='unused-sentinel')
+        environment.start()
+        self.addCleanup(environment.stop)
+        self.graph = runpy.run_path(str(ROOT / 'scripts/nest-release-graph.py'))
+        self.clients = (D['GitLab'](), self.graph['GitLab']())
+        self.builder = Mock()
+        for client in self.clients:
+            substitution = patch.dict(client._read.__globals__, build_opener=self.builder)
+            substitution.start()
+            self.addCleanup(substitution.stop)
+        self.paths = (('/pipelines/800', 'pipeline'),
+                      ('/pipelines/800/jobs?per_page=100&page=1', 'job'),
+                      ('/pipelines/800/bridges?per_page=100&page=2', 'bridge'))
+
+    def test_pipeline_inventories_and_graph_request_use_only_ephemeral_auth(self):
+        for client in self.clients:
+            paths = self.paths + ((('/jobs/801/artifacts/release-graph/request.json', 'artifact'),)
+                                  if client is self.clients[1] else ())
+            for suffix, _ in paths:
+                with self.subTest(client=type(client).__module__, suffix=suffix), patch('subprocess.run') as command:
+                    payload = b'\x00exact bytes\xff'
+                    self.builder.return_value.open.return_value = io.BytesIO(payload)
+                    self.assertEqual(client.get('projects/nest%2Fconfig' + suffix), payload)
+                    request = self.builder.return_value.open.call_args.args[0]
+                    self.assertEqual(request.full_url, 'https://gitlab.joyfullee.me/api/v4/projects/nest%2Fconfig' + suffix)
+                    self.assertEqual(request.get_method(), 'GET')
+                    self.assertEqual(request.headers, {'Job-token': 'nonsecret-fixture-token'})
+                    redirect = self.builder.call_args.args[0]()
+                    self.assertIsNone(redirect.redirect_request(None, None, 302, '', {}, 'https://other.example/'))
+                    command.assert_not_called()
+
+    def test_permission_redirect_timeout_and_size_refuse_without_fallback(self):
+        for client in self.clients:
+            paths = self.paths + ((('/jobs/801/artifacts/release-graph/request.json', 'artifact'),)
+                                  if client is self.clients[1] else ())
+            for suffix, operation in paths:
+                for error, failure in ((D['BIND']['HTTPError']('unused-sentinel', 403, 'unused-sentinel', {}, None), 'http_403'),
+                                       (D['BIND']['HTTPError']('unused-sentinel', 302, 'unused-sentinel', {}, None), 'http_refused'),
+                                       (TimeoutError('unused-sentinel'), 'timeout')):
+                    with self.subTest(suffix=suffix, failure=failure), patch('subprocess.run') as command:
+                        self.builder.reset_mock()
+                        self.builder.return_value.open.side_effect = error
+                        stream = io.StringIO()
+                        with redirect_stderr(stream), self.assertRaisesRegex(ValueError, '^GitLab read failed$'):
+                            client.get('projects/nest%2Fconfig' + suffix)
+                        row = json.loads(stream.getvalue())
+                        self.assertEqual((row['operation'], row['failure']), (operation, failure))
+                        self.assertNotIn('unused-sentinel', stream.getvalue())
+                        self.assertNotIn('nonsecret-fixture-token', stream.getvalue())
+                        self.assertEqual(self.builder.return_value.open.call_count, 1)
+                        command.assert_not_called()
+        self.builder.return_value.open.side_effect = None
+        self.builder.return_value.open.return_value = io.BytesIO(b'x' * (R['LIMIT'] + 1))
+        with redirect_stderr(io.StringIO()), self.assertRaises(ValueError):
+            self.clients[1].get('projects/nest%2Fconfig/jobs/801/artifacts/release-graph/request.json')
+
+    def test_local_reads_keep_glab_and_exact_bytes(self):
+        with patch.dict(os.environ, CI_JOB_TOKEN=''), patch('subprocess.run') as command:
+            command.return_value = subprocess.CompletedProcess([], 0, b'exact bytes', b'')
+            for client in self.clients:
+                for suffix, _ in self.paths:
+                    path = 'projects/nest%2Fconfig' + suffix
+                    self.assertEqual(client.get(path), b'exact bytes')
+                    self.assertEqual(command.call_args.args[0], ['glab', 'api', '--hostname', D['BIND']['HOST'], path])
+        self.builder.assert_not_called()
+
+    def test_unsupported_paths_refuse_before_either_transport(self):
+        with patch('subprocess.run') as command:
+            for client in self.clients:
+                for path in ('https://other.example/', 'projects/nest%2Fconfig/pipelines/800/retry',
+                             'projects/nest%2Fconfig/pipelines/800/jobs?per_page=100&page=0',
+                             'projects/nest%2Fconfig/pipelines/800/bridges?per_page=100&page=1&token=unused-sentinel',
+                             'projects/nest%2Fconfig/jobs/801/artifacts/release-graph/other.json'):
+                    with self.subTest(path=path), self.assertRaises(ValueError): client.get(path)
+            command.assert_not_called()
+        self.builder.assert_not_called()
+
+    def test_discovery_runs_through_real_native_transport_without_changing_resource_checks(self):
+        fixture = NativeGitLab()
+        def reply(request, **kwargs):
+            path = request.full_url.removeprefix('https://gitlab.joyfullee.me/api/v4/')
+            if path.endswith('/jobs?per_page=100&include_retried=true'):
+                project = path.split('/')[1].replace('%2F', '/')
+                pipeline = int(path.split('/')[3])
+                raw = R['canonical']([row for (p, _), row in fixture.jobs.items()
+                                      if p == project and row['pipeline']['id'] == pipeline])
+            else:
+                raw = fixture.get(path)
+            return io.BytesIO(raw)
+        self.builder.return_value.open.side_effect = reply
+        with patch('subprocess.run') as command:
+            result = D['discover'](fixture.request, self.clients[0])
+            self.assertEqual(result, D['discover'](fixture.request, fixture))
+            fixture.bridge['downstream_pipeline']['sha'] = 'f' * 40
+            with self.assertRaises(ValueError): D['discover'](fixture.request, self.clients[0])
+            command.assert_not_called()
 
 
 class DiscoverTest(unittest.TestCase):
@@ -184,13 +286,13 @@ class DiscoverTest(unittest.TestCase):
         with self.assertRaises(ValueError): D['listing'](Unbounded(), 'nest/stage0', 1, 'jobs')
 
     def test_transport_only_allows_exact_pipeline_gets_and_sanitizes_failure(self):
-        with patch('subprocess.run') as run:
+        with patch.dict(os.environ, CI_JOB_TOKEN=''), patch('subprocess.run') as run:
             api = D['GitLab']()
             for path in ('projects/nest%2Fconfig/pipelines/latest', 'projects/nest%2Fconfig/pipelines/1/retry',
                          'projects/nest%2Fconfig/pipelines/1/jobs?per_page=100&page=0', 'https://fixture.invalid'):
                 with self.assertRaises(ValueError): api.get(path)
             run.assert_not_called()
-            run.return_value.returncode = 1
+            run.return_value = subprocess.CompletedProcess([], 1, b'', b'HTTP 403')
             with self.assertRaisesRegex(ValueError, '^GitLab read failed$'):
                 api.get('projects/nest%2Fconfig/pipelines/1/bridges?per_page=100&page=1')
 
