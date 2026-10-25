@@ -67,6 +67,12 @@ bytes. Its retained `binding_request` is an ordinary request accepted by
 
 ## Acceptance and refusal
 
+The complete binding policy and executor selector are validated alongside every
+predecessor selector before any GitLab read. Invalid targets, unused producers,
+incomplete/duplicate slots, mixed architectures and nonpositive/noninteger
+executor IDs refuse without first acquiring otherwise valid predecessor data.
+This shares the standalone binder's policy checks and changes no artifact schema.
+
 The root config pipeline must match the selected config source and be running
 or successful. Running permits downstream edges to be accepted while unrelated
 independent graph jobs continue; it is not whole-pipeline success. The selected

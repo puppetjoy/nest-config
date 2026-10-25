@@ -77,6 +77,15 @@ and rebinding a `reuse` consumer refuse.
 
 ## Resource and compatibility checks
 
+Before any external read, the binder validates the complete binding policy,
+architecture selection, positive executor identities and every resolved
+predecessor selector, including all numeric identities and both bare artifact
+digests. Native discovery uses the same static policy admission before resolving
+its first bridge. Invalid later predecessors, partial/duplicate base bindings
+and malformed executor selections cannot cause earlier resource acquisition.
+This is input validation, not proof that a selected native resource exists or
+that an image is compatible. Successful request and result schemas are unchanged.
+
 All reads use the fixed GitLab host through `glab api` without a shell. Paths
 are limited to supported project metadata, exact jobs and the three supported
 artifact namespaces and exact job ZIP downloads. No caller URL, job trace or
