@@ -117,6 +117,7 @@ stages:
     - 'python3 spec/files/nest_compiler_release_test.py'
     - 'python3 spec/files/nest_compiler_candidate_test.py'
     - 'python3 spec/files/nest_compiler_adoption_test.py'
+    - 'python3 spec/files/nest_compiler_rollout_test.py'
 
 'Hermes install fixtures':
   extends: .all-branch-ci
@@ -254,13 +255,20 @@ stages:
 
 'Deploy environment':
   stage: 'Deploy'
+  resource_group: 'puppet-code-deployment'
+  needs:
+    - job: 'Deploy image'
+      artifacts: true
   tags: ['r10k']
   variables:
     GIT_SSH_COMMAND: 'ssh -o HostName=ssh.gitlab.eyrie. -o HostKeyAlias=gitlab.joyfullee.me'
   script:
     - 'export BOLT_PROJECT="$CI_PROJECT_DIR"'
     - 'bolt module install'
-    - 'bolt plan run nest::puppet::deploy backend=kubernetes environment="$CI_COMMIT_BRANCH"'
+    - 'bolt plan run nest::puppet::deploy backend=kubernetes environment="$CI_COMMIT_BRANCH" compiler_candidate=compiler-candidates/candidate.json'
+  artifacts:
+    when: on_success
+    paths: ['rollout-evidence/compiler/test/receipt.json', 'rollout-evidence/compiler/default/receipt.json']
   rules:
     - if: '$NEST_DAG_FIXTURE =~ /[\s\S]/'
       when: never

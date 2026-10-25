@@ -54,6 +54,11 @@ describe 'nest::openvox_compiler_patches' do
     expect(JSON.parse(values.last['command'][5])).to eq([prior['expected'], receipt])
   end
 
+  it 'records the exact declared selection without overwriting existing chart annotations' do
+    operations = rendered.select { |op| op['path'].start_with?('/spec/template/metadata/annotations') }
+    expect(operations).to eq([{ 'op' => 'add', 'path' => '/spec/template/metadata/annotations/nest.eyrie~1compiler-selection', 'value' => JSON.generate(selection) }])
+  end
+
   it 'rejects mutable images, malformed receipts, duplicate identities and unknown fields' do
     invalid = [
       selection.merge('current' => member.merge('image' => 'registry.eyrie/nest/config/main:latest')),
