@@ -516,8 +516,12 @@ Each successor retains every previously declared identity. Same-ID source
 disagreement refuses. The exact multiarchitecture candidate is reopened and
 all retained image references must still be readable. Main source must still be
 the current remote main; CI context, when available, must match the candidate's
-source and producing pipeline. The CI resource group serializes normal writers;
-the resource-version recheck detects intervening manual writes but is not an
+source and producing pipeline. The current-main check reads the canonical
+public `nest/config` HTTPS repository
+outside the local checkout. It does not require local `origin` or the external
+Git administration of a linked worktree to be mounted into the Bolt container.
+The CI resource group serializes normal writers; the resource-version recheck
+detects intervening manual writes but is not an
 atomic cluster-wide lock. Manual chart writers still require coordination.
 
 Only sanitized `receipt.json` paths are CI artifacts. Readiness is not a normal
