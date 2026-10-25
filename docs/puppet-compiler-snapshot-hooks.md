@@ -306,6 +306,16 @@ The code-ID wrapper refers only to current; static content selects current or
 retained by exact ID. The patch checks the pinned chart's container and mount
 layout before removing anything, refusing chart-layout drift.
 
+The existing CSI-backed server volumes cannot be shared by two replacement
+pods, including pods on the same node. Immutable selections therefore use a
+`Recreate` Deployment strategy, explicitly clearing `rollingUpdate` during the
+Helm transition: the old pod must release its mounts before the
+new pod initializes. This entails a compiler interruption for every immutable
+code update, not a zero-downtime rolling refresh. Confirm the selected backend's
+maintenance impact before first adoption. Do not force-unmount another pod's
+volumes or weaken the CSI check to work around
+this constraint. The normal mutable r10k path retains its original strategy.
+
 The original `nest::puppet::deploy` preflights all selected backends before any
 writer. Its mutable r10k path refuses an immutable compiler unless the caller
 supplies the exact main `compiler_candidate`. That path then performs the

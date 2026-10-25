@@ -46,6 +46,8 @@ def predecessor(deployment, namespace, live=True):
         require(type(meta['resourceVersion']) is str and len(meta['resourceVersion']) > 0)
     template = deployment['spec']['template']
     spec = template['spec']
+    strategy = deployment['spec']['strategy']
+    require(strategy == {'type': 'Recreate'} or not live and strategy == {'type': 'Recreate', 'rollingUpdate': None})
     # Refuse legacy first adoption, partial/manual hook changes and unannotated
     # snapshots. Their consumer scope must be reconciled outside routine CI.
     value = selection(json.loads(template['metadata']['annotations'][ANNOTATION], object_pairs_hook=CANDIDATE['EXECUTOR']['unique']))

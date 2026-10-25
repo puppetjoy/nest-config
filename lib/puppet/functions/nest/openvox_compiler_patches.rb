@@ -47,6 +47,10 @@ Puppet::Functions.create_function(:'nest::openvox_compiler_patches') do
       operation('test', "#{prefix}/containers/0/volumeMounts/6/name", 'puppet-code-storage'),
       operation('test', "#{prefix}/containers/0/volumeMounts/6/mountPath", '/etc/puppetlabs/code/'),
       { 'op' => 'remove', 'path' => "#{prefix}/containers/0/volumeMounts/6" },
+      # The pinned chart's existing CSI volumes cannot be mounted by old and
+      # new pods concurrently. Release them before starting the replacement;
+      # immutable code selection necessarily includes a compiler interruption.
+      operation('add', '/spec/strategy', { 'type' => 'Recreate', 'rollingUpdate' => nil }),
       operation('add', "#{prefix}/volumes/-", { 'name' => 'compiler-snapshots', 'emptyDir' => {} }),
       operation('add', "#{prefix}/containers/0/volumeMounts/-", { 'name' => 'compiler-snapshots', 'mountPath' => '/compiler', 'readOnly' => true }),
       operation('add', '/spec/template/metadata/annotations/nest.eyrie~1compiler-selection', JSON.generate(selection)),

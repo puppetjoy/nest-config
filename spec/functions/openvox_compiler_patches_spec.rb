@@ -39,6 +39,7 @@ describe 'nest::openvox_compiler_patches' do
       { 'op' => 'remove', 'path' => '/spec/template/spec/containers/0/volumeMounts/6' },
     ]
     expect(rendered.take(4)).to eq(expected)
+    expect(rendered).to include('op' => 'add', 'path' => '/spec/strategy', 'value' => { 'type' => 'Recreate', 'rollingUpdate' => nil })
     expect(rendered.none? { |op| op['path'].include?('/containers/1/') }).to be(true)
   end
 
