@@ -337,6 +337,26 @@ volume removed on exit; the output contains safe receipts, not the rendered
 manifest or source payload. This is not a native JAR catalog compile, live
 deployment, ordinary main apply or complete compiler attestation.
 
+Add `--http` to that same command to start the pinned server JAR and its real
+JRuby/HTTP dispatcher against the exact rendered store and wrappers. The
+network-disabled container exposes no ports. Its permissive authorization is
+loopback-only test configuration, never deployment policy; generated CA/runtime
+state and private server logs stay in disposable tmpfs. No agent runs.
+
+This option verifies native static HTTP delivery for each selected code ID,
+including retained module library bytes, and the ordinary v3 file-content route
+used by old catalogs with null code IDs. The receipt explicitly distinguishes
+whether the selected library content differs between releases, including a file
+absent in the previous release: equal bytes alone cannot prove historical
+content routing. Missing historical files and an unknown identity must refuse. A v4
+catalog request for the existing forbidden `bolt` client must execute the actual
+immutable main manifest's refusal. That is a failed compile, not a successful
+host catalog or native compiler attestation. Only statuses, content digests and
+booleans leave the container; no private module bytes, catalog or server log is
+retained. This proves route compatibility, not coverage of outstanding client
+caches, production TLS or readiness for first adoption. Keep production hooks
+disabled until selection/CI rollout and normal main apply/repeat are integrated.
+
 Focused public integration-contract tests:
 
     pdk test unit --tests=spec/files/nest_puppet_versioned_code_spec.rb,spec/files/nest_puppet_compiler_snapshot_spec.rb,spec/files/nest_puppet_compiler_store_spec.rb

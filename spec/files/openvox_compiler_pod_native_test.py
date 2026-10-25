@@ -14,6 +14,7 @@ parser.add_argument('--manifest',type=Path,required=True)
 parser.add_argument('--server-image',required=True)
 parser.add_argument('--jar-sha256',required=True)
 parser.add_argument('--output-dir',type=Path,required=True)
+parser.add_argument('--http',action='store_true',help='Also start the offline native JAR and verify retained and legacy HTTP routes')
 args=parser.parse_args()
 assert re.fullmatch(r'ghcr.io/openvoxproject/openvoxserver@sha256:[0-9a-f]{64}',args.server_image)
 assert re.fullmatch(r'[0-9a-f]{64}',args.jar_sha256)
@@ -73,14 +74,30 @@ rescue Errno::EROFS
 end
 puts JSON.generate('source'=>expected.fetch('source'),'code_id'=>identity.strip,'uid'=>Process.euid,'paired_wrappers'=>true,'read_only_refusal'=>true,'isolated_module_paths'=>true,'static_content_digest_verified'=>true,'wrong_static_id_refused'=>true,'native_jar_catalog_requested'=>false,'compiler_attestation'=>false)
 '''
-    args=common+['--user=0:0','--cap-drop=ALL','--cap-add=SETUID','--cap-add=SETGID','--cap-add=CHOWN','--cap-add=DAC_OVERRIDE','--tmpfs','/etc/puppetlabs/puppet:rw,mode=777,size=16m',
+    server_args=common+['--user=0:0','--cap-drop=ALL','--cap-add=SETUID','--cap-add=SETGID','--cap-add=CHOWN','--cap-add=DAC_OVERRIDE','--tmpfs','/etc/puppetlabs/puppet:rw,mode=777,size=16m',
                  '--tmpfs','/work:rw,mode=777,size=32m','--env','HOME=/work','--env','TMPDIR=/work',
                  '--volume',volume+':/compiler:ro','--entrypoint','ruby',server,'-e',probe,json.dumps(expected),
                  hashlib.sha256((ROOT/'files/puppet-versioned-code.rb').read_bytes()).hexdigest(),jar_sha256]
-    report=json.loads(run('server',args))
+    report=json.loads(run('server',server_args))
     assert report['code_id']==expected['code_id'] and report['uid']==999
     report.update(image=inits[-1]['image'],retained_releases=len(inits)-1,server_image=server,jar_sha256=jar_sha256,source_overlay=False,network=False,host_mounts=False,
                   production_hooks_enabled=False,program_complete=False)
+    if args.http:
+        receipts=[json.loads(init['command'][3]) for init in inits]
+        http_args=common+['--memory=3g','--user=0:0','--cap-drop=ALL','--cap-add=SETUID','--cap-add=SETGID','--cap-add=CHOWN','--cap-add=DAC_OVERRIDE',
+                          '--tmpfs','/etc/puppetlabs/puppet:rw,mode=777,size=16m',
+                          '--tmpfs','/work:rw,mode=777,size=256m','--env','HOME=/work','--env','TMPDIR=/work',
+                          '--volume',volume+':/compiler:ro',
+                          '--volume',str(ROOT/'spec/files/openvox_compiler_http_native.rb')+':/probe.rb:ro',
+                          '--entrypoint','ruby',server,'/probe.rb',json.dumps(expected),json.dumps(receipts),jar_sha256]
+        http_report=json.loads(run('native-http',http_args))
+        assert http_report['uid']==999 and http_report['native_http_dispatch'] is True
+        assert [row['code_id'] for row in http_report['static_content']]==[receipt['code_id'] for receipt in receipts]
+        report['native_http']=http_report
+        report['native_jar_catalog_requested']=True
+        report['host_mounts']=True
+        report['host_data_mounts']=False
+        report['test_script_bind_only']=True
     (OUT/'acceptance.json').write_text(json.dumps(report,indent=2)+'\n')
     assert json.loads((OUT/'acceptance.json').read_bytes())==report
     print(json.dumps(report))
