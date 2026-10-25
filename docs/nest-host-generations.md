@@ -110,9 +110,12 @@ used to make it fit.
 
 This transfer budget is NOT the CLI's subsequent reset-capacity policy. After
 sealing, use the installed native read-only reset planner with the exact sealed
-path and a separately reviewed `nest_reset_capacity_policy`. The native r3
-accounting contract still refuses all finite affected quotas/refquotas and
-reservations. Nothing here relaxes that boundary or makes a reset eligible.
+path and a separately reviewed `nest_reset_capacity_policy`. The managed r5
+package uses accounting contract 3, which admits only supported conservative
+shared-ancestor finite quota/refquota layouts. Other affected finite limits and
+nonzero reservations still refuse; contract-2 observations remain historical
+readable evidence, not current admission. Nothing in generation transfer relaxes
+the native planner's boundary or makes a reset eligible.
 
 ## Checked copy, sealing and failure handling
 
