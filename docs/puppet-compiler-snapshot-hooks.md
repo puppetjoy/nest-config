@@ -26,8 +26,12 @@ The Ruby library exposes `inventory(ROOT)` and `code_id(rows)` for the release
 producer. The inventory is a sorted array of relative-path records: directory
 and file permission modes, SHA256 file content, and contained symbolic-link
 targets. Git administration entries named `.git` are excluded. Special files,
-broken or escaping symlinks, control-character paths and empty trees fail.
+escaping symlinks, missing intermediate link targets, control-character paths
+and empty trees fail.
 Inventory JSON uses ASCII escaping and one trailing newline before hashing.
+A contained symlink to a missing final leaf is retained in the inventory (the
+existing firmware alias is one example), but cannot serve static content.
+Missing intermediate directories and links escaping the snapshot still refuse.
 No file contents or secret values belong in the public receipt.
 
 The frozen `environment.conf` must contain only the following assignments
@@ -44,6 +48,49 @@ after validation. Unknown or invalid requests exit nonzero with a sanitized
 error. It never generates a new expected identity to excuse drift.
 
 ## Publication and compiler-lifetime requirements
+
+### Expected identity from immutable executor inputs
+
+The existing executor `Containerfile` now runs this producer after recording
+and checking its complete installed module inputs:
+
+    python3 scripts/nest-compiler-release.py --project /opt/nest \
+      --destination /opt/nest-compiler-release --source FULL_SOURCE_SHA \
+      --base BOLT_IMAGE_AT_DIGEST
+
+This is a build-only projection in the existing executor image, not a live
+r10k observation or a new publication service. It checks the control Git source
+and unchanged tracked files, the exact base, Puppetfile digest and all installed
+module identities against `.executor-inputs.json` before copying and again
+afterward. Run it only with immutable input bytes and no concurrent writer;
+the double check is not a substitute for that isolation.
+
+The private output contains `main`, `expected.json` and `executor-inputs.json`.
+The environment includes the tracked control Hiera data and configuration, the
+real `site.pp` relocated to `manifests/site.pp`, and every installed module.
+Untracked/ignored control data and Git administration are not compiler inputs.
+It preserves the existing served-Nest `spec` pruning boundary and relocates the
+known `.modules/nest/data/private` link to `../../private/data`, the accepted
+sibling private module, instead of a nonexistent nested Bolt installation.
+The root `data/private` link already targets that same private module. No
+other input pruning or link rewriting is performed. File modes and relative
+links are retained, and new files do not share input inodes.
+
+The producer computes the native expected tree identity from this checked
+projection, validates it with the shared Ruby reader and writes the small
+identity receipts last. An existing destination is never replaced; a failure
+preserves diagnostic output and emits no accepted receipt. The output contains
+private module data: never upload `main` as a public CI artifact or include its
+contents in logs. Its two identity-only JSON files contain no module bytes.
+
+The accepted published executor digest binds this projection and its expected
+receipt together. A deployment must select that exact digest and verify its
+source/module identities independently before using its receipt as expectation
+for the existing init-copy/store interfaces. A mutable image tag, a fixture
+receipt or a receipt generated from live r10k is not an accepted release.
+This build step does not change any chart, native hook, compiler module path or
+ordinary deployment behavior; pod isolation, old-content retention and normal
+catalog/repeat acceptance remain required before production enablement.
 
 ### Isolated init copy
 
@@ -152,6 +199,13 @@ Focused public integration-contract tests:
 
     pdk test unit --tests=spec/files/nest_puppet_versioned_code_spec.rb,spec/files/nest_puppet_compiler_snapshot_spec.rb,spec/files/nest_puppet_compiler_store_spec.rb
     pdk validate
+
+The producer's real-Git/input-drift fixtures run with
+`python3 spec/files/nest_compiler_release_test.py`; they use the actual shared
+Ruby inventory reader, not a simulated code-ID response. Its CI entry is part
+of the existing update fixture job. Native-image verification additionally
+projects the complete installed module set in a network-disabled, read-only
+digest image with only disposable local output, never live host data.
 
 The optional native test starts the actual pinned Puppetserver JAR, its JRuby
 pool and its HTTP dispatcher inside a network-disabled, disposable Podman

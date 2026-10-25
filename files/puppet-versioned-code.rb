@@ -27,7 +27,11 @@ module NestPuppetVersionedCode
       name = path.delete_prefix(root + '/')
       check(name.valid_encoding? && !name.match?(%r{[\x00-\x1f\x7f]}))
       row = if stat.symlink?
-              target = File.realpath(path)
+              # A retained missing leaf (for example an unavailable firmware
+              # alias) is still an input identity, not permission to serve it.
+              # Resolve parent links fully and allow only that final missing
+              # component. Static content still requires realpath below.
+              target = File.realdirpath(path)
               check(target.start_with?(root + '/'))
               [name, 'link', File.readlink(path)]
             elsif stat.directory?
