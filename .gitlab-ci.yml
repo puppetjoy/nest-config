@@ -104,6 +104,7 @@ stages:
     - 'python3 spec/files/build_stage3_publish_test.py'
     - 'python3 spec/files/build_stage3_materialize_test.py'
     - 'python3 spec/files/build_stage3_finish_test.py'
+    - 'python3 spec/files/build_stage3_transfer_test.py'
     - 'python3 spec/files/transfer_generation_test.py'
     - 'python3 spec/files/ci_bolt_module_install_test.py'
     - 'python3 spec/files/ci_executor_identity_test.py'
