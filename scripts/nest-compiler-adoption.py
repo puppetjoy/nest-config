@@ -52,6 +52,11 @@ def propose(candidate_path, scope_path, observations_path, releases_path, output
             require(set(row) == fields | {'platform', 'boot_source'})
             require(row['platform'] == 'darwin' and row['boot_source'] == 'kern.bootsessionuuid')
             boot_pattern = DARWIN_UUID
+        elif row['schema'] == 3:
+            require(set(row) == fields | {'platform', 'boot_source'})
+            require(row['platform'] == 'windows' and row['boot_source'] ==
+                    'NtQuerySystemInformation.SystemBootEnvironmentInformation.BootIdentifier')
+            boot_pattern = UUID
         else:
             require(row['schema'] == 1 and set(row) == fields)
             boot_pattern = UUID

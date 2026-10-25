@@ -62,6 +62,9 @@ groups:
         # Cygwin authenticates the Windows administrator account; SYSTEM owns
         # the SSH service but is not the remote login identity.
         user: 'joy'
+        interpreters:
+          # Native Puppet Ruby needs a Windows path for Bolt's Cygwin upload.
+          rb: ['/bin/sh', '-c', 'exec "/cygdrive/c/Program Files/Puppet Labs/Puppet/puppet/bin/ruby.exe" -r puppet "$(cygpath -w "$1")"', 'nest-native-ruby']
     targets:
       - _plugin: puppetdb
         query: "inventory[certname] { facts.osfamily = 'windows' }"
