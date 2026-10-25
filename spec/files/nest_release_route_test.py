@@ -117,7 +117,7 @@ class ReleaseRouteTest(unittest.TestCase):
                         'sys.stdout.write("private-sentinel")\nsys.exit(1)\n')
         fake.chmod(0o700)
         result = self.f.cli(PATH=str(self.f.root) + os.pathsep + self.f.env['PATH'],
-                            RELEASE_ROUTE='verify-inputs', CI_JOB_TOKEN='private-sentinel')
+                            RELEASE_ROUTE='verify-inputs', CI_JOB_TOKEN='')
         self.assertEqual(result.returncode, 1)
         self.assertEqual(result.stdout, '')
         lines = result.stderr.splitlines()

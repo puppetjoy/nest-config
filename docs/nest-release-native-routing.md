@@ -72,17 +72,32 @@ The input publisher independently reads the selected executor job, its schema-2
 receipt and architecture/source/image/module declarations using the existing
 allowlisted GitLab reader. It reacquires them before publication; failed, erased,
 wrong-source, wrong-architecture or changed resources refuse before the output
-directory is created. This uses the existing `glab` authentication path. A CI job
-without equivalent read access must fail; do not inject a user token or treat
-fixture success as production job-token admission.
+directory is created. Local reads use existing `glab` authentication. In CI the
+reader uses only the ephemeral `CI_JOB_TOKEN` for job inventories and artifacts,
+sent in a header to the fixed HTTPS GitLab origin, without redirects. It neither
+persists the token nor uses a personal token from the environment or glab config.
+Public project identity is independently read without authentication, because
+job tokens do not support the project-details endpoint. Private project metadata
+therefore refuses; this route does not silently switch credentials.
+
+Native exact producer metadata comes from the supported `READ_JOBS` pipeline job
+inventory, including retried jobs, not the unsupported arbitrary single-job API.
+The complete bounded inventory must have fewer than 100 entries and exactly one
+matching numeric job ID. Existing project, pipeline, source, success, erased-job
+and archive identity checks still apply. Access denial fails closed and never
+changes allowlists or permission settings. Cross-project allowlists and effective
+fine-grained permissions require separate native verification; offline fixtures
+are not access proof. Discovery's wider pipeline/bridge reader is a separate
+remaining admission boundary, not made CI-compatible by this producer reader.
 
 Failed allowlisted GitLab reads emit one sanitized JSON diagnostic on stderr,
 `kind=nest_release_gitlab_read_failure`, before the caller's ordinary refusal.
 `operation` is only `project`, `job` or `artifact`; `failure` is a fixed HTTP
 status classification, `command_failed`, `command_unavailable`, `timeout` or
-`oversized_response`. Paths, server bodies, raw command stderr and credentials
+`oversized_response`; native transport also reports `http_refused` (including
+redirects) or `transport_failed`. Paths, server bodies, raw command stderr and credentials
 are never included. This is failure localization, not permission proof: the
-reader does not retry, switch credentials, expand its endpoint allowlist or
+reader does not retry, switch credentials on failure or
 accept missing job/receipt evidence. Unknown or conflicting HTTP diagnostics
 remain `command_failed`. Successful reads preserve their exact bytes and do
 not emit this diagnostic.

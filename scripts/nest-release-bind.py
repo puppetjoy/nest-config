@@ -9,6 +9,7 @@ import copy
 import hashlib
 import io
 import json
+import os
 
 from pathlib import Path
 import re
@@ -19,6 +20,8 @@ import stat
 import zipfile
 import zlib
 from typing import Any, NoReturn
+from urllib.error import HTTPError, URLError
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 ROOT = Path(__file__).resolve().parents[1]
 RELEASE = runpy.run_path(str(ROOT / 'scripts/nest-release-manifest.py'))
@@ -41,15 +44,29 @@ def decode(raw):
 
 
 class GitLab:
-    """Use existing glab authentication; no supplied URLs, shell, or token output."""
+    """Use glab locally and the ephemeral job token in CI; never change identity on failure."""
+
+    def producer_job(self, base, pipeline, identifier):
+        if not os.environ.get('CI_JOB_TOKEN'):
+            return decode(self.get(base + '/jobs/' + str(identifier)))
+        # READ_JOBS supports pipeline job lists, not arbitrary single-job reads.
+        # One bounded complete page is sufficient for these member pipelines.
+        rows = decode(self.get(base + '/pipelines/' + str(pipeline) + '/jobs?per_page=100&include_retried=true'))
+        require(type(rows) is list and len(rows) < 100, 'incomplete producer job inventory')
+        selected = [row for row in rows if type(row) is dict and type(row.get('id')) is int
+                    and row['id'] == identifier]
+        require(len(selected) == 1, 'missing or ambiguous producer job')
+        return selected[0]
 
     def get(self, path):
         require(re.fullmatch(r'projects/nest(?:%2F[a-z0-9._-]+)+(?:/jobs/[1-9][0-9]{0,19}'
                              r'(?:/artifacts(?:/(?:release-inputs/expectations\.json|'
                              r'executor-receipts/(?:haswell|cortex-a53|sifive-u74)\.json|'
-                             r'release-results/[a-z0-9][a-z0-9._-]{0,127}\.json))?)?)?', path) is not None,
+                             r'release-results/[a-z0-9][a-z0-9._-]{0,127}\.json))?)?)?', path) is not None
+                or re.fullmatch(r'projects/nest(?:%2F[a-z0-9._-]+)+/pipelines/[1-9][0-9]{0,19}'
+                                r'/jobs\?per_page=100&include_retried=true', path) is not None,
                 'unsupported GitLab read')
-        operation = 'artifact' if '/artifacts' in path else 'job' if '/jobs/' in path else 'project'
+        operation = 'artifact' if '/artifacts' in path else 'job' if '/jobs' in path else 'project'
 
         def refuse(failure) -> NoReturn:
             # Never print the path, response body, command stderr or credentials.
@@ -58,6 +75,31 @@ class GitLab:
             print(json.dumps({'schema': 1, 'kind': 'nest_release_gitlab_read_failure',
                               'operation': operation, 'failure': failure}, sort_keys=True), file=sys.stderr)
             raise ValueError('GitLab read failed')
+
+        if os.environ.get('CI_JOB_TOKEN'):
+            # Public project identity is read explicitly without authentication:
+            # the job token has no project-details endpoint. This is not a retry
+            # or fallback. All job/artifact requests use only this job's token.
+            # Never let redirects send a token to storage or another origin.
+            class NoRedirect(HTTPRedirectHandler):
+                def redirect_request(self, req, fp, code, msg, headers, newurl):
+                    return None
+
+            headers = {} if operation == 'project' else {'JOB-TOKEN': os.environ['CI_JOB_TOKEN']}
+            request = Request('https://' + HOST + '/api/v4/' + path, headers=headers, method='GET')
+            try:
+                with build_opener(NoRedirect).open(request, timeout=60) as response:
+                    raw = response.read(RELEASE['LIMIT'] + 1)
+            except HTTPError as error:
+                refuse('http_' + str(error.code) if error.code in (401, 403, 404, 429, 500, 502, 503, 504)
+                       else 'http_refused')
+            except TimeoutError:
+                refuse('timeout')
+            except (OSError, URLError):
+                refuse('transport_failed')
+            if len(raw) > RELEASE['LIMIT']:
+                refuse('oversized_response')
+            return raw
 
         try:
             result = subprocess.run(['glab', 'api', '--hostname', HOST, path], capture_output=True,
@@ -94,7 +136,8 @@ def job(api, project, pipeline, identifier, source):
     repository = decode(api.get(base))
     require(repository['path_with_namespace'] == project, 'wrong GitLab repository')
     positive(repository['id'])
-    row = decode(api.get(base + '/jobs/' + str(identifier)))
+    row = (api.producer_job(base, pipeline, identifier) if hasattr(api, 'producer_job')
+           else decode(api.get(base + '/jobs/' + str(identifier))))
     require(type(row['id']) is int and row['id'] == identifier and row['status'] == 'success'
             and row.get('erased_at') is None, 'producer job is unavailable or unsuccessful')
     observed = row['pipeline']

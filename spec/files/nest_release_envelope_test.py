@@ -244,7 +244,7 @@ class EnvelopeTest(unittest.TestCase):
             F['F']['F']['fake_glab'](fake, {path: self.api.get(path) for path in set(self.api.reads)})
             request = root / 'request.json'
             request.write_bytes(R['canonical'](self.api.request))
-            env = dict(os.environ, PATH=str(root) + os.pathsep + os.environ['PATH'], PYTHONDONTWRITEBYTECODE='1')
+            env = dict(os.environ, CI_JOB_TOKEN='', PATH=str(root) + os.pathsep + os.environ['PATH'], PYTHONDONTWRITEBYTECODE='1')
             command = [sys.executable, str(ROOT / 'scripts/nest-release-envelope.py'), '--envelope', str(request)]
             completed = subprocess.run(command, env=env, capture_output=True)
             self.assertEqual(completed.returncode, 0, completed.stderr)
