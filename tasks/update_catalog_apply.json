@@ -5,7 +5,7 @@
   "files": ["nest/tasks/update_catalog_report.rb", "nest/scripts/run_puppet.sh"],
   "parameters": {
     "expectations": {
-      "description": "Exact hostname, certname, current boot_id UUID and full configuration_version Git SHA from the reviewed release. Linux and root escalation required. Completion ambiguity must be inspected, never automatically retried.",
+      "description": "Exact hostname, certname, current boot_id UUID and full configuration_version Git SHA from the reviewed release; optional code_id is an independently expected sha256: digest carried by both native catalogs. Linux and root escalation required. Completion ambiguity must be inspected, never automatically retried.",
       "type": "Hash[String, Data]"
     }
   }

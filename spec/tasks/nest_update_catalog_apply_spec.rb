@@ -10,8 +10,9 @@ RSpec.describe NestUpdateCatalogApply do
   let(:first_uuid) { '22222222-2222-4222-8222-222222222222' }
   let(:second_uuid) { '33333333-3333-4333-8333-333333333333' }
 
-  def native_report(uuid, status)
+  def native_report(uuid, status, code_id: nil)
     value = Puppet::Transaction::Report.new('apply')
+    value.code_id = code_id
     { host: 'fixture.nest', time: Time.at(1_790_000_050).utc, configuration_version: 'a' * 40,
       transaction_uuid: uuid, catalog_uuid: uuid, status: status, environment: 'main',
       noop: false, transaction_completed: true, cached_catalog_status: 'not_used' }.each do |key, field|
@@ -85,6 +86,55 @@ RSpec.describe NestUpdateCatalogApply do
     result, seen = invoke([0], reports: [wrong])
     expect(result['main']).to eq('native_exit' => 0, 'report_bound' => false)
     expect(seen.length).to eq(1)
+  end
+
+  it 'binds the same independently expected code ID across both native reports and durable retention' do
+    expected['code_id'] = "sha256:#{'c' * 64}"
+    reports = [native_report(first_uuid, 'changed', code_id: expected['code_id']),
+               native_report(second_uuid, 'unchanged', code_id: expected['code_id'])]
+    result, seen = invoke([2, 0], reports: reports)
+    expect(result).to include('result' => 'pass', 'converged' => true, 'served_source_verified' => false)
+    expect(seen.length).to eq(2)
+    Dir.mktmpdir('code-id-retention-') do |dir|
+      params = { 'action' => 'retain', 'expectations' => expected, 'transaction' => 'fixture-code-id',
+                 'release' => "sha256:#{'b' * 64}", 'output_dir' => dir, 'report' => JSON.generate(result) }
+      stdout, stderr, status = Open3.capture3('python3', File.expand_path('../../tasks/retain_update_catalog.py', __dir__), stdin_data: JSON.generate(params))
+      expect(status.exitstatus).to eq(0), stderr + stdout
+      receipt = JSON.parse(stdout)
+      raw = File.read(receipt['path'])
+      expect(receipt['sha256']).to eq(Digest::SHA256.hexdigest(raw))
+      retained = JSON.parse(raw)
+      expect(retained['expectations']).to eq(expected)
+      expect(retained['catalog']).to eq(result)
+      expect(retained['served_source_verified']).to be(false)
+    end
+  end
+
+  [nil, "sha256:#{'d' * 64}"].each do |code_id|
+    it "stops after an unbound first code ID #{code_id.inspect} without retry or repeat" do
+      expected['code_id'] = "sha256:#{'c' * 64}"
+      result, seen = invoke([2], reports: [native_report(first_uuid, 'changed', code_id: code_id)])
+      expect(result).to include('result' => 'fail', 'repeat_attempted' => false, 'converged' => false)
+      expect(result['main']).to eq('native_exit' => 2, 'report_bound' => false)
+      expect(seen.length).to eq(1)
+    end
+
+    it "refuses an unbound repeat code ID #{code_id.inspect} without a third apply" do
+      expected['code_id'] = "sha256:#{'c' * 64}"
+      reports = [native_report(first_uuid, 'changed', code_id: expected['code_id']),
+                 native_report(second_uuid, 'unchanged', code_id: code_id)]
+      result, seen = invoke([2, 0], reports: reports)
+      expect(result).to include('result' => 'fail', 'repeat_attempted' => true, 'converged' => false)
+      expect(result['repeat']).to eq('native_exit' => 0, 'report_bound' => false)
+      expect(seen.length).to eq(2)
+    end
+  end
+
+  it 'refuses invalid expected code identity before any native apply' do
+    expected['code_id'] = 'main'
+    expect {
+      described_class.run(expected, state_dir: 'not-created', certname: 'fixture.nest', runner: ->(*) { raise 'must not apply' })
+    }.to raise_error(NestUpdateCatalogReport::Unavailable)
   end
 
   it 'refuses a report whose status contradicts the native detailed exit' do
