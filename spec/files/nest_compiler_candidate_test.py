@@ -195,6 +195,116 @@ class CompilerCandidateTest(unittest.TestCase):
         self.assertIn('paths: [\'compiler-candidates/\']', deploy)
         self.assertNotIn('compiler_release=', deploy)
 
+    def selection_fixture(self):
+        value = dict(schema=1, kind='nest_openvox_compiler_candidate', source=SHA, pipeline=123,
+                     current=dict(image=INDEX, expected=copy.deepcopy(EXPECTED)), members=copy.deepcopy(self.rows),
+                     deployment_authorized=False, retention_complete=False, compiler_attestation=False)
+        older = dict(image=INDEX.replace('f' * 64, 'a' * 64),
+                     expected=dict(EXPECTED, source='b' * 40, code_id='sha256:' + 'b' * 64))
+        oldest = dict(image=INDEX.replace('f' * 64, 'c' * 64),
+                      expected=dict(EXPECTED, source='c' * 40, code_id='sha256:' + 'c' * 64))
+        previous = dict(schema=1, current=older, retained=[oldest])
+        return value, previous
+
+    def select(self, value, previous):
+        return MODULE['selection'](self.save('input-candidate.json', value), self.save('previous.json', previous), self.output)
+
+    def test_selection_retains_every_prior_identity_without_mutating_input_or_deploying(self):
+        value, previous = self.selection_fixture()
+        original = copy.deepcopy(previous)
+        with patch.object(MODULE['subprocess'], 'run') as execute, patch.dict(os.environ, clear=True):
+            execute.return_value.stdout = json.dumps(self.index)
+            result = self.select(value, previous)
+        self.assertEqual(result, dict(schema=1, current=value['current'], retained=[previous['current'], *previous['retained']]))
+        self.assertEqual(json.loads(self.output.read_bytes()), result)
+        self.assertEqual(previous, original)
+        self.assertEqual(execute.call_count, 1)
+        self.assertEqual(execute.call_args.args[0], ['podman', 'manifest', 'inspect', INDEX])
+
+    def test_selection_repeat_and_rollback_preserve_all_other_identities(self):
+        value, previous = self.selection_fixture()
+        prior_current = copy.deepcopy(previous['current'])
+        for where in ('current', 'retained'):
+            with self.subTest(where=where):
+                if where == 'current':
+                    previous['current'] = value['current']
+                else:
+                    previous['current'] = prior_current
+                    previous['retained'].append(value['current'])
+                with patch.object(MODULE['subprocess'], 'run') as execute:
+                    execute.return_value.stdout = json.dumps(self.index)
+                    result = self.select(value, previous)
+                self.assertNotIn(value['current'], result['retained'])
+                for item in [previous['current'], *previous['retained']]:
+                    self.assertIn(item, [result['current'], *result['retained']])
+                self.output.unlink()
+
+    def test_selection_refuses_legacy_absent_empty_and_duplicate_previous_before_registry(self):
+        value, previous = self.selection_fixture()
+        cases = [None, {}, dict(schema=1, current=None, retained=[]), dict(previous, schema=True),
+                 dict(previous, retained=[previous['current']]), dict(previous, retained='unknown'),
+                 dict(previous, extra='unexpected')]
+        for prior in cases:
+            with self.subTest(prior=prior), patch.object(MODULE['subprocess'], 'run') as execute:
+                with self.assertRaises(ValueError):
+                    self.select(value, prior)
+                execute.assert_not_called()
+                self.assertFalse(self.output.exists())
+
+    def test_selection_rejects_same_code_id_with_changed_source_and_mutable_prior_images(self):
+        value, previous = self.selection_fixture()
+        for mutate in (lambda prior: prior['current']['expected'].update(code_id=EXPECTED['code_id']),
+                       lambda prior: prior['retained'][0].update(image='registry.eyrie/nest/config/main:latest'),
+                       lambda prior: prior['current']['expected'].update(schema=True)):
+            prior = copy.deepcopy(previous)
+            mutate(prior)
+            with patch.object(MODULE['subprocess'], 'run') as execute, self.assertRaises(ValueError):
+                self.select(value, prior)
+            execute.assert_not_called()
+            self.assertFalse(self.output.exists())
+
+    def test_selection_refuses_tampered_candidate_schema_flags_and_member_identity_before_registry(self):
+        value, previous = self.selection_fixture()
+        for mutate in (lambda item: item.update(schema=True), lambda item: item.update(pipeline=True),
+                       lambda item: item.update(source='b' * 40), lambda item: item.update(deployment_authorized=True),
+                       lambda item: item.update(retention_complete=True), lambda item: item.update(compiler_attestation=0),
+                       lambda item: item['members'].pop(), lambda item: item['members'].reverse(),
+                       lambda item: item['members'][1]['executor'].update(job=101),
+                       lambda item: item['members'][1]['executor'].update(pipeline=124),
+                       lambda item: item['members'][1]['executor']['inputs'].update(puppetfile_digest='sha256:' + 'd' * 64),
+                       lambda item: item['current'].update(image='registry.eyrie/nest/config/main:latest')):
+            bad = copy.deepcopy(value)
+            mutate(bad)
+            with patch.object(MODULE['subprocess'], 'run') as execute, self.assertRaises(ValueError):
+                self.select(bad, previous)
+            execute.assert_not_called()
+            self.assertFalse(self.output.exists())
+
+    def test_selection_reopens_index_and_refuses_wrong_platform_or_digest(self):
+        value, previous = self.selection_fixture()
+        for mutate in (lambda index: index['manifests'].pop(),
+                       lambda index: index['manifests'][0].update(digest='sha256:' + '0' * 64),
+                       lambda index: index['manifests'][0]['platform'].update(os='windows'),
+                       lambda index: index['manifests'][1]['platform'].update(architecture='amd64'),
+                       lambda index: index['manifests'][0].update(size=True),
+                       lambda index: index['manifests'][0]['platform'].update(variant='v8')):
+            bad = copy.deepcopy(self.index)
+            mutate(bad)
+            with patch.object(MODULE['subprocess'], 'run') as execute:
+                execute.return_value.stdout = json.dumps(bad)
+                with self.assertRaises(ValueError):
+                    self.select(value, previous)
+            self.assertFalse(self.output.exists())
+
+    def test_selection_never_replaces_existing_output(self):
+        value, previous = self.selection_fixture()
+        self.output.write_text('prior accepted selection')
+        with patch.object(MODULE['subprocess'], 'run') as execute:
+            execute.return_value.stdout = json.dumps(self.index)
+            with self.assertRaises(FileExistsError):
+                self.select(value, previous)
+        self.assertEqual(self.output.read_text(), 'prior accepted selection')
+
 
 if __name__ == '__main__':
     unittest.main()
