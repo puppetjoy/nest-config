@@ -223,7 +223,7 @@ to resume their mutations. Do not rewrite old receipts to the new contract.
 
 ### Durable native reboot revision
 
-`nest::base::cli` selects `=app-admin/nest-cli-0.9.0_p20261021-r4::nest`
+The previous durable reboot revision is `=app-admin/nest-cli-0.9.0_p20261021-r4::nest`
 from overlay MR !8, merge `8e456c3d815b6f5188c328ca038a560f6fe9291a`.
 It packages CLI MR !13, merge `f64f45ef29519a414aa8e57d538b7848b0ef8229`.
 The complete 31-library-file aggregate SHA256 is
@@ -245,13 +245,19 @@ receipts and inspect them; never rewrite a digest, erase an intent, downgrade to
 bypass a refusal or submit another reboot after an ambiguous result. Keep prior
 immutable packages for inspected code rollback, not transaction replay.
 
-### Finite shared-ancestor source and report compatibility
+### Finite shared-ancestor package and report compatibility
 
 CLI MR !14 is accepted as merge
 `aaae2dbdc064ca14a46c03344ef4fb80ac507671`, with accounting contract 3.
-This is source acceptance, not a new installed package or live capacity result;
-the managed r4 pin above still has contract 2 until immutable packaging and
-managed delivery explicitly supersede it.
+`nest::base::cli` selects `=app-admin/nest-cli-0.9.0_p20261021-r5::nest`
+from overlay MR !9, merge `0a63bb6c1eb03f15ba91d06d4fc6ff784b8a6890`.
+The complete 31-library-file aggregate SHA256 is
+`f368ae1400d0e93ad63fcd07b401a01ba62ecae80d360e55a16ddc664270ecdf`.
+Disposable Gentoo packaging verified the runtime and nine installed documents;
+this does not prove managed installation, live capacity admission or boot
+acceptance. Verify the installed complete source identity and exact Portage
+revision after inventory-backed `nest_cli_package` delivery. The version string
+alone remains insufficient. No service restart or reboot is needed.
 
 Contract 3 supports finite quota/refquota only on strict shared ancestors of
 both current and target roots. Each finite quota minus native used, each finite
