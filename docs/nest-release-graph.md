@@ -164,6 +164,12 @@ closure was changed only at that member's declared base slots.
 The existing assembler independently verifies the exact executor job/receipt,
 all rebuilt member outputs, unique producers, paired normal/debug images,
 source/compatibility/root identities and changed resources across acquisition.
+The graph reader also compares the assembler's complete outputs, raw input/result
+hash selectors and stable inner native-edge observations with the earlier reads
+used to reconstruct the descendant bases. A changed predecessor, a self-consistent
+replacement input/result, or an inner bridge retry cannot substitute between
+those two independently valid acquisitions. This is bounded read consistency,
+not a server-side transaction or a lease on later artifacts.
 Final graph lineage and original compiler bytes are read again. The job then
 fsyncs and reopens `release-graph-acceptance/receipt.json`, retained on success.
 The acceptance writer must itself be the unique running, required, unerased
@@ -222,7 +228,12 @@ rebuild an old release from mutable source to approximate rollback.
 Offline tests exercise actual CLI acquisition with fake glab, all architecture
 selections, sibling dependency fanout, explicit reuse, Stage 3 placement,
 malformed modes, source/resource/lineage failures, digest-named results,
-readback/no-clobber and parent/result races. Real GitLab merged-YAML dry runs
+readback/no-clobber and parent/result races.
+Regression fixtures also change upstream output, reseal changed original input,
+or retry an inner native bridge immediately before independent assembly. All
+three must refuse before the graph acceptance receipt is published. These tests
+do not enable executing graph compilation or prove native candidate acceptance.
+Real GitLab merged-YAML dry runs
 validate default isolation, whitespace guards, root/node source admission,
 fixture conflicts and generated child job/needs/trigger syntax without creating
 pipelines. These are not real candidate build/resource/host acceptance.

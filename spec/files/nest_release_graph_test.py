@@ -650,6 +650,35 @@ class GraphTest(unittest.TestCase):
             frozen.clear(); frozen.update(copy.deepcopy(original))
             self.leaf.clear(); self.leaf.update(copy.deepcopy(result))
 
+    def test_reassembly_cannot_replace_the_predecessor_bytes_or_native_edge_used_for_projection(self):
+        for change in ('output', 'input', 'inner-bridge'):
+            fixture = GraphTest()
+            fixture.setUp()
+            try:
+                env = fixture.completed()
+                assemble = G['A']['assemble']
+
+                def changed(request, api):
+                    # Each replacement remains independently acceptable to the
+                    # ordinary assembler. Graph acceptance must bind it to the
+                    # earlier observations used to reconstruct descendant bases.
+                    if change == 'output':
+                        api.result['output']['artifacts']['normal'] = F['MANIFEST']['image'](850)
+                    elif change == 'input':
+                        frozen = api.artifacts[('nest/config', 801, 'release-inputs/expectations.json')]
+                        frozen['consumers'][0]['reason'] = 'Changed policy between graph and assembly reads'
+                        api.result['expectations_digest'] = R['digest'](frozen)
+                    else:
+                        api.bridges[850][0]['id'] += 1
+                    return assemble(request, api)
+
+                with self.subTest(change=change), patch.dict(G['A'], {'assemble': changed}):
+                    with self.assertRaisesRegex(ValueError, 'graph member changed before assembly'):
+                        G['accept_graph'](env, fixture.api)
+                    self.assertFalse((fixture.f.checkout / 'release-graph-acceptance').exists())
+            finally:
+                fixture.doCleanups()
+
     def test_green_leaf_with_wrong_dependency_base_or_executor_is_not_accepted(self):
         env = self.completed()
         for change in ('base', 'executor', 'digest', 'failed', 'input', 'lineage'):
