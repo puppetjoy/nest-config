@@ -306,13 +306,12 @@ The code-ID wrapper refers only to current; static content selects current or
 retained by exact ID. The patch checks the pinned chart's container and mount
 layout before removing anything, refusing chart-layout drift.
 
-The original mutable `nest::puppet::deploy` preflights all selected backends and
-refuses before r10k writes when any has an immutable compiler. It must not claim
-a mutable code refresh updated a frozen compiler. Such a service is updated by
-selecting the accepted release and running the existing KubeCM deployment,
-which replaces the pod. Automatic CI selection/rollout, native catalog and
-converged repeat acceptance remain integration work; do not enable this option
-on an ordinary CI-managed service before that follow-through is ready.
+The original `nest::puppet::deploy` preflights all selected backends before any
+writer. Its mutable r10k path refuses an immutable compiler unless the caller
+supplies the exact main `compiler_candidate`. That path then performs the
+additive immutable KubeCM rollout described below, not a misleading r10k refresh.
+First adoption, normal native catalog/apply/repeat and release-long retention
+still require integration acceptance before enabling the option.
 
 Retained releases are private copies in each new pod, not a read-only view of
 a store another pod can mutate. Keep the accepted image digests and every code
@@ -460,6 +459,67 @@ Focused checks also include:
     pdk test unit --tests=spec/tasks/nest_compiler_catalog_cache_spec.rb,spec/tasks/nest_update_catalog_report_spec.rb
 
 ## Compatibility and rollback
+
+### Additive routine CI rollout
+
+The ordinary main `Deploy environment` job now waits for the same pipeline's
+`Deploy image` candidate and uses the `puppet-code-deployment` resource group.
+When a selected backend is still mutable, its r10k and cache-expiry behavior is
+unchanged. When already immutable, the plan requires an annotated selection and
+dispatches through `scripts/nest-compiler-rollout.py`. No current production
+selection is enabled by installing this integration.
+
+The chart records its complete declared selection in the pod template annotation
+`nest.eyrie/compiler-selection`. This is declaration, not attestation. The helper
+also checks native init images, expected receipts, final current identity,
+pod-private storage and compiler-only read-only mounts. A missing annotation,
+legacy deployment or partial mode change refuses automatic first adoption.
+
+    python3 scripts/nest-compiler-rollout.py CANDIDATE.json test \
+      rollout-evidence/compiler/test --check
+
+`--check` is read-only and creates no files. Without that flag, the default is
+render-only: the existing `nest::eyrie::openvox::deploy` / KubeCM interface renders
+the selected chart into a new private local output directory. The helper uses an
+invocation-specific Hiera override, preserving the original hierarchy and eyaml
+handling; it never edits tracked Hiera or deployed Puppet code. The rendered
+Deployment must contain the exact additive selection and native mount/init
+layout. Helm render output and native logs can contain private data and must not
+be attached or uploaded as public CI artifacts.
+
+`--deploy` additionally reinspects the predecessor UID and resource version,
+invokes the same existing KubeCM deployment, waits for the exact Deployment
+rollout and reopens its selected identities and ready replica counts before
+writing `receipt.json`. Native failure leaves the private output in place and
+does not emit a success receipt. Existing output is never overwritten or adopted.
+Use a fresh directory only after diagnosing the previous attempt; this is not an
+automatic retry or rollback loop.
+
+Each successor retains every previously declared identity. Same-ID source
+disagreement refuses. The exact multiarchitecture candidate is reopened and
+all retained image references must still be readable. Main source must still be
+the current remote main; CI context, when available, must match the candidate's
+source and producing pipeline. The CI resource group serializes normal writers;
+the resource-version recheck detects intervening manual writes but is not an
+atomic cluster-wide lock. Manual chart writers still require coordination.
+
+Only sanitized `receipt.json` paths are CI artifacts. Readiness is not a normal
+host catalog/apply/repeat, compiler attestation or registry retention lease; the
+receipt keeps those acceptance fields false. First-adoption cache coverage and
+registry lifetime remain required before enabling production. The public
+`nest::kubernetes::deploy` adapter also renders and guards an already immutable
+OpenVox stack before writes, refusing mutable/stale Hiera that would lose or
+change any declared identity. Render-only calls do not deploy or recurse into
+that guard. Initial mutable stacks keep their normal behavior.
+
+Manual redeploy/rollback must carry the latest complete additive
+selection, including identities introduced by later CI; do not use stale source
+Hiera as implicit retirement authority. No pruning or first-adoption switch is
+performed by this helper.
+
+Focused failure tests additionally include:
+
+    python3 spec/files/nest_compiler_rollout_test.py
 
 Existing mutable deployment behavior is unchanged while selection is absent.
 An explicit selection changes the compiler path and intentionally refuses the

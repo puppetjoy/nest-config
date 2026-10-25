@@ -49,6 +49,7 @@ Puppet::Functions.create_function(:'nest::openvox_compiler_patches') do
       { 'op' => 'remove', 'path' => "#{prefix}/containers/0/volumeMounts/6" },
       operation('add', "#{prefix}/volumes/-", { 'name' => 'compiler-snapshots', 'emptyDir' => {} }),
       operation('add', "#{prefix}/containers/0/volumeMounts/-", { 'name' => 'compiler-snapshots', 'mountPath' => '/compiler', 'readOnly' => true }),
+      operation('add', '/spec/template/metadata/annotations/nest.eyrie~1compiler-selection', JSON.generate(selection)),
     ]
     # The old r10k sidecar keeps its normal mutable tree, but cannot see this
     # volume. Only init containers write it; none survive compiler startup.

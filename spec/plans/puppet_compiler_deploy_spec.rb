@@ -43,4 +43,30 @@ RSpec.describe 'nest::puppet::deploy' do
     expect_command(deploy).always_return('stdout' => '')
     expect(run_plan('nest::puppet::deploy', 'backend' => 'test').ok?).to be(true)
   end
+
+  it 'routes an existing immutable compiler through checked additive KubeCM rollout, never r10k' do
+    allow_any_command.not_be_called
+    expect_command(inspect_command('test')).be_called_times(2).always_return('stdout' => 'compiler-snapshots')
+    expect_command('python3 scripts/nest-compiler-rollout.py compiler-candidates/candidate.json test rollout-evidence/compiler/test --check').always_return('stdout' => '{}')
+    expect_command('python3 scripts/nest-compiler-rollout.py compiler-candidates/candidate.json test rollout-evidence/compiler/test --deploy').always_return('stdout' => '{}')
+    expect(run_plan('nest::puppet::deploy', 'backend' => 'test', 'compiler_candidate' => 'compiler-candidates/candidate.json').ok?).to be(true)
+  end
+
+  it 'rejects all-environment and non-main immutable deployment before any writer' do
+    allow_any_command.not_be_called
+    allow_command(inspect_command('test')).always_return('stdout' => 'compiler-snapshots')
+    [{ 'environment' => 'other' }, { 'all_environments' => true }].each do |args|
+      result = run_plan('nest::puppet::deploy', args.merge('backend' => 'test', 'compiler_candidate' => 'candidate.json'))
+      expect(result.ok?).to be(false)
+    end
+  end
+
+  it 'does not write either backend when the second immutable preflight fails' do
+    allow_any_command.not_be_called
+    expect_command(inspect_command('test')).always_return('stdout' => 'compiler-snapshots')
+    expect_command(inspect_command('default')).always_return('stdout' => 'compiler-snapshots')
+    expect_command('python3 scripts/nest-compiler-rollout.py candidate.json test rollout-evidence/compiler/test --check').always_return('stdout' => '{}')
+    expect_command('python3 scripts/nest-compiler-rollout.py candidate.json default rollout-evidence/compiler/default --check').error_with('kind' => 'fixture/compiler', 'msg' => 'Unready compiler')
+    expect(run_plan('nest::puppet::deploy', 'compiler_candidate' => 'candidate.json').ok?).to be(false)
+  end
 end
