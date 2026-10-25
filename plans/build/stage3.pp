@@ -23,7 +23,7 @@
 # @param repo_revisions Complete gentoo/nest/haskell commit pins; isolated repositories, no sync
 # @param stage2_image Exact Stage2 image reference; defaults to platform/variant tag
 # @param catalog_inputs Exact installed config executor source/base; use its local modules, not a served environment
-# @param root_publication Explicit local staging/publication placement; frozen catalogs only, never legacy rsync
+# @param root_publication Explicit staging/publication placement, optionally through a private shared archive and inventory target
 plan nest::build::stage3 (
   String            $container,
   String            $hostname,
@@ -57,6 +57,8 @@ plan nest::build::stage3 (
       'staging_guid' => Pattern[/\A[1-9][0-9]{0,19}\z/],
       'receipts'     => String[1],
       'parent_guid'  => Pattern[/\A[1-9][0-9]{0,19}\z/],
+      Optional['target']  => Pattern[/\A[a-z0-9][a-z0-9-]{0,62}\z/],
+      Optional['archive'] => String[1],
     }], $root_publication)
     unless $catalog_inputs != undef and !$deploy and $hostroot == "/nest/releases/${root_publication['release']}/hosts/${hostname}" {
       fail('Local root publication requires frozen catalogs, the exact versioned hostroot and deploy=false')
@@ -67,6 +69,16 @@ plan nest::build::stage3 (
     # Keep sibling imports together in the verified executor, not Bolt's
     # single-script temporary upload directory.
     $finish_command = "python3 /opt/nest/files/build/finish-stage3-root.py ${finish_args.shellquote}"
+    if $root_publication['target'] != undef {
+      assert_type(String[1], $root_publication['archive'])
+      $publication_targets = get_targets($root_publication['target'])
+      unless $publication_targets.length == 1 and $publication_targets[0].config['transport'] == 'ssh' and $publication_targets[0].config['ssh']['user'] == 'joy' {
+        fail('Remote publication requires one inventory-backed Joy SSH target')
+      }
+      $publication_target = $publication_targets[0]
+    } elsif $root_publication['archive'] != undef {
+      fail('A shared archive requires an explicit publication target')
+    }
   }
   if $catalog_inputs != undef {
     if $deploy {
@@ -114,7 +126,26 @@ plan nest::build::stage3 (
     # or repair it, nor copy a root over that same source through legacy defaults.
     run_script('nest/build/check-stage3-paths.py', 'localhost', arguments => $identity_args)
     if $root_publication != undef {
-      run_command("${finish_command} --check", 'localhost', 'Admit local Stage 3 publication placement before build')
+      if $root_publication['target'] != undef {
+        $helper_template = "${root_publication['receipts']}/stage3-helpers.XXXXXXXX"
+        $helpers = run_command("mktemp -d ${helper_template.shellquote}", $publication_target,
+          'Stage publication helpers through ordinary Bolt escalation', { '_run_as' => 'root' }).first.value['stdout'].chomp
+        # Keep the existing sibling imports together on the publication host.
+        ['check-stage3-root.py', 'publish-stage3-root.py', 'materialize-stage3-root.py',
+          'finish-stage3-root.py', 'transfer-stage3-root.py'].each |$helper| {
+          upload_file("nest/build/${helper}", "${helpers}/${helper}", $publication_target, { '_run_as' => 'root' })
+        }
+        $remote_finish_path = "${helpers}/finish-stage3-root.py"
+        $remote_transfer_path = "${helpers}/transfer-stage3-root.py"
+        $remote_finish = "python3 ${remote_finish_path.shellquote} ${finish_args.shellquote}"
+        run_command("${remote_finish} --check", $publication_target,
+          'Admit native publication ZFS before build', { '_run_as' => 'root' })
+        $export_args = [$container, $root_publication['archive']]
+        run_command("python3 /opt/nest/files/build/transfer-stage3-root.py export-check ${export_args.shellquote}",
+          'localhost', 'Admit private shared archive without creating it')
+      } else {
+        run_command("${finish_command} --check", 'localhost', 'Admit local Stage 3 publication placement before build')
+      }
     }
   }
 
@@ -286,7 +317,20 @@ plan nest::build::stage3 (
 
   if $root_publication != undef {
     run_command($check_catalog, 'localhost', 'Verify frozen executor before root publication')
-    $published = parsejson(run_command($finish_command, 'localhost', 'Materialize and publish stopped Stage 3 root').first.value['stdout'])
+    if $root_publication['target'] != undef {
+      $transfer = parsejson(run_command("python3 /opt/nest/files/build/transfer-stage3-root.py export ${export_args.shellquote}",
+        'localhost', 'Archive stopped root and frozen repositories on private shared storage').first.value['stdout'])
+      assert_type(Struct[{
+        'archive_digest' => Pattern[/\Asha256:[0-9a-f]{64}\z/],
+        'content_digest' => Pattern[/\Asha256:[0-9a-f]{64}\z/],
+      }], $transfer)
+      $receive_args = [$container, $root_publication['archive'], $transfer['archive_digest'],
+        $transfer['content_digest']] + $finish_args[1,8]
+      $published = parsejson(run_command("python3 ${remote_transfer_path.shellquote} receive ${receive_args.shellquote}",
+        $publication_target, 'Check transfer, seal and publish on native ZFS', { '_run_as' => 'root' }).first.value['stdout'])
+    } else {
+      $published = parsejson(run_command($finish_command, 'localhost', 'Materialize and publish stopped Stage 3 root').first.value['stdout'])
+    }
     assert_type(Struct[{ 'root' => Struct[{
       'path'           => String[1],
       'dataset_guid'   => Pattern[/\A[1-9][0-9]{0,19}\z/],

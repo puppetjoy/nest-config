@@ -115,6 +115,53 @@ privileged-runner allocator, remote copy mechanism or automatic CI bootstrap.
 
 ## Verified boundary
 
+### Native build with publication on another host
+
+When the native build host and the ZFS publication host differ, use the same
+Stage 3 adapter with an explicit `nest_stage3_remote_placement` record. It has
+the same schema, member, expectations digest, staging, staging GUID, receipts
+and publication parent GUID fields as local placement, plus:
+
+- `target`: one configured inventory name, such as `falcon`. The Stage 3 plan
+  requires the existing Joy SSH transport and uses Bolt escalation, not root SSH.
+- `archive`: a fresh absolute `.tar` path on an existing share visible at the
+  same path on both hosts. Its existing parent must be root-owned, mode 0700,
+  non-symlinked and disjoint from identity, staging, receipts and publication.
+  Do not put this transport scratch in `/nest/backup`.
+
+Select and provision the same local ZFS placement on the publication host first,
+using the existing `--provision` interface above. For the adapter's remote
+placement, retain those exact local fields and select the explicit target and
+private shared archive; do not replace a GUID with an NFS path or weaken native
+mount admission. The private identity generation must remain accessible to both
+hosts through the existing share. Budget the temporary archive and both staging
+and published root copies before the build. No helper chooses or expands quotas.
+
+Before container initialization the plan uploads the existing sibling helpers
+through Bolt, checks publication-host ZFS placement, and read-only checks the
+absent shared archive. After the build stops, `transfer-stage3-root.py export`
+archives the stopped image layer plus its exact frozen repository volume. GNU
+tar's PAX/ACL/xattr/numeric-owner options preserve restore metadata inside opaque
+archive bytes, including nanosecond mtimes and hardlinks. The share itself need
+not support release xattrs, devices or symlinks. Host shares and build-only binds
+are not payload. Stopped source and repository identities are checked again.
+
+The root-only archive is created without clobbering, fsynced and digest-bound to
+the assembled root. On the publication host, `receive` verifies that exact
+archive and its retained result, reserves the existing finish intent, extracts
+to the empty admitted ZFS staging dataset, compares full restored content, then
+syncs and seals it. It calls the unchanged native publisher/checker. The adapter
+independently reopens the final resource on that same inventory target through
+`nest::build::check_stage3_root`, rather than checking an NFS view on the builder.
+
+This is a transport option on the existing build, not a new service or general
+archive import API. Only the root-owned archive made by this producer is valid.
+Any failed copy, extraction, digest, mount, seal or publication leaves the
+private archive, started intent and partial datasets for inspection. There is no
+automatic archive deletion, retry, dataset destruction or source-container
+restart. Local publication remains unchanged. Temporary helpers remain under
+the selected receipts directory; they are not a system-wide installation.
+
 The ordinary fixture job runs promotion and placement fault tests. They cover
 read-only defaults, complete pairs, stale selection, failed copy/readback, exact
 retained rollback and pointer behavior, selected parent GUIDs, overlap, partial

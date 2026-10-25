@@ -88,9 +88,15 @@ def prepare(expected, member_id, receipt, placement=None):
     if stage == "stage3":
         require(member["mode"] == "fresh")
         require(re.fullmatch(r"[a-z0-9][a-z0-9-]{0,62}", member["host"]) is not None)
-        release.fields(placement, "schema kind member expectations_digest staging staging_guid receipts parent_guid", "placement")
+        remote = type(placement) is dict and placement.get("kind") == "nest_stage3_remote_placement"
+        release.fields(placement, "schema kind member expectations_digest staging staging_guid receipts parent_guid" +
+                       (" target archive" if remote else ""), "placement")
         require(type(placement["schema"]) is int and placement["schema"] == 1
-                and placement["kind"] == "nest_stage3_local_placement")
+                and placement["kind"] == ("nest_stage3_remote_placement" if remote else "nest_stage3_local_placement"))
+        if remote:
+            release.match(placement["target"], r"[a-z0-9][a-z0-9-]{0,62}", "publication target")
+            release.absolute_path(placement["archive"], "private shared archive")
+            require(placement["archive"].endswith(".tar"))
         require(placement["member"] == member_id and placement["expectations_digest"] == release.digest(expected))
         for key in ("staging_guid", "parent_guid"):
             release.match(placement[key], r"[1-9][0-9]{0,19}", "placement GUID")
@@ -106,6 +112,8 @@ def prepare(expected, member_id, receipt, placement=None):
                   "catalog_inputs": {"source": expected["executor"]["source"], "base": receipt["inputs"]["base_image"]},
                   "root_publication": {key: placement[key] for key in ("staging", "staging_guid", "receipts", "parent_guid")}}
         params["root_publication"].update(release=expected["release"], expectations=release.digest(expected))
+        if remote:
+            params["root_publication"].update(target=placement["target"], archive=placement["archive"])
     elif stage == "stage1":
         params.update(variant=member["variant"], refresh=member["mode"] == "refresh",
                       from_image=member["bases"]["normal"], from_image_debug=member["bases"]["debug"])
@@ -154,13 +162,20 @@ def execute(expected, member_id, receipt, directory, placement=None):
         require(root["path"] == params["hostroot"])
         release.match(root["dataset_guid"], r"[1-9][0-9]{0,19}", "root GUID")
         release.match(root["content_digest"], release.DIGEST, "root digest")
-        # Independent native admission on the SAME explicitly selected local
-        # publication host, not trust in the plan's returned object alone.
+        # Independent native admission on the selected publication host, not
+        # an NFS view or trust in the build plan's returned object alone.
+        arguments = [root["path"], member["host"], expected["release"], root["dataset_guid"],
+                     release.digest(expected), "--content-digest", root["content_digest"]]
+        remote = params["root_publication"].get("target")
+        if remote:
+            command = [str(PROJECT / "bin/bolt-wrapper"), "plan", "run", "nest::build::check_stage3_root",
+                       "--project", str(PROJECT), "--params", "-", "--format", "json"]
+            payload = release.canonical({"targets": remote, "arguments": arguments})
+        else:
+            command = [sys.executable, str(PROJECT / "files/build/check-stage3-root.py"), *arguments]
+            payload = None
         with tempfile.TemporaryFile() as output, tempfile.TemporaryFile() as error:
-            result = subprocess.run([sys.executable, str(PROJECT / "files/build/check-stage3-root.py"),
-                                     root["path"], member["host"], expected["release"], root["dataset_guid"],
-                                     release.digest(expected), "--content-digest", root["content_digest"]],
-                                    stdout=output, stderr=error, check=False, timeout=3600)
+            result = subprocess.run(command, input=payload, stdout=output, stderr=error, check=False, timeout=3600)
             require(result.returncode == 0)
             output.seek(0)
             raw = output.read(release.LIMIT + 1)
@@ -202,7 +217,7 @@ def main():
     parser.add_argument("--member", required=True)
     parser.add_argument("--executor-receipt", required=True)
     parser.add_argument("--output-dir", required=True)
-    parser.add_argument("--stage3-placement", help="Exact local placement JSON; required only for Stage 3")
+    parser.add_argument("--stage3-placement", help="Exact local or shared-archive remote placement JSON; required only for Stage 3")
     args = parser.parse_args()
     try:
         print(json.dumps(execute(release.load(args.expectations), args.member,
