@@ -439,6 +439,15 @@ non-root groups and a symlinked cache file refuse. Ancestor directories remain
 the existing agent's trusted runtime boundary, including its daemon-owned
 vardir. This read is an observation, not a tamper-proof cache attestation.
 
+Historical mutable Nest compilers emitted abbreviated Git configuration versions.
+For an explicitly present null `code_id`, the observer and adoption reader accept
+7–40 lowercase hexadecimal characters and preserve the exact version token. They
+never resolve or expand it, bind it to a release source, or infer historical
+content preservation. A non-null immutable code ID still requires a full
+40-character source matching its independently accepted expected receipt. Missing
+code IDs, malformed versions and shortened immutable sources continue to refuse.
+Do not run a new host apply merely to replace a historical version abbreviation.
+
 Keep the original inventory-backed invocation receipts and an explicit scope
 JSON object with `schema: 1` and a nonempty `clients` array. Each client has
 exactly `hostname`, `certname` and `server`. Collect the sanitized successful

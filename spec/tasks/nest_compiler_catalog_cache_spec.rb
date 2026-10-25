@@ -27,6 +27,26 @@ RSpec.describe NestCompilerCatalogCache do
     expect(collect['cache']['code_id']).to eq(catalog['code_id'])
   end
 
+  it 'preserves historical abbreviated versions only for explicitly null code IDs' do
+    ['5b732030', '13c279d6', 'a' * 7, 'a' * 39].each do |version|
+      catalog['version'] = version
+      expect(collect(reader: ->(_path) { JSON.generate(catalog) })['cache']['configuration_version']).to eq(version)
+    end
+  end
+
+  it 'never expands a legacy version or accepts an abbreviated immutable source' do
+    catalog['code_id'] = 'sha256:' + ('b' * 64)
+    ['5b732030', 'a' * 7, 'a' * 39].each do |version|
+      catalog['version'] = version
+      expect { collect(reader: ->(_path) { JSON.generate(catalog) }) }.to raise_error(NestUpdateCatalogReport::Unavailable)
+    end
+    catalog['code_id'] = nil
+    ['', 'a' * 6, 'a' * 41, 'main', '5b732030-extra', "5b732030\n", '5B732030'].each do |version|
+      catalog['version'] = version
+      expect { collect(reader: ->(_path) { JSON.generate(catalog) }) }.to raise_error(NestUpdateCatalogReport::Unavailable)
+    end
+  end
+
   ['name', 'environment', 'version', 'code_id', 'catalog_uuid', 'resources'].each do |field|
     it "distinguishes missing #{field} from a legitimate null code ID" do
       catalog.delete(field)

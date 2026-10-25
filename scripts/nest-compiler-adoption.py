@@ -57,11 +57,14 @@ def propose(candidate_path, scope_path, observations_path, releases_path, output
                 and row['catalog_applied'] is False and row['acceptance_recorded'] is False)
         cache = row['cache']
         require(type(cache) is dict and set(cache) == {'configuration_version', 'code_id', 'catalog_uuid', 'cache_sha256'})
-        require(matches(cache['configuration_version'], r'[0-9a-f]{40}'))
         require(matches(cache['catalog_uuid'], UUID) and matches(cache['cache_sha256'], r'[0-9a-f]{64}'))
         if cache['code_id'] is None:
+            # Historical mutable compilers used git --short. Observe the exact
+            # token without resolving/expanding it or claiming historical bytes.
+            require(matches(cache['configuration_version'], r'[0-9a-f]{7,40}'))
             legacy.append(row['certname'])
         else:
+            require(matches(cache['configuration_version'], r'[0-9a-f]{40}'))
             require(type(cache['code_id']) is str and cache['code_id'] in identities)
             require(identities[cache['code_id']]['expected']['source'] == cache['configuration_version'])
     # Keep every supplied release, including identities absent in today's
