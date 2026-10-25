@@ -370,12 +370,14 @@ def accept_graph(env, api):
             and routes[0]['downstream_pipeline']['project_id'] == 3, 'unbound graph acceptance')
     expected = copy.deepcopy(request['expectations'])
     outputs: dict[str, Any] = {}
+    acquired = {}
     producers, observations = {}, {}
     for name in order:
         resolved, observations[name] = native_node(api, request, root_id, name)
         selector = dict(project=indexed[name]['project'], member=name, job_name=nodes[name]['job_name'], **resolved)
         producers[name] = selector
-        actual, _ = D['edge'](api, source, expected['sources'][selector['project']], selector)
+        actual, native = D['edge'](api, source, expected['sources'][selector['project']], selector)
+        acquired[name] = dict(selector=actual, native=native)
         original = B['artifact'](api, 'nest/config', actual['input_job'], 'release-inputs/expectations.json', actual['input_sha256'])
         result = B['decode'](B['result_bytes'](api, selector['project'], actual['job'], name, actual['result_sha256']))
         output = B['check_result'](original, result, actual)
@@ -397,6 +399,12 @@ def accept_graph(env, api):
             consumer['decision'] = 'defer'
     assembled = A['assemble'](dict(schema=1, kind='nest_release_assembly', expectations=expected,
                                  executor_job=request['executor_job'], producers=producers), api)
+    # Assembly independently reacquires each leaf, but must not silently replace
+    # the bytes or inner native edge used above to reconstruct descendant bases.
+    # Two internally consistent observations are not one consistent graph.
+    assembled_outputs = {row['member']['id']: row for row in assembled['manifest']['candidate']['outputs']}
+    require(assembled['members'] == acquired and assembled_outputs == outputs,
+            'graph member changed before assembly')
     for name in order:
         _, observation = native_node(api, request, root_id, name)
         require(observation == observations[name], 'graph lineage changed during acceptance')
