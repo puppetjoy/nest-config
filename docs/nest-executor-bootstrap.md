@@ -1,9 +1,11 @@
 # Distinct OpenBolt to config executor bootstrap
 
-The config executor build accepts an exact successful native OpenBolt result
-without relabeling the old executor's release as the new config source. This
-extends the existing `.template` build and schema-2 executor receipt. It creates
-no trigger or service, and cannot trigger config -> Bolt -> config recursively.
+The config executor build and optional native successor route accept an exact
+successful native OpenBolt result without relabeling the old executor's release
+as the new config source. This
+extends the existing `.template` build and schema-2 executor receipt. Its explicit
+artifact-backed child uses the existing GitLab trigger mechanism, not a service
+or shell orchestrator, and cannot trigger config -> Bolt -> config recursively.
 The ordinary same-source binder, discovery, assembly and envelope contracts are
 unchanged; do not bypass their source checks to model this separate boundary.
 
@@ -23,7 +25,7 @@ native pipeline or trigger source with:
 
 No caller `BOLT_IMAGE` override is permitted in this mode. Ordinary builds without
 bootstrap fields retain their existing default/override behavior. Tag, push, MR,
-schedule and parent-pipeline bootstrap execution are refused. Partial, false,
+schedule and unbound parent-pipeline bootstrap execution are refused. Partial, false,
 malformed or conflicting selection cannot fall through to ordinary executor
 builds or either deployment job. The Test-stage selection job fails before any
 Build-stage action. Existing isolated status-fixture mode still suppresses all
@@ -44,6 +46,52 @@ script. Static diagnostics and exit 1 indicate operational refusal; argument
 errors return 2. Neither helper invocation builds, triggers or retries anything.
 `--ci-base` without bootstrap fields prints the existing ordinary base selection
 and does not create a bootstrap directory.
+
+## Native successor route
+
+After the separately approved OpenBolt producer has completed, select
+`EXECUTOR_BOOTSTRAP=route` on an API/web/trigger pipeline at the exact successor
+config revision on `main`. Keep `EXECUTOR_ONLY=true`, one native `BUILD` CPU and
+the same `RELEASE_BOOTSTRAP_FILE` request. This selection authorizes an actual
+successor executor build through the existing CI, so do not launch it merely to
+manufacture acceptance evidence. No new OpenBolt or OS build is triggered.
+
+`Compile executor bootstrap` runs `--compile-route`. Before publishing anything,
+it checks the clean source/job/CPU identity and independently acquires the whole
+old-executor/OpenBolt boundary twice. It retains the canonical original request,
+acquired evidence and generated child YAML with fsync, no-clobber and readback.
+Compilation itself performs only authenticated reads and local publication.
+
+`Run executor bootstrap` consumes that exact artifact with `strategy: mirror`.
+Its pipeline/YAML variable forwarding and inherited variables are disabled. The
+generated child includes this same revision's CI with exactly six fixed variables:
+`EXECUTOR_BOOTSTRAP=true`, `EXECUTOR_ONLY=true`, `BUILD`, and the exact compiler
+`RELEASE_BOOTSTRAP_PIPELINE`, `RELEASE_BOOTSTRAP_JOB`, `RELEASE_BOOTSTRAP_SHA256`.
+It never forwards the file variable's path, credentials, other selection modes
+or a mutable image alias. Same-project `trigger:project` is not used; this is one
+artifact-backed child, leaving no recursive config -> Bolt -> config trigger.
+
+The child admits artifact selectors only as a complete set from `parent_pipeline`,
+never alongside a file variable. Before its registry/build commands it verifies
+the exact successful compiler job, raw request digest and required native parent
+bridge's source/project/main-ref/child identity. The parent must originate from
+API/web/trigger; the child must have no bridges. It independently acquires the
+original OpenBolt evidence and reopens the route before retaining the base.
+The retained bootstrap input additionally contains `route`, with exactly
+`pipeline`, `job`, `sha256`. The ordinary schema-2 installed-executor receipt is
+unchanged. Partial selectors and conflicting modes cannot fall through to normal
+executor or deployment jobs. Downstream failure propagates to the parent.
+
+The completed-successor reader accepts this child only by independently reopening
+the retained route's compiler and its now-successful native bridge, in addition
+to the original old/new artifact checks. An unrelated green child or copied route
+receipt cannot substitute. Missing job-token access fails without another identity.
+Actual production permissions and native bootstrap execution remain unproven.
+
+This closes scheduling of the successor from a completed predecessor, not automatic
+construction of the preceding OpenBolt release or the complete release graph.
+No aliases, served Puppet code, hosts or ordinary builds change in route mode.
+Rollback stops selecting `route` and preserves all predecessor/successor artifacts.
 
 ## Request schema 1
 
@@ -141,7 +189,8 @@ build merely for evidence. An ordinary nonbootstrap executor has no bootstrap
 receipt and cannot substitute, even if its version/source happens to match.
 
 The helper validates every static selector before acquisition. It requires a
-successful API/web/pipeline/trigger successor with no outgoing bridges, exactly
+successful API/web/pipeline/trigger successor, or an independently route-bound
+parent-pipeline successor, with no outgoing bridges, exactly
 one selected architecture build, no deployment jobs and no failed, erased or
 tolerated jobs. The independently read executor schema, source, CPU, job and image
 must match. It reacquires the entire original old-executor/OpenBolt boundary using
@@ -188,9 +237,10 @@ pre-acquisition refusal, exact artifact allowlisting and a real CLI/fake-glab
 retention/readback after producer exit. They are isolated fixtures, not native
 bootstrap or production permission acceptance.
 
-The full native graph must still schedule the prior executor -> OpenBolt ->
-this successor boundary and freeze each descendant after actual predecessor
-success. Automatic graph generation, later source-owned executor admission,
+The optional route now schedules a successor from an already completed OpenBolt
+boundary. The full native graph must still schedule the preceding old-executor
+to OpenBolt boundary and freeze each descendant after actual predecessor success.
+Automatic full graph generation, later source-owned executor admission,
 production permission/resource/ISA/ABI checks, full release policy/promotion and
 host transaction lifecycle remain open. No actual new candidate bootstrap is
 run merely to claim this interface is operationally proven.
