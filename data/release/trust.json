@@ -1,5 +1,7 @@
 {
   "schema": 1,
   "kind": "nest_release_identity_trust",
-  "hosts": {}
+  "hosts": {
+    "owl": "9400832b20210cc2b29a949f1314f852f037cf413172c51fa73bf77371da65b7"
+  }
 }
