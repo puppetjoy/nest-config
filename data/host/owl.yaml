@@ -112,6 +112,10 @@ nest::service::gitlab_runner::instances:
     podman: true
     puppetcore: true
     qemu: true
+    # Frozen Stage 3 admission/export runs in the executor as well as the
+    # nested build container, so both need the same shared build paths.
+    volumes:
+      - '/nest:/nest'
 
 # Hermes profiles run as named instances; the root/default profile is not a
 # long-running Nesty agent.
