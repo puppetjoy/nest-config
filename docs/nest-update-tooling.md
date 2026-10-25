@@ -249,7 +249,7 @@ immutable packages for inspected code rollback, not transaction replay.
 
 CLI MR !14 is accepted as merge
 `aaae2dbdc064ca14a46c03344ef4fb80ac507671`, with accounting contract 3.
-`nest::base::cli` selects `=app-admin/nest-cli-0.9.0_p20261021-r5::nest`
+The previous finite shared-ancestor package is `=app-admin/nest-cli-0.9.0_p20261021-r5::nest`
 from overlay MR !9, merge `0a63bb6c1eb03f15ba91d06d4fc6ff784b8a6890`.
 The complete 31-library-file aggregate SHA256 is
 `f368ae1400d0e93ad63fcd07b401a01ba62ecae80d360e55a16ddc664270ecdf`.
@@ -279,6 +279,31 @@ contract 3 CLI can export valid contract 2 history, but cannot resume its
 preparation or make it newly reboot-eligible. Never relabel a historical receipt,
 replace its bound policy or downgrade to bypass refusal. Actual A/B and finite
 limit behavior still require the separately approved disruptive canary.
+
+### Checked kernel Puppet outcomes
+
+`nest::base::cli` selects `=app-admin/nest-cli-0.9.0_p20261021-r6::nest`
+from overlay MR !10, merge `d1c339be0a777b90f94ffc487bdb7885c773cdea`.
+It packages CLI MR !15, merge `b1952f110d99b5db4b4de7e57d3f5e39392d134a`.
+The complete 31-library-file aggregate SHA256 is
+`f142e7e2f430854d9bde85bd4dec1cc3be1c3d9e9edb0b4f141830b99c743ead`.
+Verify the entire installed source map and exact Portage revision after ordinary
+inventory-backed `nest_cli_package` delivery. Package and source CI are not
+installed acceptance. No service restart or reboot is needed for this tooling pin.
+
+Successful kernel `puppet` commands preserve native integer exit 2 as applied,
+distinct from exit 0 as converged. The complete kernel phase still has aggregate
+exit null or zero. Other completed commands cannot claim exit 2; contradictory
+completed outcomes fail closed. Historical successful unknown command exits
+remain null, not fabricated measured zero. Failed and stopped reports remain
+exportable. Native eligibility and transported report readers preserve the same
+outcome contract; none turns command success into actual boot acceptance.
+
+Accounting remains contract 3, with readable contracts 2 and 3. The source change
+can invalidate preparation bound to older CLI bytes. Keep prior immutable packages,
+receipts, shared state and reboot intent. Never rewrite a digest, downgrade to
+bypass refusal, or replay preparation or an ambiguous reboot. Actual A/B lifecycle
+and the first disruptive canary remain separately owner-gated.
 
 ## Fail-closed ZFS startup
 
