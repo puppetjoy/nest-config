@@ -12,12 +12,13 @@ ROOT = Path(__file__).resolve().parents[1]
 CANDIDATE = runpy.run_path(str(ROOT / 'scripts/nest-compiler-candidate.py'))
 require, load = CANDIDATE['require'], CANDIDATE['load']
 ANNOTATION = 'nest.eyrie/compiler-selection'
+SOURCE_REPOSITORY = 'https://gitlab.joyfullee.me/nest/config.git'
 
 
-def command(argv, timeout=180, log=None):
+def command(argv, timeout=180, log=None, cwd=None):
     # Rendering can contain private chart data. Never copy native stdout/stderr
     # into the public result or exception; keep only the safe phase failure.
-    result = subprocess.run(argv, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout, check=False)
+    result = subprocess.run(argv, cwd=ROOT if cwd is None else cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout, check=False)
     if log is not None:
         for suffix, payload in (('.stdout', result.stdout), ('.stderr', result.stderr)):
             descriptor = os.open(str(log) + suffix, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -154,7 +155,10 @@ def rollout(candidate_path, namespace, output, deploy=False, check_only=False):
     if os.environ.get('CI'):
         require(os.environ.get('CI_COMMIT_BRANCH') == 'main' and os.environ.get('CI_DEFAULT_BRANCH') == 'main')
         require(value['source'] == os.environ.get('CI_COMMIT_SHA') and str(value['pipeline']) == os.environ.get('CI_PIPELINE_ID'))
-    head = command(['git', 'ls-remote', '--exit-code', 'origin', 'refs/heads/main']).decode().split()
+    # Bolt mounts a linked worktree without its external Git administration.
+    # Read the canonical public source outside that checkout; neither local
+    # origin configuration nor a writable/visible .git directory is required.
+    head = command(['git', 'ls-remote', '--exit-code', SOURCE_REPOSITORY, 'refs/heads/main'], cwd=ROOT.parent).decode().split()
     require(len(head) == 2 and head == [value['source'], 'refs/heads/main'])
     require(not output.exists())
     before = get_deployment(namespace)

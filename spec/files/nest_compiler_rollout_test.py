@@ -58,6 +58,7 @@ class CompilerRolloutTest(unittest.TestCase):
         self.after['metadata'].update(resourceVersion='124', generation=5)
         self.after['status']['observedGeneration'] = 5
         self.calls = []
+        self.remote_checks = []
         self.environment = patch.dict(os.environ, {}, clear=True)
         self.environment.start()
         self.addCleanup(self.environment.stop)
@@ -65,6 +66,7 @@ class CompilerRolloutTest(unittest.TestCase):
     def native(self, argv, **kwargs):
         self.calls.append(argv)
         if argv[:2] == ['git', 'ls-remote']:
+            self.remote_checks.append((argv, kwargs))
             return (SHA + '\trefs/heads/main\n').encode()
         if argv[:2] == ['ruby', '-ryaml']:
             if '-rjson' in argv and 'YAML.load_stream' in argv[4]:
@@ -84,6 +86,7 @@ class CompilerRolloutTest(unittest.TestCase):
         self.assertFalse(self.output.exists())
         self.assertEqual([args[0] for args in self.calls], ['git', 'podman'])
         self.assertEqual(self.calls[-1], ['podman', 'manifest', 'inspect', OLD['image']])
+        self.assertEqual(self.remote_checks, [(['git', 'ls-remote', '--exit-code', MODULE['SOURCE_REPOSITORY'], 'refs/heads/main'], {'cwd': ROOT.parent})])
 
     def test_render_uses_existing_kubecm_plan_and_private_invocation_hiera_only(self):
         result = self.run_rollout()
@@ -227,6 +230,22 @@ class CompilerRolloutTest(unittest.TestCase):
                 MODULE['command'](['inert'], log=self.root / 'native')
         self.assertEqual((self.root / 'native.stderr').stat().st_mode & 0o777, 0o600)
         self.assertEqual((self.root / 'native.stderr').read_bytes(), b'private error')
+
+    def test_canonical_ref_observation_works_without_linked_worktree_git_administration(self):
+        checkout = self.root / 'isolated-checkout'
+        checkout.mkdir()
+        (checkout / '.git').write_text('gitdir: /unmounted/private/repository/worktrees/fixture\n')
+        local = self.root / 'remote.git'
+        subprocess.run(['git', 'init', '--bare', str(local)], check=True, capture_output=True)
+        ref = ['git', 'ls-remote', '--exit-code', str(local), 'refs/heads/main']
+        with patch.dict(MODULE['command'].__globals__, ROOT=checkout):
+            with self.assertRaises(ValueError):
+                MODULE['command'](ref)
+            # Missing main still refuses outside the checkout too; successful
+            # empty advertisement isolates discovery from exact-ref admission.
+            with self.assertRaises(ValueError):
+                MODULE['command'](ref, cwd=checkout.parent)
+            self.assertEqual(MODULE['command'](['git', 'ls-remote', str(local)], cwd=checkout.parent), b'')
 
 
 if __name__ == '__main__':
