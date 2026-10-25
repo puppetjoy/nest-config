@@ -78,6 +78,32 @@ class CompilerAdoptionTest(unittest.TestCase):
         self.assertEqual(result['selection']['retained'], self.releases)
         self.assertEqual(result['legacy_null_code_id_clients'], [])
 
+    def test_darwin_schema_preserves_native_boot_identity_without_relaxing_linux(self):
+        row = self.observations[0]
+        native = '5F573720-AD7D-4CC8-90CB-4FB2520C257A'
+        row.update(schema=2, platform='darwin', boot_source='kern.bootsessionuuid', boot_id=native)
+        with patch.object(subprocess, 'run') as execute:
+            execute.return_value.stdout = json.dumps(self.index)
+            result = self.propose()
+        self.assertTrue(result['scope_cache_reconciled'])
+        self.assertEqual(row['boot_id'], native)
+        self.assertFalse(result['global_cache_coverage'])
+        self.assertFalse(result['deployment_authorized'])
+        self.output.unlink()
+        original = copy.deepcopy(row)
+        for change in (dict(schema=1), dict(schema=3), dict(schema=True), dict(platform='windows'),
+                       dict(boot_source='linux'), dict(boot_id=native.lower()), dict(boot_id=native + '\n')):
+            self.observations[0] = dict(original, **change)
+            with self.subTest(change=change), patch.object(subprocess, 'run') as execute, self.assertRaises(ValueError):
+                self.propose()
+            execute.assert_not_called()
+            self.assertFalse(self.output.exists())
+        self.observations[0] = dict(original)
+        del self.observations[0]['boot_source']
+        with patch.object(subprocess, 'run') as execute, self.assertRaises(ValueError):
+            self.propose()
+        execute.assert_not_called()
+
     def test_legacy_abbreviations_remain_unresolved_observations_not_release_sources(self):
         for version in ('5b732030', '13c279d6', 'a' * 7, 'a' * 39):
             self.cache['configuration_version'] = version

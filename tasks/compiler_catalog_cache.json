@@ -5,7 +5,7 @@
   "files": ["nest/tasks/update_catalog_report.rb"],
   "parameters": {
     "expectations": {
-      "description": "Exact hostname, certname and configured Puppet server. Linux and root escalation required. Missing, unsafe, changing or non-main caches refuse; a present null code_id is legacy mutable content, not unknown or an immutable release.",
+      "description": "Exact hostname, certname and configured Puppet server. Native Linux or Darwin Ruby with root escalation required; Cygwin/Windows unsupported. Linux emits schema 1; Darwin emits schema 2 with its exact native boot-session UUID. Missing, unsafe, changing or non-main caches refuse; a present null code_id is legacy mutable content, not unknown or an immutable release.",
       "type": "Hash[String, Data]"
     }
   }

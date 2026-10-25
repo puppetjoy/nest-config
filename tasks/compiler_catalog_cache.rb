@@ -2,12 +2,32 @@
 # frozen_string_literal: true
 
 require_relative 'update_catalog_report'
+require 'open3'
 
 # Observe the native JSON cache without loading a catalog, syncing plugins,
 # contacting a server, instantiating YAML objects or changing agent state.
 module NestCompilerCatalogCache
   REPORT = NestUpdateCatalogReport
   LEGACY_VERSION = %r{\A[0-9a-f]{7,40}\z}
+  DARWIN_UUID = %r{\A[0-9A-F]{8}(?:-[0-9A-F]{4}){3}-[0-9A-F]{12}\z}
+
+  def self.platform
+    return 'linux' if RUBY_PLATFORM.include?('linux')
+    return 'darwin' if RUBY_PLATFORM.include?('darwin')
+    raise REPORT::Unavailable, 'Unsupported native cache platform'
+  end
+
+  def self.boot_id(native_platform = platform)
+    return REPORT.boot_id if native_platform == 'linux'
+    REPORT.require_value(native_platform == 'darwin')
+    output, _error, status = Open3.capture3('/usr/sbin/sysctl', '-n', 'kern.bootsessionuuid')
+    # Preserve the native uppercase token exactly. Only sysctl's single output
+    # record terminator is removed; malformed or differently cased IDs refuse.
+    REPORT.require_value(status.success? && output.end_with?("\n"))
+    value = output.delete_suffix("\n")
+    REPORT.require_value(DARWIN_UUID.match?(value))
+    value
+  end
 
   # Reject ambiguous JSON instead of silently keeping its last duplicate key.
   class UniqueHash < Hash
@@ -43,37 +63,47 @@ module NestCompilerCatalogCache
     stat.uid.zero? && stat.mode.nobits?(0o002) && (stat.mode.nobits?(0o020) || stat.gid.zero?)
   end
 
+  def self.fingerprint(stat)
+    [stat.dev, stat.ino, stat.size, stat.mtime, stat.ctime, stat.uid, stat.gid, stat.mode, stat.nlink]
+  end
+
   def self.read_cache(path)
     # Native JSON caches are root:root 0660. Permit that native mode without
     # weakening the independent last-run report reader's stricter contract.
     REPORT.require_value(File.absolute_path(path) == path)
+    before = File.lstat(path)
+    REPORT.require_value(before.file? && owned?(before) && before.size <= REPORT::LIMIT)
     File.open(path, File::RDONLY | File::NOFOLLOW | File::NONBLOCK) do |file|
       stat = file.stat
-      REPORT.require_value(stat.file? && owned?(stat) && stat.size <= REPORT::LIMIT)
+      REPORT.require_value(stat.file? && owned?(stat) && stat.size <= REPORT::LIMIT && fingerprint(before) == fingerprint(stat))
       raw = file.read(REPORT::LIMIT + 1)
-      after = file.stat
-      REPORT.require_value(raw.bytesize <= REPORT::LIMIT && [after.dev, after.ino, after.size, after.mtime, after.ctime] == [stat.dev, stat.ino, stat.size, stat.mtime, stat.ctime])
+      REPORT.require_value(raw.bytesize <= REPORT::LIMIT && fingerprint(file.stat) == fingerprint(stat) && fingerprint(File.lstat(path)) == fingerprint(stat))
       raw
     end
   end
 
   def self.collect(expected, path:, certname:, server:, hostname: Socket.gethostname, boot: REPORT.method(:boot_id),
-                   reader: method(:read_cache), clock: -> { Time.now.to_i })
+                   reader: method(:read_cache), clock: -> { Time.now.to_i }, native_platform: 'linux')
     expectations(expected)
+    REPORT.require_value(['linux', 'darwin'].include?(native_platform))
+    pattern = (native_platform == 'linux') ? REPORT::UUID : DARWIN_UUID
     before = boot.call
-    REPORT.require_value(REPORT::UUID.match?(before) && expected == { 'hostname' => hostname, 'certname' => certname, 'server' => server })
+    REPORT.require_value(before.is_a?(String) && pattern.match?(before) && expected == { 'hostname' => hostname, 'certname' => certname, 'server' => server })
     raw = reader.call(path)
     cache = headers(raw, certname)
     REPORT.require_value(reader.call(path) == raw && boot.call == before)
-    { 'schema' => 1, 'kind' => 'nest_compiler_catalog_cache', 'hostname' => hostname, 'certname' => certname, 'server' => server,
+    result = { 'schema' => 1, 'kind' => 'nest_compiler_catalog_cache', 'hostname' => hostname, 'certname' => certname, 'server' => server,
       'boot_id' => before, 'observed_at' => clock.call, 'environment' => 'main', 'cache' => cache,
       'read_only' => true, 'catalog_applied' => false, 'acceptance_recorded' => false }
+    result.merge!('schema' => 2, 'platform' => 'darwin', 'boot_source' => 'kern.bootsessionuuid') if native_platform == 'darwin'
+    result
   end
 
   def self.main
     Timeout.timeout(30) do
       raw = $stdin.read(16_385)
-      REPORT.require_value(raw.bytesize <= 16_384 && Process.euid.zero? && RUBY_PLATFORM.include?('linux'))
+      REPORT.require_value(raw.bytesize <= 16_384 && Process.euid.zero?)
+      native_platform = platform
       params = JSON.parse(raw, object_class: UniqueHash)
       REPORT.require_value(params.is_a?(Hash) && params.key?('expectations') && params.keys.all? { |key| key == 'expectations' || key.start_with?('_') })
       expectations(params['expectations'])
@@ -83,7 +113,8 @@ module NestCompilerCatalogCache
       certname = Puppet[:certname]
       REPORT.require_value(certname.is_a?(String) && REPORT::NAME.match?(certname))
       path = File.join(Puppet[:client_datadir], 'catalog', certname + '.json')
-      puts JSON.generate(collect(params['expectations'], path: path, certname: certname, server: Puppet[:server]))
+      puts JSON.generate(collect(params['expectations'], path: path, certname: certname, server: Puppet[:server],
+                                 native_platform: native_platform, boot: -> { boot_id(native_platform) }))
     end
     0
   rescue REPORT::Unavailable, JSON::ParserError, ArgumentError, TypeError, SystemCallError, Timeout::Error, SystemStackError

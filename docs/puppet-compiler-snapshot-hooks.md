@@ -439,6 +439,22 @@ non-root groups and a symlinked cache file refuse. Ancestor directories remain
 the existing agent's trusted runtime boundary, including its daemon-owned
 vardir. This read is an observation, not a tamper-proof cache attestation.
 
+Native Darwin Ruby is also supported with root escalation and the same POSIX
+root-owned file contract (Darwin group 0 is wheel). The observer invokes only
+`/usr/sbin/sysctl -n kern.bootsessionuuid` for boot continuity; it does not invent
+a Linux boot ID or normalize the native uppercase UUID. Darwin emits schema 2
+with `platform: darwin` and `boot_source: kern.bootsessionuuid`; Linux continues
+to emit exactly schema 1. The adoption reader accepts these two explicit
+contracts, not arbitrary platform strings or mixed-case/rewritten identifiers.
+The `macs` inventory group selects `/opt/puppetlabs/puppet/bin/ruby` with the
+native Puppet libraries; Apple's system Ruby cannot load this agent's Puppet.
+This changes the Ruby task interpreter only, not login or escalation policy.
+Both paths check descriptor and pathname identity/metadata around each bounded
+read, then require the same bytes and boot session on the second observation.
+The agent runtime ancestors remain trusted as above; this is not ACL attestation.
+Windows/Cygwin is still unsupported: POSIX mode bits are not native Windows ACL
+proof, and inventory reachability alone is not a successful cache observation.
+
 Historical mutable Nest compilers emitted abbreviated Git configuration versions.
 For an explicitly present null `code_id`, the observer and adoption reader accept
 7–40 lowercase hexadecimal characters and preserve the exact version token. They
