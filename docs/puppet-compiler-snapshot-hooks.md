@@ -129,6 +129,41 @@ catalogs and normal apply/repeat acceptance remain separate integration
 obligations. This publication neither deploys a compiler nor enables hooks.
 Bootstrap/partial executor publications do not emit a deployment candidate.
 
+### Additive successor selection
+
+For an already accepted immutable selection, the same helper can propose its
+next selection without discarding old catalog content:
+
+    python3 scripts/nest-compiler-candidate.py selection \
+      compiler-candidates/candidate.json PREVIOUS_ACCEPTED_SELECTION.json \
+      NEW_SELECTION.json
+
+This command works outside the producing CI environment. It strictly checks
+the candidate's complete source/pipeline/member/input identities and reopens
+its exact registry index with the same platform/member verifier as publication.
+It validates the previous chart selection and moves its current release into
+the retained set, preserving every older retained entry unchanged. If the new
+code ID is already selected, its expected receipt must agree exactly; that ID
+becomes current and every other ID remains. Repeats and rollback proposals do
+not drop the intervening release. Duplicate previous IDs, conflicting source
+receipts, mutable images, missing/unknown fields and existing output files
+refuse. Input/output documents are bounded; exceeding the limit refuses rather
+than silently pruning retention.
+
+The previous document must come from the independently accepted source/deployed
+selection. Passing a locally invented predecessor does not establish catalog
+coverage. This helper does not fetch that provenance, attest the registry's old
+image retention, inspect outstanding client catalogs, accept a candidate's CI,
+change Hiera or deploy. Its output is a proposal in the existing chart schema,
+not permission to apply it. The selected init containers still independently
+check every actual tree before a server can start.
+
+Legacy mutable deployments and absent/null previous selections deliberately
+refuse. First adoption needs its own live-catalog compatibility reconciliation;
+there is no implicit bootstrap, empty-retention fallback or retirement switch.
+Automatic source selection/rollout and native catalog/apply acceptance remain
+open. No current service selection is changed by this command.
+
 Run its inert fault fixtures with
 `python3 spec/files/nest_compiler_candidate_test.py`. Actual published member
 checks must also execute on their native architectures; unit fixtures alone
