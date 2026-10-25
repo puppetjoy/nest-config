@@ -67,6 +67,19 @@ class RebootObservationTest(unittest.TestCase):
                 self.assertEqual(document['admission']['sha256'], self.receipt['sha256'])
                 self.assertIs(document['report']['reboot_requested'], None if intent else native_exit == 0)
 
+    def test_applied_kernel_puppet_exit_survives_exact_reboot_continuity(self):
+        self.before['phases'][3]['commands'] = [dict(operation='puppet', native_exit=2, success=True)]
+        self.receipt = retain(dict(self.context, report=json.dumps(self.before)))
+        for changed in (False, True):
+            data = self.after(changed)
+            data['phases'] = copy.deepcopy(self.before['phases'])
+            code, receipt = self.run_task(data)
+            self.assertEqual(code, 0, receipt)
+            saved = json.loads(Path(receipt['path']).read_bytes())
+            self.assertEqual(saved['report']['phases'][3]['commands'][0]['native_exit'], 2)
+            self.assertIs(receipt['target_boot_observed'], changed)
+            self.assertFalse(receipt['resubmission_allowed'])
+
     def test_original_boot_without_attempt_is_observed_not_permission(self):
         code, receipt = self.run_task(plan())
         self.assertEqual(code, 0, receipt)

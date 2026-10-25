@@ -230,6 +230,35 @@ class RetainUpdateReportTest(unittest.TestCase):
             with self.subTest(change=change):
                 self.assertEqual(self.run_task(self.arguments(data)).returncode, 1)
 
+    def test_completed_phase_native_outcomes_are_operation_specific(self):
+        for reboot in (False, True):
+            for operation in ('mountpoint', 'root', 'source', 'modules', 'puppet', 'kexec'):
+                for phase in retainer.PHASES:
+                    for code in (None, 0, 1, 2, 4, 6, 17, True):
+                        with self.subTest(reboot=reboot, operation=operation, phase=phase, code=code):
+                            data = with_reboot() if reboot else fixture()
+                            row = next(row for row in data['phases'] if row['phase'] == phase)
+                            row['commands'] = [dict(operation=operation, native_exit=code, success=True)]
+                            allowed = code is None or type(code) is int and (
+                                code == 0 or code == 2 and operation == 'puppet' and phase == 'kernel')
+                            try:
+                                retained = retainer.project(json.dumps(data), 'fixture-report',
+                                                            data['release'], 'fixture-host')
+                            except ValueError:
+                                self.assertFalse(allowed)
+                            else:
+                                self.assertTrue(allowed)
+                                self.assertIs(next(row for row in retained['phases'] if row['phase'] == phase)
+                                              ['commands'][0]['native_exit'], code)
+
+    def test_nonzero_aggregate_phase_exit_cannot_claim_completion(self):
+        for phase in retainer.PHASES:
+            for code in (1, 2, 4, 6, 17):
+                data = fixture()
+                next(row for row in data['phases'] if row['phase'] == phase)['native_exit'] = code
+                self.assertEqual(self.run_task(self.arguments(data)).returncode, 1, (phase, code))
+        self.assertEqual(list(self.supervisor.iterdir()), [])
+
     def test_partial_stopped_and_lifecycle_are_distinct(self):
         for state, schema in (("stopped", 1), ("accepted", 2), ("finalizing", 2), ("finalized", 2)):
             data = fixture(state, schema)

@@ -55,6 +55,17 @@ def reboot_time(value):
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
+def completed_command(command, phase):
+    """Native tagged kernel Puppet may apply changes; copy commands may not.
+
+    Null preserves existing successful non-process operation receipts. It is
+    never converted to a measured exit, and a false success flag still refuses.
+    """
+    code = command["native_exit"]
+    return command["success"] is True and (code is None or type(code) is int and (
+        code == 0 or code == 2 and command["operation"] == "puppet" and phase == "kernel"))
+
+
 def reboot_receipt(data, phases, prepared):
     """Validate native submission semantics, never infer an observed boot."""
     if "reboot" not in data:
@@ -75,7 +86,7 @@ def reboot_receipt(data, phases, prepared):
     requested = reboot_time(receipt["requested_at"])
     for phase in phases:
         require(phase["state"] == "complete" and phase["native_exit"] in (None, 0) and
-                all(command["success"] and command["native_exit"] in (None, 0) for command in phase["commands"]),
+                all(completed_command(command, phase["phase"]) for command in phase["commands"]),
                 "unsuccessful reboot preparation")
         finished = datetime.fromisoformat(phase["finished_at"].replace("Z", "+00:00"))
         require(finished.tzinfo is not None and finished <= requested, "reboot predates preparation")
@@ -123,6 +134,7 @@ def project(raw, transaction, release, hostname):
             phase["finished_at"] = token(row["finished_at"], r"[0-9T:.+Z-]{20,40}")
             native_exit = row["native_exit"]
             require(native_exit is None or type(native_exit) is int and 0 <= native_exit <= 255, "invalid native exit")
+            require(row["state"] != "complete" or native_exit in (None, 0), "failed exit in completed phase")
             phase["native_exit"] = native_exit
             commands = row["commands"]
             require(isinstance(commands, list) and len(commands) <= 128, "invalid command outcomes")
@@ -133,7 +145,8 @@ def project(raw, transaction, release, hostname):
                 require(type(command["success"]) is bool, "invalid command result")
                 require(command["operation"] in ("mountpoint", "root", "source", "modules", "puppet", "kexec"),
                         "unsupported native operation")
-                require(row["state"] != "complete" or command["success"], "failed command in completed phase")
+                require(row["state"] != "complete" or completed_command(command, row["phase"]),
+                        "failed command in completed phase")
                 phase["commands"].append({
                     "operation": token(command["operation"], r"[A-Za-z0-9_. -]{1,128}"),
                     "native_exit": exit_code, "success": command["success"],
