@@ -108,6 +108,7 @@ stages:
     - 'python3 spec/files/nest_release_inputs_test.py'
     - 'python3 spec/files/nest_release_route_test.py'
     - 'python3 spec/files/nest_executor_bootstrap_test.py'
+    - 'python3 spec/files/nest_executor_accept_test.py'
     - 'python3 spec/files/nest_release_graph_test.py'
     - 'python3 spec/files/nest_nested_dag_fixture_test.py'
     - 'python3 spec/files/nest_executor_inputs_test.py'

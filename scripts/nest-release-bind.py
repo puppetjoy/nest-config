@@ -95,6 +95,7 @@ class GitLab:
                 with build_opener(NoRedirect).open(request, timeout=60) as response:
                     raw = response.read(RELEASE['LIMIT'] + 1)
             except HTTPError as error:
+                error.close()
                 refuse('http_' + str(error.code) if error.code in (401, 403, 404, 429, 500, 502, 503, 504)
                        else 'http_refused')
             except TimeoutError:

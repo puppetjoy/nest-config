@@ -76,8 +76,8 @@ def identity(env):
     return checkout, source
 
 
-def acquire(request, source, cpu, api) -> dict[str, Any]:
-    """Keep old expectations/result untouched; cross-source only at this boundary."""
+def selection(request, source, cpu):
+    """Admit the complete bootstrap selector before any external acquisition."""
     R['fields'](request, 'schema kind successor_source successor_cpu producer', 'bootstrap request')
     require(type(request['schema']) is int and request['schema'] == 1
             and request['kind'] == 'nest_executor_bootstrap', 'unsupported bootstrap request')
@@ -94,6 +94,12 @@ def acquire(request, source, cpu, api) -> dict[str, Any]:
         B['positive'](selector[key])
     for key in ('input_sha256', 'result_sha256'):
         R['match'](selector[key], r'[0-9a-f]{64}', 'OpenBolt artifact digest')
+    return selector
+
+
+def acquire(request, source, cpu, api) -> dict[str, Any]:
+    """Keep old expectations/result untouched; cross-source only at this boundary."""
+    selector = selection(request, source, cpu)
     input_path = 'release-inputs/expectations.json'
     raw_input = api.get(B['prefix']('nest/config') + '/jobs/' + str(selector['input_job']) + '/artifacts/' + input_path)
     require(hashlib.sha256(raw_input).hexdigest() == selector['input_sha256'], 'OpenBolt input bytes changed')
