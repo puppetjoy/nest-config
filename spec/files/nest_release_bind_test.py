@@ -355,6 +355,40 @@ class ReleaseBindTest(unittest.TestCase):
         self.api.request['expectations']['members'][0]['variant'] = 'workstation'
         self.bind()
 
+    def test_all_resolved_selectors_admit_before_executor_or_predecessor_reads(self):
+        for key, value in [('project', 'nest/config'), ('member', ''), ('pipeline', True),
+                           ('job', 0), ('input_pipeline', -1), ('input_job', '801'),
+                           ('input_sha256', 'invalid'), ('result_sha256', 'A' * 64),
+                           ('unexpected', 'fixture')]:
+            with self.subTest(key=key):
+                self.api = FakeGitLab()
+                later = copy.deepcopy(self.api.request['producers']['upstream'])
+                self.api.request['producers']['later'] = later
+                member = self.api.request['expectations']['members'][0]
+                other = copy.deepcopy(member)
+                other['id'] = 'later-target'
+                other['variant'] = 'workstation'
+                self.api.request['expectations']['members'].append(other)
+                consumer = next(c for c in self.api.request['expectations']['consumers'] if c['project'] == 'nest/stage1')
+                consumer['members'].append(other['id'])
+                self.api.request['bindings'].extend(dict(target=other['id'], base=role, producer='later', artifact=role)
+                                                    for role in ('normal', 'debug'))
+                BIND['binding_selection'](self.api.request['expectations'], self.api.request['executor_job'],
+                                          self.api.request['producers'], self.api.request['bindings'])
+                later[key] = value
+                with patch.object(self.api, 'get', side_effect=AssertionError('external read')) as read:
+                    with self.assertRaises(ValueError): self.bind()
+                    read.assert_not_called()
+
+    def test_executor_selector_admits_before_external_reads(self):
+        for key, value in [('pipeline', True), ('job', 0), ('unexpected', 901)]:
+            with self.subTest(key=key):
+                self.api = FakeGitLab()
+                self.api.request['executor_job'][key] = value
+                with patch.object(self.api, 'get', side_effect=AssertionError('external read')) as read:
+                    with self.assertRaises(ValueError): self.bind()
+                    read.assert_not_called()
+
     def test_job_and_artifact_identity_failures(self):
         for change in ('status', 'erased', 'pipeline', 'project', 'source', 'commit', 'archive', 'input_name', 'executor_name'):
             with self.subTest(change=change):

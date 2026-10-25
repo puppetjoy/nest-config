@@ -298,13 +298,9 @@ def compatible(target, base, source, role):
                 and target['compatibility'] == source['compatibility'], 'incompatible platform or boot policy')
 
 
-def bind(request: Any, api):
-    fields(request, 'schema kind expectations executor_job producers bindings', 'binding request')
-    require(type(request['schema']) is int and request['schema'] == 1
-            and request['kind'] == 'nest_release_base_binding', 'unsupported binding request')
-    expected = copy.deepcopy(request['expectations'])
+def binding_selection(expected, executor_selector, producers, bindings):
+    """Admit the shared binding policy before either caller acquires resources."""
     indexed = RELEASE['expectations'](expected)
-    producers, bindings = request['producers'], request['bindings']
     require(type(producers) is dict and 0 < len(producers) <= 128, 'invalid predecessor inventory')
     require(type(bindings) is list and 0 < len(bindings) <= 2048, 'invalid base binding inventory')
     selected = {}
@@ -332,11 +328,34 @@ def bind(request: Any, api):
         if member['stage'] == 'stage1':
             require(len({edge['producer'] for edge in bindings if edge['target'] == member['id']}) == 1,
                     'Stage 1 base pair has different producers')
-    fields(request['executor_job'], 'pipeline job', 'executor job')
+    fields(executor_selector, 'pipeline job', 'executor job')
+    for value in executor_selector.values():
+        positive(value)
+    return indexed, next(iter(architectures))
+
+
+def bind(request: Any, api):
+    fields(request, 'schema kind expectations executor_job producers bindings', 'binding request')
+    require(type(request['schema']) is int and request['schema'] == 1
+            and request['kind'] == 'nest_release_base_binding', 'unsupported binding request')
+    expected = copy.deepcopy(request['expectations'])
+    producers, bindings = request['producers'], request['bindings']
     executor_selector = request['executor_job']
+    indexed, architecture = binding_selection(expected, executor_selector, producers, bindings)
+    # Standalone binding accepts resolved selectors, unlike native discovery.
+    # Validate every one before reading even the already selected executor.
+    for name, selector in producers.items():
+        match(name, RELEASE['TOKEN'], 'predecessor name')
+        fields(selector, 'project pipeline job member input_pipeline input_job input_sha256 result_sha256', 'predecessor')
+        match(selector['member'], RELEASE['TOKEN'], 'predecessor member')
+        require(selector['project'] in PROJECTS - {'nest/config'}
+                and selector['project'] in expected['sources'], 'missing predecessor source')
+        for key in ('pipeline', 'job', 'input_pipeline', 'input_job'):
+            positive(selector[key])
+        for key in ('input_sha256', 'result_sha256'):
+            match(selector[key], r'[0-9a-f]{64}', 'predecessor artifact digest')
     config_source = expected['sources']['nest/config']
     executor_job = job(api, 'nest/config', executor_selector['pipeline'], executor_selector['job'], expected['executor']['source'])
-    architecture = next(iter(architectures))
     require(executor_job['name'] == 'Build ' + architecture, 'wrong executor job')
     executor = artifact(api, 'nest/config', executor_selector['job'], 'executor-receipts/' + architecture + '.json')
     check_executor(executor, expected, expected['members'][0]['cpu'])
@@ -345,10 +364,6 @@ def bind(request: Any, api):
     observations = [(executor_job, None)]
     outputs = {}
     for name, selector in producers.items():
-        match(name, RELEASE['TOKEN'], 'predecessor name')
-        fields(selector, 'project pipeline job member input_pipeline input_job input_sha256 result_sha256', 'predecessor')
-        match(selector['member'], RELEASE['TOKEN'], 'predecessor member')
-        require(selector['project'] in expected['sources'], 'missing predecessor source')
         source = expected['sources'][selector['project']]
         actual_job = job(api, selector['project'], selector['pipeline'], selector['job'], source)
         input_job = job(api, 'nest/config', selector['input_pipeline'], selector['input_job'], config_source)

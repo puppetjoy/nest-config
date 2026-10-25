@@ -197,6 +197,22 @@ class DiscoverTest(unittest.TestCase):
                 with self.assertRaises(ValueError): self.discover()
                 self.assertEqual(self.api.native_reads, [])
 
+    def test_binding_policy_and_executor_admit_before_predecessor_reads(self):
+        for change in ('executor', 'empty', 'target', 'producer', 'base', 'artifact', 'duplicate', 'partial'):
+            with self.subTest(change=change):
+                self.api = NativeGitLab()
+                request = self.api.request
+                if change == 'executor': request['executor_job']['job'] = True
+                if change == 'empty': request['bindings'] = []
+                if change == 'target': request['bindings'][0]['target'] = 'missing'
+                if change == 'producer': request['bindings'][0]['producer'] = 'missing'
+                if change == 'base': request['bindings'][0]['base'] = 'image'
+                if change == 'artifact': request['bindings'][0]['artifact'] = 'unknown'
+                if change == 'duplicate': request['bindings'].append(copy.deepcopy(request['bindings'][0]))
+                if change == 'partial': request['bindings'].pop()
+                with self.assertRaises(ValueError): self.discover()
+                self.assertEqual(self.api.native_reads, [])
+
     def test_generated_child_bridge_can_use_original_parent_input_pipeline(self):
         # Artifact-backed routing creates a config child containing the direct
         # member bridge; the unique input publisher remains in its parent.

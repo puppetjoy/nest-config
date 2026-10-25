@@ -149,6 +149,7 @@ def discover(request: Any, api):
         R['match'](name, R['TOKEN'], 'predecessor name')
         selector_fields(selector)
         require(selector['project'] in sources, 'predecessor source missing')
+    BIND['binding_selection'](request['expectations'], request['executor_job'], producers, request['bindings'])
     for name, selector in producers.items():
         binding['producers'][name], observations[name] = edge(
             api, sources['nest/config'], sources[selector['project']], selector)
