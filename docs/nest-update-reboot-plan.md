@@ -113,7 +113,7 @@ live eligibility. No live reset/reboot was performed by this source integration.
 
 `nest::host::observe_update_reboot` reopens an earlier original-boot receipt from
 `check_update_reboot`, then reads exactly `nest reset status ID --format=json` on
-one inventory target. It has no execute, wait, retry, prepare or acceptance option.
+one inventory target. It has no execute, preparation retry or acceptance option.
 Use it after a separately authorized native request loses its result, or after
 the existing external controller resumes. This is observation continuity, not an
 implemented external-controller dispatch or complete wave lifecycle.
@@ -153,6 +153,33 @@ overrides the original command exit or independently verifies health/acceptance.
 false in every result. `not_attempted` is not permission to submit: the wave,
 window, survivor, retention and external-controller gates remain separate.
 Transport refusal, wrong identity/boot, missing observation or failed publication
-halts the invocation. A later invocation repeats only the status read. Never
+halts the invocation. A later invocation repeats only read-only observation. Never
 retry preparation or reboot to recover evidence, edit intent, clear failures,
 or advance another failure-domain wave based on this receipt alone.
+
+### Optional bounded transport reconnect
+
+After a separately authorized request or external-controller restart, callers
+may add `reconnect_timeout`, an integer from 5 through 600 seconds. Omission
+preserves the immediate single-status-read behavior and its exact result shape.
+The plan reopens the original admission before contacting the host, uses Bolt's
+existing `wait_until_available` with a five-second retry interval, then reopens
+admission again before the single native status read. Missing or changed admission
+after waiting stops without a status command. Timeout stops without a second
+wait, status acquisition, fabricated report or automatic reboot/preparation retry.
+The budget configures Bolt's normal connection loop, not a hard real-time process
+kill deadline; underlying inventory transport timeouts still apply.
+
+This retries only ordinary inventory-backed connection establishment. It does not
+wait for a disconnect or invoke the reboot plan. A reachable original boot may
+return immediately and remains an original-boot observation, not a completed
+reboot. A changed boot must still satisfy the exact existing native continuity
+checks. Connection success cannot imply target-boot success, health, acceptance,
+release permission or permission to submit another request. No credentials,
+transport or escalation policy changes, and no direct SSH fallback is added.
+
+Keep the admission file and report directory on persistent external controller
+storage across the intended outage. This option does not launch that controller,
+dispatch the original reboot, resume an interrupted process, implement waves or
+prove actual A/B boot continuity. Those remain separate lifecycle obligations.
+Rollback omits the optional parameter; retain all prior observations and intents.

@@ -7,6 +7,7 @@ plan nest::host::observe_update_reboot (
   String[1]                                       $hostname,
   Stdlib::Absolutepath                             $output_dir,
   Hash                                            $admission,
+  Optional[Integer[5, 600]]                        $reconnect_timeout = undef,
 ) {
   $nodes = get_targets($target)
   if $nodes.length != 1 or $nodes[0].name =~ Pattern[/\A[^.]*-console(?:\.|\z)/] {
@@ -20,8 +21,16 @@ plan nest::host::observe_update_reboot (
     'admission'   => $admission,
   }
   run_task('nest::retain_update_reboot_observation', 'localhost', $context + { 'action' => 'check' })
-  # Reconnect is not acceptance. A transport failure stops this invocation;
-  # a later invocation only repeats this read, never a reboot or preparation.
+  if $reconnect_timeout != undef {
+    # Existing Bolt transport owns bounded connection attempts. Never call the
+    # reboot plan, wait for a disconnect, or infer boot success from availability.
+    wait_until_available($nodes, wait_time => $reconnect_timeout, retry_interval => 5)
+    # Waiting can outlive or change the retained admission. Reopen it again
+    # before the only native status read; a prior check is not a lease.
+    run_task('nest::retain_update_reboot_observation', 'localhost', $context + { 'action' => 'check' })
+  }
+  # Transport/status failure stops this invocation. A later invocation only
+  # repeats connection observation and this read, never reboot or preparation.
   $native = run_command(
     ['nest', 'reset', 'status', $transaction, '--format=json'].shellquote,
     $nodes[0], 'Observe exact transaction boot without submitting a reboot', { '_run_as' => 'root' },
