@@ -192,8 +192,15 @@ fails closed rather than silently changing the release. This interface does
 not create tags or change refs. Do not compile from an uninstalled feature
 branch and expect it to execute as `main`.
 
-Artifact acquisition uses only fixed allowlisted GitLab GETs through existing
-`glab` authentication. Production runner job-token access and all required
+Artifact acquisition uses only fixed allowlisted GitLab GETs. Local reads use
+existing `glab` authentication; CI uses only its ephemeral job token with the
+same fixed-origin, no-redirect transport for pipeline, job, bridge and compiler
+artifact reads. Public project identity is independently read unauthenticated.
+This replaces inherited CI paths that still invoked unauthenticated `glab`;
+it does not relax lineage checks or prove native permission admission.
+`READ_PIPELINES` is required for pipeline/bridge metadata and `READ_JOBS` for
+job inventories/artifacts; no permission settings change here.
+Production runner job-token access and all required
 registry/private module/runner-local resources must be separately admitted;
 no user token is injected to make an inaccessible CI boundary look successful.
 Stage 3 trust policy is source-checked before graph publication and again by

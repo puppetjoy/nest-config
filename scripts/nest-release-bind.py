@@ -67,6 +67,10 @@ class GitLab:
                                 r'/jobs\?per_page=100&include_retried=true', path) is not None,
                 'unsupported GitLab read')
         operation = 'artifact' if '/artifacts' in path else 'job' if '/jobs' in path else 'project'
+        return self._read(path, operation)
+
+    def _read(self, path, operation):
+        """Read an already allowlisted path with the same credential boundary."""
 
         def refuse(failure) -> NoReturn:
             # Never print the path, response body, command stderr or credentials.

@@ -126,7 +126,7 @@ class NativeJobTokenReadTest(unittest.TestCase):
         environment = patch.dict(os.environ, CI_JOB_TOKEN='nonsecret-fixture-token', GITLAB_TOKEN='must-not-be-used')
         environment.start()
         self.addCleanup(environment.stop)
-        self.globals = BIND['GitLab'].get.__globals__
+        self.globals = BIND['GitLab']._read.__globals__
         self.builder = Mock()
         substitution = patch.dict(self.globals, build_opener=self.builder)
         substitution.start()
