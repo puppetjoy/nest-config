@@ -133,6 +133,10 @@ and publication parent GUID fields as local placement, plus:
 
 - `target`: one configured inventory name, such as `falcon`. The Stage 3 plan
   requires the existing Joy SSH transport and uses Bolt escalation, not root SSH.
+- `build_target`: the explicit inventory host running the native Podman service,
+  such as `owl`, using the same Joy/Bolt transport. This is not inferred from the
+  image hostname or the CI runner's container hostname. Older remote placement
+  records without this field now refuse before container initialization.
 - `archive`: a fresh absolute `.tar` path on an existing share visible at the
   same path on both hosts. Its existing parent must be root-owned, mode 0700,
   non-symlinked and disjoint from identity, staging, receipts and publication.
@@ -146,10 +150,19 @@ mount admission. The private identity generation must remain accessible to both
 hosts through the existing share. Budget the temporary archive and both staging
 and published root copies before the build. No helper chooses or expands quotas.
 
+The CI executor needs the existing shared `/nest` view for placement and private
+identity admission. Owl's existing builder runner mounts it explicitly; nested
+build-container mounts alone do not make it visible to the executor. The runner
+already has trusted native Podman-socket access. No host storage graph is mounted
+into CI, and no root SSH transport is added.
+
 Before container initialization the plan uploads the existing sibling helpers
-through Bolt, checks publication-host ZFS placement, and read-only checks the
-absent shared archive. After the build stops, `transfer-stage3-root.py export`
-archives the stopped image layer plus its exact frozen repository volume. GNU
+through Bolt to both selected hosts, checks publication-host ZFS placement, and
+read-only checks the absent shared archive on the native build host. After the
+build stops, `transfer-stage3-root.py export` runs on that same inventory-backed
+native host and archives its stopped image layer plus exact frozen repository
+volume. `podman mount` is not supported by the remote Podman client, and its local
+layer paths must not be read from the CI container's different filesystem. GNU
 tar's PAX/ACL/xattr/numeric-owner options preserve restore metadata inside opaque
 archive bytes, including nanosecond mtimes and hardlinks. The share itself need
 not support release xattrs, devices or symlinks. Host shares and build-only binds

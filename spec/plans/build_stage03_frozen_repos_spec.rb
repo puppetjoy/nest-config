@@ -12,8 +12,9 @@ RSpec.describe 'Stage 0 and Stage 3 frozen repository inputs' do
   let(:ca_sha256) { 'a' * 64 }
   let(:identity_reference) { '12345678-1234-4123-8123-123456789abc' }
   let(:inventory_data) do
-    { 'targets' => [{ 'name' => 'falcon', 'uri' => 'falcon.nest',
-                     'config' => { 'transport' => 'ssh', 'ssh' => { 'user' => 'joy' } } }] }
+    { 'targets' => ['falcon', 'fixture-host'].map do |name|
+      { 'name' => name, 'uri' => "#{name}.nest", 'config' => { 'transport' => 'ssh', 'ssh' => { 'user' => 'joy' } } }
+    end }
   end
   let(:catalog_check) do
     "python3 /opt/nest/scripts/nest-executor-inputs.py check --source #{catalog['source']} --base #{catalog['base']} > /dev/null"
@@ -266,34 +267,64 @@ RSpec.describe 'Stage 0 and Stage 3 frozen repository inputs' do
     expect(run_plan('nest::build::stage3', publication_options).ok?).to be(false)
   end
 
-  it 'publishes the stopped native build on a distinct inventory-backed Joy target' do
-    mocks(3)
-    expect_script('nest/build/check-stage3-paths.py').be_called_times(4)
-    expect_script('nest/build/freeze-repos.py').be_called_times(3)
-    expect_command(catalog_check).be_called_times(4)
-    helpers = '/private/receipts/stage3-helpers.fixture'
-    expect_command('mktemp -d /private/receipts/stage3-helpers.XXXXXXXX')
-      .with_targets('falcon').always_return('stdout' => "#{helpers}\n")
-    ['check-stage3-root.py', 'publish-stage3-root.py', 'materialize-stage3-root.py',
-     'finish-stage3-root.py', 'transfer-stage3-root.py'].each do |helper|
-      expect_upload("nest/build/#{helper}").with_destination("#{helpers}/#{helper}").with_targets('falcon')
+  shared_examples 'native Stage 3 export' do |export_failure|
+    it(export_failure ? 'stops before publication after native export failure' : 'publishes the stopped native build on an inventory-backed Joy target') do
+      mocks(3)
+      expect_script('nest/build/check-stage3-paths.py').be_called_times(4)
+      expect_script('nest/build/freeze-repos.py').be_called_times(3)
+      expect_command(catalog_check).be_called_times(4)
+      helpers = '/private/receipts/stage3-helpers.fixture'
+      expect_command('mktemp -d /private/receipts/stage3-helpers.XXXXXXXX')
+        .with_targets('falcon').always_return('stdout' => "#{helpers}\n")
+      ['check-stage3-root.py', 'publish-stage3-root.py', 'materialize-stage3-root.py',
+       'finish-stage3-root.py', 'transfer-stage3-root.py'].each do |helper|
+        expect_upload("nest/build/#{helper}").with_destination("#{helpers}/#{helper}").with_targets('falcon')
+      end
+      build_helpers = '/private/receipts/stage3-helpers.build-fixture'
+      expect_command('mktemp -d /private/receipts/stage3-export-helpers.XXXXXXXX')
+        .with_targets('stage3-export-fixture-host').always_return('stdout' => "#{build_helpers}\n")
+      ['check-stage3-root.py', 'publish-stage3-root.py', 'materialize-stage3-root.py',
+       'finish-stage3-root.py', 'transfer-stage3-root.py'].each do |helper|
+        expect_upload("nest/build/#{helper}").with_destination("#{build_helpers}/#{helper}").with_targets('stage3-export-fixture-host')
+      end
+      remote_finish = finish_command.sub('/opt/nest/files/build', helpers)
+      expect_command("#{remote_finish} --check").with_targets('falcon')
+      export_prefix = "python3 #{build_helpers}/transfer-stage3-root.py"
+      expect_command("#{export_prefix} export-check fixture /private/transfer/root.tar").with_targets('stage3-export-fixture-host')
+      digests = { 'archive_digest' => "sha256:#{'c' * 64}", 'content_digest' => "sha256:#{'b' * 64}" }
+      if export_failure
+        expect_command("#{export_prefix} export fixture /private/transfer/root.tar")
+          .with_targets('stage3-export-fixture-host').error_with('msg' => 'Native export failed', 'kind' => 'fixture/export')
+      else
+        expect_command("#{export_prefix} export fixture /private/transfer/root.tar")
+          .with_targets('stage3-export-fixture-host').always_return('stdout' => digests.to_json)
+      end
+      receive = "python3 #{helpers}/transfer-stage3-root.py receive fixture /private/transfer/root.tar #{digests['archive_digest']} #{digests['content_digest']} " \
+                "/private/staging 123 /private/receipts fixture-host fixture-release 456 sha256:#{'a' * 64} /private/fixture-host"
+      if export_failure
+        expect_command(receive).not_be_called
+      else
+        expect_command(receive).with_targets('falcon').always_return('stdout' => root_artifact.to_json)
+      end
+      expect_command(finish_command).not_be_called
+      result = run_plan('nest::build::stage3', publication_options.merge(
+        'root_publication' => publication.merge('target' => 'falcon', 'archive' => '/private/transfer/root.tar', 'build_target' => 'fixture-host'),
+      ))
+      expect(result.ok?).to be(!export_failure), result.value.to_s
+      expect(result.value).to eq(root_artifact) unless export_failure
     end
-    remote_finish = finish_command.sub('/opt/nest/files/build', helpers)
-    expect_command("#{remote_finish} --check").with_targets('falcon')
-    export_prefix = 'python3 /opt/nest/files/build/transfer-stage3-root.py'
-    expect_command("#{export_prefix} export-check fixture /private/transfer/root.tar").with_targets('localhost')
-    digests = { 'archive_digest' => "sha256:#{'c' * 64}", 'content_digest' => "sha256:#{'b' * 64}" }
-    expect_command("#{export_prefix} export fixture /private/transfer/root.tar")
-      .with_targets('localhost').always_return('stdout' => digests.to_json)
-    receive = "python3 #{helpers}/transfer-stage3-root.py receive fixture /private/transfer/root.tar #{digests['archive_digest']} #{digests['content_digest']} " \
-              "/private/staging 123 /private/receipts fixture-host fixture-release 456 sha256:#{'a' * 64} /private/fixture-host"
-    expect_command(receive).with_targets('falcon').always_return('stdout' => root_artifact.to_json)
-    expect_command(finish_command).not_be_called
-    result = run_plan('nest::build::stage3', publication_options.merge(
-      'root_publication' => publication.merge('target' => 'falcon', 'archive' => '/private/transfer/root.tar'),
-    ))
-    expect(result.ok?).to be(true), result.value.to_s
-    expect(result.value).to eq(root_artifact)
+  end
+
+  include_examples 'native Stage 3 export', false
+  include_examples 'native Stage 3 export', true
+
+  it 'refuses missing or noninventory native build targets before commands' do
+    expect(executor).not_to receive(:run_command)
+    [nil, 'missing', 'root@fixture-host'].each do |target|
+      selected = publication.merge('target' => 'falcon', 'archive' => '/private/transfer/root.tar')
+      selected['build_target'] = target unless target.nil?
+      expect(run_plan('nest::build::stage3', publication_options.merge('root_publication' => selected)).ok?).to be(false)
+    end
   end
 
   it 'refuses changed publication paths rather than returning an accepted member' do

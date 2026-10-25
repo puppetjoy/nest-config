@@ -90,11 +90,12 @@ def prepare(expected, member_id, receipt, placement=None):
         require(re.fullmatch(r"[a-z0-9][a-z0-9-]{0,62}", member["host"]) is not None)
         remote = type(placement) is dict and placement.get("kind") == "nest_stage3_remote_placement"
         release.fields(placement, "schema kind member expectations_digest staging staging_guid receipts parent_guid" +
-                       (" target archive" if remote else ""), "placement")
+                       (" target archive build_target" if remote else ""), "placement")
         require(type(placement["schema"]) is int and placement["schema"] == 1
                 and placement["kind"] == ("nest_stage3_remote_placement" if remote else "nest_stage3_local_placement"))
         if remote:
             release.match(placement["target"], r"[a-z0-9][a-z0-9-]{0,62}", "publication target")
+            release.match(placement["build_target"], r"[a-z0-9][a-z0-9-]{0,62}", "native build target")
             release.absolute_path(placement["archive"], "private shared archive")
             require(placement["archive"].endswith(".tar"))
         require(placement["member"] == member_id and placement["expectations_digest"] == release.digest(expected))
@@ -113,7 +114,7 @@ def prepare(expected, member_id, receipt, placement=None):
                   "root_publication": {key: placement[key] for key in ("staging", "staging_guid", "receipts", "parent_guid")}}
         params["root_publication"].update(release=expected["release"], expectations=release.digest(expected))
         if remote:
-            params["root_publication"].update(target=placement["target"], archive=placement["archive"])
+            params["root_publication"].update(target=placement["target"], archive=placement["archive"], build_target=placement["build_target"])
         # Preserve the existing Stage 3 CI resource controls for shared builders.
         # Omitting them keeps the plan's normal profile-selected defaults.
         for variable, parameter in (("CI_HOST_MAKEOPTS", "makeopts"),

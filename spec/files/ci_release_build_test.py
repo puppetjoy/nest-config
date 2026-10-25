@@ -549,11 +549,12 @@ class CandidateBuildTest(unittest.TestCase):
 
     def test_stage3_remote_placement_reopens_on_the_inventory_publication_host(self):
         self.select("stage3")
-        placement = dict(self.placement(), kind="nest_stage3_remote_placement", target="falcon", archive="/private/transfer/root.tar")
+        placement = dict(self.placement(), kind="nest_stage3_remote_placement", target="falcon", build_target="owl", archive="/private/transfer/root.tar")
         result = self.cli(placement)
         self.assertEqual(result.returncode, 0, result.stderr)
         calls = self.calls()
         self.assertEqual(calls[0]["params"]["root_publication"]["target"], "falcon")
+        self.assertEqual(calls[0]["params"]["root_publication"]["build_target"], "owl")
         self.assertEqual(calls[0]["params"]["root_publication"]["archive"], placement["archive"])
         self.assertEqual(calls[1]["args"][2], "nest::build::check_stage3_root")
         self.assertEqual(calls[1]["params"]["targets"], "falcon")
@@ -561,7 +562,7 @@ class CandidateBuildTest(unittest.TestCase):
 
     def test_stage3_remote_readback_faults_never_emit_or_replay_member(self):
         self.select("stage3")
-        placement = dict(self.placement(), kind="nest_stage3_remote_placement", target="falcon", archive="/private/transfer/root.tar")
+        placement = dict(self.placement(), kind="nest_stage3_remote_placement", target="falcon", build_target="owl", archive="/private/transfer/root.tar")
         for index, env in enumerate([{"FAIL_ROOT_CHECK": "1"}, {"CHANGE_ROOT_CHECK": "1"}]):
             self.output = self.root / ("remote-fault-" + str(index))
             self.output.mkdir()
@@ -573,11 +574,14 @@ class CandidateBuildTest(unittest.TestCase):
 
     def test_stage3_remote_placement_rejects_missing_archive_and_raw_ssh_targets(self):
         self.select("stage3")
-        placement = dict(self.placement(), kind="nest_stage3_remote_placement", target="falcon", archive="/private/transfer/root.tar")
-        for key, value in [("target", "root@falcon"), ("target", "ssh://falcon"), ("archive", "relative.tar"), ("archive", "/private/not-tar")]:
+        placement = dict(self.placement(), kind="nest_stage3_remote_placement", target="falcon", build_target="owl", archive="/private/transfer/root.tar")
+        for key, value in [("target", "root@falcon"), ("target", "ssh://falcon"), ("build_target", "root@owl"),
+                           ("build_target", "ssh://owl"), ("archive", "relative.tar"), ("archive", "/private/not-tar")]:
             self.assertEqual(self.cli(dict(placement, **{key: value})).returncode, 1)
-        del placement['archive']
-        self.assertEqual(self.cli(placement).returncode, 1)
+        for key in ('archive', 'build_target'):
+            incomplete = dict(placement)
+            del incomplete[key]
+            self.assertEqual(self.cli(incomplete).returncode, 1)
         self.assertEqual(self.calls(), [])
 
     def test_stage3_refresh_and_nonstage3_placement_refuse_before_bolt(self):
