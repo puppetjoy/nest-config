@@ -2,7 +2,7 @@
   "description": "Validate complete wave scope and transaction identities for read-only native status observation",
   "input_method": "stdin",
   "supports_noop": true,
-  "files": ["nest/tasks/update_wave_plan.py"],
+  "files": ["nest/tasks/update_wave_plan.py", "nest/tasks/update_lifecycle_policy.py", "nest/tasks/retain_update_report.py", "nest/tasks/update_network_health.py"],
   "parameters": {
     "policy": { "type": "Hash" },
     "targets": { "type": "Array[String[1], 1]" },

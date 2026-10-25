@@ -1,0 +1,53 @@
+{
+  "description": "Bind the existing policy-bound host lifecycle, retain exact operation intents and collect native acceptance evidence; no host operations",
+  "input_method": "stdin",
+  "supports_noop": false,
+  "files": [
+    "nest/tasks/update_lifecycle_policy.py",
+    "nest/tasks/update_wave_plan.py",
+    "nest/tasks/update_observe_inputs.py",
+    "nest/tasks/update_prepare_inputs.py",
+    "nest/tasks/retain_update_report.py",
+    "nest/tasks/retain_update_health.py",
+    "nest/tasks/update_boot_health.py",
+    "nest/tasks/update_network_health.py"
+  ],
+  "parameters": {
+    "action": {
+      "type": "Enum['inputs', 'admit', 'read', 'begin', 'complete', 'boot', 'canary', 'evidence', 'retain']"
+    },
+    "policy": {
+      "type": "Hash"
+    },
+    "targets": {
+      "type": "Array[String]"
+    },
+    "inputs": {
+      "type": "Hash"
+    },
+    "output_dir": {
+      "type": "Stdlib::Absolutepath"
+    },
+    "host": {
+      "type": "Optional[String]"
+    },
+    "step": {
+      "type": "Optional[String]"
+    },
+    "result": {
+      "type": "Optional[Hash]"
+    },
+    "status": {
+      "type": "Optional[String]"
+    },
+    "canary": {
+      "type": "Optional[String]"
+    },
+    "native_exit": {
+      "type": "Optional[Integer]"
+    },
+    "report": {
+      "type": "Optional[Hash]"
+    }
+  }
+}

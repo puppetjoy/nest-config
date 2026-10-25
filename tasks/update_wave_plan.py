@@ -92,12 +92,14 @@ def backup_requirements(value: Any, selected: Any, require_hold=False):
 
 
 def plan(policy: Any, targets: Any):
-    require(type(policy) is dict and type(policy.get('schema')) is int and policy['schema'] in (1, 2, 3, 4))
-    extra = ' preparation_window' if policy['schema'] in (2, 3, 4) else ''
-    if policy['schema'] in (3, 4):
+    require(type(policy) is dict and type(policy.get('schema')) is int and policy['schema'] in (1, 2, 3, 4, 5))
+    extra = ' preparation_window' if policy['schema'] >= 2 else ''
+    if policy['schema'] >= 3:
         extra += ' backup_requirements'
+    if policy['schema'] == 5:
+        extra += ' lifecycle'
     fields(policy, 'schema kind release config_source max_parallel domains hosts excluded canaries' + extra)
-    if policy['schema'] in (2, 3, 4):
+    if policy['schema'] >= 2:
         # Structural validation only: future/expired policies remain inspectable.
         # A window is a bound on initiation, not proof of owner authorization.
         preparation_window(policy['preparation_window'])
@@ -135,8 +137,11 @@ def plan(policy: Any, targets: Any):
     # turn an approved multi-host scope into a different run. Re-freeze policy.
     require(set(selected) == set(indexed) and set(canaries) <= set(indexed))
     require([row["name"] for row in hosts[:len(canaries)]] == canaries)
-    if policy['schema'] in (3, 4):
-        backup_requirements(policy['backup_requirements'], selected, require_hold=policy['schema'] == 4)
+    if policy['schema'] >= 3:
+        backup_requirements(policy['backup_requirements'], selected, require_hold=policy['schema'] >= 4)
+    if policy['schema'] == 5:
+        from update_lifecycle_policy import lifecycle_policy
+        lifecycle_policy(policy['lifecycle'], indexed)
 
     waves = [[name] for name in canaries]
     remaining = [row["name"] for row in hosts if row["name"] not in canaries]
@@ -161,9 +166,9 @@ def plan(policy: Any, targets: Any):
         "preparation_observed": False, "reboot_eligible": [],
         "execution_authorized": False, "acceptance_recorded": False,
     }
-    if policy['schema'] in (2, 3, 4):
+    if policy['schema'] >= 2:
         result.update(policy_schema=policy['schema'], preparation_window=policy['preparation_window'])
-    if policy['schema'] in (3, 4):
+    if policy['schema'] >= 3:
         result['backup_requirements'] = policy['backup_requirements']
     return result
 

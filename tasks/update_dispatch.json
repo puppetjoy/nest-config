@@ -1,0 +1,34 @@
+{
+  "description": "Inspect by default; explicitly dispatch or resume the existing Bolt lifecycle in an external user systemd manager, or copy and reopen sanitized reports",
+  "input_method": "stdin",
+  "supports_noop": false,
+  "files": [
+    "nest/tasks/update_lifecycle.py",
+    "nest/tasks/update_lifecycle_policy.py",
+    "nest/tasks/update_wave_plan.py",
+    "nest/tasks/update_observe_inputs.py",
+    "nest/tasks/update_prepare_inputs.py",
+    "nest/tasks/retain_update_report.py",
+    "nest/tasks/update_network_health.py"
+  ],
+  "parameters": {
+    "action": {
+      "type": "Enum['inspect', 'start', 'resume', 'export', 'receive']"
+    },
+    "project": {
+      "type": "Optional[Stdlib::Absolutepath]"
+    },
+    "source": {
+      "type": "Optional[String[1]]"
+    },
+    "params": {
+      "type": "Optional[Hash]"
+    },
+    "export": {
+      "type": "Optional[Hash]"
+    },
+    "output_dir": {
+      "type": "Optional[Stdlib::Absolutepath]"
+    }
+  }
+}

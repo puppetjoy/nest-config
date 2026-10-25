@@ -1,0 +1,10 @@
+{
+  "description": "Read the existing Bolt supervisor identity without host actions",
+  "input_method": "stdin",
+  "supports_noop": true,
+  "parameters": {
+    "controller": {
+      "type": "String[1]"
+    }
+  }
+}

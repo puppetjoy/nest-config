@@ -2,6 +2,7 @@
   "description": "Compute exact inventory-backed serial failure-domain waves without host commands, preparation or reboot authorization",
   "input_method": "stdin",
   "supports_noop": true,
+  "files": ["nest/tasks/update_lifecycle_policy.py", "nest/tasks/retain_update_report.py", "nest/tasks/update_network_health.py"],
   "parameters": {
     "policy": { "type": "Hash[String, Data]", "description": "Complete schema-1 or schema-2 nest_update_wave_policy; schema 2 adds a bounded UTC preparation window, not authorization" },
     "targets": { "type": "Array[String[1], 1]", "description": "Exact resolved inventory names; must equal the policy host scope" }

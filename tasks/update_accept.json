@@ -1,0 +1,13 @@
+{
+  "description": "MUTATING: deliver bounded collected evidence to native nest reset accept; never reset, reboot or finalize",
+  "input_method": "stdin",
+  "supports_noop": false,
+  "parameters": {
+    "transaction": {
+      "type": "String[1]"
+    },
+    "evidence": {
+      "type": "Hash"
+    }
+  }
+}

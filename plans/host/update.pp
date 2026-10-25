@@ -12,18 +12,31 @@
 # @param $maintenance Exact per-controller survivor/storage/physical admission inputs for preparation
 # @param $release_manifest Complete runtime release manifest, required only for preparation
 plan nest::host::update (
-  TargetSpec                                   $targets,
-  Boolean                                      $reset            = true,
-  Boolean                                      $reboot           = false,
-  Boolean                                      $run_puppet       = true,
-  Enum['legacy', 'plan', 'observe', 'prepare'] $mode             = 'legacy',
-  Optional[Hash]                               $policy           = undef,
-  Optional[Hash]                               $preparation      = undef,
-  Optional[Hash]                               $observations     = undef,
-  Optional[Stdlib::Absolutepath]               $output_dir       = undef,
-  Optional[Hash]                               $maintenance      = undef,
-  Optional[Hash]                               $release_manifest = undef,
+  TargetSpec                                                $targets,
+  Boolean                                                   $reset            = true,
+  Boolean                                                   $reboot           = false,
+  Boolean                                                   $run_puppet       = true,
+  Enum['legacy', 'plan', 'observe', 'prepare', 'lifecycle'] $mode             = 'legacy',
+  Optional[Hash]                                            $policy           = undef,
+  Optional[Hash]                                            $preparation      = undef,
+  Optional[Hash]                                            $observations     = undef,
+  Optional[Stdlib::Absolutepath]                            $output_dir       = undef,
+  Optional[Hash]                                            $maintenance      = undef,
+  Optional[Hash]                                            $release_manifest = undef,
 ) {
+  if $mode == 'lifecycle' {
+    if $policy == undef or $observations == undef or $output_dir == undef or !$reset or !$run_puppet or $preparation != undef or $release_manifest != undef {
+      fail_plan('Lifecycle requires policy, observations, output_dir, reset and main acceptance; prepare separately once', 'nest/update-lifecycle-inputs')
+    }
+    return(run_plan('nest::host::update_lifecycle', {
+      'targets'      => $targets,
+      'policy'       => $policy,
+      'observations' => $observations,
+      'output_dir'   => $output_dir,
+      'maintenance'  => $maintenance,
+      'execute'      => $reboot,
+    }))
+  }
   if ($mode == 'prepare') != ($release_manifest != undef) {
     fail_plan('Preparation requires the complete release_manifest; other modes refuse it', 'nest/update-generation-binding')
   }
