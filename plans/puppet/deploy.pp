@@ -34,6 +34,20 @@ plan nest::puppet::deploy ( # lint:ignore:deploy_plan_boundary -- code rollout p
     default      => [],
   }
 
+  # Do not update r10k and report success while an immutable compiler continues
+  # serving its prior selected snapshot. Preflight every backend before writes.
+  $selected_openvox_backends.each |$openvox_backend| {
+    $namespace = $openvox_backends[$openvox_backend]['namespace']
+    $inspect_cmd = [
+      'kubectl', 'get', 'deployment', '-n', $namespace, 'puppet-puppetserver',
+      '-o', 'jsonpath={.spec.template.spec.containers[0].volumeMounts[?(@.name=="compiler-snapshots")].name}',
+    ].shellquote
+    $frozen = run_command($inspect_cmd, 'localhost', 'Inspect compiler deployment mode').first.value['stdout'].strip
+    if $frozen != '' {
+      fail('Immutable compiler selected: deploy its accepted compiler_release through nest::eyrie::openvox::deploy; mutable r10k deployment refused')
+    }
+  }
+
   $selected_openvox_backends.each |$openvox_backend| {
     $openvox     = $openvox_backends[$openvox_backend]
     $namespace   = $openvox['namespace']

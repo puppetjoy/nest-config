@@ -2,7 +2,8 @@
 
 `files/puppet-versioned-code.rb` implements the paired native Puppetserver
 code-ID and static-content command contracts. It is a source component, not a
-new deployment service. It is deliberately not enabled in the OpenVox chart yet.
+new deployment service. The OpenVox chart has an opt-in pod-private integration;
+no production or test service selects it by default.
 The existing consumer-side optional `code_id` field does not establish compiler
 provenance without the publication and lifetime guarantees below.
 
@@ -89,8 +90,8 @@ source/module identities independently before using its receipt as expectation
 for the existing init-copy/store interfaces. A mutable image tag, a fixture
 receipt or a receipt generated from live r10k is not an accepted release.
 This build step does not change any chart, native hook, compiler module path or
-ordinary deployment behavior; pod isolation, old-content retention and normal
-catalog/repeat acceptance remain required before production enablement.
+ordinary deployment behavior. The explicit chart selection below is separate;
+normal catalog/repeat acceptance remains required before production enablement.
 
 ### Isolated init copy
 
@@ -121,11 +122,10 @@ blindly. The sanitized JSON success receipt establishes a checked local copy,
 not a read-only compiler mount, persistent release publication or attestation.
 Its `compiler_read_only_verified` and `compiler_attestation` fields remain false.
 
-This component is deliberately not wired into the chart yet. Before enabling
-it, provide an independently expected release tree, compiler-only read-only
-mounts, no mutable global module paths, paired hooks, lifetime/static-content
-retention and compatible existing deploy/rollout behavior. The helper is not a
-generic archive copier or a new source-fetch/deployment service.
+The opt-in chart integration below supplies the copy, mounts and paired hooks.
+It still requires independently accepted release expectations and retention
+selection. The helper is not a generic archive copier or a new source-fetch or
+deployment service.
 
 ### Retained publication and native static content
 
@@ -164,8 +164,8 @@ producer and pod rollout still need to provide independent expectations,
 isolated read-only mounts and that lifetime guarantee. Publication success is
 not compiler attestation. This component remains disabled in production.
 
-These requirements are still integration work, not effects of installing these
-files:
+These requirements are acceptance obligations, not effects of merely installing
+these files:
 
 1. Publish a complete, independently checked release tree from accepted config
    and module inputs. Capture the actual served module set, including any
@@ -195,9 +195,76 @@ mechanism is needed. This boundary does not introduce signing or custody.
 
 ## Verification
 
+### Explicit chart selection
+
+`nest::service::puppet::compiler_release` is optional service Hiera data. When
+absent, KubeCM emits only a non-mutating Deployment-kind check and preserves
+the existing r10k deployment. When present, it is an exact schema-1 object:
+
+- `schema`: integer `1`.
+- `current`: an object with exactly `image` and `expected`.
+- `retained`: an array of prior objects with exactly `image` and `expected`.
+
+Each image must be `registry.eyrie/nest/config/main@sha256:DIGEST`, selected from
+accepted publication, not a tag. Each expected object has the four receipt
+fields documented above, supplied independently from the accepted release.
+Duplicate code IDs, unknown fields and malformed identities refuse rendering.
+Select an accepted multiarchitecture index, or constrain placement to the
+architecture of an individually selected member. Never infer architecture
+compatibility from a common source SHA alone.
+
+The existing `nest::eyrie::openvox::deploy` / KubeCM rendering interface applies
+the selection. Init containers copy retained releases first, then current,
+into one pod-private `emptyDir`. Each uses the exact selected executor image,
+a read-only root filesystem and its built projection. It must match the
+independent expectation before publication. The last init verifies the entire
+selected set, installs both wrappers/config together and changes ownership to
+the pinned chart's service UID/GID 999. Init failure prevents compiler startup
+and preserves partial pod state; no retry deletes or adopts it.
+
+Only the compiler mounts that volume after init, read-only. Neither the r10k
+sidecar nor any other pod can write it. The mutable code-volume mount is removed
+from the compiler. The startup entrypoint sets the fixed environment root and
+an empty base module path using the explicit server configuration directory.
+The code-ID wrapper refers only to current; static content selects current or
+retained by exact ID. The patch checks the pinned chart's container and mount
+layout before removing anything, refusing chart-layout drift.
+
+The original mutable `nest::puppet::deploy` preflights all selected backends and
+refuses before r10k writes when any has an immutable compiler. It must not claim
+a mutable code refresh updated a frozen compiler. Such a service is updated by
+selecting the accepted release and running the existing KubeCM deployment,
+which replaces the pod. Automatic CI selection/rollout, native catalog and
+converged repeat acceptance remain integration work; do not enable this option
+on an ordinary CI-managed service before that follow-through is ready.
+
+Retained releases are private copies in each new pod, not a read-only view of
+a store another pod can mutate. Keep the accepted image digests and every code
+ID required by still-live catalogs in the next selection. Removing an entry
+does not garbage-collect its registry image, and this feature neither grants
+retirement authority nor proves release-long registry retention. Rollback
+selects the previous accepted current and retains both identities, then uses
+the same pod replacement. Do not restore mutable code under a historical ID.
+
+The optional native integration check requires Python with PyYAML, Podman, the
+accepted executor images and exact server image already present locally:
+
+    python3 spec/files/openvox_compiler_pod_native_test.py \
+      --manifest PRIVATE_KUBECM_RENDER.yaml --server-image IMAGE_AT_DIGEST \
+      --jar-sha256 INDEPENDENT_JAR_SHA256 --output-dir NEW_LOCAL_DIRECTORY
+
+It executes the actual rendered init commands without a source overlay, then
+the paired wrappers in the server image as UID 999. It verifies server JAR
+identity, isolated paths, static-content digest, wrong-ID refusal and an EROFS
+write refusal. Private copied module bytes remain only in a disposable named
+volume removed on exit; the output contains safe receipts, not the rendered
+manifest or source payload. This is not a native JAR catalog compile, live
+deployment, ordinary main apply or complete compiler attestation.
+
 Focused public integration-contract tests:
 
     pdk test unit --tests=spec/files/nest_puppet_versioned_code_spec.rb,spec/files/nest_puppet_compiler_snapshot_spec.rb,spec/files/nest_puppet_compiler_store_spec.rb
+    pdk test unit --tests=spec/functions/openvox_compiler_patches_spec.rb,spec/plans/puppet_compiler_deploy_spec.rb,spec/plans/puppet_management_spec.rb
     pdk validate
 
 The producer's real-Git/input-drift fixtures run with
@@ -241,9 +308,10 @@ catalogs are retained for independent readback.
 
 ## Compatibility and rollback
 
-No chart, existing deploy plan or live compiler setting changes in this source
-slice. Existing human/deploy interfaces are unchanged. Keep this component
-disabled until the complete snapshot publication and retention path is verified.
+Existing mutable deployment behavior is unchanged while selection is absent.
+An explicit selection changes the compiler path and intentionally refuses the
+old mutable deploy path rather than reporting stale code as deployed. Keep this
+option disabled until complete publication, rollout and retention are verified.
 A later deployment rollback restores the previously accepted compiler snapshot
 and its matching hooks/receipt together; never point an old ID at current r10k
 content. No reset, reboot, quota change or release promotion is authorized here.
