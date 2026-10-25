@@ -288,6 +288,15 @@ class ExecutorRouteTest(unittest.TestCase):
         self.assertEqual(M['acquire'](canonical, self.f.f.sha, 'haswell', self.api), acquired)
         self.assertEqual(self.native_request, original)
 
+    def test_native_selection_allows_unchanged_revision_but_preserves_exact_edge(self):
+        self.native_discovery()
+        self.native_request['successor_source'] = self.api.expected['sources']['nest/config']
+        canonical, _, acquired = M['discover_route'](
+            self.native_request, self.native_request['successor_source'], 'haswell', self.api)
+        self.assertEqual(canonical['native']['config_source'], canonical['successor_source'])
+        M['successor_boundary'](acquired, 1000, 1001)
+        self.assertEqual(canonical['producer'], self.f.request['producer'])
+
     def test_discovery_all_native_cpus_and_digest_named_results(self):
         self.native_discovery()
         for cpu in M['CPUS']:
@@ -318,7 +327,7 @@ class ExecutorRouteTest(unittest.TestCase):
     def test_discovery_complete_static_admission_precedes_external_reads(self):
         self.native_discovery()
         mutations = [('schema', True), ('kind', 'other'), ('successor_source', 'f' * 40),
-                     ('successor_cpu', 'zen5'), ('config_source', self.f.f.sha),
+                     ('successor_cpu', 'zen5'), ('config_source', ''),
                      ('config_source', 'a' * 40 + '\n'), ('bolt_source', None), ('extra', 'field')]
         for key, value in mutations:
             request = copy.deepcopy(self.native_request); request[key] = value
@@ -360,7 +369,7 @@ class ExecutorRouteTest(unittest.TestCase):
         self.native_discovery()
         canonical, _, _ = self.discover()
         self.api.reads.clear()
-        for key, value in [('config_source', self.f.f.sha), ('bolt_source', 'malformed'), ('extra', 'field')]:
+        for key, value in [('config_source', ''), ('bolt_source', 'malformed'), ('extra', 'field')]:
             bad = copy.deepcopy(canonical); bad['native'][key] = value
             with self.subTest(key=key), self.assertRaises(ValueError):
                 M['acquire'](bad, self.f.f.sha, 'haswell', self.api)
