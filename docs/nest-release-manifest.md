@@ -688,6 +688,11 @@ historic outputs or changing live aliases.
 
 ### Stage 3 adapter local placement
 
+The current explicit provisioning and promotion interfaces are documented in
+[release publication](nest-release-publication.md). They extend this placement
+schema; historical delivery limitations below are not a current implementation
+checklist. No source interface grants build or promotion authority.
+
 For one approved Stage 3 build, append `--stage3-placement FILE`. This file has
 exactly `schema` (integer 1), `kind` (`nest_stage3_local_placement`), `member`
 (the selected member ID), `expectations_digest` (the exact prefixed digest of

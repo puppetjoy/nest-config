@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import re
+import runpy
 import stat
 import subprocess
 import sys
@@ -90,6 +91,8 @@ def finish(container, staging, staging_guid, receipts, hostname, release, parent
 
 
 def main():
+    if sys.argv[1:2] == ['--provision']:
+        return provision_main(sys.argv[2:])
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ['container', 'staging', 'staging_guid', 'receipts', 'hostname', 'release',
                  'parent_guid', 'expectations', 'identity']:
@@ -107,6 +110,96 @@ def main():
         return 0
     except (OSError, ValueError, TypeError, KeyError, IndexError, RuntimeError, subprocess.SubprocessError):
         print('Stage 3 completion failed; retain staging, publication and receipts; no accepted root emitted', file=sys.stderr)
+        return 1
+
+
+def provision(expected, member_id, storage_guid, staging_parent, staging_parent_guid, receipts, apply=False):
+    """Place only selected children on existing, explicitly identified local ZFS.
+
+    No pool choice, ancestor creation, quota changes, deletion or OS build.
+    Partial attempts are retained; this is not a destructive retry interface.
+    """
+    release = runpy.run_path(str(Path(__file__).resolve().parents[2] / 'scripts/nest-release-manifest.py'))
+    indexed = release['expectations'](expected)
+    member = indexed[member_id]
+    require(member['stage'] == 'stage3' and member['mode'] == 'fresh' and os.geteuid() == 0)
+    base, staging_parent, receipts = ROOT.BASE, Path(staging_parent), Path(receipts)
+    identity = Path(member['identity_root'])
+    for path in [base, staging_parent, receipts, identity]:
+        ROOT.safe_ancestors(path)
+    paths = [base, staging_parent, receipts, identity]
+    for index, path in enumerate(paths):
+        require(all(path != other and path not in other.parents and other not in path.parents
+                    for other in paths[index + 1:]))
+    require(stat.S_IMODE(receipts.stat().st_mode) == 0o700)
+    storage = PUB.filesystem(base, 'off', storage_guid, parent=True)
+    staging_storage = PUB.filesystem(staging_parent, 'off', staging_parent_guid, parent=True)
+    require(storage[0] != staging_storage[0]
+            and not storage[0].startswith(staging_storage[0] + '/')
+            and not staging_storage[0].startswith(storage[0] + '/'))
+    token = expected['release'] + '-' + member_id
+    require(len(token) <= 200)
+    staging = staging_parent / token
+    output = receipts / ('placement-' + token + '.json')
+    require(not staging.exists() and not staging.is_symlink() and not output.exists() and not output.is_symlink())
+    parent = base / expected['release'] / 'hosts'
+    target = parent / member['host']
+    require(not target.exists() and not target.is_symlink())
+    # Existing release/hosts parents may be shared by other members. Admit their
+    # exact native placement and release ownership; never repair/adopt old paths.
+    parents = [(base / expected['release'], storage[0] + '/' + expected['release']),
+               (parent, storage[0] + '/' + expected['release'] + '/hosts')]
+    existing = {}
+    for path, dataset in parents:
+        if path.exists() or path.is_symlink():
+            row = PUB.filesystem(path, 'off', parent=True)
+            require(row[0] == dataset and stat.S_IMODE(path.stat().st_mode) == 0o700)
+            require(PUB.command(['zfs', 'get', '-H', '-o', 'value', 'org.nest:build-release', dataset]).strip() == expected['release'])
+            existing[path] = row
+    result = {'schema': 1, 'kind': 'nest_stage3_placement_plan', 'member': member_id,
+              'expectations_digest': release['digest'](expected), 'applied': False}
+    if not apply:
+        return result
+    for path, dataset in parents + [(staging, staging_storage[0] + '/' + token)]:
+        if path in existing:
+            require(PUB.filesystem(path, 'off', parent=True) == existing[path])
+            continue
+        # Private no-clobber mountpoint reservation; a failed ZFS create leaves
+        # the path for diagnosis, not an automatic destroy/recreate loop.
+        path.mkdir(mode=0o700)
+        PUB.command(['zfs', 'create', '-u', '-o', 'mountpoint=' + str(path), '-o', 'canmount=noauto',
+                     '-o', 'readonly=off', '-o', 'exec=off', '-o', 'setuid=off', '-o', 'devices=off',
+                     '-o', 'org.nest:build-release=' + expected['release'], dataset])
+        PUB.command(['zfs', 'mount', dataset])
+        path.chmod(0o700)
+        require(PUB.filesystem(path, 'off', parent=True)[0] == dataset)
+    # The original independently selected parent resources must still match.
+    require(PUB.filesystem(base, 'off', storage_guid, parent=True) == storage)
+    require(PUB.filesystem(staging_parent, 'off', staging_parent_guid, parent=True) == staging_storage)
+    placement = {'schema': 1, 'kind': 'nest_stage3_local_placement', 'member': member_id,
+                 'expectations_digest': release['digest'](expected), 'staging': str(staging),
+                 'staging_guid': PUB.filesystem(staging, 'off')[1], 'receipts': str(receipts),
+                 'parent_guid': PUB.filesystem(parent, 'off', parent=True)[1]}
+    preflight('placement-check', str(staging), placement['staging_guid'], str(receipts), member['host'],
+              expected['release'], placement['parent_guid'], placement['expectations_digest'], str(identity))
+    retain(output, placement)
+    result.update(applied=True, placement=str(output))
+    return result
+
+
+def provision_main(arguments):
+    parser = argparse.ArgumentParser(description='Select local Stage 3 placement; default checks only, --apply provisions children')
+    for name in ['expectations', 'member', 'storage-guid', 'staging-parent', 'staging-parent-guid', 'receipts']:
+        parser.add_argument('--' + name, required=True)
+    parser.add_argument('--apply', action='store_true')
+    args = parser.parse_args(arguments)
+    try:
+        release = runpy.run_path(str(Path(__file__).resolve().parents[2] / 'scripts/nest-release-manifest.py'))
+        print(json.dumps(provision(release['load'](args.expectations), args.member, args.storage_guid,
+                                   args.staging_parent, args.staging_parent_guid, args.receipts, args.apply), sort_keys=True))
+        return 0
+    except (OSError, ValueError, TypeError, KeyError, IndexError, RuntimeError, subprocess.SubprocessError):
+        print('Stage 3 placement refused or incomplete; retain existing paths and datasets for diagnosis', file=sys.stderr)
         return 1
 
 

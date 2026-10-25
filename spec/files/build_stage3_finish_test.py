@@ -7,6 +7,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+import runpy
 from unittest.mock import patch
 
 PROJECT = Path(__file__).resolve().parents[2]
@@ -165,6 +166,91 @@ class FinishTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertEqual(result.stdout, '')
         self.assertEqual(result.stderr, 'Stage 3 completion failed; retain staging, publication and receipts; no accepted root emitted\n')
+
+
+class PlacementTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.base = Path(temporary.name)
+        self.storage = self.base / 'releases'
+        self.staging_parent = self.base / 'staging'
+        self.receipts = self.base / 'receipts'
+        fixture = runpy.run_path(str(PROJECT / 'spec/files/nest_release_manifest_test.py'))
+        self.expected, _ = fixture['fixture']()
+        self.member = next(row for row in self.expected['members'] if row['id'] == 'stage3')
+        self.identity = self.base / 'identities' / self.member['identity_reference']
+        self.member['identity_root'] = str(self.identity)
+        for path in [self.storage, self.staging_parent, self.receipts, self.identity]:
+            path.mkdir(parents=True, mode=0o700)
+        self.rows = {self.storage: ['pool/releases', '100', str(self.storage), 'yes', 'off'],
+                     self.staging_parent: ['pool/staging', '200', str(self.staging_parent), 'yes', 'off']}
+        self.calls = []
+        self.args = [self.expected, 'stage3', '100', str(self.staging_parent), '200', str(self.receipts)]
+        for manager in [patch.object(FIN.ROOT, 'BASE', self.storage),
+                        patch.object(FIN.ROOT, 'safe_ancestors'), patch.object(FIN.os, 'geteuid', return_value=0),
+                        patch.object(FIN.PUB, 'filesystem', side_effect=self.filesystem),
+                        patch.object(FIN.PUB, 'command', side_effect=self.command)]:
+            manager.start()
+            self.addCleanup(manager.stop)
+
+    def filesystem(self, path, readonly, guid=None, parent=False):
+        row = self.rows[path]
+        if row[4] != readonly or (guid is not None and row[1] != guid):
+            raise ValueError('fixture native mismatch')
+        return row
+
+    def command(self, arguments):
+        self.calls.append(arguments)
+        if arguments[:2] == ['zfs', 'create']:
+            mount = Path(next(arg.split('=', 1)[1] for arg in arguments if arg.startswith('mountpoint=')))
+            self.rows[mount] = [arguments[-1], str(300 + len(self.rows)), str(mount), 'yes', 'off']
+        if arguments[:2] == ['zfs', 'get']:
+            return self.expected['release'] + '\n'
+        return ''
+
+    def test_preview_never_provisions_or_retains(self):
+        before = list(self.base.rglob('*'))
+        self.assertFalse(FIN.provision(*self.args)['applied'])
+        self.assertEqual(self.calls, [])
+        self.assertEqual(list(self.base.rglob('*')), before)
+
+    def test_selected_children_return_existing_adapter_placement_after_native_readback(self):
+        result = FIN.provision(*self.args, apply=True)
+        placement = json.loads(Path(result['placement']).read_bytes())
+        self.assertEqual(placement['kind'], 'nest_stage3_local_placement')
+        self.assertEqual(placement['member'], 'stage3')
+        self.assertEqual(placement['staging_guid'], self.rows[Path(placement['staging'])][1])
+        self.assertEqual(Path(result['placement']).stat().st_mode & 0o777, 0o600)
+        self.assertEqual(len([call for call in self.calls if call[:2] == ['zfs', 'create']]), 3)
+        self.assertFalse(any('destroy' in call or '-p' in call for call in self.calls))
+        with self.assertRaises(ValueError):
+            FIN.provision(*self.args, apply=True)
+
+    def test_wrong_selected_guid_or_overlapping_storage_refuses_before_writes(self):
+        self.args[2] = '999'
+        with self.assertRaises(ValueError):
+            FIN.provision(*self.args, apply=True)
+        self.args[2] = '100'
+        self.args[3] = str(self.storage)
+        with self.assertRaises(ValueError):
+            FIN.provision(*self.args, apply=True)
+        self.assertEqual(self.calls, [])
+
+    def test_zfs_failure_retains_reserved_path_without_accepted_placement_or_deletion(self):
+        FIN.PUB.command.side_effect = subprocess.CalledProcessError(37, 'zfs')
+        with self.assertRaises(subprocess.CalledProcessError):
+            FIN.provision(*self.args, apply=True)
+        self.assertTrue((self.storage / self.expected['release']).is_dir())
+        self.assertEqual(list(self.receipts.iterdir()), [])
+
+    def test_existing_unowned_or_partial_parent_is_not_adopted(self):
+        path = self.storage / self.expected['release']
+        path.mkdir(mode=0o700)
+        self.rows[path] = ['pool/wrong', '999', str(path), 'yes', 'off']
+        with self.assertRaises(ValueError):
+            FIN.provision(*self.args, apply=True)
+        self.assertEqual(self.calls, [])
 
 
 if __name__ == '__main__':
