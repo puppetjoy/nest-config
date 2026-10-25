@@ -115,6 +115,15 @@ privileged-runner allocator, remote copy mechanism or automatic CI bootstrap.
 
 ## Verified boundary
 
+The candidate adapter honors the existing Stage 3 CI variables
+`CI_HOST_MAKEOPTS` and `CI_HOST_EMERGE_DEFAULT_OPTS` as the plan's `makeopts` and
+`emerge_default_opts`. Empty or absent values preserve the profile defaults.
+Select these ordinary build controls for the real builder's available resources;
+the adapter does not reserve memory or stop other workloads to make room.
+The frozen input publisher also requires the selected host's existing public CA
+pin in `data/release/trust.json`. That release allowlist does not install a CA or
+alter the live Puppet trust store.
+
 ### Native build with publication on another host
 
 When the native build host and the ZFS publication host differ, use the same

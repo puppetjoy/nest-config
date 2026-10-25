@@ -78,6 +78,8 @@ class CandidateBuildTest(unittest.TestCase):
         self.project = self.root / "executor"
         self.project.mkdir()
         self.env = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1", PYTHONDONTWRITEBYTECODE="1")
+        for name in ("CI_HOST_MAKEOPTS", "CI_HOST_EMERGE_DEFAULT_OPTS"):
+            self.env.pop(name, None)
         self.env.update(CI_PIPELINE_ID="901", CI_JOB_ID="902", CI_REGISTRY="registry.example",
                         CI_PROJECT_DIR=str(self.root / "producer"), CALLS=str(self.root / "calls"), EXECUTOR=str(self.project))
         for name in ("bin/ci-release-build", "bin/ci-executor-receipt", "bin/bolt-wrapper",
@@ -518,6 +520,22 @@ class CandidateBuildTest(unittest.TestCase):
         self.assertTrue(json.loads(result.stdout)["readback_verified"])
         self.assertEqual(self.cli(placement).returncode, 1)
         self.assertEqual(len(self.calls()), 2)
+
+    def test_stage3_preserves_existing_explicit_ci_resource_controls(self):
+        self.select("stage3")
+        result = self.cli(self.placement(), CI_HOST_MAKEOPTS="-j2 -l4",
+                          CI_HOST_EMERGE_DEFAULT_OPTS="--usepkg --jobs=2 --load-average=4")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        params = self.calls()[0]["params"]
+        self.assertEqual(params["makeopts"], "-j2 -l4")
+        self.assertEqual(params["emerge_default_opts"], "--usepkg --jobs=2 --load-average=4")
+
+    def test_stage3_missing_resource_controls_keep_plan_defaults(self):
+        self.select("stage3")
+        result = self.cli(self.placement(), CI_HOST_MAKEOPTS="", CI_HOST_EMERGE_DEFAULT_OPTS="")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for name in ("makeopts", "emerge_default_opts"):
+            self.assertNotIn(name, self.calls()[0]["params"])
 
     def test_stage3_missing_wrong_or_unknown_placement_refuses_before_bolt(self):
         self.select("stage3")
