@@ -45,6 +45,41 @@ error. It never generates a new expected identity to excuse drift.
 
 ## Publication and compiler-lifetime requirements
 
+### Isolated init copy
+
+`ruby files/puppet-compiler-snapshot.rb SOURCE DESTINATION RECEIPT` implements
+the copy boundary for a future init container. `SOURCE` is the complete selected
+environment, including its actual modules. `RECEIPT` has the independently
+expected frozen-tree identity described above; this command never creates that
+expectation from whatever mutable bytes happen to be present. Production release
+publication must still supply and verify that expectation from accepted inputs.
+
+`DESTINATION` must be absent, outside the source, under an existing canonical
+directory owned by the caller and not group/world writable. Use an isolated
+per-pod volume with only the init container writing it. The helper copies files
+to new inodes, preserves file/directory modes and relative contained links, and
+excludes Git administration. Absolute links refuse instead of retaining a
+pointer into mutable input. Special files, escaping links and a symlinked
+`environment.conf` also refuse. The copied configuration is replaced by the
+three constant, isolated assignments required by the native hooks. The complete
+finished tree must then match the supplied expected digest and configuration.
+Changed source bytes or modes cannot silently produce a new accepted identity.
+
+On failure it emits no success receipt and preserves any partial destination;
+it never cleans, adopts or replaces an existing tree, retries a fetch or changes
+a running compiler. A failed init container must prevent compiler startup. The
+partial tree is diagnostic state, not an accepted environment. A pod retry must
+use a genuinely fresh destination/volume or stop for inspection, not erase it
+blindly. The sanitized JSON success receipt establishes a checked local copy,
+not a read-only compiler mount, persistent release publication or attestation.
+Its `compiler_read_only_verified` and `compiler_attestation` fields remain false.
+
+This component is deliberately not wired into the chart yet. Before enabling
+it, provide an independently expected release tree, compiler-only read-only
+mounts, no mutable global module paths, paired hooks, lifetime/static-content
+retention and compatible existing deploy/rollout behavior. The helper is not a
+generic archive copier or a new source-fetch/deployment service.
+
 These requirements are still integration work, not effects of installing this
 file:
 
@@ -78,7 +113,7 @@ mechanism is needed. This boundary does not introduce signing or custody.
 
 Focused public integration-contract tests:
 
-    pdk test unit --tests=spec/files/nest_puppet_versioned_code_spec.rb
+    pdk test unit --tests=spec/files/nest_puppet_versioned_code_spec.rb,spec/files/nest_puppet_compiler_snapshot_spec.rb
     pdk validate
 
 The optional native test starts the actual pinned Puppetserver JAR, its JRuby
@@ -99,7 +134,9 @@ confined to container loopback with `--network=none`, never deployment policy.
 The synthetic source SHA made of `a` characters is fixture data, not a source
 acceptance receipt.
 
-The native test verifies real v4 and ordinary v3 catalogs carry the expected
+The native test first executes the real init copy boundary, replaces the original
+mutable module input, then mounts only the copied output read-only. It verifies
+real v4 and ordinary v3 catalogs carry the expected
 identity, loads an actual module, verifies static-content delivery, refuses a
 wrong static identity and unknown environment, observes an `EROFS` write refusal,
 and compiles from the same frozen module after changing separate mutable input.
