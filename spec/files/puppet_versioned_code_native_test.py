@@ -21,6 +21,7 @@ out.mkdir(parents=True, exist_ok=False)
 repo = Path(__file__).resolve().parents[2]
 helper = repo / 'files/puppet-versioned-code.rb'
 publisher = repo / 'files/puppet-compiler-snapshot.rb'
+store_helper = repo / 'files/puppet-compiler-store.rb'
 frozen = out / 'mutable-input/main'
 for directory in ['manifests', 'modules/fixture/manifests', 'modules/fixture/files']:
     (frozen / directory).mkdir(parents=True, exist_ok=True)
@@ -36,7 +37,7 @@ root = '/fixture'
 jar = '/opt/puppetlabs/server/apps/puppetserver/puppet-server-release.jar'
 raise 'Wrong server JAR' unless Digest::SHA256.file(jar).hexdigest == ARGV.fetch(0)
 File.write('/fixture/id', "#!/bin/sh\nexec ruby /helper/puppet-versioned-code.rb id /release/environments/main /receipt/expected.json \"$@\"\n")
-File.write('/fixture/content', "#!/bin/sh\nexec ruby /helper/puppet-versioned-code.rb content /release/environments/main /receipt/expected.json \"$@\"\n")
+File.write('/fixture/content', "#!/bin/sh\nexec ruby /helper/puppet-compiler-store.rb content /store \"$@\"\n")
 File.chmod(0755, '/fixture/id', '/fixture/content')
 '''
 http = r'''
@@ -142,12 +143,16 @@ begin
   static_response = Net::HTTP.get_response(static_uri)
   puts 'STATIC_RESPONSE ' + JSON.generate({'status'=>static_response.code, 'body'=>static_response.body})
   raise 'static content mismatch' unless static_response.code == '200' && static_response.body == "Frozen module static content A.\n"
+  previous = JSON.parse(File.read('/receipt/previous.json'))
+  previous_uri = URI('http://127.0.0.1:8140/puppet/v3/static_file_content/modules/fixture/files/probe.txt?' + URI.encode_www_form({'environment'=>'main', 'code_id'=>previous.fetch('code_id')}))
+  previous_response = Net::HTTP.get_response(previous_uri)
+  raise 'retained identity lost its old static bytes' unless previous_response.code == '200' && previous_response.body == "Retained previous static content.\n"
   wrong_uri = URI('http://127.0.0.1:8140/puppet/v3/static_file_content/modules/fixture/files/probe.txt?' + URI.encode_www_form({'environment'=>'main', 'code_id'=>'sha256:' + '0' * 64}))
   wrong_response = Net::HTTP.get_response(wrong_uri)
   raise 'wrong identity served static content' unless wrong_response.code.to_i >= 400 && wrong_response.body != static_response.body
   unknown_output, unknown_status = Open3.capture2e('/fixture/id', 'other')
   raise 'unknown environment accepted' if unknown_status.success?
-  puts 'HTTP_ACCEPTANCE ' + JSON.generate({'code_id'=>catalog['code_id'], 'version'=>catalog['version'], 'catalog'=>catalog, 'native_http_dispatch'=>true, 'v3_catalog'=>v3, 'frozen_write_refused'=>frozen_write_refused, 'mutable_source_ignored'=>true, 'static_content_verified'=>true, 'wrong_identity_status'=>wrong_response.code, 'unknown_environment_refused'=>!unknown_status.success?, 'applied'=>false})
+  puts 'HTTP_ACCEPTANCE ' + JSON.generate({'code_id'=>catalog['code_id'], 'version'=>catalog['version'], 'catalog'=>catalog, 'native_http_dispatch'=>true, 'v3_catalog'=>v3, 'frozen_write_refused'=>frozen_write_refused, 'mutable_source_ignored'=>true, 'static_content_verified'=>true, 'retained_static_content_verified'=>true, 'previous_code_id'=>previous.fetch('code_id'), 'wrong_identity_status'=>wrong_response.code, 'unknown_environment_refused'=>!unknown_status.success?, 'applied'=>false})
 ensure
   Process.kill('TERM', pid) rescue Errno::ESRCH
   begin
@@ -171,6 +176,19 @@ receipt_dir = out / 'receipt'
 receipt_dir.mkdir(exist_ok=True)
 inventory = subprocess.check_output(['ruby', '-r', str(helper), '-e', "puts JSON.generate({'schema'=>1,'environment'=>'main','source'=>'a'*40,'code_id'=>NestPuppetVersionedCode.code_id(NestPuppetVersionedCode.inventory(ARGV[0]))})", str(frozen.resolve())], text=True)
 (receipt_dir / 'expected.json').write_text(json.dumps(json.loads(inventory), indent=2)+'\n')
+store = out / 'store'
+store.mkdir(mode=0o700)
+static = frozen / 'modules/fixture/files/probe.txt'
+static.write_text('Retained previous static content.\n')
+previous = subprocess.check_output(['ruby', '-r', str(helper), '-e', "puts JSON.generate({'schema'=>1,'environment'=>'main','source'=>'a'*40,'code_id'=>NestPuppetVersionedCode.code_id(NestPuppetVersionedCode.inventory(ARGV[0]))})", str(frozen.resolve())], text=True)
+(receipt_dir / 'previous.json').write_text(previous)
+for name in ['previous', 'expected']:
+    if name == 'expected':
+        static.write_text('Frozen module static content A.\n')
+    publication = subprocess.run(['ruby', str(store_helper), 'publish', str(frozen.resolve()), str(store.resolve()), str((receipt_dir / (name + '.json')).resolve())], capture_output=True, text=True, check=True)
+    (out / ('store-' + name + '.json')).write_text(publication.stdout)
+    assert json.loads(publication.stdout)['published'] is True
+    assert json.loads(publication.stdout)['compiler_attestation'] is False
 (out / 'frozen/environments').mkdir(parents=True, mode=0o755)
 # Exercise the actual init copy boundary with independently selected fixture
 # identity, then mount only its relocated output in the actual native compiler.
@@ -180,6 +198,11 @@ publication = subprocess.run(['ruby', str(publisher), str(frozen.resolve()), str
 assert json.loads(publication.stdout)['code_id'] == json.loads(inventory)['code_id']
 (frozen / 'modules/fixture/manifests/init.pp').write_text("class fixture { notify { 'changed-original-input': } }\n")
 args = ['podman', 'run', '-i', '--rm', '--pull=never', '--network=none', '--read-only', '--read-only-tmpfs=false', '--cap-drop=ALL', '--security-opt=no-new-privileges', '--memory=3g', '--pids-limit=512', '--tmpfs', '/fixture:rw,nosuid,size=256m', '--mount', 'type=bind,src=' + str((out / 'frozen').resolve()) + ',dst=/release,ro', '--mount', 'type=bind,src=' + str(receipt_dir.resolve()) + ',dst=/receipt,ro', '--mount', 'type=bind,src=' + str(helper) + ',dst=/helper/puppet-versioned-code.rb,ro', '--entrypoint', 'ruby', image, '-', options.jar_sha256]
+args[args.index('--entrypoint'):args.index('--entrypoint')] = [
+    '--mount', 'type=bind,src=' + str(store.resolve()) + ',dst=/store,ro',
+    '--mount', 'type=bind,src=' + str(publisher) + ',dst=/helper/puppet-compiler-snapshot.rb,ro',
+    '--mount', 'type=bind,src=' + str(store_helper) + ',dst=/helper/puppet-compiler-store.rb,ro',
+]
 r = subprocess.run(args, input=script, capture_output=True, text=True, timeout=360)
 (out / 'stdout').write_text(r.stdout)
 (out / 'stderr').write_text(r.stderr)

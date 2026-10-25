@@ -80,8 +80,45 @@ mounts, no mutable global module paths, paired hooks, lifetime/static-content
 retention and compatible existing deploy/rollout behavior. The helper is not a
 generic archive copier or a new source-fetch/deployment service.
 
-These requirements are still integration work, not effects of installing this
-file:
+### Retained publication and native static content
+
+`files/puppet-compiler-store.rb` adds an identity-keyed retained store:
+
+    ruby files/puppet-compiler-store.rb publish SOURCE STORE EXPECTED_RECEIPT
+    ruby files/puppet-compiler-store.rb content STORE ENVIRONMENT CODE_ID FILE_PATH
+
+Publication requires an existing canonical, caller-owned private `STORE`
+directory (mode `0700`). It takes a nonblocking exclusive local publisher lock,
+copies through the checked snapshot helper and writes the supplied receipt.
+It synchronizes the completed files/directories before atomically publishing
+`STORE/HEX_CODE_ID/main` and `STORE/HEX_CODE_ID/expected.json`. The receipt must
+already come from accepted release inputs; the publisher never derives a new
+expected identity from mutable source. An existing exact release is reopened
+and checked, not replaced, even if the original source subsequently changes.
+Failed publication preserves its `.pending` tree and all prior releases; a
+repeat refuses rather than deleting/adopting that diagnostic tree. Stores must
+be on a local filesystem supporting flock, directory fsync and atomic rename.
+
+The native content wrapper passes `content STORE` followed by Puppetserver's
+environment, code ID and file path. It resolves the requested old identity,
+not a mutable current pointer, checks the read-only store/snapshot and streams
+only the same allowed static module paths as the paired native hook. Use the
+existing fixed-snapshot `puppet-versioned-code.rb id ROOT RECEIPT` wrapper for
+the compiler's current ID. Both wrappers must agree on that current snapshot;
+retained old content is separate from compiler module lookup. Neither wrapper
+allows a historical ID to serve today's mutable module bytes.
+
+There is deliberately no pruning, alias promotion, network fetch or live
+compiler reconfiguration in this component. Retain every published identity
+until release/catalog lifetime policy explicitly permits retirement. Published
+bytes must have no concurrent writer for the serving lifetime: read-only views
+of a writer-owned shared store are not sufficient. The existing publication
+producer and pod rollout still need to provide independent expectations,
+isolated read-only mounts and that lifetime guarantee. Publication success is
+not compiler attestation. This component remains disabled in production.
+
+These requirements are still integration work, not effects of installing these
+files:
 
 1. Publish a complete, independently checked release tree from accepted config
    and module inputs. Capture the actual served module set, including any
@@ -113,7 +150,7 @@ mechanism is needed. This boundary does not introduce signing or custody.
 
 Focused public integration-contract tests:
 
-    pdk test unit --tests=spec/files/nest_puppet_versioned_code_spec.rb,spec/files/nest_puppet_compiler_snapshot_spec.rb
+    pdk test unit --tests=spec/files/nest_puppet_versioned_code_spec.rb,spec/files/nest_puppet_compiler_snapshot_spec.rb,spec/files/nest_puppet_compiler_store_spec.rb
     pdk validate
 
 The optional native test starts the actual pinned Puppetserver JAR, its JRuby
@@ -140,8 +177,12 @@ real v4 and ordinary v3 catalogs carry the expected
 identity, loads an actual module, verifies static-content delivery, refuses a
 wrong static identity and unknown environment, observes an `EROFS` write refusal,
 and compiles from the same frozen module after changing separate mutable input.
+The content hook also reopens an older published identity through the real
+native HTTP endpoint and verifies its different static bytes are still served
+after publishing the current identity. All publication expectations in this
+test are independently selected inert fixture trees, not production receipts.
 It does not apply a catalog, run the agent, verify production TLS, publish a
-release, or exercise a host transaction. Its invocation, native logs and parsed
+production release, or exercise a host transaction. Its invocation, native logs and parsed
 catalogs are retained for independent readback.
 
 ## Compatibility and rollback
