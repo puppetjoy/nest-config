@@ -115,6 +115,7 @@ stages:
     - 'python3 spec/files/nest_nested_dag_fixture_test.py'
     - 'python3 spec/files/nest_executor_inputs_test.py'
     - 'python3 spec/files/nest_compiler_release_test.py'
+    - 'python3 spec/files/nest_compiler_candidate_test.py'
 
 'Hermes install fixtures':
   extends: .all-branch-ci
@@ -206,6 +207,7 @@ stages:
         empty'
     - 'bash files/build/publish-image.sh "$EXECUTOR_IMAGE" > "executor-receipts/${CPU}.ref"'
     - 'python3 bin/ci-executor-receipt record "executor-receipts/${CPU}.ref" "executor-receipts/${CPU}.json"'
+    - 'python3 scripts/nest-compiler-candidate.py record "executor-receipts/${CPU}.json" "executor-receipts/${CPU}.compiler.json"'
     - 'if [ "$EXECUTOR_BOOTSTRAP" != "true" ]; then podman tag "$EXECUTOR_IMAGE" "${CI_REGISTRY_IMAGE}/${CI_COMMIT_REF_SLUG}:${CPU}" && podman push "${CI_REGISTRY_IMAGE}/${CI_COMMIT_REF_SLUG}:${CPU}"; fi'
   artifacts:
     paths: ['executor-receipts/', 'executor-bootstrap/']
@@ -287,7 +289,12 @@ stages:
     - 'EXECUTOR_REFS=$(python3 bin/ci-executor-receipt refs executor-receipts)'
     - 'for reference in $EXECUTOR_REFS; do podman manifest add "$LOCAL_IMAGE" "docker://$reference" || exit; done'
     - 'podman manifest push --all "$LOCAL_IMAGE" "${CI_REGISTRY}/${IMAGE}:latest"'
-    - 'podman manifest push --all "$LOCAL_IMAGE" "registry.eyrie/${IMAGE}:latest"'
+    - 'mkdir compiler-candidates'
+    - 'podman manifest push --all --digestfile compiler-candidates/index.digest "$LOCAL_IMAGE" "registry.eyrie/${IMAGE}:latest"'
+    - 'if [ "$CI_COMMIT_BRANCH" = "main" ] && [ "$EXECUTOR_ONLY" != "true" ]; then python3 scripts/nest-compiler-candidate.py candidate executor-receipts "registry.eyrie/${IMAGE}@$(tr -d "\n" < compiler-candidates/index.digest)" compiler-candidates/candidate.json; fi'
+  artifacts:
+    when: on_success
+    paths: ['compiler-candidates/']
   rules:
     - if: '$NEST_DAG_FIXTURE =~ /[\s\S]/'
       when: never
