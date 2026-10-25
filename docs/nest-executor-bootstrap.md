@@ -112,6 +112,64 @@ live hosts. Ordinary managed tooling delivery retains its existing behavior.
 A later consumer must use the exact new executor job/digest after independent
 acceptance. Firefox, Camofox and llama.cpp source-owned executor pins are unchanged.
 
+## Accepting the completed successor
+
+After a separately authorized bootstrap build has completed, use the existing
+config checkout and authenticated GitLab reads:
+
+```sh
+python3 scripts/nest-executor-accept.py --successor /absolute/successor.json
+python3 scripts/nest-executor-accept.py --successor /absolute/successor.json \
+  --output-dir /existing/canonical/artifact/directory
+```
+
+The request fields are exactly `schema` (integer 1), `kind`
+(`nest_executor_successor_request`), `bootstrap` (the complete original schema-1
+bootstrap request above), and `successor`. The latter has exactly:
+
+- `pipeline` and `job`: positive integer identities of the completed config
+  successor pipeline and its single `Build CPU` job.
+- `image`: the exact immutable config architecture image selected for acceptance.
+- `executor_sha256`: bare lowercase SHA256 of the original
+  `executor-receipts/CPU.json` bytes from that job.
+- `bootstrap_sha256`: bare lowercase SHA256 of the original
+  `executor-bootstrap/receipt.json` bytes from the same job.
+
+Select these from the actual successful build, never predict them or use a
+latest-success selector. Missing prior artifacts require diagnosis, not a new
+build merely for evidence. An ordinary nonbootstrap executor has no bootstrap
+receipt and cannot substitute, even if its version/source happens to match.
+
+The helper validates every static selector before acquisition. It requires a
+successful API/web/pipeline/trigger successor with no outgoing bridges, exactly
+one selected architecture build, no deployment jobs and no failed, erased or
+tolerated jobs. The independently read executor schema, source, CPU, job and image
+must match. It reacquires the entire original old-executor/OpenBolt boundary using
+the original bootstrap request, compares it to the successor's retained receipt,
+and binds the successor's recorded installed base to the exact OpenBolt image and
+`bolt.ref` bytes. Old and new config source closures stay distinct.
+
+The complete acquisition runs again before acceptance; changed jobs, inventory,
+source or artifact bytes refuse rather than following retries. Only two exact
+config bootstrap artifact paths extend the existing GET allowlist. The helper
+uses the existing glab/job-token reader without switching identities on failure;
+production job-token permission for this particular boundary remains unproven.
+
+Default mode prints only a digest and readback status, writing no files. Optional
+retention uses the existing content-addressed, no-clobber, fsync/readback publisher
+and retains the original request plus old/new evidence in one bounded file.
+The request may then be removed without losing the retained evidence. Exit 0 is
+artifact acceptance and any requested local readback, 1 is static operational
+refusal, and 2 is malformed command arguments. No build, trigger, registry pull,
+alias update or host operation is performed.
+
+This accepts native successful jobs and exact artifact relationships, not image
+resource/ISA/ABI compatibility or fresh local execution. Those fields remain
+explicitly `not_performed`, and `promotion_authorized` stays false. The existing
+successful build's schema-2 receipt records its own installed-source checks; the
+new reader does not present that as its own image execution. Retained free-text
+prior inputs still require sanitization before public sharing.
+
 ## Tests, remaining work and rollback
 
 Offline tests exercise all three native architecture boundaries, raw/digest-named
@@ -122,6 +180,13 @@ CLI acquisition with fake glab. Fake Podman tests bind actual successor input
 observations before writing a schema-2 receipt. They build/publish nothing.
 Real GitLab merged-YAML dry runs verify admission and ordinary compatibility
 without creating pipelines or artifacts.
+
+The completed-successor tests exercise all three architecture selections,
+independent old/new acquisition, digest-named prior results, failed/erased/changed
+resources, incorrect installed bases, relabelled retained receipts, static
+pre-acquisition refusal, exact artifact allowlisting and a real CLI/fake-glab
+retention/readback after producer exit. They are isolated fixtures, not native
+bootstrap or production permission acceptance.
 
 The full native graph must still schedule the prior executor -> OpenBolt ->
 this successor boundary and freeze each descendant after actual predecessor
