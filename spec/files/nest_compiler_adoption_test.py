@@ -78,6 +78,29 @@ class CompilerAdoptionTest(unittest.TestCase):
         self.assertEqual(result['selection']['retained'], self.releases)
         self.assertEqual(result['legacy_null_code_id_clients'], [])
 
+    def test_legacy_abbreviations_remain_unresolved_observations_not_release_sources(self):
+        for version in ('5b732030', '13c279d6', 'a' * 7, 'a' * 39):
+            self.cache['configuration_version'] = version
+            with self.subTest(version=version), patch.object(subprocess, 'run') as execute:
+                execute.return_value.stdout = json.dumps(self.index)
+                result = self.propose()
+                self.assertEqual(result['legacy_null_code_id_clients'], ['fixture.nest'])
+                self.assertEqual(result['selection']['current']['expected']['source'], FIXTURE['SHA'])
+                self.assertFalse(result['legacy_historical_content_bound'])
+                self.assertFalse(result['compiler_attestation'])
+                self.assertEqual(self.cache['configuration_version'], version)
+                self.assertEqual(execute.call_count, 1)
+                self.output.unlink()
+
+    def test_abbreviated_immutable_and_malformed_legacy_versions_refuse_before_registry(self):
+        for identity, version in [(self.expected['code_id'], self.expected['source'][:8])] + [
+                (None, version) for version in ('', 'a' * 6, 'a' * 41, 'main', '5b732030-extra', '5b732030\n', '5B732030')]:
+            self.cache.update(code_id=identity, configuration_version=version)
+            with self.subTest(identity=identity, version=version), patch.object(subprocess, 'run') as execute, self.assertRaises(ValueError):
+                self.propose()
+            execute.assert_not_called()
+            self.assertFalse(self.output.exists())
+
     def test_candidate_identity_is_allowed_but_source_must_match(self):
         self.cache.update(code_id=self.expected['code_id'], configuration_version=self.expected['source'])
         with patch.object(subprocess, 'run') as execute:

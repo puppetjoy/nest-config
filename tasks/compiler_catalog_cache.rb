@@ -7,6 +7,7 @@ require_relative 'update_catalog_report'
 # contacting a server, instantiating YAML objects or changing agent state.
 module NestCompilerCatalogCache
   REPORT = NestUpdateCatalogReport
+  LEGACY_VERSION = %r{\A[0-9a-f]{7,40}\z}
 
   # Reject ambiguous JSON instead of silently keeping its last duplicate key.
   class UniqueHash < Hash
@@ -27,7 +28,10 @@ module NestCompilerCatalogCache
     value = JSON.parse(raw, object_class: UniqueHash)
     REPORT.require_value(value.is_a?(Hash) && ['name', 'environment', 'version', 'code_id', 'catalog_uuid', 'resources'].all? { |key| value.key?(key) })
     REPORT.require_value(value['name'] == certname && value['environment'] == 'main')
-    REPORT.require_value(value['version'].is_a?(String) && REPORT::SHA.match?(value['version']))
+    # Old mutable Nest compilers emitted git --short. Preserve that observation
+    # exactly; it is not a full release source and must never bind an immutable ID.
+    version_pattern = value['code_id'].nil? ? LEGACY_VERSION : REPORT::SHA
+    REPORT.require_value(value['version'].is_a?(String) && version_pattern.match?(value['version']))
     REPORT.require_value(value['catalog_uuid'].is_a?(String) && REPORT::UUID.match?(value['catalog_uuid']))
     REPORT.require_value(value['code_id'].nil? || (value['code_id'].is_a?(String) && REPORT::CODE_ID.match?(value['code_id'])))
     REPORT.require_value(value['resources'].is_a?(Array) && !value['resources'].empty?)
