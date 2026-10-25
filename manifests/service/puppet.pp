@@ -1,8 +1,14 @@
 class nest::service::puppet (
   Optional[Sensitive] $puppetboard_secret_key = undef,
   Optional[Sensitive] $r10k_deploy_key        = undef,
+  Optional[Hash]      $compiler_release       = undef,
 ) {
   if defined(Class['nest::kubernetes']) {
+    $compiler_patch = $compiler_release ? {
+      undef   => [{ 'op' => 'test', 'path' => '/kind', 'value' => 'Deployment' }],
+      default => nest::openvox_compiler_patches($compiler_release, $nest::kubernetes::service)[0]['patch'],
+    }
+    $compiler_patch_yaml = $compiler_patch.stdlib::to_yaml
     $puppetboard_secret_key_base64 = $puppetboard_secret_key ? {
       undef   => '',
       default => base64('encode', $puppetboard_secret_key.unwrap),
