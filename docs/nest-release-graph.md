@@ -1,12 +1,12 @@
 # Native same-source release graph
 
-Current admission: executing graph compilation remains disabled. Actual
+Current admission: executing candidate graph compilation remains disabled. Actual
 nonpublishing pipelines 11573 and 11574 rejected the former same-project
 multi-project node edge with `invalid_bridge_trigger`. Lint did not prove
 scheduling. The compiler now flattens member freezers into the graph child,
 and the freezer, predecessor and final acceptance readers use that direct
 lineage. This source has offline coverage, not live contract acceptance.
-The CLI still refuses `--compile` before publishing artifacts. Standalone
+The CLI still refuses candidate `--compile` before publishing artifacts. Standalone
 frozen-input routes remain available. Remove this refusal only after the exact
 flattened contracts and nonpublishing pass/fail propagation are verified;
 the previously accepted status-only nesting exercise is not that evidence.
@@ -246,6 +246,40 @@ live input/result artifacts, and another status-only topology run would not
 close that gap. Keep executing graph compilation disabled.
 
 ## Nonpublishing nested topology exercise
+
+### Actual flattened freezer input observation
+
+`RELEASE_GRAPH=verify-inputs` with the existing `RELEASE_GRAPH_FILE` selects a
+bounded nonexecuting use of the actual compiler and scoped freezer. The request
+uses the ordinary graph schema but must contain exactly one independent Stage 0
+server `refresh` node. Predecessor graphs, other stages, multiple rebuilt members
+and conflicting modes refuse before publication. The same API/web/trigger and
+clean `main` source checks apply. This mode is not candidate graph enablement.
+
+The real compiler retains `release-graph/request.json`, `graph.yml` and its
+distinct `nest_release_graph_input_verification_publication` receipt, with exact
+hashes and execution not started. Its first config child contains the actual
+`Freeze release inputs MEMBER` job and artifact-backed `Release node MEMBER`
+bridge. The freezer acquires the real compiler artifact and exact native
+pipeline/job/bridge identities, including its active writer and prepublication
+race checks. It then emits the existing `RELEASE_ROUTE=verify-inputs` projection
+and second config child. Stage 0 receives only the existing input-observation
+selection, never `RELEASE_CANDIDATE`; no result digest or predecessor output is
+invented. All native bridge layers mirror failure and disable caller pipeline
+variable forwarding.
+
+No `Accept release graph` job is emitted: an input observation is not a member
+result and cannot satisfy the assembler. Retain and independently reopen the
+actual compiler, freezer, projection and Stage 0 observation artifacts after the
+native run. The supported source and offline tests do not themselves prove live
+job-token permissions. Even a successful live run covers only the independent
+flattened freezer/compiler path; predecessor resolution, final graph acceptance,
+failure propagation and distinct executor bootstrap remain separate obligations.
+Do not replay a previously accepted standalone observation as proof of this path.
+Omit graph selectors to roll back; preserve exact artifacts and prior executor
+digests. No OS build, alias promotion or host operation is authorized by this mode.
+
+### Status-only nesting fixture
 
 After this source is installed at `main`, the existing status fixture also
 accepts `NEST_DAG_FIXTURE=nested-stage1-pass` or `nested-stage1-fail` from API

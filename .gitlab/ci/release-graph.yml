@@ -23,7 +23,7 @@
   rules:
     - if: '$NEST_DAG_FIXTURE =~ /[\s\S]/ || $CI_COMMIT_TAG'
       when: never
-    - if: '($CI_PIPELINE_SOURCE == "api" || $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "trigger") && $RELEASE_GRAPH == "true" && $RELEASE_GRAPH_FILE'
+    - if: '($CI_PIPELINE_SOURCE == "api" || $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "trigger") && ($RELEASE_GRAPH == "true" || $RELEASE_GRAPH == "verify-inputs") && $RELEASE_GRAPH_FILE'
 
 'Run release graph':
   stage: 'Deploy'
@@ -42,4 +42,4 @@
   rules:
     - if: '$NEST_DAG_FIXTURE =~ /[\s\S]/ || $CI_COMMIT_TAG'
       when: never
-    - if: '($CI_PIPELINE_SOURCE == "api" || $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "trigger") && $RELEASE_GRAPH == "true" && $RELEASE_GRAPH_FILE'
+    - if: '($CI_PIPELINE_SOURCE == "api" || $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "trigger") && ($RELEASE_GRAPH == "true" || $RELEASE_GRAPH == "verify-inputs") && $RELEASE_GRAPH_FILE'
