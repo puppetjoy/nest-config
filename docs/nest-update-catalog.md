@@ -85,8 +85,10 @@ an abbreviated commit. Older abbreviated reports deliberately fail exact-source
 binding. This does not require replaying an apply just to test installation.
 The version describes the server's configured Git revision, not independently
 attested module bytes or a clean server checkout. Report digest readback does
-not authenticate catalog content. Real invocation provenance and served module
-identity must still be bound by lifecycle integration.
+not authenticate catalog content or independently attest served modules.
+Lifecycle acceptance uses the ordinary
+Git configuration version and native report results; module-byte attestation is
+not required for this personal distro.
 
 The legacy apply/repeat path without expectations does not capture a report
 under the agent lock. A separate task read cannot prove that a concurrent agent did not
@@ -144,9 +146,9 @@ is not bypassed. Build/skip-module fact overrides and extra argument overrides
 are removed for the bound task. Native report isolation proves invocation
 provenance without requiring a lock to remain held during later readback.
 
-This is still NOT release acceptance: the task does not independently attest
-served module bytes, a clean server checkout, the prepared release/root/BE,
-historical failure dispositions or service/hardware/physical UX. Consequently
+This is still NOT release acceptance: the task does not verify the prepared
+release/root/BE, historical failure dispositions or service/hardware/physical UX.
+Independent served-module attestation is not a release requirement. Consequently
 `served_source_verified` and `acceptance_recorded` remain false. Lifecycle
 integration must retain these receipts durably with real release/boot evidence
 before accept/finalize. No real host catalog was applied to validate this code.
@@ -279,8 +281,9 @@ This adds native identity reconciliation, not a compiler attestation. It does no
 configure a server code-ID command, freeze a mutable server module tree, prove
 compiler-cache identity or establish what a server-generated digest represents.
 `served_source_verified`, `release_binding_verified` and `acceptance_recorded`
-remain false. Trusted served-module/release identity and full lifecycle admission
-still require independent implementation and real verification. Tests use actual
+remain false. Independent served-module attestation and native code IDs are not
+required for the ordinary r10k/OpenVox update path. Full lifecycle acceptance
+still needs real release/boot, health and native catalog results. Tests use actual
 OpenVox report serialization and inert apply runners, not production catalogs.
 Rollback omits the optional field only for explicitly legacy callers, preserving
 retained receipts and all ambiguity; it cannot undo a prior apply.

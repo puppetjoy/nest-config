@@ -61,31 +61,6 @@ plan nest::kubernetes::deploy ( # lint:ignore:deploy_plan_boundary -- central Ku
     } - ['service', 'app']
   }
 
-  # Routine stack redeploys must not roll a CI-selected immutable compiler back
-  # to mutable/stale Hiera and silently lose still-needed static content. Keep
-  # this guard in the public adapter, not only the code-deployment caller.
-  if $deploy and $app == 'openvox' and $service == 'puppet' and !$render_to_real {
-    $compiler_namespace = pick_default($namespace, 'default')
-    $inspect_compiler = [
-      'kubectl', 'get', 'deployment', '-n', $compiler_namespace, 'puppet-puppetserver', '--ignore-not-found',
-      '-o', 'jsonpath={.spec.template.spec.containers[0].volumeMounts[?(@.name=="compiler-snapshots")].name}',
-    ].shellquote
-    $compiler_mode = run_command($inspect_compiler, 'localhost', 'Inspect existing OpenVox compiler before stack deployment').first.value['stdout'].strip
-    if $compiler_mode != '' {
-      $guard_directory = run_command(
-        'umask 077; mkdir -p rollout-evidence && mktemp -d rollout-evidence/compiler-chart.XXXXXXXX',
-        'localhost', 'Create private compiler chart preflight directory',
-      ).first.value['stdout'].strip
-      $guard_manifest = "${guard_directory}/rendered.yaml"
-      run_plan('nest::kubernetes::deploy', {
-        service => $service, app => $app, chart => $chart, deploy => $deploy,
-        hooks => $hooks, init => $init, namespace => $namespace, render_to => $guard_manifest,
-        repo_url => $repo_url, version => $version, wait => false, subcharts => $subcharts,
-      })
-      $guard_command = ['python3', 'scripts/nest-compiler-rollout.py', '--guard-chart', $compiler_namespace, $guard_manifest].shellquote
-      run_command($guard_command, 'localhost', 'Refuse loss of retained compiler identities')
-    }
-  }
 
   return run_plan('kubecm::deploy', {
     release          => $service,
