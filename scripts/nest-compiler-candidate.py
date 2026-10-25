@@ -125,14 +125,7 @@ def release(value):
     return value
 
 
-def selection(candidate_path, previous_path, output):
-    """Propose an additive successor; an explicit previous selection is required.
-
-    This does not accept a legacy mutable deployment, retire any code identity,
-    mutate Hiera or deploy. The caller must separately establish the previous
-    selection's provenance and the deployment's normal acceptance obligations.
-    """
-    value = load(candidate_path)
+def checked_candidate(value):
     require(type(value) is dict and set(value) == {'schema', 'kind', 'source', 'pipeline', 'current', 'members',
                                                    'deployment_authorized', 'retention_complete', 'compiler_attestation'})
     require(type(value['schema']) is int and value['schema'] == 1 and value['kind'] == 'nest_openvox_compiler_candidate')
@@ -151,6 +144,19 @@ def selection(candidate_path, previous_path, output):
         require(row['expected'] == current['expected'])
         require(row['executor']['inputs']['modules'] == rows[0]['executor']['inputs']['modules'])
         require(row['executor']['inputs']['puppetfile_digest'] == rows[0]['executor']['inputs']['puppetfile_digest'])
+    return value
+
+
+def selection(candidate_path, previous_path, output):
+    """Propose an additive successor; an explicit previous selection is required.
+
+    This does not accept a legacy mutable deployment, retire any code identity,
+    mutate Hiera or deploy. The caller must separately establish the previous
+    selection's provenance and the deployment's normal acceptance obligations.
+    """
+    value = checked_candidate(load(candidate_path))
+    current = value['current']
+    rows = value['members']
     previous = load(previous_path)
     require(type(previous) is dict and set(previous) == {'schema', 'current', 'retained'})
     require(type(previous['schema']) is int and previous['schema'] == 1 and type(previous['retained']) is list)

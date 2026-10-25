@@ -402,6 +402,63 @@ It does not apply a catalog, run the agent, verify production TLS, publish a
 production release, or exercise a host transaction. Its invocation, native logs and parsed
 catalogs are retained for independent readback.
 
+## Legacy first-adoption cache reconciliation
+
+A mutable deployment has no accepted previous immutable selection. Do not
+invent one or treat an absent cache ID as proof that no client needs content.
+The read-only task `nest::compiler_catalog_cache` observes the native JSON
+cache at the agent's actual `client_datadir/catalog/CERTNAME.json`:
+
+    bolt task run nest::compiler_catalog_cache --targets owl --run-as root \
+      'expectations={"hostname":"owl","certname":"owl","server":"puppet.eyrie"}'
+
+It binds hostname, certname, configured server and unchanged boot, reads the
+same root-owned trusted regular file twice, and emits only identity
+headers and a digest. It never loads/applies a catalog, synchronizes plugins,
+contacts a compiler or deletes caches. Missing `code_id`, missing/unsafe or
+changing caches, non-main caches and malformed/duplicate JSON refuse. A
+present JSON null `code_id` is explicitly legacy, not a missing observation.
+The native root:root 0660 cache mode is supported; world write, writable
+non-root groups and a symlinked cache file refuse. Ancestor directories remain
+the existing agent's trusted runtime boundary, including its daemon-owned
+vardir. This read is an observation, not a tamper-proof cache attestation.
+
+Keep the original inventory-backed invocation receipts and an explicit scope
+JSON object with `schema: 1` and a nonempty `clients` array. Each client has
+exactly `hostname`, `certname` and `server`. Collect the sanitized successful
+task values in an observations JSON array; retain failures rather than
+silently removing their clients from the scope. Known prior releases are an
+array of the accepted `{image, expected}` objects, not a fabricated previous
+selection. An explicitly empty array means none are supplied, not that global
+retention has been proven.
+
+    python3 scripts/nest-compiler-adoption.py CANDIDATE.json SCOPE.json \
+      OBSERVATIONS.json KNOWN_RELEASES.json NEW_PROPOSAL.json
+
+This non-deploying command requires one observation per exact scoped client,
+at most fifteen minutes old and not in the future. Every non-null code ID must
+be covered by the candidate or a supplied prior release, with matching source.
+All supplied prior identities remain retained, including those not observed in
+this bounded scope. The candidate's actual multiarchitecture index is reopened
+and checked against its producing receipts before output. Existing output is
+never overwritten. Observations and submitted release objects are evidence,
+not trusted attestations or proof of their own provenance.
+
+The output is an adoption proposal, deliberately not a chart selection or
+deployment approval: its `selection` member is the proposed selection. It lists
+legacy clients and explicitly leaves global cache coverage, historical legacy
+content binding, retention completeness, deployment authority and compiler
+attestation false. Null-ID catalogs use the ordinary v3 current-content route;
+that compatibility does not preserve historical bytes or prove a successful
+normal main apply/repeat. Reconcile all relevant consumers and retained images,
+then finish automatic selection/CI rollout and normal acceptance before enabling
+the paired production hooks. This command does not close those obligations.
+
+Focused checks also include:
+
+    python3 spec/files/nest_compiler_adoption_test.py
+    pdk test unit --tests=spec/tasks/nest_compiler_catalog_cache_spec.rb,spec/tasks/nest_update_catalog_report_spec.rb
+
 ## Compatibility and rollback
 
 Existing mutable deployment behavior is unchanged while selection is absent.
