@@ -1,5 +1,6 @@
 require 'spec_helper'
 require_relative '../../tasks/compiler_catalog_cache'
+require_relative '../../tasks/compiler_windows_cache'
 
 RSpec.describe NestCompilerCatalogCache do
   let(:uuid) { '11111111-1111-4111-8111-111111111111' }
@@ -60,7 +61,18 @@ RSpec.describe NestCompilerCatalogCache do
     allow(status).to receive(:success?).and_return(false)
     allow(Open3).to receive(:capture3).and_return([native + "\n", 'private-native-error', status])
     expect { described_class.boot_id('darwin') }.to raise_error(NestUpdateCatalogReport::Unavailable)
-    expect { described_class.boot_id('windows') }.to raise_error(NestUpdateCatalogReport::Unavailable)
+    allow(NestCompilerWindowsCache).to receive(:boot_id).and_return(uuid)
+    expect(described_class.boot_id('windows')).to eq(uuid)
+  end
+
+  it 'emits a distinct Windows schema and refuses changed native boot identity' do
+    result = collect(native_platform: 'windows')
+    expect(result).to include('schema' => 3, 'platform' => 'windows', 'boot_id' => uuid,
+                             'boot_source' => 'NtQuerySystemInformation.SystemBootEnvironmentInformation.BootIdentifier')
+    expect(result['cache']).to eq(collect['cache'])
+    expect(JSON.generate(result)).not_to include('private-payload')
+    boots = [uuid, '22222222-2222-4222-8222-222222222222']
+    expect { collect(native_platform: 'windows', boot: -> { boots.shift }) }.to raise_error(NestUpdateCatalogReport::Unavailable)
   end
 
   it 'preserves historical abbreviated versions only for explicitly null code IDs' do

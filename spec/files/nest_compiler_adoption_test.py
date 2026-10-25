@@ -104,6 +104,25 @@ class CompilerAdoptionTest(unittest.TestCase):
             self.propose()
         execute.assert_not_called()
 
+    def test_windows_schema_requires_native_boot_source_and_never_relaxes_other_platforms(self):
+        row = self.observations[0]
+        source = 'NtQuerySystemInformation.SystemBootEnvironmentInformation.BootIdentifier'
+        row.update(schema=3, platform='windows', boot_source=source)
+        with patch.object(subprocess, 'run') as execute:
+            execute.return_value.stdout = json.dumps(self.index)
+            result = self.propose()
+        self.assertTrue(result['scope_cache_reconciled'])
+        self.assertFalse(result['deployment_authorized'])
+        self.assertFalse(result['global_cache_coverage'])
+        self.output.unlink()
+        for change in (dict(schema=1), dict(schema=2), dict(schema=True), dict(platform='cygwin'),
+                       dict(platform='darwin'), dict(boot_source='LastBootUpTime'), dict(boot_id=UUID + '\n')):
+            self.observations[0] = dict(row, **change)
+            with self.subTest(change=change), patch.object(subprocess, 'run') as execute, self.assertRaises(ValueError):
+                self.propose()
+            execute.assert_not_called()
+            self.assertFalse(self.output.exists())
+
     def test_legacy_abbreviations_remain_unresolved_observations_not_release_sources(self):
         for version in ('5b732030', '13c279d6', 'a' * 7, 'a' * 39):
             self.cache['configuration_version'] = version

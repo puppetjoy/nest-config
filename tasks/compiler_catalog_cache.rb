@@ -10,15 +10,18 @@ module NestCompilerCatalogCache
   REPORT = NestUpdateCatalogReport
   LEGACY_VERSION = %r{\A[0-9a-f]{7,40}\z}
   DARWIN_UUID = %r{\A[0-9A-F]{8}(?:-[0-9A-F]{4}){3}-[0-9A-F]{12}\z}
+  WINDOWS_BOOT = 'NtQuerySystemInformation.SystemBootEnvironmentInformation.BootIdentifier'
 
   def self.platform
     return 'linux' if RUBY_PLATFORM.include?('linux')
     return 'darwin' if RUBY_PLATFORM.include?('darwin')
+    return 'windows' if RUBY_PLATFORM == 'x64-mingw32'
     raise REPORT::Unavailable, 'Unsupported native cache platform'
   end
 
   def self.boot_id(native_platform = platform)
     return REPORT.boot_id if native_platform == 'linux'
+    return NestCompilerWindowsCache.boot_id if native_platform == 'windows'
     REPORT.require_value(native_platform == 'darwin')
     output, _error, status = Open3.capture3('/usr/sbin/sysctl', '-n', 'kern.bootsessionuuid')
     # Preserve the native uppercase token exactly. Only sysctl's single output
@@ -85,8 +88,8 @@ module NestCompilerCatalogCache
   def self.collect(expected, path:, certname:, server:, hostname: Socket.gethostname, boot: REPORT.method(:boot_id),
                    reader: method(:read_cache), clock: -> { Time.now.to_i }, native_platform: 'linux')
     expectations(expected)
-    REPORT.require_value(['linux', 'darwin'].include?(native_platform))
-    pattern = (native_platform == 'linux') ? REPORT::UUID : DARWIN_UUID
+    REPORT.require_value(['linux', 'darwin', 'windows'].include?(native_platform))
+    pattern = (native_platform == 'darwin') ? DARWIN_UUID : REPORT::UUID
     before = boot.call
     REPORT.require_value(before.is_a?(String) && pattern.match?(before) && expected == { 'hostname' => hostname, 'certname' => certname, 'server' => server })
     raw = reader.call(path)
@@ -96,14 +99,21 @@ module NestCompilerCatalogCache
       'boot_id' => before, 'observed_at' => clock.call, 'environment' => 'main', 'cache' => cache,
       'read_only' => true, 'catalog_applied' => false, 'acceptance_recorded' => false }
     result.merge!('schema' => 2, 'platform' => 'darwin', 'boot_source' => 'kern.bootsessionuuid') if native_platform == 'darwin'
+    result.merge!('schema' => 3, 'platform' => 'windows', 'boot_source' => WINDOWS_BOOT) if native_platform == 'windows'
     result
   end
 
   def self.main
     Timeout.timeout(30) do
       raw = $stdin.read(16_385)
-      REPORT.require_value(raw.bytesize <= 16_384 && Process.euid.zero?)
+      REPORT.require_value(raw.bytesize <= 16_384)
       native_platform = platform
+      if native_platform == 'windows'
+        require_relative 'compiler_windows_cache'
+        REPORT.require_value(NestCompilerWindowsCache.elevated?)
+      else
+        REPORT.require_value(Process.euid.zero?)
+      end
       params = JSON.parse(raw, object_class: UniqueHash)
       REPORT.require_value(params.is_a?(Hash) && params.key?('expectations') && params.keys.all? { |key| key == 'expectations' || key.start_with?('_') })
       expectations(params['expectations'])
@@ -113,11 +123,12 @@ module NestCompilerCatalogCache
       certname = Puppet[:certname]
       REPORT.require_value(certname.is_a?(String) && REPORT::NAME.match?(certname))
       path = File.join(Puppet[:client_datadir], 'catalog', certname + '.json')
+      reader = (native_platform == 'windows') ? NestCompilerWindowsCache.method(:read_cache) : method(:read_cache)
       puts JSON.generate(collect(params['expectations'], path: path, certname: certname, server: Puppet[:server],
-                                 native_platform: native_platform, boot: -> { boot_id(native_platform) }))
+                                 native_platform: native_platform, boot: -> { boot_id(native_platform) }, reader: reader))
     end
     0
-  rescue REPORT::Unavailable, JSON::ParserError, ArgumentError, TypeError, SystemCallError, Timeout::Error, SystemStackError
+  rescue REPORT::Unavailable, JSON::ParserError, ArgumentError, TypeError, SystemCallError, Timeout::Error, SystemStackError, LoadError
     puts JSON.generate('_error' => { 'kind' => 'nest/compiler-catalog-cache-unavailable',
                                     'msg' => 'Catalog cache observation unavailable; no deployment or acceptance authorized' })
     1

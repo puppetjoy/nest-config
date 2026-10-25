@@ -2,10 +2,10 @@
   "description": "Read only: observe sanitized native main catalog cache identity for compiler adoption and retention reconciliation; never compile, apply, accept or delete a catalog",
   "input_method": "stdin",
   "supports_noop": true,
-  "files": ["nest/tasks/update_catalog_report.rb"],
+  "files": ["nest/tasks/update_catalog_report.rb", "nest/tasks/compiler_windows_cache.rb"],
   "parameters": {
     "expectations": {
-      "description": "Exact hostname, certname and configured Puppet server. Native Linux or Darwin Ruby with root escalation required; Cygwin/Windows unsupported. Linux emits schema 1; Darwin emits schema 2 with its exact native boot-session UUID. Missing, unsafe, changing or non-main caches refuse; a present null code_id is legacy mutable content, not unknown or an immutable release.",
+      "description": "Exact hostname, certname and configured Puppet server. Native Linux/Darwin root or elevated x64 Windows Puppet Ruby required, not Cygwin Ruby. Linux emits schema 1, Darwin schema 2 and Windows schema 3 with native boot identity. Windows reads require handle-bound ACL/reparse checks. Missing, unsafe, changing or non-main caches refuse; a present null code_id is legacy mutable content, not unknown or an immutable release.",
       "type": "Hash[String, Data]"
     }
   }

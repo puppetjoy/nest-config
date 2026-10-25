@@ -444,7 +444,7 @@ root-owned file contract (Darwin group 0 is wheel). The observer invokes only
 `/usr/sbin/sysctl -n kern.bootsessionuuid` for boot continuity; it does not invent
 a Linux boot ID or normalize the native uppercase UUID. Darwin emits schema 2
 with `platform: darwin` and `boot_source: kern.bootsessionuuid`; Linux continues
-to emit exactly schema 1. The adoption reader accepts these two explicit
+to emit exactly schema 1. The adoption reader accepts these explicit
 contracts, not arbitrary platform strings or mixed-case/rewritten identifiers.
 The `macs` inventory group selects `/opt/puppetlabs/puppet/bin/ruby` with the
 native Puppet libraries; Apple's system Ruby cannot load this agent's Puppet.
@@ -452,8 +452,40 @@ This changes the Ruby task interpreter only, not login or escalation policy.
 Both paths check descriptor and pathname identity/metadata around each bounded
 read, then require the same bytes and boot session on the second observation.
 The agent runtime ancestors remain trusted as above; this is not ACL attestation.
-Windows/Cygwin is still unsupported: POSIX mode bits are not native Windows ACL
-proof, and inventory reachability alone is not a successful cache observation.
+Native x64 Windows Puppet Ruby is supported through the existing Cygwin SSH
+transport. The Windows inventory interpreter converts Bolt's uploaded script
+path with `cygpath`; the login account and escalation policy do not change.
+Invoke the same task as the existing elevated Windows administrator, without
+Linux `--run-as root`. Cygwin Ruby and POSIX mode bits are not Windows evidence:
+
+    bolt task run nest::compiler_catalog_cache --targets harrier \
+      'expectations={"hostname":"harrier","certname":"harrier","server":"puppet.eyrie"}'
+
+The adapter uses the installed Ruby standard-library Fiddle, not added gems or
+PowerShell JSON conversion. It requires an elevated native token and reads the
+native binary boot GUID with `NtQuerySystemInformation` information class 90.
+Schema 3 specifies `platform: windows` and
+`boot_source: NtQuerySystemInformation.SystemBootEnvironmentInformation.BootIdentifier`.
+Its `boot_id` is the conventional lowercase GUID serialization of the native
+integer fields, not a timestamp, Linux boot ID or normalized string observation.
+The before/after GUID must agree; unsupported APIs refuse.
+
+Drive-qualified Puppet paths only are accepted. Every ancestor is opened and
+held through the bounded read, with no write/delete sharing and no reparse-point
+following. The root is checked as an ordinary disk directory; each named
+ancestor and the file additionally require native SYSTEM/Administrators ownership
+and a handle-bound DACL with no untrusted effective write or takeover grant.
+Directory create-child rights are allowed, but untrusted delete-child, delete,
+DAC/owner and generic-write/all grants refuse. Inherit-only ACEs do not grant
+effective rights; unsupported object/callback ACE types refuse. Null DACLs,
+reparse points and multiple file hardlinks refuse. Metadata and ACLs are checked
+on the same native file handle before/after reading, with native byte offsets
+and a strict size bound. Read-only last-access time changes are excluded from
+content metadata comparison. All handles and native security allocations close
+on refusal as well as success. A second bounded read and the shared strict
+duplicate-key JSON parser are still required. Output never includes cache
+resources, ACL payloads or native error text. This is bounded cache observation,
+not a Windows host acceptance or immutable compiler attestation.
 
 Historical mutable Nest compilers emitted abbreviated Git configuration versions.
 For an explicitly present null `code_id`, the observer and adoption reader accept
