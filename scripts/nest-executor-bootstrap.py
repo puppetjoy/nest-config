@@ -104,7 +104,6 @@ def native_selection(value, source):
     R['fields'](value, 'config_source bolt_source producer', 'native bootstrap edge')
     for key in ('config_source', 'bolt_source'):
         R['match'](value[key], R['SHA'], 'prior native source')
-    require(value['config_source'] != source, 'discovery requires distinct config sources')
     D['selector_fields'](value['producer'])
     require(value['producer']['project'] == 'nest/tools/bolt', 'discovery requires OpenBolt')
     require(b'$' not in R['canonical'](value), 'variable expansion in bootstrap discovery')
@@ -152,7 +151,6 @@ def acquire(request, source, cpu, api) -> dict[str, Any]:
     members = R['expectations'](expected)
     old_source = expected['sources']['nest/config']
     old_executor_source = expected['executor']['source']
-    require(old_source != source and old_executor_source != source, 'bootstrap requires distinct config sources')
     if native is not None:
         require(old_source == native['config_source']
                 and expected['sources']['nest/tools/bolt'] == native['bolt_source'], 'native source closure mismatch')
@@ -205,6 +203,16 @@ def acquire(request, source, cpu, api) -> dict[str, Any]:
     if native is not None:
         evidence['native_edge'] = observation
     return evidence
+
+
+def successor_boundary(acquired, pipeline, job):
+    """Separate build resources, not necessarily Git revisions, break the loop."""
+    B['positive'](pipeline)
+    B['positive'](job)
+    prior = acquired['predecessor']
+    for key in ('input_job', 'executor_job'):
+        require(pipeline != prior[key]['pipeline'] and job != prior[key]['job'],
+                'bootstrap successor must follow a distinct completed config pipeline')
 
 
 def route_input(selector, source, child_id, api, status):
@@ -285,6 +293,7 @@ def compile_route(env, api):
     require(b'$' not in raw, 'variable expansion in bootstrap route')
     if acquired is None:
         acquired = acquire(request, source, env['CPU'], api)
+    successor_boundary(acquired, int(env['CI_PIPELINE_ID']), int(env['CI_JOB_ID']))
     variables = dict(EXECUTOR_BOOTSTRAP='true', EXECUTOR_ONLY='true', BUILD=env['CPU'],
                      RELEASE_BOOTSTRAP_PIPELINE=env['CI_PIPELINE_ID'], RELEASE_BOOTSTRAP_JOB=env['CI_JOB_ID'],
                      RELEASE_BOOTSTRAP_SHA256=hashlib.sha256(raw).hexdigest())
@@ -336,6 +345,7 @@ def publish(request_path, env, api):
         require(request_path.is_file() and not request_path.is_symlink(), 'invalid bootstrap file')
         request = R['load'](request_path)
     result = acquire(request, source, env['CPU'], api)
+    successor_boundary(result, int(env['CI_PIPELINE_ID']), int(env['CI_JOB_ID']))
     if route:
         require(route_input(route, source, int(env['CI_PIPELINE_ID']), api, 'running') == request,
                 'bootstrap route changed before publication')

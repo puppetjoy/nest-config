@@ -441,16 +441,8 @@ def main():
         if args.check_selection:
             require(selected(os.environ) is not None, 'no graph selected')
         elif args.compile:
-            if os.environ.get('RELEASE_GRAPH') == 'verify-inputs':
-                compile_graph(R['load'](os.environ['RELEASE_GRAPH_FILE']), os.environ)
-                print('Graph input verification route retained; no candidate execution authorized')
-                return 0
-            # The compiler/freezer/acceptance source now uses two child levels.
-            # Retain refusal until the exact contracts, not only the prior
-            # status-only nesting fixture, pass nonpublishing live acceptance.
-            print('Release graph scheduling unavailable: flattened graph acceptance pending; '
-                  'use the existing standalone frozen-input route', file=sys.stderr)
-            return 1
+            compile_graph(R['load'](os.environ['RELEASE_GRAPH_FILE']), os.environ)
+            print('Release graph retained; native CI executes only the explicitly selected build path')
         elif args.accept:
             accept_graph(os.environ, GitLab())
         else:

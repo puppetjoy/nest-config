@@ -114,12 +114,19 @@ class GraphTest(unittest.TestCase):
                              RELEASE_GRAPH_INPUT_SHA256=hashlib.sha256(R['canonical'](self.request)).hexdigest(),
                              RELEASE_GRAPH_ROOT_PIPELINE='650')
 
-    def test_public_compile_refuses_unsupported_topology_without_publication(self):
+    def test_public_compile_retains_supported_build_graph_without_executing_it(self):
+        submitted = self.f.root / 'graph.json'
+        submitted.write_bytes(R['canonical'](self.request))
         completed = subprocess.run([sys.executable, str(ROOT / 'scripts/nest-release-graph.py'), '--compile'],
-                                   cwd=self.f.checkout, env=self.env, capture_output=True, text=True, check=False)
-        self.assertEqual(completed.returncode, 1)
-        self.assertIn('flattened graph acceptance pending', completed.stderr)
-        self.assertFalse((self.f.checkout / 'release-graph').exists())
+                                   cwd=self.f.checkout, env=dict(self.env, RELEASE_GRAPH_FILE=str(submitted)),
+                                   capture_output=True, text=True, check=False)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        directory = self.f.checkout / 'release-graph'
+        graph = R['load'](directory / 'graph.yml')
+        self.assertEqual(graph['Freeze release inputs stage1']['needs'], ['Release node stage0'])
+        self.assertEqual(graph['Accept release graph']['needs'], ['Release node stage0', 'Release node stage1'])
+        self.assertFalse(R['load'](directory / 'receipt.json')['promotion_authorized'])
+        self.assertEqual(R['load'](directory / 'receipt.json')['execution'], 'not_started')
 
     def verification_request(self):
         expected = G['I']['project_member'](self.request['expectations'], 'stage0')
@@ -703,7 +710,7 @@ class GraphArtifactFlowTest(unittest.TestCase):
     """Carry emitted artifacts across isolated jobs; all GitLab resources are fake.
 
     Unlike the independent reader fixtures, no freezer input or leaf projection
-    is precomputed. Production compilation stays disabled at its CLI boundary.
+    is precomputed. Compilation only emits the explicitly selected build graph.
     This exercises its compiler function, then the real freezer/acceptance CLIs;
     it is not live scheduling, job-token or image-publication acceptance.
     """

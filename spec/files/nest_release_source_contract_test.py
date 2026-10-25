@@ -172,7 +172,7 @@ class SourceContractTest(unittest.TestCase):
         self.assertEqual(R['load'](fixture.f.checkout / 'release-graph-acceptance/receipt.json'), receipt)
         self.assertFalse(receipt['promotion_authorized'])
 
-    def test_bootstrap_retains_three_distinct_source_identities(self):
+    def test_bootstrap_retains_exact_sources_without_requiring_gratuitous_source_changes(self):
         fixture = self.fixture(E['ExecutorBootstrapTest'])
         split_executor(fixture.api)
         fixture.reseal()
@@ -182,8 +182,11 @@ class SourceContractTest(unittest.TestCase):
         self.assertEqual(result['successor']['source'], fixture.f.sha)
         self.assertEqual(len({result['predecessor']['executor_job']['source'],
                               result['predecessor']['input_job']['source'], result['successor']['source']}), 3)
-        with self.assertRaisesRegex(ValueError, 'distinct config sources'):
-            E['M']['acquire'](dict(fixture.request, successor_source=EXECUTOR_SOURCE), EXECUTOR_SOURCE, 'haswell', fixture.api)
+        same = E['M']['acquire'](dict(fixture.request, successor_source=EXECUTOR_SOURCE), EXECUTOR_SOURCE, 'haswell', fixture.api)
+        E['M']['successor_boundary'](same, 1000, 1001)
+        self.assertEqual(same['predecessor'], result['predecessor'])
+        self.assertEqual(same['successor']['source'], EXECUTOR_SOURCE)
+        self.assertEqual(same['successor']['base_image'], result['successor']['base_image'])
 
 
 if __name__ == '__main__':

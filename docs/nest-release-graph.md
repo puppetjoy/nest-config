@@ -1,17 +1,17 @@
 # Native same-source release graph
 
-Current admission: executing candidate graph compilation remains disabled. Actual
+Current admission: explicit candidate graph compilation is supported. Actual
 nonpublishing pipelines 11573 and 11574 rejected the former same-project
 multi-project node edge with `invalid_bridge_trigger`. Lint did not prove
 scheduling. The compiler now flattens member freezers into the graph child,
 and the freezer, predecessor and final acceptance readers use that direct
 lineage. Actual independent compiler/freezer input observation and mirrored
 required-leaf failure propagation are verified as described below. Predecessor
-resolution and final graph acceptance still have only offline coverage.
-The CLI still refuses candidate `--compile` before publishing artifacts. Standalone
-frozen-input routes remain available. Remove this refusal only after the exact
-flattened contracts and nonpublishing pass/fail propagation are verified;
-the previously accepted status-only nesting exercise is not that evidence.
+resolution and final graph acceptance have cross-job offline coverage, not live
+OS-build acceptance. The CLI emits the reviewed graph rather than unconditionally
+refusing it. This is a supported source interface, not new build authorization.
+Standalone frozen-input routes remain available. The accepted native input and
+failure-propagation runs are retained; do not repeat them merely for receipts.
 
 `scripts/nest-release-graph.py` extends the existing frozen-input publisher,
 base discovery/binder, candidate route and final assembler. It is a GitLab CI
@@ -107,8 +107,8 @@ llama.cpp have passed independent parent acceptance of the scoped-input and
 schema-2 source prerequisites. This is source/offline contract acceptance,
 not native scheduling or production job-token permission acceptance. No
 consumer check is bypassed here; specialized executor pins remain enforced.
-The CLI remains disabled pending actual flattened-contract nonpublishing
-pass/fail acceptance.
+Ordinary source publication never selects the build graph. A caller must supply
+the explicit operator selection and complete pinned request described above.
 Do not replay the previously accepted status fixtures as proof of those new
 contracts, and do not use real candidate builds merely to test scheduling.
 
@@ -246,17 +246,18 @@ simulated Stage 0 input; its digest-named fixture result binds the descendant's
 actual bases and projection. Final acceptance reopens both emitted inputs and
 assembles those exact simulated outputs. Changed compiler bytes, a failed
 predecessor and a self-consistent changed descendant policy refuse publication.
-The compiler CLI is deliberately not bypassed or enabled by this test.
+The compiler CLI also has a regression that emits the actual graph without
+starting a pipeline; the cross-job test exercises its freezer and assembler.
 
 These GitLab resources, executor receipts and leaf outputs are explicitly fake
 and confined to the disposable test. The closed fake `glab` serves only fixture
 GET replies. The test performs no image build, publication, host operation or
 live job-token acquisition. Run it with `python3 spec/files/nest_release_graph_test.py`;
 the existing release fixture CI job includes it. This closes an offline
-cross-job artifact-flow gap, not the still-required live nonpublishing contract
-exercise. Stage consumers' existing status-only fixture cannot supply those
-live input/result artifacts, and another status-only topology run would not
-close that gap. Keep executing graph compilation disabled.
+cross-job artifact-flow gap, not live OS-build acceptance. Stage consumers'
+existing status-only fixture cannot supply real output artifacts. Another
+status-only topology run would add no useful coverage. Do not invent output
+digests or launch OS builds merely to replace these fixtures with live receipts.
 
 ## Nonpublishing nested topology exercise
 
@@ -316,7 +317,7 @@ Keep this intentional failure as evidence, not a release fault to retry.
 Neither run built a member output. They do not prove predecessor discovery,
 final assembly, distinct old-executor/OpenBolt/successor bootstrap, multi-ISA
 execution, production resource/ABI compatibility or any host lifecycle gate.
-Candidate graph compilation remains disabled. Do not replay these accepted runs,
+Candidate graph compilation is now available by explicit selection. Do not replay these accepted runs,
 substitute observations for member results, invent output digests or launch a
 real candidate build merely to fill an evidence gap.
 
@@ -350,7 +351,7 @@ Retain that intentional failed pipeline as test evidence, not a broken release
 or a reason to retry the leaf. A successful pipeline creation is not acceptance.
 
 This is a bounded supported-topology/status exercise. It is not acceptance
-of the disabled graph compiler. It does not execute its input discovery,
+of the candidate graph compiler. It does not execute its input discovery,
 lineage guards, candidate jobs, executor bootstrap, resource access or ISA/ABI
 checks, and must not be presented as those contracts' live acceptance. It
 does not replace the remaining full program or separately approved host canary.

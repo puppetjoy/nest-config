@@ -91,6 +91,24 @@ class ExecutorAcceptanceTest(unittest.TestCase):
         self.assertFalse(result['promotion_authorized'])
         self.assertGreaterEqual(self.api.reads.count('projects/nest%2Fconfig/jobs/1001/artifacts/executor-bootstrap/receipt.json'), 2)
 
+    def test_same_revision_successor_preserves_distinct_builds_and_original_receipts(self):
+        source = self.api.expected['sources']['nest/config']
+        self.f.request['successor_source'] = source
+        self.bootstrap['request_digest'] = R['digest'](self.f.request)
+        self.bootstrap['successor']['source'] = source
+        self.executor['sha'] = source
+        self.executor['inputs']['source'] = source
+        self.executor['inputs']['modules'][0]['git_head'] = source
+        self.job['pipeline']['sha'] = source
+        self.job['commit']['id'] = source
+        self.pipeline['sha'] = source
+        self.reseal()
+        result = self.accept()
+        self.assertEqual(result['accepted']['executor']['sha'], self.api.executor['sha'])
+        self.assertNotEqual(result['accepted']['executor']['pipeline'], self.api.executor['pipeline'])
+        self.assertEqual(result['accepted']['executor']['inputs']['base_image'],
+                         self.api.result['output']['artifacts']['image'])
+
     def test_complete_static_admission_precedes_any_reads(self):
         for target, key, value in [(self.request, 'schema', True), (self.request, 'kind', 'other'),
                                    (self.request['successor'], 'job', True),

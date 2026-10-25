@@ -150,10 +150,21 @@ class ExecutorBootstrapTest(unittest.TestCase):
             self.request = before
         self.assertEqual(self.api.reads, [])
 
-    def test_same_config_source_refuses_instead_of_circular_bootstrap(self):
+    def test_same_config_revision_is_valid_for_a_distinct_successor_build(self):
         self.request['successor_source'] = self.api.expected['sources']['nest/config']
-        with self.assertRaises(ValueError):
-            M['acquire'](self.request, self.request['successor_source'], 'haswell', self.api)
+        result = M['acquire'](self.request, self.request['successor_source'], 'haswell', self.api)
+        M['successor_boundary'](result, 1000, 1001)
+        self.assertEqual(result['successor']['source'], self.api.expected['sources']['nest/config'])
+        self.assertEqual(result['successor']['base_image'], self.api.result['output']['artifacts']['image'])
+
+    def test_same_revision_does_not_allow_self_dependent_build_resources(self):
+        result = self.acquire()
+        for pipeline, job in ((900, 1001), (800, 1001), (1000, 901), (1000, 801)):
+            with self.subTest(pipeline=pipeline, job=job), self.assertRaises(ValueError):
+                M['successor_boundary'](result, pipeline, job)
+            with self.subTest(publication=(pipeline, job)), self.assertRaises(ValueError):
+                self.publish(CI_PIPELINE_ID=str(pipeline), CI_JOB_ID=str(job))
+            self.assertFalse((self.f.checkout / 'executor-bootstrap').exists())
 
     def test_wrong_cpu_variant_reuse_and_non_bolt_output_refuse(self):
         for target, key, value in [(self.api.expected['members'][0], 'cpu', 'zen5'),

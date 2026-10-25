@@ -102,8 +102,8 @@ are no new CI variables or trigger services. Its fields are exactly `schema`,
 and `producer`:
 
 - Successor source and CPU have the same meaning as the exact request below.
-- `config_source` is the exact 40-character prior config source, distinct from
-  the successor. `bolt_source` is the exact OpenBolt source; neither is a ref.
+- `config_source` is the exact 40-character prior config source. It may equal
+  the successor revision. `bolt_source` is the exact OpenBolt source; neither is a ref.
 - `producer` is the existing native discovery selector, with exactly `project`
   (`nest/tools/bolt`), `member`, `root_pipeline`, `input_pipeline`, `bridge`
   and `job_name`. The positive integer root identifies the config pipeline
@@ -155,8 +155,10 @@ and `producer`, plus only the optional `native` object described above:
 
 - `schema` is integer 1; `kind` is `nest_executor_bootstrap`.
 - `successor_source` is the exact new config Git SHA. It must match the actual
-  clean checkout, not a mutable branch name, and differ from the prior config
-  source in the OpenBolt input artifact.
+  clean checkout, not a mutable branch name. Rebuilding the same config revision
+  against a newly completed OpenBolt image is supported. The successor pipeline
+  and job must differ from both prior config input and executor resources;
+  publication and completed-successor acceptance enforce that boundary.
 - `successor_cpu` is the exact selected native executor CPU above.
 - `producer` uses the existing base-binding selector with exactly `project`,
   `pipeline`, `job`, `member`, `input_pipeline`, `input_job`, `input_sha256` and
@@ -251,7 +253,8 @@ tolerated jobs. The independently read executor schema, source, CPU, job and ima
 must match. It reacquires the entire original old-executor/OpenBolt boundary using
 the original bootstrap request, compares it to the successor's retained receipt,
 and binds the successor's recorded installed base to the exact OpenBolt image and
-`bolt.ref` bytes. Old and new config source closures stay distinct.
+`bolt.ref` bytes. Old and new build receipts stay distinct even when their config
+Git revision is unchanged. Neither receipt is relabelled as the other build.
 
 The complete acquisition runs again before acceptance; changed jobs, inventory,
 source or artifact bytes refuse rather than following retries. Only two exact

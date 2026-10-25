@@ -76,6 +76,7 @@ def observe(request, api):
     # Acquire the OLD boundary independently rather than trusting nested copies
     # retained by the new build. Never require the successor to produce itself.
     acquired = M['acquire'](bootstrap, source, cpu, api)
+    M['successor_boundary'](acquired, pipeline['id'], successor['job'])
     acquired['successor'].update(pipeline=pipeline['id'], job=successor['job'])
     if pipeline['source'] == 'parent_pipeline':
         require('route' in retained, 'missing bootstrap route evidence')
