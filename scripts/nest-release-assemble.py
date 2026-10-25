@@ -43,13 +43,14 @@ def acquire(expected, identifier, selector, executor_digest, api):
     return output, dict(selector=resolved, native=observation)
 
 
-def assemble(request: Any, api) -> dict[str, Any]:
+def selection(request: Any):
+    """Validate every selected member and executor before any acquisition."""
     R['fields'](request, 'schema kind expectations executor_job producers', 'assembly request')
     require(type(request['schema']) is int and request['schema'] == 1
             and request['kind'] == 'nest_release_assembly', 'unsupported assembly request')
     expected = copy.deepcopy(request['expectations'])
     indexed = R['expectations'](expected)
-    producers = request['producers']
+    producers: dict[str, Any] = request['producers']
     require(type(producers) is dict and set(producers) == set(indexed) and len(producers) <= 128,
             'assembly must select the complete member matrix')
     # An executor is architecture-specific. Assemble separate complete manifests
@@ -59,6 +60,18 @@ def assemble(request: Any, api) -> dict[str, Any]:
     require(len(architectures) == 1, 'mixed executor architectures')
     architecture = next(iter(architectures))
     R['fields'](request['executor_job'], 'pipeline job', 'executor job')
+    for value in request['executor_job'].values():
+        B['positive'](value)
+    for identifier, selector in producers.items():
+        D['selector_fields'](selector)
+        require(selector['member'] == identifier and selector['project'] == indexed[identifier]['project'],
+                'wrong assembly member selector')
+    return expected, indexed, architecture
+
+
+def assemble(request: Any, api) -> dict[str, Any]:
+    expected, indexed, architecture = selection(request)
+    producers = request['producers']
     selected = request['executor_job']
 
     def executor():

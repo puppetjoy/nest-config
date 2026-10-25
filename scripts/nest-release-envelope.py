@@ -29,22 +29,12 @@ def selection(request: Any):
             and set(assemblies) <= ARCHITECTURES, 'invalid architecture inventory')
     members, images = [], set()
     for architecture, assembly in assemblies.items():
-        R['fields'](assembly, 'schema kind expectations executor_job producers', 'assembly request')
-        require(type(assembly['schema']) is int and assembly['schema'] == 1
-                and assembly['kind'] == 'nest_release_assembly', 'unsupported assembly request')
-        expected = assembly['expectations']
-        indexed = R['expectations'](expected)
+        expected, _, selected_architecture = A['selection'](assembly)
         require(expected['release'] == request['release'] and expected['sources'] == request['sources'],
                 'architecture has different release or source closure')
-        require(all(row['cpu'] in A['B']['CPUS'] and A['B']['CPUS'][row['cpu']] == architecture
-                    for row in indexed.values()), 'member in wrong architecture')
+        require(selected_architecture == architecture, 'member in wrong architecture')
         require(expected['executor']['image'] not in images, 'executor image reused across architectures')
         images.add(expected['executor']['image'])
-        R['fields'](assembly['executor_job'], 'pipeline job', 'executor selector')
-        for value in assembly['executor_job'].values():
-            A['B']['positive'](value)
-        producers = assembly['producers']
-        require(type(producers) is dict and set(producers) == set(indexed), 'incomplete architecture producers')
         members.extend(expected['members'])
     require(len(members) <= 128, 'envelope member inventory exceeds bound')
     # Reuse the existing complete member/consumer schema for global uniqueness,

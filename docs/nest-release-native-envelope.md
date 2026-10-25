@@ -53,7 +53,13 @@ sanitization before sharing; the schema is not a secret scrubber.
 
 ## Acquisition and publication
 
-The entire selection is validated before external reads. The existing assembler
+The entire selection is validated before external reads, including every
+architecture's complete producer selector inventory, exact member/project
+association, positive integer pipeline IDs and nonempty bridge/job names. A
+malformed later architecture cannot initiate acquisition for an earlier one.
+The same static admission applies to standalone assembly and predecessor
+discovery. This changes no artifact schema or accepted resource identity.
+The existing assembler
 checks exact required bridges, downstream sources, successful unerased jobs,
 original frozen input/result bytes and independently selected executor receipt
 bytes. Global producer identities and published host-root GUIDs cannot repeat

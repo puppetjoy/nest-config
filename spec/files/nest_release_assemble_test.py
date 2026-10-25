@@ -100,6 +100,16 @@ class AssemblyTest(unittest.TestCase):
                 if change == 'unknown_field': self.api.request['shell'] = 'fixture-private-value'
                 with self.assertRaises(ValueError): self.assemble()
 
+    def test_complete_selector_inventory_refuses_before_any_external_read(self):
+        for key, value in [('member', 'stage0'), ('project', 'nest/stage0'),
+                           ('root_pipeline', True), ('input_pipeline', 0),
+                           ('bridge', ''), ('job_name', []), ('unexpected', 'fixture')]:
+            with self.subTest(key=key):
+                self.api = MatrixGitLab()
+                self.api.request['producers']['stage1'][key] = value
+                with self.assertRaises(ValueError): self.assemble()
+                self.assertEqual(self.api.native_reads, [])
+
     def full_matrix(self):
         expected, candidate = F['F']['MANIFEST']['fixture']()
         self.api.expected.clear()

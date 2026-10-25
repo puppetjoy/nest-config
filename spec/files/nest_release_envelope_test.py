@@ -192,6 +192,16 @@ class EnvelopeTest(unittest.TestCase):
                 with self.assertRaises(ValueError): self.acquire()
                 self.assertFalse(self.api.reads)
 
+    def test_later_architecture_malformed_selector_refuses_before_any_external_read(self):
+        for key, value in [('member', 'stage0-haswell'), ('project', 'nest/stage0'),
+                           ('root_pipeline', True), ('input_pipeline', 0),
+                           ('bridge', ''), ('job_name', []), ('unexpected', 'fixture')]:
+            with self.subTest(key=key):
+                self.api = ProgramGitLab()
+                self.api.request['assemblies']['sifive-u74']['producers']['stage1-sifive-u74'][key] = value
+                with self.assertRaises(ValueError): self.acquire()
+                self.assertEqual(self.api.reads, [])
+
     def test_wrong_architecture_or_shared_executor_never_substitutes_for_receipt(self):
         for change in ('cpu', 'image', 'job', 'key', 'boolean'):
             with self.subTest(change=change):
