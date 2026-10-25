@@ -78,6 +78,24 @@ RSpec.describe NestPuppetVersionedCode do
     expect { described_class.inventory(root) }.to raise_error(described_class::Unavailable)
   end
 
+  it 'binds a contained missing leaf without treating it as available static content' do
+    File.symlink('absent', File.join(root, 'modules/fixture/files/missing'))
+    value = expected
+    expect(snapshot(value).id('main')).to eq(value['code_id'])
+    expect { snapshot(value).content('main', value['code_id'], 'modules/fixture/files/missing') {} }.to raise_error(Errno::ENOENT)
+  end
+
+  it 'refuses a dangling link through an escaping parent link' do
+    File.symlink('/etc', File.join(root, 'modules/fixture/files/outside'))
+    File.symlink('outside/absent', File.join(root, 'modules/fixture/files/missing'))
+    expect { described_class.inventory(root) }.to raise_error(described_class::Unavailable)
+  end
+
+  it 'refuses a dangling leaf directly outside the snapshot' do
+    File.symlink('/nonexistent-compiler-fixture-leaf', File.join(root, 'modules/fixture/files/missing'))
+    expect { described_class.inventory(root) }.to raise_error(described_class::Unavailable)
+  end
+
   it 'refuses symlinks from a static directory into private snapshot data' do
     File.write(File.join(root, 'private'), 'not static content')
     File.symlink('../../../private', File.join(root, 'modules/fixture/files/escape'))
