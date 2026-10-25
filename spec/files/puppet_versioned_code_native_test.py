@@ -20,7 +20,8 @@ out = options.output_dir.resolve()
 out.mkdir(parents=True, exist_ok=False)
 repo = Path(__file__).resolve().parents[2]
 helper = repo / 'files/puppet-versioned-code.rb'
-frozen = out / 'frozen/environments/main'
+publisher = repo / 'files/puppet-compiler-snapshot.rb'
+frozen = out / 'mutable-input/main'
 for directory in ['manifests', 'modules/fixture/manifests', 'modules/fixture/files']:
     (frozen / directory).mkdir(parents=True, exist_ok=True)
 (frozen / 'manifests/site.pp').write_text('include fixture\n')
@@ -168,8 +169,16 @@ script = setup + http
 image = options.image
 receipt_dir = out / 'receipt'
 receipt_dir.mkdir(exist_ok=True)
-inventory = subprocess.check_output(['ruby', '-r', str(helper), '-e', "puts JSON.generate({'schema'=>1,'environment'=>'main','source'=>'a'*40,'code_id'=>NestPuppetVersionedCode.code_id(NestPuppetVersionedCode.inventory(ARGV[0]))})", str((out / 'frozen/environments/main').resolve())], text=True)
+inventory = subprocess.check_output(['ruby', '-r', str(helper), '-e', "puts JSON.generate({'schema'=>1,'environment'=>'main','source'=>'a'*40,'code_id'=>NestPuppetVersionedCode.code_id(NestPuppetVersionedCode.inventory(ARGV[0]))})", str(frozen.resolve())], text=True)
 (receipt_dir / 'expected.json').write_text(json.dumps(json.loads(inventory), indent=2)+'\n')
+(out / 'frozen/environments').mkdir(parents=True, mode=0o755)
+# Exercise the actual init copy boundary with independently selected fixture
+# identity, then mount only its relocated output in the actual native compiler.
+(frozen / 'environment.conf').write_text('config_version = git rev-parse HEAD\n')
+publication = subprocess.run(['ruby', str(publisher), str(frozen.resolve()), str((out / 'frozen/environments/main').resolve()), str((receipt_dir / 'expected.json').resolve())], capture_output=True, text=True, check=True)
+(out / 'publication.json').write_text(publication.stdout)
+assert json.loads(publication.stdout)['code_id'] == json.loads(inventory)['code_id']
+(frozen / 'modules/fixture/manifests/init.pp').write_text("class fixture { notify { 'changed-original-input': } }\n")
 args = ['podman', 'run', '-i', '--rm', '--pull=never', '--network=none', '--read-only', '--read-only-tmpfs=false', '--cap-drop=ALL', '--security-opt=no-new-privileges', '--memory=3g', '--pids-limit=512', '--tmpfs', '/fixture:rw,nosuid,size=256m', '--mount', 'type=bind,src=' + str((out / 'frozen').resolve()) + ',dst=/release,ro', '--mount', 'type=bind,src=' + str(receipt_dir.resolve()) + ',dst=/receipt,ro', '--mount', 'type=bind,src=' + str(helper) + ',dst=/helper/puppet-versioned-code.rb,ro', '--entrypoint', 'ruby', image, '-', options.jar_sha256]
 r = subprocess.run(args, input=script, capture_output=True, text=True, timeout=360)
 (out / 'stdout').write_text(r.stdout)
