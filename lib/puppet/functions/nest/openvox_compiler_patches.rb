@@ -85,8 +85,6 @@ Puppet::Functions.create_function(:'nest::openvox_compiler_patches') do
     result += [
       operation('add', "#{prefix}/containers/0/volumeMounts/-", { 'name' => 'compiler-snapshots', 'mountPath' => '/docker-custom-entrypoint.d/20-compiler.sh',
                                                                'subPath' => 'runtime/entrypoint', 'readOnly' => true }),
-      operation('add', "#{prefix}/containers/0/volumeMounts/-", { 'name' => 'compiler-snapshots', 'mountPath' => '/etc/puppetlabs/puppetserver/conf.d/versioned-code.conf',
-                                                               'subPath' => 'runtime/versioned-code.conf', 'readOnly' => true }),
     ]
     [{ 'target' => { 'group' => 'apps', 'version' => 'v1', 'kind' => 'Deployment', 'name' => "#{service}-puppetserver" }, 'patch' => result }]
   end
@@ -112,7 +110,7 @@ Puppet::Functions.create_function(:'nest::openvox_compiler_patches') do
       wrappers = {
         'id' => "#!/bin/sh\nexec /opt/puppetlabs/puppet/bin/ruby /compiler/runtime/puppet-versioned-code.rb id #{root}/main #{root}/expected.json \"$@\"\n",
         'content' => "#!/bin/sh\nexec /opt/puppetlabs/puppet/bin/ruby /compiler/runtime/puppet-compiler-store.rb content /compiler/store \"$@\"\n",
-        'entrypoint' => "#!/bin/sh\nset -eu\npuppet config set --confdir /etc/puppetlabs/puppet --section server environmentpath #{root}\npuppet config set --confdir /etc/puppetlabs/puppet --section server basemodulepath /compiler/empty-modules\npuppet config set --confdir /etc/puppetlabs/puppet --section server environment main\n",
+        'entrypoint' => "#!/bin/sh\nset -eu\nln -sfn /compiler/runtime/versioned-code.conf /etc/puppetlabs/puppetserver/conf.d/versioned-code.conf\npuppet config set --confdir /etc/puppetlabs/puppet --section server environmentpath #{root}\npuppet config set --confdir /etc/puppetlabs/puppet --section server basemodulepath /compiler/empty-modules\npuppet config set --confdir /etc/puppetlabs/puppet --section server environment main\n",
       }
       wrappers.each do |name, content|
         File.open(File.join('/compiler/runtime', name), File::WRONLY | File::CREAT | File::EXCL, 0755) { |file| file.write(content) }
@@ -120,6 +118,8 @@ Puppet::Functions.create_function(:'nest::openvox_compiler_patches') do
       File.open('/compiler/runtime/versioned-code.conf', File::WRONLY | File::CREAT | File::EXCL, 0644) do |file|
         file.write("versioned-code: { code-id-command: /compiler/runtime/id, code-content-command: /compiler/runtime/content }\n")
       end
+      # Link the immutable native hook config only after the image's recursive
+      # permissions setup; a read-only submount beneath conf.d makes it fail.
       # UID/GID are the pinned chart's Puppet service identity. Ownership changes
       # do not alter the inventoried modes/content. All later mounts are read-only.
       FileUtils.chown_R(999, 999, '/compiler')

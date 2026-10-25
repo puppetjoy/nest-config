@@ -65,8 +65,7 @@ def predecessor(deployment, namespace, live=True):
     require(inits[-1]['command'][6] == value['current']['expected']['code_id'])
     containers = spec['containers']
     require(containers[0]['name'] == 'puppet-puppetserver')
-    required = {'/compiler': None, '/docker-custom-entrypoint.d/20-compiler.sh': 'runtime/entrypoint',
-                '/etc/puppetlabs/puppetserver/conf.d/versioned-code.conf': 'runtime/versioned-code.conf'}
+    required = {'/compiler': None, '/docker-custom-entrypoint.d/20-compiler.sh': 'runtime/entrypoint'}
     mounts = [item for item in containers[0]['volumeMounts'] if item['name'] == 'compiler-snapshots']
     require(len(mounts) == len(required))
     for mount in mounts:
