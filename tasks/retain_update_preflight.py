@@ -23,14 +23,16 @@ def project(raw, hostname, release, inputs):
             and row.get('observation_success') is True, 'Invalid native planner outcome')
     require(row.get('steps') == ['backup', 'mount', 'sync', 'kernel', 'unmount', 'activate']
             and row.get('replaces_alternate') is True, 'Unexpected native plan scope')
-    preflight = row['transaction_preflight']
+    preflight: Any = row['transaction_preflight']
     require(type(preflight) is dict and preflight.get('read_only') is True
             and preflight.get('capacity_admission') == 'admitted', 'Missing transaction admission')
-    capacity = preflight['capacity']
+    capacity: Any = preflight['capacity']
     require(type(capacity) is dict and row['capacity'] == capacity and capacity.get('admission') == 'admitted'
             and capacity.get('admitted') is True, 'Capacity not admitted')
-    observed = capacity['observations']
-    require(type(observed) is dict and type(observed.get('accounting_contract')) is int and observed['accounting_contract'] == 2
+    observed: Any = capacity['observations']
+    # Transport accepts both readable contracts without relabeling old evidence.
+    # Native execution eligibility remains the installed CLI's responsibility.
+    require(type(observed) is dict and type(observed.get('accounting_contract')) is int and observed['accounting_contract'] in (2, 3)
             and observed.get('stage') == 'backup', 'Unsupported capacity accounting')
     observation_digest = token(capacity['observations_sha256'], DIGEST)
     # Native Ruby JSON.generate preserves hash insertion order, as does this
@@ -78,7 +80,7 @@ def project(raw, hostname, release, inputs):
             'boot_id': boot, 'pool_guid': pool_guid, 'current': current, 'target': target,
             'source': source_result, 'shared_state': shared_result, **trees,
             'cli_sha256': cli_digest, 'filter_sha256': token(preflight['policy']['filter_sha256'], DIGEST),
-            'capacity_policy_sha256': policy_digest, 'accounting_contract': 2,
+            'capacity_policy_sha256': policy_digest, 'accounting_contract': observed['accounting_contract'],
             'observations_sha256': observation_digest, 'capacity_admitted': True,
             'read_only': True, 'reset_authorized': False,
             'transport_sha256': hashlib.sha256(raw.encode('utf-8')).hexdigest()}

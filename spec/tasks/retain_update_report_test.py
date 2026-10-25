@@ -107,6 +107,30 @@ class RetainUpdateReportTest(unittest.TestCase):
                     self.assertFalse(retained['acceptance_independently_verified'])
                     self.assertNotIn('observation', retained)
 
+    def test_readable_capacity_contracts_retain_reboot_outcomes_without_boot_acceptance(self):
+        for contract in (2, 3):
+            for code, intent in ((0, False), (23, False), (0, True)):
+                data = with_reboot(native_exit=code, intent=intent)
+                data['capacity']['accounting_contract'] = contract
+                with self.subTest(contract=contract, code=code, intent=intent):
+                    result = self.run_task(self.arguments(data))
+                    self.assertEqual(result.returncode, 0, result.stdout)
+                    receipt = json.loads(result.stdout)
+                    content = Path(receipt['path']).read_bytes()
+                    retained = json.loads(content)
+                    self.assertEqual(hashlib.sha256(content).hexdigest(), receipt['sha256'])
+                    self.assertTrue(receipt['readback_verified'])
+                    self.assertIs(retained['reboot_requested'], data['reboot_requested'])
+                    self.assertFalse(retained['acceptance_independently_verified'])
+
+    def test_unknown_capacity_contract_cannot_publish_reboot_receipts(self):
+        for contract in (None, True, 2.0, 3.0, '2', '3', 1, 4):
+            data = with_reboot()
+            data['capacity']['accounting_contract'] = contract
+            with self.subTest(contract=contract):
+                self.assertEqual(self.run_task(self.arguments(data)).returncode, 1)
+        self.assertEqual(list(self.supervisor.iterdir()), [])
+
     def test_reboot_receipt_strict_shape_binding_and_calendar_validation(self):
         changes = [
             {'schema': True}, {'schema': 2}, {'state': 'submitted'}, {'boot_id': 'other'},
