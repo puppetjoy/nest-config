@@ -195,6 +195,108 @@ class CompilerCandidateTest(unittest.TestCase):
         self.assertIn('paths: [\'compiler-candidates/\']', deploy)
         self.assertNotIn('compiler_release=', deploy)
 
+    def pin(self, value):
+        return MODULE['pin'](self.save('pin-candidate.json', value), REPOSITORY + ':manifest-123', self.output)
+
+    def pin_command(self, argv, _phase, timeout=180):
+        self.pin_calls.append(argv)
+        if argv[:3] == ['podman', 'manifest', 'push']:
+            Path(argv[argv.index('--digestfile') + 1]).write_text(self.pin_digest)
+            self.assertEqual(timeout, 600)
+            return ''
+        return json.dumps(self.index)
+
+    def test_pin_adds_only_digest_named_mirror_tag_and_reopens_it(self):
+        value, _previous = self.selection_fixture()
+        self.pin_calls, self.pin_digest = [], 'sha256:' + 'f' * 64
+        with patch.dict(MODULE['pin'].__globals__, command=self.pin_command):
+            result = self.pin(value)
+        tag = 'registry.eyrie/nest/config/main:compiler-sha256-' + 'f' * 64
+        self.assertEqual(result['tag'], tag)
+        self.assertEqual(result['image'], INDEX)
+        self.assertEqual(json.loads(self.output.read_bytes()), result)
+        self.assertFalse(result['retention_complete'])
+        self.assertFalse(result['deployment_authorized'])
+        push = self.pin_calls[-2]
+        self.assertEqual(push[:5], ['podman', 'manifest', 'push', '--all', '--digestfile'])
+        self.assertEqual(push[-2:], [REPOSITORY + ':manifest-123', tag])
+        self.assertEqual(self.pin_calls[-1], ['podman', 'manifest', 'inspect', tag])
+        self.assertFalse(any('latest' in arg or 'prune' in arg for call in self.pin_calls for arg in call))
+
+    def test_pin_refuses_wrong_ci_context_local_list_or_existing_output_before_registry(self):
+        value, _previous = self.selection_fixture()
+        for env in ({'CI_COMMIT_BRANCH': 'other'}, {'CI_COMMIT_SHA': 'b' * 40}, {'CI_PIPELINE_ID': '124'}):
+            with patch.dict(os.environ, env), patch.object(MODULE['subprocess'], 'run') as execute, self.assertRaises(ValueError):
+                self.pin(value)
+            execute.assert_not_called()
+        path = self.save('pin-candidate.json', value)
+        for local in ('--all', REPOSITORY + ':latest', REPOSITORY + ':manifest-124'):
+            with patch.object(MODULE['subprocess'], 'run') as execute, self.assertRaises(ValueError):
+                MODULE['pin'](path, local, self.output)
+            execute.assert_not_called()
+        self.output.write_text('prior')
+        with patch.object(MODULE['subprocess'], 'run') as execute, self.assertRaises(ValueError):
+            self.pin(value)
+        execute.assert_not_called()
+        self.assertEqual(self.output.read_text(), 'prior')
+
+    def test_pin_refuses_local_list_drift_before_push(self):
+        value, _previous = self.selection_fixture()
+        calls = []
+
+        def command(argv, phase, timeout=180):
+            calls.append(argv)
+            index = copy.deepcopy(self.index)
+            if argv[-1] == REPOSITORY + ':manifest-123':
+                index['manifests'].pop()
+            return json.dumps(index)
+
+        with patch.dict(MODULE['pin'].__globals__, command=command), self.assertRaises(ValueError):
+            self.pin(value)
+        self.assertFalse(any('push' in call for call in calls))
+        self.assertFalse(self.output.exists())
+
+    def test_pin_wrong_digest_or_failed_push_emits_no_receipt(self):
+        value, _previous = self.selection_fixture()
+        for digest in ('sha256:' + 'a' * 64, '', 'private-error', 'sha256:' + 'f' * 64 + '\nextra'):
+            self.pin_calls, self.pin_digest = [], digest
+            with patch.dict(MODULE['pin'].__globals__, command=self.pin_command), self.assertRaises(ValueError):
+                self.pin(value)
+            self.assertFalse(self.output.exists())
+        self.pin_calls, self.pin_digest = [], 'sha256:' + 'f' * 64
+
+        def failing(argv, phase, timeout=180):
+            if 'push' in argv:
+                raise subprocess.CalledProcessError(37, argv, stderr='private-error')
+            return self.pin_command(argv, phase, timeout)
+
+        with patch.dict(MODULE['pin'].__globals__, command=failing), self.assertRaises(subprocess.CalledProcessError):
+            self.pin(value)
+        self.assertFalse(self.output.exists())
+
+    def test_pin_requires_successful_tag_readback(self):
+        value, _previous = self.selection_fixture()
+        self.pin_calls, self.pin_digest = [], 'sha256:' + 'f' * 64
+
+        def command(argv, phase, timeout=180):
+            if argv[:3] == ['podman', 'manifest', 'inspect'] and argv[-1].startswith('registry.eyrie/nest/config/main:compiler-'):
+                return '{}'
+            return self.pin_command(argv, phase, timeout)
+
+        with patch.dict(MODULE['pin'].__globals__, command=command), self.assertRaises(ValueError):
+            self.pin(value)
+        self.assertFalse(self.output.exists())
+
+    def test_ci_requires_pin_before_environment_can_consume_candidate(self):
+        ci = (ROOT / '.gitlab-ci.yml').read_text()
+        deploy = ci.split("'Deploy image':", 1)[1].split("'Check executor bootstrap selection':", 1)[0]
+        self.assertLess(deploy.index('nest-compiler-candidate.py candidate'), deploy.index('nest-compiler-candidate.py pin'))
+        self.assertIn('compiler-candidates/image-pin.json', deploy)
+        self.assertIn('[ "$EXECUTOR_ONLY" != "true" ]; then python3 scripts/nest-compiler-candidate.py pin', deploy)
+        environment = ci.split("'Deploy environment':", 1)[1].split("'Deploy image':", 1)[0]
+        self.assertIn("- job: 'Deploy image'", environment)
+        self.assertIn('artifacts: true', environment)
+
     def selection_fixture(self):
         value = dict(schema=1, kind='nest_openvox_compiler_candidate', source=SHA, pipeline=123,
                      current=dict(image=INDEX, expected=copy.deepcopy(EXPECTED)), members=copy.deepcopy(self.rows),

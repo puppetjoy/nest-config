@@ -9,6 +9,7 @@ import re
 import runpy
 import subprocess
 import sys
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 EXECUTOR = runpy.run_path(str(ROOT / 'bin/ci-executor-receipt'))
@@ -199,6 +200,47 @@ def verify_index(reference, rows):
     require(actual == wanted)
 
 
+def pin(candidate_path, local_list, output):
+    """Keep a published compiler index reachable when ordinary latest advances.
+
+    This only adds a digest-named tag in the existing mirror. It does not
+    retire images, change cleanup policy or promise protection from deletion.
+    """
+    value = checked_candidate(load(candidate_path))
+    source, pipeline, repository = EXECUTOR['context']()
+    require(os.environ.get('CI_COMMIT_BRANCH') == 'main')
+    require(repository == 'registry.gitlab.joyfullee.me/nest/config/main')
+    require(value['source'] == source and value['pipeline'] == pipeline)
+    require(local_list == repository + ':manifest-' + str(pipeline))
+    require(not Path(output).exists())
+    reference = value['current']['image']
+    digest = reference.split('@')[1]
+    tag = reference.split('@')[0] + ':compiler-' + digest.replace(':', '-')
+    # The still-owned publishing job has the original local list. Do not
+    # reconstruct a historical index from members: that may change its digest.
+    verify_index(reference, value['members'])
+    remote = load_index(reference)
+    require(load_index(local_list) == remote)
+    with tempfile.TemporaryDirectory(prefix='nest-compiler-pin-') as directory:
+        digest_path = Path(directory) / 'digest'
+        command(['podman', 'manifest', 'push', '--all', '--digestfile', str(digest_path),
+                 local_list, tag], 'pin compiler index', timeout=600)
+        require(digest_path.read_bytes() in (digest.encode('ascii'), (digest + '\n').encode('ascii')))
+    require(load_index(tag) == remote)
+    result = {'schema': 1, 'kind': 'nest_openvox_compiler_image_pin',
+              'source': source, 'pipeline': pipeline, 'image': reference, 'tag': tag,
+              'published_digest_verified': True, 'tag_readback_verified': True,
+              'retention_complete': False, 'deployment_authorized': False}
+    write(output, result)
+    return result
+
+
+def load_index(reference):
+    raw = command(['podman', 'manifest', 'inspect', reference], 'read compiler index')
+    require(len(raw) <= 131072)
+    return json.loads(raw, object_pairs_hook=EXECUTOR['unique'])
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='action', required=True)
@@ -213,12 +255,18 @@ def main():
     successor.add_argument('candidate', type=Path)
     successor.add_argument('previous_selection', type=Path)
     successor.add_argument('output', type=Path)
+    retention = commands.add_parser('pin', help='Add a digest-named mirror tag from the original CI publishing list; never retire images')
+    retention.add_argument('candidate', type=Path)
+    retention.add_argument('local_list')
+    retention.add_argument('output', type=Path)
     args = parser.parse_args()
     try:
         if args.action == 'record':
             record(args.executor_receipt, args.output)
         elif args.action == 'candidate':
             candidate(args.directory, args.index_reference, args.output)
+        elif args.action == 'pin':
+            pin(args.candidate, args.local_list, args.output)
         else:
             selection(args.candidate, args.previous_selection, args.output)
         return 0

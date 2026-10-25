@@ -129,6 +129,33 @@ catalogs and normal apply/repeat acceptance remain separate integration
 obligations. This publication neither deploys a compiler nor enables hooks.
 Bootstrap/partial executor publications do not emit a deployment candidate.
 
+Normal main publication also runs, before accepting `Deploy image`:
+
+    python3 scripts/nest-compiler-candidate.py pin \
+      compiler-candidates/candidate.json "$LOCAL_IMAGE" \
+      compiler-candidates/image-pin.json
+
+The helper accepts only this source/pipeline's checked candidate and original
+local publishing list (`registry.gitlab.joyfullee.me/nest/config/main:manifest-PIPELINE`).
+It compares that list with the exact published index and adds the mirror tag
+`compiler-sha256-HEX_INDEX_DIGEST` in the existing `nest/config/main` repository.
+The native push must return the original index digest, and the tag must reopen
+with the same index. All architecture members are pushed with the list; no
+`latest`, prior tag, deployment, GC schedule or cleanup policy is changed by
+this helper. A failed push, digest mismatch or readback emits no accepted pin
+receipt and fails the publishing job, blocking dependent environment deployment.
+The digest-named tag is an additive GC root, not a cryptographic tag lock or a
+lease against manual registry deletion. Existing authentication/TLS is unchanged.
+
+This prevents future ordinary `latest` replacements from orphaning newly
+published compiler indexes under the existing mirror GC policy. It does not
+retroactively pin historical indexes: retain all existing digest selections and
+reconcile/backfill their lifetime separately before production adoption. Never
+rebuild an old index from mutable sources or delete old images to fit retention.
+No automatic retirement is implemented. The pin receipt deliberately keeps
+`retention_complete` false; offline clients, backup/release lifetime and owner
+retirement policy remain separate obligations.
+
 ### Additive successor selection
 
 For an already accepted immutable selection, the same helper can propose its
