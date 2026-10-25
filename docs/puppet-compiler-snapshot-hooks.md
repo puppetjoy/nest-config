@@ -93,6 +93,47 @@ This build step does not change any chart, native hook, compiler module path or
 ordinary deployment behavior. The explicit chart selection below is separate;
 normal catalog/repeat acceptance remains required before production enablement.
 
+### CI compiler candidate publication
+
+Normal executor builds now reopen their published member digest and run
+`scripts/nest-compiler-candidate.py record EXECUTOR_RECEIPT OUTPUT` before
+accepting the build artifacts. This rehashes all installed executor inputs,
+compares the projection input inventory and validates the actual read-only
+compiler tree with the native Ruby snapshot reader. Only identities are
+published in `executor-receipts/CPU.compiler.json`, never module payloads.
+
+After normal main image publication, `Deploy image` records the registry's
+actual pushed mirror index digest and runs:
+
+    python3 scripts/nest-compiler-candidate.py candidate executor-receipts \
+      registry.eyrie/nest/config/main@sha256:INDEX_DIGEST \
+      compiler-candidates/candidate.json
+
+The helper verifies that exact immutable index has precisely the three
+recorded Linux architecture members, each from this pipeline/source with a
+distinct producing job and image. All compiler tree identities, Puppetfile
+digests and complete module inventories must agree. Architecture-specific
+base digests may differ. Missing members, source drift, a mutable/foreign
+index, unknown platform/variant, mismatched modules or different compiler
+trees refuse without an accepted candidate. Existing receipt/output files
+are never replaced. Native errors are sanitized; no secrets reach summaries.
+
+The resulting schema-1 `nest_openvox_compiler_candidate` artifact contains
+source, pipeline, `current` (exact mirror index plus expected receipt), and
+the checked member records. It deliberately is not a full chart selection:
+there is no `retained` field, and `deployment_authorized`,
+`retention_complete` and `compiler_attestation` are false. An empty retained
+list must not silently discard identities required by live catalogs.
+Selection/retention reconciliation, deployment sequencing, real native
+catalogs and normal apply/repeat acceptance remain separate integration
+obligations. This publication neither deploys a compiler nor enables hooks.
+Bootstrap/partial executor publications do not emit a deployment candidate.
+
+Run its inert fault fixtures with
+`python3 spec/files/nest_compiler_candidate_test.py`. Actual published member
+checks must also execute on their native architectures; unit fixtures alone
+are not installed compiler acceptance.
+
 ### Isolated init copy
 
 `ruby files/puppet-compiler-snapshot.rb SOURCE DESTINATION RECEIPT` implements
