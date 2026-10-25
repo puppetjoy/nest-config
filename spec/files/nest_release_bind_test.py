@@ -17,7 +17,7 @@ import unittest
 import warnings
 import zipfile
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[2]
 BIND = runpy.run_path(str(ROOT / 'scripts/nest-release-bind.py'))
@@ -64,6 +64,11 @@ def receipt(expected, cpu='haswell'):
 
 
 class GitLabReadDiagnosticTest(unittest.TestCase):
+    def setUp(self):
+        environment = patch.dict(os.environ, CI_JOB_TOKEN='')
+        environment.start()
+        self.addCleanup(environment.stop)
+
     def get(self, path, result=None, error=None):
         stream = io.StringIO()
         with patch('subprocess.run', return_value=result, side_effect=error) as command, redirect_stderr(stream):
@@ -114,6 +119,86 @@ class GitLabReadDiagnosticTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, '^unsupported GitLab read$'):
                 BIND['GitLab']().get('projects/nest%2Fconfig?private-sentinel')
         command.assert_not_called()
+
+
+class NativeJobTokenReadTest(unittest.TestCase):
+    def setUp(self):
+        environment = patch.dict(os.environ, CI_JOB_TOKEN='nonsecret-fixture-token', GITLAB_TOKEN='must-not-be-used')
+        environment.start()
+        self.addCleanup(environment.stop)
+        self.globals = BIND['GitLab'].get.__globals__
+        self.builder = Mock()
+        substitution = patch.dict(self.globals, build_opener=self.builder)
+        substitution.start()
+        self.addCleanup(substitution.stop)
+        self.api = BIND['GitLab']()
+
+    def reply(self, payload):
+        self.builder.return_value.open.return_value = io.BytesIO(payload)
+
+    def test_public_project_and_job_artifact_have_distinct_explicit_authentication(self):
+        for suffix, token in (('', None), ('/jobs/901/artifacts/executor-receipts/haswell.json', 'nonsecret-fixture-token'),
+                              ('/pipelines/900/jobs?per_page=100&include_retried=true', 'nonsecret-fixture-token')):
+            with self.subTest(suffix=suffix), patch('subprocess.run') as command:
+                payload = b'\x00exact bytes\xff'
+                self.reply(payload)
+                self.assertEqual(self.api.get('projects/nest%2Fconfig' + suffix), payload)
+                request = self.builder.return_value.open.call_args.args[0]
+                self.assertEqual(request.full_url, 'https://gitlab.joyfullee.me/api/v4/projects/nest%2Fconfig' + suffix)
+                self.assertEqual(request.get_method(), 'GET')
+                self.assertEqual(request.get_header('Job-token'), token)
+                self.assertEqual(set(request.headers), {'Job-token'} if token else set())
+                self.assertEqual(self.builder.return_value.open.call_args.kwargs, {'timeout': 60})
+                redirect = self.builder.call_args.args[0]()
+                self.assertIsNone(redirect.redirect_request(None, None, 302, '', {}, 'https://other.example/'))
+                command.assert_not_called()
+
+    def test_errors_are_sanitized_without_retry_or_glab_fallback(self):
+        for error, failure in ((BIND['HTTPError']('private-sentinel', 403, 'private-sentinel', {}, None), 'http_403'),
+                               (BIND['HTTPError']('private-sentinel', 302, 'private-sentinel', {}, None), 'http_refused'),
+                               (BIND['URLError']('private-sentinel'), 'transport_failed'),
+                               (TimeoutError('private-sentinel'), 'timeout')):
+            with self.subTest(failure=failure), patch('subprocess.run') as command:
+                self.builder.reset_mock()
+                self.builder.return_value.open.side_effect = error
+                stream = io.StringIO()
+                with redirect_stderr(stream), self.assertRaisesRegex(ValueError, '^GitLab read failed$'):
+                    self.api.get('projects/nest%2Fconfig/pipelines/900/jobs?per_page=100&include_retried=true')
+                self.assertEqual(json.loads(stream.getvalue())['failure'], failure)
+                self.assertNotIn('private-sentinel', stream.getvalue())
+                self.assertNotIn('nonsecret-fixture-token', stream.getvalue())
+                self.assertEqual(self.builder.return_value.open.call_count, 1)
+                command.assert_not_called()
+
+    def test_oversized_native_response_refuses(self):
+        self.reply(b'x' * (R['LIMIT'] + 1))
+        with redirect_stderr(io.StringIO()), self.assertRaisesRegex(ValueError, '^GitLab read failed$'):
+            self.api.get('projects/nest%2Fconfig')
+
+    def test_native_listing_selects_exact_job_and_keeps_independent_project_checks(self):
+        fixture = FakeGitLab()
+        project = R['canonical'](dict(id=3, path_with_namespace='nest/config'))
+        row: Any = fixture.jobs[('nest/config', 901)]
+        def open_request(request, **kwargs):
+            return io.BytesIO(project if request.full_url.endswith('nest%2Fconfig') else R['canonical']([row]))
+        self.builder.return_value.open.side_effect = open_request
+        result = BIND['job'](self.api, 'nest/config', 900, 901, fixture.expected['sources']['nest/config'])
+        self.assertEqual(result['job'], 901)
+        for mutation in (dict(status='failed'), dict(id=902), dict(erased_at='yesterday'),
+                         dict(pipeline=dict(row['pipeline'], project_id=10)),
+                         dict(pipeline=dict(row['pipeline'], sha='f' * 40))):
+            changed = dict(row, **mutation)
+            self.builder.return_value.open.side_effect = lambda request, **kw: io.BytesIO(
+                project if request.full_url.endswith('nest%2Fconfig') else R['canonical']([changed]))
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError):
+                BIND['job'](self.api, 'nest/config', 900, 901, fixture.expected['sources']['nest/config'])
+
+    def test_incomplete_duplicate_missing_and_malformed_listings_refuse(self):
+        for rows in ([], [{'id': 901}] * 2, [{'id': 901}] * 100, {}, [{'id': True}], [{'id': 902}]):
+            with self.subTest(rows=rows):
+                self.reply(R['canonical'](rows))
+                with self.assertRaises(ValueError):
+                    self.api.producer_job('projects/nest%2Fconfig', 900, 901)
 
 
 class FakeGitLab:
@@ -189,6 +274,9 @@ class FakeGitLab:
 
 class ReleaseBindTest(unittest.TestCase):
     def setUp(self):
+        environment = patch.dict(os.environ, CI_JOB_TOKEN='')
+        environment.start()
+        self.addCleanup(environment.stop)
         self.api = FakeGitLab()
 
     def bind(self):
