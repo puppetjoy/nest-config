@@ -12,6 +12,7 @@ CANDIDATE = runpy.run_path(str(Path(__file__).with_name('nest-compiler-candidate
 require, load = CANDIDATE['require'], CANDIDATE['load']
 NAME = r'[A-Za-z0-9][A-Za-z0-9_.-]{0,252}'
 UUID = r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}'
+DARWIN_UUID = r'[0-9A-F]{8}(?:-[0-9A-F]{4}){3}-[0-9A-F]{12}'
 
 
 def matches(value, pattern):
@@ -44,14 +45,21 @@ def propose(candidate_path, scope_path, observations_path, releases_path, output
     now = int(time.time()) if now is None else now
     seen, legacy = set(), []
     for row in observations:
-        require(type(row) is dict and set(row) == {'schema', 'kind', 'hostname', 'certname', 'server', 'boot_id',
-                                                   'observed_at', 'environment', 'cache', 'read_only',
-                                                   'catalog_applied', 'acceptance_recorded'})
-        require(type(row['schema']) is int and row['schema'] == 1 and row['kind'] == 'nest_compiler_catalog_cache')
+        fields = {'schema', 'kind', 'hostname', 'certname', 'server', 'boot_id', 'observed_at',
+                  'environment', 'cache', 'read_only', 'catalog_applied', 'acceptance_recorded'}
+        require(type(row) is dict and type(row.get('schema')) is int)
+        if row['schema'] == 2:
+            require(set(row) == fields | {'platform', 'boot_source'})
+            require(row['platform'] == 'darwin' and row['boot_source'] == 'kern.bootsessionuuid')
+            boot_pattern = DARWIN_UUID
+        else:
+            require(row['schema'] == 1 and set(row) == fields)
+            boot_pattern = UUID
+        require(row['kind'] == 'nest_compiler_catalog_cache')
         require(type(row['certname']) is str and row['certname'] in clients and row['certname'] not in seen)
         require({key: row[key] for key in ('hostname', 'certname', 'server')} == clients[row['certname']])
         seen.add(row['certname'])
-        require(matches(row['boot_id'], UUID))
+        require(matches(row['boot_id'], boot_pattern))
         require(type(row['observed_at']) is int and 0 <= now - row['observed_at'] <= 900)
         require(row['environment'] == 'main' and row['read_only'] is True
                 and row['catalog_applied'] is False and row['acceptance_recorded'] is False)

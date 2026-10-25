@@ -10,9 +10,9 @@ RSpec.describe NestCompilerCatalogCache do
   end
   let(:raw) { JSON.generate(catalog) }
 
-  def collect(reader: ->(_path) { raw }, boot: -> { uuid })
+  def collect(reader: ->(_path) { raw }, boot: -> { uuid }, native_platform: 'linux')
     described_class.collect(expected, path: 'fixture-only', certname: 'fixture.nest', server: 'puppet.eyrie',
-                            hostname: 'fixture', boot: boot, reader: reader, clock: -> { 1_790_000_000 })
+                            hostname: 'fixture', boot: boot, reader: reader, clock: -> { 1_790_000_000 }, native_platform: native_platform)
   end
 
   it 'returns only sanitized native cache identity and an explicit null legacy code ID' do
@@ -25,6 +25,42 @@ RSpec.describe NestCompilerCatalogCache do
   it 'observes a non-null immutable code ID without accepting its source or deploying' do
     catalog['code_id'] = 'sha256:' + ('b' * 64)
     expect(collect['cache']['code_id']).to eq(catalog['code_id'])
+  end
+
+  it 'preserves the Linux schema and distinguishes Darwin native uppercase boot sessions' do
+    expect(collect['schema']).to eq(1)
+    expect(collect).not_to have_key('platform')
+    native = '5F573720-AD7D-4CC8-90CB-4FB2520C257A'
+    result = collect(boot: -> { native }, native_platform: 'darwin')
+    expect(result).to include('schema' => 2, 'platform' => 'darwin', 'boot_source' => 'kern.bootsessionuuid', 'boot_id' => native)
+    expect(result['cache']).to eq(collect['cache'])
+    expect(JSON.generate(result)).not_to include('private-payload')
+  end
+
+  it 'rejects a normalized, malformed, changed or foreign-platform boot identity' do
+    native = '5F573720-AD7D-4CC8-90CB-4FB2520C257A'
+    [native.downcase, native + "\n", 'unknown', nil].each do |value|
+      expect { collect(boot: -> { value }, native_platform: 'darwin') }.to raise_error(NestUpdateCatalogReport::Unavailable)
+    end
+    expect { collect(boot: -> { native }) }.to raise_error(NestUpdateCatalogReport::Unavailable)
+    expect { collect(native_platform: 'cygwin') }.to raise_error(NestUpdateCatalogReport::Unavailable)
+    boots = [native, '6F573720-AD7D-4CC8-90CB-4FB2520C257A']
+    expect { collect(boot: -> { boots.shift }, native_platform: 'darwin') }.to raise_error(NestUpdateCatalogReport::Unavailable)
+  end
+
+  it 'requires a successful native sysctl record without rewriting its identifier' do
+    native = '5F573720-AD7D-4CC8-90CB-4FB2520C257A'
+    status = instance_double(Process::Status, success?: true)
+    allow(Open3).to receive(:capture3).with('/usr/sbin/sysctl', '-n', 'kern.bootsessionuuid').and_return([native + "\n", '', status])
+    expect(described_class.boot_id('darwin')).to eq(native)
+    [native, native.downcase + "\n", native + "\n\n", " #{native}\n"].each do |output|
+      allow(Open3).to receive(:capture3).and_return([output, '', status])
+      expect { described_class.boot_id('darwin') }.to raise_error(NestUpdateCatalogReport::Unavailable)
+    end
+    allow(status).to receive(:success?).and_return(false)
+    allow(Open3).to receive(:capture3).and_return([native + "\n", 'private-native-error', status])
+    expect { described_class.boot_id('darwin') }.to raise_error(NestUpdateCatalogReport::Unavailable)
+    expect { described_class.boot_id('windows') }.to raise_error(NestUpdateCatalogReport::Unavailable)
   end
 
   it 'preserves historical abbreviated versions only for explicitly null code IDs' do
@@ -103,8 +139,30 @@ RSpec.describe NestCompilerCatalogCache do
   end
 
   it 'refuses a symbolic link and non-regular cache before interpreting its content' do
-    expect { described_class.read_cache('/proc/self/fd/0') }.to raise_error(Errno::ELOOP)
+    expect { described_class.read_cache('/proc/self/fd/0') }.to raise_error(NestUpdateCatalogReport::Unavailable)
     expect { described_class.read_cache('/') }.to raise_error(NestUpdateCatalogReport::Unavailable)
     expect { described_class.read_cache('relative') }.to raise_error(NestUpdateCatalogReport::Unavailable)
+  end
+
+  it 'refuses replacement or metadata changes before open and after the bounded read' do
+    stat = Struct.new(:dev, :ino, :size, :mtime, :ctime, :uid, :gid, :mode, :nlink) do
+      def file?
+        true
+      end
+    end
+    original = stat.new(1, 2, raw.bytesize, 3, 4, 0, 0, 0o100660, 1)
+    changed = original.dup
+    changed.ino = 5
+    file = instance_double(File, stat: original, read: raw)
+    allow(File).to receive(:open).with('/fixture', File::RDONLY | File::NOFOLLOW | File::NONBLOCK).and_yield(file)
+    allow(File).to receive(:lstat).with('/fixture').and_return(original, changed)
+    expect { described_class.read_cache('/fixture') }.to raise_error(NestUpdateCatalogReport::Unavailable)
+    allow(File).to receive(:lstat).with('/fixture').and_return(changed)
+    expect { described_class.read_cache('/fixture') }.to raise_error(NestUpdateCatalogReport::Unavailable)
+    allow(File).to receive(:lstat).with('/fixture').and_return(original)
+    changed = original.dup
+    changed.mode = 0o100666
+    allow(file).to receive(:stat).and_return(original, changed)
+    expect { described_class.read_cache('/fixture') }.to raise_error(NestUpdateCatalogReport::Unavailable)
   end
 end

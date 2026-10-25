@@ -44,6 +44,11 @@ groups:
             uri: facts.fqdn
 
   - name: 'macs'
+    config:
+      ssh:
+        interpreters:
+          # Apple's system Ruby cannot load the native Puppet agent libraries.
+          rb: ['/opt/puppetlabs/puppet/bin/ruby', '-r', 'puppet']
     targets:
       - _plugin: puppetdb
         query: "inventory[certname] { facts.osfamily = 'Darwin' }"
