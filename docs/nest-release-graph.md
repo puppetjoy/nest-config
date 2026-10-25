@@ -5,7 +5,9 @@ nonpublishing pipelines 11573 and 11574 rejected the former same-project
 multi-project node edge with `invalid_bridge_trigger`. Lint did not prove
 scheduling. The compiler now flattens member freezers into the graph child,
 and the freezer, predecessor and final acceptance readers use that direct
-lineage. This source has offline coverage, not live contract acceptance.
+lineage. Actual independent compiler/freezer input observation and mirrored
+required-leaf failure propagation are verified as described below. Predecessor
+resolution and final graph acceptance still have only offline coverage.
 The CLI still refuses candidate `--compile` before publishing artifacts. Standalone
 frozen-input routes remain available. Remove this refusal only after the exact
 flattened contracts and nonpublishing pass/fail propagation are verified;
@@ -278,6 +280,34 @@ failure propagation and distinct executor bootstrap remain separate obligations.
 Do not replay a previously accepted standalone observation as proof of this path.
 Omit graph selectors to roll back; preserve exact artifacts and prior executor
 digests. No OS build, alias promotion or host operation is authorized by this mode.
+
+#### Verified native scope and remaining admission
+
+The existing nonexecuting run rooted at config pipeline 11988 traversed actual
+config graph child 11989, artifact-backed route child 11990 and Stage 0 pipeline
+11991. Independently reopened compiler job 50423, scoped freezer job 50425 and
+input-observation job 50430 bind the original request, projection, source and
+executor to that exact lineage. This proves the independent input path and its
+actual native artifact/job-token access, not predecessor outputs or final release
+acceptance.
+
+The separate negative run rooted at config pipeline 12003 traversed graph child
+12004, route child 12005 and Stage 0 pipeline 12006. Compiler job 50509 and scoped
+freezer job 50511 succeeded. Required verifier job 50516 failed with exit 1;
+all three required bridges and the root failed. No candidate job, final graph
+acceptance job, outgoing leaf bridge or leaf output archive was present. Exact
+compiler/freezer artifact bytes and their hashes, projected source and selected
+immutable old executor were independently reopened. The leaf trace emits only
+the generic Stage 0 refusal: it does not establish the precise internal failure
+cause, even though the selected old parser independently rejects schema 2.
+Keep this intentional failure as evidence, not a release fault to retry.
+
+Neither run built a member output. They do not prove predecessor discovery,
+final assembly, distinct old-executor/OpenBolt/successor bootstrap, multi-ISA
+execution, production resource/ABI compatibility or any host lifecycle gate.
+Candidate graph compilation remains disabled. Do not replay these accepted runs,
+substitute observations for member results, invent output digests or launch a
+real candidate build merely to fill an evidence gap.
 
 ### Status-only nesting fixture
 
