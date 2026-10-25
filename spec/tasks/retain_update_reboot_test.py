@@ -55,6 +55,24 @@ class RebootPlanTest(unittest.TestCase):
             self.assertTrue(json.loads(raw)['read_only'])
         self.assertEqual(len(list(self.directory.glob('*.json'))), 3)
 
+    def test_kernel_puppet_applied_exit_is_retained_without_rewriting(self):
+        for reason in ('eligible', 'already_requested', 'already_booted'):
+            data = plan(reason)
+            data['phases'][3]['commands'] = [dict(operation='puppet', native_exit=2, success=True)]
+            code, receipt = self.run_task(report=json.dumps(data))
+            self.assertEqual(code, 0, receipt)
+            saved = json.loads(Path(receipt['path']).read_bytes())
+            self.assertEqual(saved['report']['phases'][3]['commands'][0]['native_exit'], 2)
+            self.assertIs(receipt['reboot_eligible'], reason == 'eligible')
+
+    def test_false_success_exit_cannot_be_retained_as_eligible(self):
+        for operation, phase, code in (('root', 2, 2), ('modules', 3, 2), ('puppet', 2, 2),
+                                       ('puppet', 3, 1), ('puppet', 3, 4), ('puppet', 3, 6)):
+            data = plan()
+            data['phases'][phase]['commands'] = [dict(operation=operation, native_exit=code, success=True)]
+            self.assertEqual(self.run_task(report=json.dumps(data))[0], 1)
+        self.assertEqual(list(self.directory.iterdir()), [])
+
     def test_all_attempted_outcomes_remain_ineligible(self):
         for code, intent in ((0, False), (23, False), (0, True)):
             for changed in (False, True):

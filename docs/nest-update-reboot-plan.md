@@ -109,6 +109,24 @@ finalization. Old no-reboot reports preserve their existing lifecycle semantics.
 Historical export remains possible when old BEs have since changed; export is not
 live eligibility. No live reset/reboot was performed by this source integration.
 
+## Native preparation exits
+
+Completed phases must have a null or zero aggregate native exit. Each completed
+command must have a true native success flag and a null or zero exit, except
+the tagged kernel-phase `puppet` operation also permits detailed exit 2 (changes
+applied). The original 2 is retained, never rewritten to zero or confused with
+the separate normal-main unchanged-repeat requirement. Exit 2 from copy, module,
+mount or other operations, Puppet 1/4/6, and nonzero aggregate phase exits cannot
+claim completion or eligibility. Valid failed/stopped phase outcomes remain
+exportable. Null remains an unmeasured existing operation outcome, not a measured
+process exit. These transported checks do not replace native locked validation.
+
+Older native CLI reboot validation may still reject an otherwise prepared
+transaction containing a legitimate kernel Puppet exit 2. Correcting the
+supervisor parser alone does not repair installed native eligibility. Verify
+reviewed CLI/package delivery separately; never rewrite old receipts, bypass
+the native refusal or replay preparation merely to replace a 2 with a 0.
+
 ## Observation after disconnect or controller restart
 
 `nest::host::observe_update_reboot` reopens an earlier original-boot receipt from
