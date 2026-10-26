@@ -31,6 +31,21 @@ helper also accepts the exact JSON policy as one positional argument, followed
 by optional `--check`. All policy fields are public placement/identity/budget
 metadata; never put key bytes, passwords or other secrets in arguments.
 
+NFS presents a different metadata view: it can synthesize `system.nfs4_acl` and
+hide `security.capability`. Direct tree copying therefore requires local ZFS;
+NFS tree mode refuses before hashing or reserving a transfer. For a publication
+accessed over NFS, pass paired plan parameters `archive` and `archive_digest`
+(native `--archive` and `--archive-digest`). Reuse the existing private producer
+tar and its independently retained SHA256; do not rebuild or export again.
+The archive must be an existing root-owned, single-link mode-0600 regular `.tar`
+under canonical root-trusted mode-0700 storage, outside source/state/destination.
+Opaque archive bytes preserve the producer's xattrs, capabilities and hardlinks
+across NFS. The helper checks the pinned archive digest before and after GNU tar
+extraction and requires the unchanged full content digest on the local ZFS root
+before sealing. It does not weaken or normalize the content identity. The native
+started/complete receipts retain the archive path/digest; later `--verify` needs
+neither archive nor publication access. Omit archive parameters in verify mode.
+
 `check=false` explicitly copies and seals this one generation. It is a storage
 write and potentially significant read/copy load; use the reviewed release's
 host, placement, capacity and maintenance scope. It is not implicitly called by
@@ -128,11 +143,11 @@ Before copy, it atomically publishes mode-0600
 `generation-GUID.started` in the shared state directory with fsync/readback.
 Files deliberately do not end in `.json`, so native transaction-ID discovery
 does not mistake them for CLI transactions. The no-clobber reservation survives
-failure. Copy uses local-path rsync from the mounted publication, preserving
+failure. Local ZFS tree copy uses local-path rsync from the mounted publication, preserving
 numeric ownership, modes, nanosecond mtime, ACLs, xattrs and hardlinks. There is
 no `--delete`, `--inplace`, remote shell, filtering or source modification.
 
-The full source digest is checked before/after copy and the complete destination
+The full source digest (or pinned archive byte digest) is checked before/after copy and the complete destination
 digest must match. After pool sync, one checked ZFS set publishes the exact
 hostname, runtime release, build token and content digest with `readonly=on`.
 Native properties and the actual read-only mount are rechecked, along with the

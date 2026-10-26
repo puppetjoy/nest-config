@@ -33,6 +33,17 @@ def fixture(verify=False, check=True):
 
 
 class RetentionTests(unittest.TestCase):
+    def test_archive_transfer_report_is_accepted_without_retaining_private_path(self):
+        policy, row = fixture()
+        row['archive'] = {'path': '/private-sentinel/producer.tar', 'digest': 'sha256:' + 'd' * 64}
+        result = M['project'](json.dumps(row), policy, True, False)
+        self.assertNotIn('private-sentinel', json.dumps(result))
+        for archive in ({}, {'path': 'relative', 'digest': 'sha256:' + 'd' * 64},
+                        {'path': '/producer.tar', 'digest': 'bad'}):
+            row['archive'] = archive
+            with self.assertRaises(ValueError):
+                M['project'](json.dumps(row), policy, True, False)
+
     def call(self, params):
         return subprocess.run([sys.executable, str(TASK)], input=json.dumps(params), text=True,
                               capture_output=True, cwd=ROOT / 'spec', timeout=10)

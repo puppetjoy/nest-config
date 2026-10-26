@@ -32,6 +32,11 @@ def project(raw, policy, check, verify_only):
             and (check or not verify_only), 'Invalid mode')
     fields = 'schema kind policy policy_sha256 read_only sealed reset_authorized '
     fields += 'generation transfer_receipt_sha256 reset_capacity_admitted' if verify_only else 'source capacity'
+    if not verify_only and 'archive' in row:
+        fields += ' archive'
+        R['fields'](row['archive'], 'path digest', 'producer archive')
+        require(type(row['archive']['path']) is str and Path(row['archive']['path']).is_absolute(), 'Invalid archive path')
+        R['match'](row['archive']['digest'], 'sha256:' + HEX, 'archive digest')
     R['fields'](row, fields, 'generation report')
     require(type(row['schema']) is int and row['schema'] == 1, 'Invalid schema')
     require(row['kind'] == ('nest_generation_verification_report' if verify_only else 'nest_generation_transfer_report'), 'Invalid kind')

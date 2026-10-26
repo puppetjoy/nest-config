@@ -200,7 +200,24 @@ def contained_paths(root):
         require(root in resolved.parents and resolved.is_dir())
 
 
-def transfer(value, check=False):
+def archive_digest(path, expected):
+    require(re.fullmatch(ROOT.DIGEST, expected) is not None)
+    require(path.is_absolute() and path.suffix == '.tar')
+    ROOT.safe_ancestors(path.parent)
+    require(stat.S_IMODE(path.parent.stat().st_mode) == 0o700)
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(descriptor, 'rb') as stream:
+        before = os.fstat(stream.fileno())
+        require(stat.S_ISREG(before.st_mode) and before.st_uid == 0 and before.st_nlink == 1
+                and stat.S_IMODE(before.st_mode) == 0o600)
+        digest = 'sha256:' + hashlib.file_digest(stream, 'sha256').hexdigest()
+        require(ROOT.metadata(os.fstat(stream.fileno())) == ROOT.metadata(before)
+                and ROOT.metadata(path.lstat()) == ROOT.metadata(before))
+    require(digest == expected)
+
+
+def transfer(value, check=False, archive=None, expected_archive_digest=None):
+    require((archive is None) == (expected_archive_digest is None))
     observed = identity(value, True)
     destination = Path(value['destination'])
     require(not os.listdir(destination))
@@ -209,11 +226,22 @@ def transfer(value, check=False):
     require(not started.exists() and not started.is_symlink() and not completed.exists() and not completed.is_symlink())
     capacity = admission(value, observed)
     contained_paths(Path(value['source']))
-    require(ROOT.content_digest(Path(value['source'])) == value['content_digest'])
+    if archive is None:
+        # NFS can synthesize ACLs and hide security.capability. Never normalize
+        # away missing metadata or spend a full hash proving that mismatch.
+        require(observed['source_mount'].get('fstype', 'zfs') == 'zfs')
+        require(ROOT.content_digest(Path(value['source'])) == value['content_digest'])
+    else:
+        archive = Path(archive)
+        for path in (Path(value['source']), destination, STATE):
+            require(path != archive and path not in archive.parents and archive not in path.parents)
+        archive_digest(archive, expected_archive_digest)
     require(identity(value, True) == observed)
     binding = {'schema': 1, 'kind': 'nest_generation_transfer_report', 'policy': value,
                'policy_sha256': hashlib.sha256(ROOT.canonical(value)).hexdigest(), 'source': observed, 'capacity': capacity,
                'read_only': check, 'sealed': False, 'reset_authorized': False}
+    if archive is not None:
+        binding['archive'] = {'path': str(archive), 'digest': expected_archive_digest}
     if check:
         return binding
     # Share the native transaction lock. Never unlink it, wait, or break a lock.
@@ -226,10 +254,20 @@ def transfer(value, check=False):
         capacity = admission(value, observed)
         binding['capacity'] = capacity
         retain(started, binding)  # Survives every failed/ambiguous copy; never replay.
-        command(['rsync', '--archive', '--acls', '--hard-links', '--xattrs', '--numeric-ids', '--modify-window=-1',
-                 '--one-file-system', '--', value['source'] + '/', str(destination) + '/'], 86400)
+        if archive is None:
+            command(['rsync', '--archive', '--acls', '--hard-links', '--xattrs', '--numeric-ids', '--modify-window=-1',
+                     '--one-file-system', '--', value['source'] + '/', str(destination) + '/'], 86400)
+        else:
+            # Same private producer archive and GNU tar metadata preservation as
+            # transfer-stage3-root.py; no transport shell or NFS xattr fiction.
+            command(['tar', '--extract', '--file', str(archive), '--directory', str(destination),
+                     '--same-owner', '--same-permissions', '--acls', '--xattrs', '--xattrs-include=*',
+                     '--numeric-owner', '--sparse'], 86400)
         require(identity(value, True) == observed)
-        require(ROOT.content_digest(Path(value['source'])) == value['content_digest'])
+        if archive is None:
+            require(ROOT.content_digest(Path(value['source'])) == value['content_digest'])
+        else:
+            archive_digest(archive, expected_archive_digest)
         require(ROOT.content_digest(destination) == value['content_digest'])
         contained_paths(destination)
         command(['zpool', 'sync', observed['dataset'].split('/')[0]], 3600)
@@ -273,8 +311,14 @@ def verify(value):
     completed = STATE / ('generation-' + value['destination_guid'] + '.complete')
     initial, initial_raw = receipt(started)
     final, final_raw = receipt(completed)
-    require(set(initial) == {'schema', 'kind', 'policy', 'policy_sha256', 'source', 'capacity',
-                             'read_only', 'sealed', 'reset_authorized'})
+    names = {'schema', 'kind', 'policy', 'policy_sha256', 'source', 'capacity',
+             'read_only', 'sealed', 'reset_authorized'}
+    require(set(initial) in (names, names | {'archive'}))
+    if 'archive' in initial:
+        archive: Any = initial['archive']
+        require(type(archive) is dict and set(archive) == {'path', 'digest'})
+        require(type(archive['path']) is str and Path(archive['path']).is_absolute())
+        require(type(archive['digest']) is str and re.fullmatch(ROOT.DIGEST, archive['digest']) is not None)
     require(type(initial['schema']) is int and initial['schema'] == 1
             and initial['kind'] == 'nest_generation_transfer_report')
     require(ROOT.canonical(initial['policy']) == ROOT.canonical(value)
@@ -304,10 +348,13 @@ def main():
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument('--check', action='store_true', help='Read-only placement/content/budget checks; no lock or receipt creation')
     mode.add_argument('--verify', action='store_true', help='Read-only sealed local generation and retained receipt verification')
+    parser.add_argument('--archive', help='Existing private producer tar; preserves metadata hidden by NFS')
+    parser.add_argument('--archive-digest', help='Exact independently retained producer archive SHA256')
     args = parser.parse_args()
     try:
         value = policy(args.policy)
-        print(json.dumps(verify(value) if args.verify else transfer(value, args.check), sort_keys=True))
+        require(not args.verify or (args.archive is None and args.archive_digest is None))
+        print(json.dumps(verify(value) if args.verify else transfer(value, args.check, args.archive, args.archive_digest), sort_keys=True))
         return 0
     except (OSError, ValueError, TypeError, KeyError, IndexError, RuntimeError, RecursionError, subprocess.SubprocessError):
         print('Generation transfer refused or stopped; retain the dataset and native receipts; never replay automatically', file=sys.stderr)
