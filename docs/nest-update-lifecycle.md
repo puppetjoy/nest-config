@@ -94,6 +94,14 @@ catalog/canary receipts are reused; an intent lacking its result refuses automat
 replay. Native acceptance/finalization are idempotent for the same evidence/boot.
 No extra-BE producer or exceptional cleanup policy is introduced.
 
+Read-only reboot admission and health collection retain only their completed
+results, not separate operation intents. A lost observation can be collected
+again without owner intervention or a new transaction. Existing old observation
+intent files remain readable but do not block recollection. Reboot submission,
+catalog applies and arbitrary canary commands retain their at-most-once intents;
+an ambiguous mutation still stops. Completed reports are still reopened and
+validated before acceptance or cross-host export.
+
 ## Surviving external dispatch and report delivery
 
 `nest::host::update_dispatch` defaults to `action=inspect`. Supply the exact

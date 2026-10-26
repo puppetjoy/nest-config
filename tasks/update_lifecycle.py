@@ -71,7 +71,10 @@ def step(p, bound):
         save_exclusive(path, {'policy_sha256': bound['policy_sha256'], 'host': p['host'], 'step': p['step']})
         return {'intent_retained': True}
     if p['action'] == 'complete':
-        require(path.exists(), 'missing operation intent')
+        # Read-only admission and health collection need a retained result, not
+        # a second intent file. Interrupted observations can be collected again;
+        # mutations and arbitrary canary commands still require prior intent.
+        require(p['step'] in ('reboot', 'health') or path.exists(), 'missing operation intent')
         result = p['result']
         # Only published sanitized results enter the journal, never raw command output.
         reopen(result, p['output_dir'])
@@ -79,7 +82,7 @@ def step(p, bound):
     if done.exists():
         receipt = json.loads(read_report(done, LIMIT), object_pairs_hook=unique)
         reopen(receipt, p['output_dir'])
-        return {'complete': True, 'intent': True, 'receipt': receipt}
+        return {'complete': True, 'intent': path.exists(), 'receipt': receipt}
     return {'complete': False, 'intent': path.exists()}
 
 

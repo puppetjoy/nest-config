@@ -41,10 +41,8 @@ plan nest::host::update_acceptance (
   $health_context = $context + { 'step' => 'health' }
   $health = run_task('nest::update_lifecycle', 'localhost', $health_context + { 'action' => 'read' }).first.value
   if !$health['complete'] {
-    if $health['intent'] {
-      fail_plan('Prior health retention is incomplete; inspect before continuing', 'nest/update-lifecycle-ambiguous')
-    }
-    run_task('nest::update_lifecycle', 'localhost', $health_context + { 'action' => 'begin' })
+    # Health collection is read-only. A lost observation is safe to collect
+    # again; only its completed report needs retention.
     $health_outcome = run_plan('nest::host::update_health', {
       'target' => $name, 'expectations' => $boot, 'endpoints' => $settings['endpoints'], 'retention' => $retention,
     })

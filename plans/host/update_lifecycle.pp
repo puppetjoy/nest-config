@@ -33,15 +33,12 @@ plan nest::host::update_lifecycle (
     $prior = run_task('nest::update_lifecycle', 'localhost', $step + { 'action' => 'read' }).first.value
     if $prior['complete'] {
       $admission = $prior['receipt']
-    } elsif $prior['intent'] {
-      fail_plan('Reboot admission intent has no retained result; inspect, never submit', 'nest/update-lifecycle-ambiguous')
     } else {
       $admission = run_plan('nest::host::check_update_reboot', {
         'target' => $name, 'transaction' => $observations[$name]['transaction'],
         'release' => $bound['release'], 'hostname' => $name, 'output_dir' => $output_dir,
       })
       if $execute {
-        run_task('nest::update_lifecycle', 'localhost', $step + { 'action' => 'begin' })
         run_task('nest::update_lifecycle', 'localhost', $step + { 'action' => 'complete', 'result' => $admission })
       }
     }
