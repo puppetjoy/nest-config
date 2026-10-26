@@ -96,6 +96,46 @@ Original legacy bytes stay untouched and are also in the immutable archive.
 All old keys remain permanently non-replayable. The exception is operator
 supplied, not an incident-specific hardcoded allowance or a public API bypass.
 
+## Later native-process restarts
+
+The preceding sections retain the original incident evidence. A subsequent
+power-recovery restart exposed a separate lifecycle defect: the controller
+refused every later reconciliation merely because an earlier receipt existed.
+Old input remained correctly fenced, but a fresh authorized recovery could not
+proceed. A second-generation regression reproduces that refusal against the
+unchanged source.
+
+A new explicit local grant may now reconcile a later *lost* generation. It
+cannot retire a resumable/occupied native session, replay the previous grant,
+change the required journal hash, reopen terminal scopes or excuse additional
+uncertain input. Prior closed/retired records and action keys remain fenced;
+every prior receipt and full journal is retained in immutable generation
+history. An old grant is still idempotent and cannot recover a new loss.
+
+The local operator may reference either an existing approval or a current typed
+owner instruction as `owner-instruction:<event id>:<revision>`. This is not an
+invented approval identifier. `bin/firefox-controller-refresh` independently
+reads the canonical request/instruction, checks its revision, expiry and exact
+scope, and refuses terminal requests before supplying the grant. The public
+bridge and viewer still cannot install grants.
+
+For a lost generation, the existing controller-refresh utility accepts
+`--generation-recovery-request` and `--generation-recovery-grant`. It checks the
+expected retained epoch and installed source, requires exactly one existing
+Firefox process for the managed profile and an unoccupied native driver, then
+restarts only the observer/controller with image-extracted source. Firefox,
+geckodriver, KasmVNC and the profile are not restarted. The new leased controller
+performs the full journal verification before committing. Readback verifies the
+same live native PID/generation, current source and working protocol. Failure
+preserves the browser and does not automatically replay recovery or input.
+
+The restart also exposed image drift: the live baked controller lacked the
+later binding/creation repairs present in accepted main. A temporary overlay
+alone does not survive a pod replacement. Delivery must include a persistent
+managed image pin and verify that the installed baked assets match it, in
+addition to the immediate controller-only recovery. Source publication and
+fixture success are not installed browser acceptance.
+
 Working installed request-context acceptance remains incomplete. The prior
 installed creation-receipt repair and finite broker routing remain deployed.
 The separate production r10k firewalld authentication failure recorded in
