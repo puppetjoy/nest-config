@@ -322,11 +322,12 @@ class IdentityTests(unittest.TestCase):
         self.properties = {'guid': '456', 'createtxg': '789', 'origin': '-', 'exec': 'off',
                            'setuid': 'off', 'devices': 'off', 'canmount': 'on'}
         self.state_properties = {'guid': '800', 'canmount': 'noauto', 'org.nest:host-id': 'c' * 32}
+        self.pool_identity = 'c' * 32
         self.calls = []
 
     def property_value(self, dataset, name):
         if dataset == 'pool':
-            return 'c' * 32
+            return '-'  # A pool user property is not a root-dataset property.
         if name == 'mountpoint':
             return str(GEN.STATE) if dataset == self.state else self.value['destination']
         if name == 'readonly':
@@ -338,7 +339,7 @@ class IdentityTests(unittest.TestCase):
     def command(self, args, timeout=60):
         self.calls.append(args)
         if args[0] == 'zpool':
-            return '123'
+            return self.pool_identity if args[-2:] == ['org.nest:host-id', 'pool'] else '123'
         if args[:3] == ['zfs', 'list', '-H']:
             return '' if 'snapshot' in args else args[-1]
         raise AssertionError(args)
@@ -389,6 +390,14 @@ class IdentityTests(unittest.TestCase):
             with self.subTest(key=key), self.assertRaises(ValueError):
                 self.run_identity()
             self.value[key] = previous
+
+    def test_pool_identity_uses_pool_property_and_refuses_missing_or_changed_binding(self):
+        self.run_identity()
+        self.assertIn(['zpool', 'get', '-Hp', '-o', 'value', 'org.nest:host-id', 'pool'], self.calls)
+        for identity in ('-', 'd' * 32):
+            self.pool_identity = identity
+            with self.subTest(identity=identity), self.assertRaises(ValueError):
+                self.run_identity()
 
     def test_state_requires_explicit_host_binding_and_managed_mount_policy(self):
         for key, changed in [('org.nest:host-id', '-'), ('org.nest:host-id', 'd' * 32),
