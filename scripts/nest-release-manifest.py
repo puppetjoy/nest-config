@@ -278,9 +278,11 @@ def generation_binding(manifest: Any, policies: Any, scope: Any = None):
                               "platform": output["member"]["platform"],
                               "kernel": output["member"]["compatibility"]["kernel"]}
     if scope is not None:
-        require(type(scope) is dict and scope.get("release") == runtime
-                and scope.get("config_source") == checked["expectations"]["sources"]["nest/config"],
-                "generation: wave release/config mismatch")
+        require(type(scope) is dict and scope.get("release") == runtime, "generation: wave release mismatch")
+        # The immutable root records its build source. The wave independently
+        # selects the main catalog to apply after boot; a tooling/catalog fix
+        # must not force an otherwise unchanged OS generation to be rebuilt.
+        match(scope.get("config_source"), SHA, "wave catalog source")
         hosts = scope.get("hosts")
         require(type(hosts) is list and all(type(host) is dict for host in hosts)
                 and len(hosts) == len(bindings) and {host.get("name") for host in hosts} == set(bindings),
