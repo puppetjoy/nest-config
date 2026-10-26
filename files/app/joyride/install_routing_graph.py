@@ -10,6 +10,8 @@ import tempfile
 import urllib.request
 
 BUILD = "metro-20261026-v3"
+# History enrichment retains topology identity so existing route bindings stay valid.
+GRAPH_BUILD = "metro-20261025-v2"
 SIZE = 1206992896
 SHA256 = "9dcfaa2629a6a9d8a2903d5fd917b51b6fddbe55af49861a9d58ee098ad62886"
 URL = ("https://gitlab.joyfullee.me/api/v4/projects/83/packages/generic/"
@@ -38,7 +40,7 @@ def verify(path):
         if db.execute("PRAGMA integrity_check").fetchall() != [("ok",)]:
             raise ValueError("graph_integrity_failed")
         metadata = {key: json.loads(value) for key, value in db.execute("SELECT * FROM metadata")}
-    if metadata["graph_build"] != BUILD or metadata["unresolved_migrations"]:
+    if metadata["graph_build"] != GRAPH_BUILD or metadata["unresolved_migrations"]:
         raise ValueError("graph_metadata_mismatch")
 
 

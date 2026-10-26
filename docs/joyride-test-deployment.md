@@ -9,6 +9,9 @@ check/build/smoke. Build 52537 `image.json` binds the multiarchitecture image
 It retains cross-waypoint sidewalk continuity from MR 46. The immutable private
 graph is `metro-20261026-v3`, 1,206,992,896 bytes, SHA-256
 `9dcfaa2629a6a9d8a2903d5fd917b51b6fddbe55af49861a9d58ee098ad62886`.
+This package enriches history without rebuilding topology: its `graph_build`
+metadata remains `metro-20261025-v2`, preserving existing route bindings. Package
+selection and expected topology identity are checked independently.
 The existing installer verifies it before atomic selection, retaining v2 below
 as `previous.sqlite3` and leaving older rollback bytes intact. No open inode is
 overwritten. Contributing skates increase from 406 to 832, weighted edges from
