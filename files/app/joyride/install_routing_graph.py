@@ -91,13 +91,14 @@ def install(root=Path("/data/private/routing")):
                 output.flush()
                 os.fsync(output.fileno())
             verify(temporary)
-            temporary.chmod(0o400)
             os.replace(temporary, destination)
         finally:
             if temporary is not None:
                 temporary.unlink(missing_ok=True)
     else:
         verify(destination)
+    # A fresh pod's fsGroup walk may add group write permissions to PVC files.
+    destination.chmod(0o400)
     if current.is_symlink() and os.readlink(current) != destination.name:
         select(root, "previous.sqlite3", os.readlink(current))
     select(root, "current.sqlite3", destination.name)
