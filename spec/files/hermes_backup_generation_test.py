@@ -365,6 +365,23 @@ class HermesBackupGenerationTest(unittest.TestCase):
         self.assertFalse((self.backup_dir / str(first['archive'])).exists())
         self.assertEqual(self.call_log.read_text(), 'backup\nbackup\n')
 
+    def test_exclusive_hold_locks_use_writable_descriptors_for_nfs(self) -> None:
+        receipt = self.backup('nfs-lock')
+        native_flock = fcntl.flock
+        modes = []
+
+        def nfs_flock(fd, operation):
+            access = fcntl.fcntl(fd, fcntl.F_GETFL) & os.O_ACCMODE
+            modes.append(access)
+            if operation & fcntl.LOCK_EX and access == os.O_RDONLY:
+                raise OSError(9, 'NFS exclusive lock requires write access')
+            return native_flock(fd, operation)
+
+        with mock.patch.object(generation.fcntl, 'flock', side_effect=nfs_flock):
+            for action in ('hold', 'check-hold', 'release-hold'):
+                generation.retain_generation(self.hold_args(receipt, action))
+        self.assertEqual(modes, [os.O_RDWR, os.O_RDONLY, os.O_RDWR])
+
     def test_independent_holds_require_independent_exact_release(self) -> None:
         first = self.backup('shared-held')
         generation.retain_generation(self.hold_args(first, hold_id='one'))

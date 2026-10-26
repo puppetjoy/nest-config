@@ -417,8 +417,10 @@ def retain_generation(args: argparse.Namespace) -> dict[str, object]:
         raise ValueError('invalid retention profile coverage')
     backup_dir, paths = _verification_paths(args, require_age=args.command != 'release-hold')
     path = _hold_path(backup_dir, args.hold_id)
-    with paths[0].open('rb') as lock:
-        shared = args.command == 'check-hold'
+    shared = args.command == 'check-hold'
+    # Linux NFS implements flock with byte-range locks: exclusive locks need
+    # write access. Open the existing lock without creating or truncating it.
+    with paths[0].open('rb' if shared else 'r+b') as lock:
         fcntl.flock(lock.fileno(), (fcntl.LOCK_SH if shared else fcntl.LOCK_EX) | fcntl.LOCK_NB)
         if args.command == 'hold':
             verified = _verify_generation_locked(args, paths[1])
