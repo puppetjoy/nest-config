@@ -9,11 +9,11 @@ import sqlite3
 import tempfile
 import urllib.request
 
-BUILD = "metro-20261025-v2"
-SIZE = 1205555200
-SHA256 = "f13481cb4e1ba95e28165d9259b692216acd635d2266ccc5cc1be6b6c89ca104"
+BUILD = "metro-20261026-v3"
+SIZE = 1206992896
+SHA256 = "9dcfaa2629a6a9d8a2903d5fd917b51b6fddbe55af49861a9d58ee098ad62886"
 URL = ("https://gitlab.joyfullee.me/api/v4/projects/83/packages/generic/"
-       "joyride-routing-private/metro-20261025-v2/" + SHA256 + ".sqlite3")
+       "joyride-routing-private/metro-20261026-v3/" + SHA256 + ".sqlite3")
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):

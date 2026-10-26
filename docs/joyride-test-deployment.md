@@ -2,6 +2,22 @@
 
 ## Private routing engine
 
+The enriched-history TEST selection follows Joyride MR 47, merged-main revision
+`474f8f614b363f48199db94fc150f520a2399463`, pipeline 12278 with successful
+check/build/smoke. Build 52537 `image.json` binds the multiarchitecture image
+`sha256:437df0055eed4b7bb116b6ff1e9164342c9787362194b9ecbfb5ff2e1fd611b3`.
+It retains cross-waypoint sidewalk continuity from MR 46. The immutable private
+graph is `metro-20261026-v3`, 1,206,992,896 bytes, SHA-256
+`9dcfaa2629a6a9d8a2903d5fd917b51b6fddbe55af49861a9d58ee098ad62886`.
+The existing installer verifies it before atomic selection, retaining v2 below
+as `previous.sqlite3` and leaving older rollback bytes intact. No open inode is
+overwritten. Contributing skates increase from 406 to 832, weighted edges from
+10,114 to 12,578 and activity-edge uses from 36,516 to 68,190. These are conservative
+local history contributions, not new whole-route matches or facility certainty.
+Preserve active frontend, basemap and content; no release is published.
+
+Historical v2 baseline and retained installer safety contract:
+
 The TEST baseline now follows Joyride MR 42, merged-main head
 `dd05b3ce7705fa1cfaee818b545d39b43f83694e`, successful pipeline 12204.
 Build 52004 `image.json` binds the multiarchitecture image
