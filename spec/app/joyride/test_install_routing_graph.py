@@ -58,8 +58,10 @@ class GraphInstall(unittest.TestCase):
         self.assertEqual((self.root / "previous.sqlite3").resolve(), old)
         self.assertEqual(old.read_bytes(), b"retained rollback fixture")
         self.assertEqual((self.root / "current.sqlite3").stat().st_mode & 0o777, 0o400)
+        (self.root / "current.sqlite3").chmod(0o660)  # Kubernetes fsGroup mount preparation.
         with patch.object(installer.urllib.request, "build_opener", side_effect=AssertionError("must reuse")):
             installer.install(self.root)
+        self.assertEqual((self.root / "current.sqlite3").stat().st_mode & 0o777, 0o400)
         self.assertEqual((self.root / "previous.sqlite3").resolve(), old)
 
     def test_bad_downloads_never_change_active_selection(self):
