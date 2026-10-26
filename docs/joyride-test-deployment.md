@@ -1,5 +1,38 @@
 # Joyride private TEST deployment
 
+## Private routing engine
+
+The TEST baseline now follows Joyride MR 42, merged-main head
+`dd05b3ce7705fa1cfaee818b545d39b43f83694e`, successful pipeline 12204.
+Build 52004 `image.json` binds the multiarchitecture image
+`sha256:16f20746d48e8e9c7c48845951fd7ffc6e5dbec74bbfd68a978660f965eafd62`.
+The previous managed image is the basemap v3 pin below. Preserve active basemap,
+frontend and content selections; this installation does not publish a release.
+
+The serial `routing-graph` initializer reuses the existing read-only package
+credential and private project 83 generic package lane, without new RBAC. It
+streams the checksum-named `joyride-routing-private/metro-20261025-v2` file to
+the private PVC, verifies exact size, SHA-256, SQLite integrity, build metadata
+and unresolved migrations before atomically selecting
+`/data/private/routing/current.sqlite3`. Its immutable file is read-only and
+retained. The source graph is 1,205,555,200 bytes with SHA-256
+`f13481cb4e1ba95e28165d9259b692216acd635d2266ccc5cc1be6b6c89ca104`.
+The installer checks staging capacity plus 256 MiB headroom; it neither expands
+the existing 8 GiB PVC nor deletes retained data. A rerun verifies/reuses the
+installed file without downloading it again. A changed selection retains the
+old target under `previous.sqlite3`; no open graph is overwritten in place.
+For rollback, select a retained verified graph atomically and retain both files;
+change the managed installer selection as well so the next rollout agrees.
+
+Only the private proxy forwards the five exact `/routing/*` operations to port
+8002. JSON bodies are capped at 1 MiB, caller identity/auth headers are discarded,
+and upstream timeouts match the trusted listener's existing 120-second budget.
+Public, internal-web and bearer-ops listeners do not register routing URLs.
+Production remains fail-closed and unapplied. See `joyride-luna-private-access.md`
+and the application's `docs/internal-routing-engine.md` for the API contract.
+Oregon carriageway/sidewalk remains unknown; installing this graph does not
+resolve facility uncertainty or confer final route acceptance.
+
 ## Basemap v3 managed installation
 
 The current TEST baseline follows application MR 40, merged-main revision

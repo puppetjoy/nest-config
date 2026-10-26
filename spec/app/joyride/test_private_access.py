@@ -117,6 +117,32 @@ class PrivateAccess(unittest.TestCase):
     def test_home(self):
         self.assertEqual(self.request()[0], 200)
 
+    def test_routing_exact_methods_and_header_boundary(self):
+        for operation in ("status", "propose", "match", "settle", "export"):
+            path = "/routing/" + operation
+            method = "GET" if operation == "status" else "POST"
+            status, data = self.request(path=path, method=method, extra=(
+                "Content-Type: application/json\r\nAuthorization: forged\r\n"
+                "Cookie: forged\r\nTailscale-User-Login: forged\r\n"
+                "X-Joyride-Trusted-Test: forged\r\nForwarded: forged\r\n"))
+            self.assertEqual(status, 200)
+            self.assertEqual(json.loads(data)["path"], path)
+            self.assertEqual(json.loads(data)["headers"]["Content-Type"], "application/json")
+            self.assertNotIn(b"forged", data)
+            for wrong in ("HEAD", "PUT", "DELETE", "OPTIONS", "POST" if method == "GET" else "GET"):
+                self.assertEqual(self.request(path=path, method=wrong)[0], 405)
+            for suffix in ("?", "?x=1", "/", "/extra"):
+                self.assertEqual(self.request(path=path + suffix, method=method)[0], 404)
+        self.assertEqual(self.request(path="/routing/match", method="POST", extra="Content-Length: 1048577\r\n")[0], 413)
+
+    def test_routing_raw_uri_tricks_are_refused(self):
+        for path in ("/routing", "/routing/unknown", "//routing/status", "/routing//status",
+                     "/routing/%73tatus", "/%72outing/status", "/other/../routing/status",
+                     "/routing/../admin", "/routing/%2e%2e/admin", "/routing/status%3fx=1",
+                     "/routing/status/../status", "/routing/status%00"):
+            with self.subTest(path=path):
+                self.assertIn(self.request(path=path)[0], (400, 404))
+
     def test_exact_origin_with_standard_port(self):
         self.assertEqual(self.request(host="joyride-test.eyrie:443")[0], 200)
 

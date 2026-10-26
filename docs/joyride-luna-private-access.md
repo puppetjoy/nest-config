@@ -73,6 +73,19 @@ cluster pods and direct PodIP/Service calls must fail network admission. Inspect
 all additive NetworkPolicies, not merely the named policy. Kubernetes node-local
 and same-pod processes are privileged trust roots, not untrusted network clients.
 
+### Trusted TEST routing
+
+The same admitted backchannel now forwards exactly `GET /routing/status` and
+`POST /routing/propose`, `/routing/match`, `/routing/settle`, `/routing/export`
+to trusted port 8002 only. No query strings, trailing slashes, normalized or
+encoded target variants, unknown operations or other methods are accepted.
+All caller headers are discarded except the supplied content type; no identity,
+cookie, bearer or synthetic trust header reaches the application. POST content
+must be JSON, capped at 1 MiB; upstream read/send budgets are 120 seconds.
+No tailnet grant, VIP, NetworkPolicy, domain, token or production authority is
+added. The graph remains private and read-only. Parent-owned Luna backchannel
+and final route acceptance remain separate from engineering endpoint checks.
+
 ### Trusted TEST member administration
 
 The raw method/path allowance reaches only port 8002:
