@@ -619,7 +619,8 @@ resources:
                 cpu: 100m
                 memory: 64Mi
               limits:
-                memory: 256Mi
+                # Full SQLite index verification caches the fixed 1.2 GB graph.
+                memory: 1536Mi
             volumeMounts:
             - name: data
               mountPath: /data/private
