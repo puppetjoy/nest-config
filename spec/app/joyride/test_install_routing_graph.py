@@ -27,7 +27,7 @@ class GraphInstall(unittest.TestCase):
         with closing(sqlite3.connect(source)) as db:
             db.execute("CREATE TABLE metadata (key TEXT, value TEXT)")
             db.executemany("INSERT INTO metadata VALUES (?, ?)", [
-                ("graph_build", json.dumps(installer.BUILD)), ("unresolved_migrations", "[]")])
+                ("graph_build", json.dumps(installer.GRAPH_BUILD)), ("unresolved_migrations", "[]")])
             db.commit()
         self.raw = source.read_bytes()
         self.sha = hashlib.sha256(self.raw).hexdigest()
@@ -91,6 +91,13 @@ class GraphInstall(unittest.TestCase):
         with patch.dict(os.environ, {"RUNTIME_ENV": "production"}):
             with self.assertRaisesRegex(ValueError, "test_only"):
                 installer.install(self.root)
+
+    def test_package_version_does_not_replace_topology_identity(self):
+        self.assertNotEqual(installer.BUILD, installer.GRAPH_BUILD)
+        self.download()
+        with patch.object(installer, "GRAPH_BUILD", "unexpected-topology"):
+            with self.assertRaisesRegex(ValueError, "graph_metadata_mismatch"):
+                installer.verify((self.root / "current.sqlite3").resolve())
 
     def test_unmanaged_selection_and_corrupt_retained_file_refused(self):
         current = self.root / "current.sqlite3"
