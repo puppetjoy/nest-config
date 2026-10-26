@@ -23,6 +23,10 @@ installed file without downloading it again. A changed selection retains the
 old target under `previous.sqlite3`; no open graph is overwritten in place.
 For rollback, select a retained verified graph atomically and retain both files;
 change the managed installer selection as well so the next rollout agrees.
+Download writeback is bounded to 16 MiB intervals. Full SQLite integrity checks
+use a 1280 MiB page-cache budget within this serial initializer's 1536 MiB limit,
+avoiding repeated random index reads from CephFS; steady-state app budgets are
+unchanged.
 
 Only the private proxy forwards the five exact `/routing/*` operations to port
 8002. JSON bodies are capped at 1 MiB, caller identity/auth headers are discarded,

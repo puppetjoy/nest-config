@@ -31,6 +31,9 @@ def verify(path):
     if digest.hexdigest() != SHA256:
         raise ValueError("graph_checksum_mismatch")
     with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)) as db:
+        # Full index verification revisits the graph in several key orders.
+        # Cache this fixed 1.2 GB artifact instead of random CephFS rereads.
+        db.execute("PRAGMA cache_size=-1310720")
         if db.execute("PRAGMA integrity_check").fetchall() != [("ok",)]:
             raise ValueError("graph_integrity_failed")
         metadata = {key: json.loads(value) for key, value in db.execute("SELECT * FROM metadata")}
