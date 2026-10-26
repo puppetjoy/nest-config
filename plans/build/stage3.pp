@@ -73,13 +73,14 @@ plan nest::build::stage3 (
     if $root_publication['target'] != undef {
       assert_type(String[1], $root_publication['archive'])
       assert_type(String[1], $root_publication['build_target'])
+      # Target.config omits defaults; admission needs the effective transport.
       $publication_targets = get_targets($root_publication['target'])
-      unless $publication_targets.length == 1 and $publication_targets[0].config['transport'] == 'ssh' and $publication_targets[0].config['ssh']['user'] == 'joy' {
+      unless $publication_targets.length == 1 and $publication_targets[0].transport == 'ssh' and $publication_targets[0].user == 'joy' {
         fail('Remote publication requires one inventory-backed Joy SSH target')
       }
       $publication_target = $publication_targets[0]
       $build_targets = get_targets($root_publication['build_target'])
-      unless $build_targets.length == 1 and $build_targets[0].config['transport'] == 'ssh' and $build_targets[0].config['ssh']['user'] == 'joy' {
+      unless $build_targets.length == 1 and $build_targets[0].transport == 'ssh' and $build_targets[0].user == 'joy' {
         fail('Native root export requires one inventory-backed Joy SSH build target')
       }
       # Preserve the inventory SSH transport when the image hostname below is

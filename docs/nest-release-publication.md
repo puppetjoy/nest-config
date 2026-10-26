@@ -142,6 +142,14 @@ and publication parent GUID fields as local placement, plus:
   non-symlinked and disjoint from identity, staging, receipts and publication.
   Do not put this transport scratch in `/nest/backup`.
 
+Admission checks Bolt's effective `Target.transport` and `Target.user`, including
+inherited/default configuration. `Target.config` contains only inventory-level
+configuration and may omit the normal default SSH transport. A missing raw
+`transport` key is not a transport failure; an effective non-SSH transport or
+non-Joy identity still refuses before initialization. Materialize and reopen the
+exact selected placement file on the executor's actual shared mount; a corrected
+local copy alone does not update the file that CI consumes.
+
 Select and provision the same local ZFS placement on the publication host first,
 using the existing `--provision` interface above. For the adapter's remote
 placement, retain those exact local fields and select the explicit target and

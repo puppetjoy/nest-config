@@ -11,9 +11,13 @@ RSpec.describe 'Stage 0 and Stage 3 frozen repository inputs' do
   let(:catalog) { { 'source' => 'e' * 40, 'base' => "registry.example/nest/bolt@sha256:#{'f' * 64}" } }
   let(:ca_sha256) { 'a' * 64 }
   let(:identity_reference) { '12345678-1234-4123-8123-123456789abc' }
+  let(:inventory_transport) { nil }
+  let(:inventory_user) { 'joy' }
   let(:inventory_data) do
     { 'targets' => ['falcon', 'fixture-host'].map do |name|
-      { 'name' => name, 'uri' => "#{name}.nest", 'config' => { 'transport' => 'ssh', 'ssh' => { 'user' => 'joy' } } }
+      config = { 'ssh' => { 'user' => inventory_user } }
+      config['transport'] = inventory_transport unless inventory_transport.nil?
+      { 'name' => name, 'uri' => "#{name}.nest", 'config' => config }
     end }
   end
   let(:catalog_check) do
@@ -317,6 +321,26 @@ RSpec.describe 'Stage 0 and Stage 3 frozen repository inputs' do
 
   include_examples 'native Stage 3 export', false
   include_examples 'native Stage 3 export', true
+
+  shared_examples 'unsafe native Stage 3 inventory' do
+    it 'refuses before any host command or container initialization' do
+      expect(executor).not_to receive(:run_command)
+      selected = publication.merge('target' => 'falcon', 'archive' => '/private/transfer/root.tar', 'build_target' => 'fixture-host')
+      expect(run_plan('nest::build::stage3', publication_options.merge('root_publication' => selected)).ok?).to be(false)
+    end
+  end
+
+  context 'with a non-SSH effective transport' do
+    let(:inventory_transport) { 'local' }
+
+    include_examples 'unsafe native Stage 3 inventory'
+  end
+
+  context 'with a root SSH identity' do
+    let(:inventory_user) { 'root' }
+
+    include_examples 'unsafe native Stage 3 inventory'
+  end
 
   it 'refuses missing or noninventory native build targets before commands' do
     expect(executor).not_to receive(:run_command)
