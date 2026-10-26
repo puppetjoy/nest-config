@@ -91,6 +91,7 @@ class PrivateAccess(unittest.TestCase):
             run("podman", "cp", str(cls.path), cls.container + ":/tls")
             run("podman", "cp", str(cls.path / "nginx.conf"), cls.container + ":/etc/nginx/nginx.conf")
             run("podman", "start", cls.container)
+            run("podman", "exec", cls.container, "nginx", "-t")
             nginx_info = json.loads(run("podman", "inspect", cls.container).stdout)[0]
             cls.address = nginx_info["NetworkSettings"]["Networks"][cls.network]["IPAddress"]
             for _ in range(30):
@@ -134,6 +135,44 @@ class PrivateAccess(unittest.TestCase):
             for suffix in ("?", "?x=1", "/", "/extra"):
                 self.assertEqual(self.request(path=path + suffix, method=method)[0], 404)
         self.assertEqual(self.request(path="/routing/match", method="POST", extra="Content-Length: 1048577\r\n")[0], 413)
+
+    def test_routing_reviews_exact_targets_methods_and_headers(self):
+        identifier = "bfa1494e-0443-4c8a-9aab-1074b615f2a3"
+        for path in ("/routing/reviews", "/routing/reviews/" + identifier):
+            for method in ("GET", "POST"):
+                with self.subTest(path=path, method=method):
+                    status, data = self.request(path=path, method=method, extra=(
+                        "Content-Type: application/json\r\nAuthorization: forged\r\n"
+                        "Cookie: forged\r\nTailscale-User-Login: forged\r\n"
+                        "X-Joyride-Trusted-Test: forged\r\nForwarded: forged\r\n"
+                        "X-Joyride-Identity: forged\r\nTrusted-Test-Listener: forged\r\n"))
+                    self.assertEqual(status, 200)
+                    self.assertEqual(json.loads(data)["path"], path)
+                    self.assertEqual(json.loads(data)["headers"]["Host"], "joyride-test.eyrie")
+                    self.assertEqual(json.loads(data)["headers"]["Content-Type"], "application/json")
+                    self.assertNotIn(b"forged", data)
+            for method in ("HEAD", "PUT", "PATCH", "DELETE", "OPTIONS"):
+                self.assertEqual(self.request(path=path, method=method)[0], 405)
+            self.assertEqual(self.request(path=path, method="POST", extra="Content-Length: 1048577\r\n")[0], 413)
+            for suffix in ("?", "?x=1", "/", "/extra"):
+                for method in ("GET", "POST"):
+                    self.assertEqual(self.request(path=path + suffix, method=method)[0], 404)
+
+    def test_routing_reviews_aliases_and_malformed_ids_are_refused(self):
+        identifier = "bfa1494e-0443-4c8a-9aab-1074b615f2a3"
+        paths = ["/routing/reviews/" + value for value in (
+            identifier.upper(), identifier.replace("-", ""), identifier[:-1],
+            identifier + "0", "g" + identifier[1:], "{" + identifier + "}",
+            identifier.replace("-", "%2d"), "unknown")]
+        paths += ["//routing/reviews", "/routing//reviews", "/routing/%72eviews",
+                  "/%72outing/reviews", "/other/../routing/reviews",
+                  "/routing/reviews/../reviews", "/routing/reviews/../../admin",
+                  "/routing/reviews/%2e%2e/../admin", "/routing/reviews%2f" + identifier,
+                  "/routing/reviews%3fx=1", "/routing/reviews%00"]
+        for path in paths:
+            for method in ("GET", "POST"):
+                with self.subTest(path=path, method=method):
+                    self.assertIn(self.request(path=path, method=method)[0], (400, 404))
 
     def test_routing_raw_uri_tricks_are_refused(self):
         for path in ("/routing", "/routing/unknown", "//routing/status", "/routing//status",
