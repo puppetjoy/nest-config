@@ -195,6 +195,14 @@ syncs and seals it. It calls the unchanged native publisher/checker. The adapter
 independently reopens the final resource on that same inventory target through
 `nest::build::check_stage3_root`, rather than checking an NFS view on the builder.
 
+Stage builds keep the generated crossdev overlay at `/var/lib/portage/crossdev`,
+outside `/var/db/repos`. The latter remains the exact three-repository frozen
+input inventory; an extra directory still refuses. `nest::lib::repo` accepts an
+explicit absolute `location` for generated repositories while preserving its
+ordinary default. Crossdev's configuration and generated metadata use that same
+location. Ordinary live hosts retain `/var/db/repos/crossdev`; this does not move
+or delete their existing overlay, repair a failed build, or authorize a retry.
+
 This is a transport option on the existing build, not a new service or general
 archive import API. Only the root-owned archive made by this producer is valid.
 Any failed copy, extraction, digest, mount, seal or publication leaves the

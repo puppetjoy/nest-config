@@ -3,7 +3,17 @@ class nest::lib::crossdev {
     ensure => installed,
   }
 
-  nest::lib::repo { 'crossdev': }
+  # Crossdev generates repository content; it is not a fourth pinned input.
+  # Keep build output outside the complete frozen /var/db/repos inventory.
+  # Ordinary hosts retain their existing location without a live migration.
+  $location = ($facts['build'] and $facts['build'] =~ /^stage\d+$/) ? {
+    true    => '/var/lib/portage/crossdev',
+    default => '/var/db/repos/crossdev',
+  }
+
+  nest::lib::repo { 'crossdev':
+    location => $location,
+  }
 
   file {
     default:
@@ -14,17 +24,17 @@ class nest::lib::crossdev {
     ;
 
     [
-      '/var/db/repos/crossdev/metadata',
-      '/var/db/repos/crossdev/profiles',
+      "${location}/metadata",
+      "${location}/profiles",
     ]:
       ensure => directory,
     ;
 
-    '/var/db/repos/crossdev/metadata/layout.conf':
+    "${location}/metadata/layout.conf":
       content => "masters = gentoo\nthin-manifests = true\n",
     ;
 
-    '/var/db/repos/crossdev/profiles/repo_name':
+    "${location}/profiles/repo_name":
       content => "crossdev\n",
     ;
   }
