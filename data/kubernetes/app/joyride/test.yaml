@@ -5,9 +5,9 @@ service_name: '%{nest::kubernetes::service}'
 fqdn: '%{nest::kubernetes::service}.eyrie'
 runtime_environment: test
 ingress_class: contour-test
-# Routing repair MR 45, successful merged-main pipeline 12225, build 52190 image.json.
-# Head 659c5d49690e3a094c66f2c6d23e2bdd3bcab824; preserves admitted graph and basemap v3.
-joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:ea972524587c06c52bd85bd307ffcbd239b5bcf70e58831693e4ba14a7fd48df
+# History salvage MR 47, successful merged-main pipeline 12278, build 52537 image.json.
+# Head 474f8f614b363f48199db94fc150f520a2399463; retains sidewalk continuity MR 46.
+joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:437df0055eed4b7bb116b6ff1e9164342c9787362194b9ecbfb5ff2e1fd611b3
 affinity: {}
 tolerations: []
 resources:
