@@ -15,6 +15,14 @@ health checking. Each advertiser checks its own strict HTTPS `/readyz`, includin
 etcd readiness, with the Kubernetes CA mounted read-only. It does not check the
 VIP, use an insecure TLS bypass, or substitute the lighter static-Pod probe.
 
+The integration helper also binds the local readiness hostname to loopback in
+the static Pod's `hostAliases`, retaining the generated `kubernetes` alias.
+This preserves the hostname used for certificate verification while removing
+DNS from the bootstrap path. An otherwise healthy API must not lose its VIP
+because its own short node name is sent to a public resolver while cluster
+DNS is still starting. No external resolver or cluster service is required for
+this node-local check.
+
 The check period is ten seconds, timeout three seconds and withdrawal threshold
 two consecutive failures. Startup suppresses advertisement until the first
 successful check; recovery re-announces automatically. Detection is not instant,
