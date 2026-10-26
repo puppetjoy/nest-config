@@ -282,14 +282,24 @@ limit behavior still require the separately approved disruptive canary.
 
 ### Checked kernel Puppet outcomes
 
-`nest::base::cli` selects `=app-admin/nest-cli-0.9.0_p20261021-r7::nest`
-from overlay MR !11, merge `e68eb79f3c73b820a9cb2125da162b079c692044`.
-It packages CLI MR !16, merge `685e2d2e70cbcd76d3a0bd392e1d8ffb1d981122`.
+`nest::base::cli` selects `=app-admin/nest-cli-0.9.0_p20261021-r8::nest`
+from overlay MR !12, merge `0b01c701b5da805850d8a8beb74bee256e291bcc`.
+It packages CLI MR !17, merge `1aee2c84fcd9e287cee3e7bf8302d48766962eb6`,
+including the checked kernel outcomes from MR !16.
 The complete 31-library-file aggregate SHA256 is
-`ea61e9dafd0047972881caf1eaaeafd850dd9834ba28dd57d13464afe2efeebc`.
+`5ce530992688c50ef8d1e53bc6aaf77905385dad88eaac7a3ba26d603686e93c`.
 Verify the entire installed source map and exact Portage revision after ordinary
 inventory-backed `nest_cli_package` delivery. Package and source CI are not
 installed acceptance. No service restart or reboot is needed for this tooling pin.
+
+Native reset cycles persist a transaction-owned `nest-reset-ID` snapshot identity
+through plan, capacity admission, clone, resume, promotion and finalize. Retained
+legacy fixed-name snapshots do not collide with a new cycle and are not deleted
+or renamed. The same cycle must retain its chosen identity; an ambiguous partial
+creation cannot silently mint a replacement or replay backup. Historical and
+standalone behavior remains explicit in the CLI compatibility contract. This
+source/package correction is not proof of live A/B acceptance and does not
+extend an approved outage window.
 
 Generation and shared-state admission read pool host identity with `zpool get`,
 not `zfs get`. Dataset identity remains independently checked; no host identity,
