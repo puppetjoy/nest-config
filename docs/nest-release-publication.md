@@ -156,6 +156,17 @@ build-container mounts alone do not make it visible to the executor. The runner
 already has trusted native Podman-socket access. No host storage graph is mounted
 into CI, and no root SSH transport is added.
 
+For native Joy/Bolt operations, that trusted builder also exposes the existing
+Joy agent socket read-only at `/run/nest-build-ssh-agent`. Selected jobs set
+`SSH_AUTH_SOCK=/run/nest-build-ssh-agent`; other runner instances do not receive
+this mount. Require a live socket and verify inventory-backed transport to both
+hosts before starting a candidate. An absent or unusable agent is a refusal,
+not permission to enroll a key, copy private keys or fall back to root SSH.
+The read-only mount does not restrict agent signing: jobs on this builder must
+already be trusted for native host access. It neither starts an agent nor changes
+host authorized keys. Remove this builder volume and the selected job variable
+to withdraw forwarding; do not interrupt active jobs to reconfigure the runner.
+
 Before container initialization the plan uploads the existing sibling helpers
 through Bolt to both selected hosts, checks publication-host ZFS placement, and
 read-only checks the absent shared archive on the native build host. After the
