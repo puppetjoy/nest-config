@@ -46,6 +46,21 @@ RSpec.describe 'kube-vip health CA manifest integration' do
     expect(stdout).not_to include('!ruby')
   end
 
+  it 'binds the local readiness hostname without depending on external or cluster DNS' do
+    stdout, stderr, status = Open3.capture3(RbConfig.ruby, script, stdin_data: YAML.dump(manifest))
+    expect(status).to be_success, stderr
+    expect(YAML.safe_load(stdout).dig('spec', 'hostAliases')).to include(
+      { 'ip' => '127.0.0.1', 'hostnames' => ['control1'] },
+    )
+  end
+
+  it 'preserves generated aliases while adding the local TLS hostname only once' do
+    manifest['spec']['hostAliases'] = [{ 'ip' => '127.0.0.1', 'hostnames' => ['kubernetes', 'control1'] }]
+    stdout, stderr, status = Open3.capture3(RbConfig.ruby, script, stdin_data: YAML.dump(manifest))
+    expect(status).to be_success, stderr
+    expect(YAML.safe_load(stdout).dig('spec', 'hostAliases')).to eq(manifest['spec']['hostAliases'])
+  end
+
   it 'refuses liveness-only advertising qualification' do
     manifest['spec']['containers'].first['env'].first['value'] = 'https://control1:6443/livez'
     _stdout, stderr, status = Open3.capture3(RbConfig.ruby, script, stdin_data: YAML.dump(manifest))
