@@ -45,6 +45,27 @@ RSpec.describe 'nest::host::stage_generation' do
     expect(run_plan('nest::host::stage_generation', 'targets' => 'fixture-host', 'policy' => policy).ok?).to be(false)
   end
 
+  it 'passes the paired producer archive without changing policy or read-only default' do
+    archive = '/private/producer.tar'
+    digest = 'sha256:' + 'a' * 64
+    expected = "#{command(false)} --archive #{archive} --archive-digest #{digest} --check"
+    expect_command(expected).with_targets('fixture-host').always_return('stdout' => report.to_json)
+    result = run_plan('nest::host::stage_generation', 'targets' => 'fixture-host', 'policy' => policy, 'manifest' => manifest,
+                      'archive' => archive, 'archive_digest' => digest)
+
+    expect(result.ok?).to be(true)
+  end
+
+  [{ 'archive' => '/private/producer.tar' }, { 'archive_digest' => 'sha256:' + 'a' * 64 },
+   { 'archive' => '/private/producer.tar', 'archive_digest' => 'sha256:' + 'a' * 64, 'verify_only' => true }].each do |options|
+    it "refuses incomplete archive inputs or archive with sealed verification #{options}" do
+      allow_any_command.not_be_called
+      result = run_plan('nest::host::stage_generation', options.merge('targets' => 'fixture-host', 'policy' => policy, 'manifest' => manifest))
+
+      expect(result.ok?).to be(false)
+    end
+  end
+
   it 'refuses manifest binding failure before any target command' do
     allow_any_command.not_be_called
     binding = { 'manifest' => manifest, 'policies' => { 'fixture-host' => policy } }

@@ -56,6 +56,7 @@ class TransferTests(unittest.TestCase):
         self.commands = []
         self.sealed = False
         self.patches = [patch.object(GEN, 'STATE', self.state),
+                        patch.object(GEN.ROOT, 'safe_ancestors'),  # Disposable fixtures beneath the test runner's temporary parent.
                         patch.object(GEN, 'identity', side_effect=self.identity),
                         patch.object(GEN, 'admission', return_value=self.capacity),
                         patch.object(GEN, 'command', side_effect=self.command)]
@@ -69,7 +70,7 @@ class TransferTests(unittest.TestCase):
 
     def command(self, args, timeout=60):
         self.commands.append(args)
-        if args[0] == 'rsync':
+        if args[0] in ('rsync', 'tar'):
             return subprocess.run(args, capture_output=True, text=True, check=True).stdout
         if args[:2] == ['zfs', 'set']:
             self.sealed = True
@@ -80,6 +81,65 @@ class TransferTests(unittest.TestCase):
 
     def completed(self):
         return self.state / 'generation-456.complete'
+
+    def archive(self):
+        path = self.base / 'producer.tar'
+        subprocess.run(['tar', '--create', '--file', str(path), '--format=pax', '--acls', '--xattrs',
+                        '--xattrs-include=*', '--numeric-owner', '--directory', str(self.source), '.'], check=True)
+        path.chmod(0o600)
+        return path, 'sha256:' + hashlib.sha256(path.read_bytes()).hexdigest()
+
+    def test_archive_preserves_metadata_hidden_by_nfs_and_verifies_without_archive(self):
+        archive, digest = self.archive()
+        self.observed['source_mount'] = {'fstype': 'nfs4', 'options': 'ro'}
+        original = GEN.ROOT.content_digest
+        def local_only(path):
+            self.assertNotEqual(path, self.source, 'Never hash an NFS metadata view')
+            return original(path)
+        with patch.object(GEN.ROOT, 'content_digest', side_effect=local_only):
+            result = GEN.transfer(self.value, archive=str(archive), expected_archive_digest=digest)
+        self.assertTrue(result['sealed'])
+        self.assertEqual(result['archive'], {'path': str(archive), 'digest': digest})
+        self.assertEqual(original(self.destination), self.value['content_digest'])
+        self.assertEqual(os.getxattr(self.destination / 'private', 'user.fixture'), b'fixture attribute')
+        self.assertEqual((self.destination / 'private').stat().st_ino, (self.destination / 'hardlink').stat().st_ino)
+        archive.unlink()
+        shutil.rmtree(self.source)
+        self.assertTrue(GEN.verify(self.value)['sealed'])
+
+    def test_nfs_tree_refuses_before_hash_lock_or_copy(self):
+        self.observed['source_mount'] = {'fstype': 'nfs4'}
+        with patch.object(GEN.ROOT, 'content_digest', side_effect=AssertionError('No NFS hash')), self.assertRaises(ValueError):
+            GEN.transfer(self.value)
+        self.assertEqual(list(self.state.iterdir()), [])
+        self.assertEqual(self.commands, [])
+
+    def test_archive_check_has_no_copy_lock_or_reservation(self):
+        archive, digest = self.archive()
+        result = GEN.transfer(self.value, check=True, archive=str(archive), expected_archive_digest=digest)
+        self.assertTrue(result['read_only'])
+        self.assertEqual(list(self.state.iterdir()), [])
+        self.assertEqual(self.commands, [])
+
+    def test_archive_bad_digest_or_mode_refuses_before_reservation(self):
+        archive, digest = self.archive()
+        for bad_digest, mode in [('sha256:' + '0' * 64, 0o600), (digest, 0o644)]:
+            archive.chmod(mode)
+            with self.subTest(mode=mode), self.assertRaises(ValueError):
+                GEN.transfer(self.value, archive=str(archive), expected_archive_digest=bad_digest)
+        self.assertEqual(list(self.state.iterdir()), [])
+        self.assertEqual(self.commands, [])
+
+    def test_wrong_archive_content_retains_reservation_without_sealing(self):
+        archive, digest = self.archive()
+        self.value['content_digest'] = 'sha256:' + '0' * 64
+        with self.assertRaises(ValueError):
+            GEN.transfer(self.value, archive=str(archive), expected_archive_digest=digest)
+        self.assertTrue(self.started().exists())
+        self.assertFalse(self.completed().exists())
+        self.assertFalse(self.sealed)
+        with self.assertRaises(ValueError):
+            GEN.transfer(self.value, archive=str(archive), expected_archive_digest=digest)
 
     def test_real_transfer_metadata_content_and_atomic_receipt(self):
         result = GEN.transfer(self.value)

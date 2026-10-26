@@ -7,15 +7,22 @@
 # @param $verify_only Verify an already sealed local generation and its retained receipts without publication access
 # @param $output_dir Existing persistent supervisor directory; required before any executing transfer
 # @param $binding Optional transaction/wave/stage association for retained sealed verification
+# @param $archive Existing private producer tar when publication metadata cannot survive NFS
+# @param $archive_digest Independently retained exact producer archive SHA256
 plan nest::host::stage_generation (
   TargetSpec                     $targets,
   Hash                           $policy,
   Hash                           $manifest,
-  Boolean                        $check       = true,
-  Boolean                        $verify_only = false,
-  Optional[Stdlib::Absolutepath] $output_dir  = undef,
-  Optional[Hash]                 $binding     = undef,
+  Boolean                        $check          = true,
+  Boolean                        $verify_only    = false,
+  Optional[Stdlib::Absolutepath] $output_dir     = undef,
+  Optional[Hash]                 $binding        = undef,
+  Optional[Stdlib::Absolutepath] $archive        = undef,
+  Optional[String]               $archive_digest = undef,
 ) {
+  if ($archive == undef) != ($archive_digest == undef) or ($verify_only and $archive != undef) {
+    fail_plan('Archive staging requires paired path/digest and cannot accompany sealed verification', 'nest/generation-archive')
+  }
   if $binding != undef and (!$verify_only or $output_dir == undef) {
     fail_plan('Preparation binding requires retained sealed verification', 'nest/generation-binding')
   }
@@ -43,7 +50,11 @@ plan nest::host::stage_generation (
   }
   # Only public placement/digest/budget fields belong in this JSON. The helper
   # validates the complete schema and never logs file names or private content.
-  $args = ['python3', '/usr/libexec/nest/transfer-generation.py', $policy.to_json]
+  $archive_args = $archive ? {
+    undef   => [],
+    default => ['--archive', $archive, '--archive-digest', $archive_digest],
+  }
+  $args = ['python3', '/usr/libexec/nest/transfer-generation.py', $policy.to_json] + $archive_args
   $command = $verify_only ? {
     true    => $args + ['--verify'],
     default => $check ? {
