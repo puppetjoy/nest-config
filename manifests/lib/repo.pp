@@ -1,7 +1,8 @@
 define nest::lib::repo (
-  Boolean          $default  = false,
-  Boolean          $unstable = false,
-  Optional[String] $url      = undef,
+  Boolean              $default  = false,
+  Boolean              $unstable = false,
+  Optional[String]     $url      = undef,
+  Stdlib::Absolutepath $location = "/var/db/repos/${name}",
 ) {
   include 'nest::lib::repos'
 
@@ -15,7 +16,7 @@ define nest::lib::repo (
   if $url {
     $repo_content = @("END_REPO")
       [${name}]
-      location = /var/db/repos/${name}
+      location = ${location}
       sync-type = git
       sync-uri = ${url}
       sync-depth = 1
@@ -23,7 +24,7 @@ define nest::lib::repo (
       auto-sync = yes
       | END_REPO
 
-    vcsrepo { "/var/db/repos/${name}":
+    vcsrepo { $location:
       ensure   => present,
       force    => true, # clone over existing content
       provider => git,
@@ -33,7 +34,7 @@ define nest::lib::repo (
   } else {
     $repo_content = @("END_REPO")
       [${name}]
-      location = /var/db/repos/${name}
+      location = ${location}
       auto-sync = no
       | END_REPO
   }
@@ -59,7 +60,7 @@ define nest::lib::repo (
       content => "*/*::${name} ~*\n",
     ;
 
-    "/var/db/repos/${name}":
+    $location:
       ensure => directory,
     ;
   }
