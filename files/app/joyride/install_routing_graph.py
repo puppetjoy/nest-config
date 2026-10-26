@@ -67,12 +67,21 @@ def install(root=Path("/data/private/routing")):
                 temporary = Path(output.name)
                 with urllib.request.build_opener(NoRedirect).open(request, timeout=120) as response:
                     remaining = SIZE
+                    unsynced = 0
                     while remaining:
                         chunk = response.read(min(1024 * 1024, remaining))
                         if not chunk:
                             raise ValueError("graph_download_truncated")
                         output.write(chunk)
                         remaining -= len(chunk)
+                        unsynced += len(chunk)
+                        # CephFS dirty pages count against the container limit.
+                        # Bound writeback before they grow to the graph's size.
+                        if unsynced >= 16 * 1024 * 1024:
+                            output.flush()
+                            os.fsync(output.fileno())
+                            os.posix_fadvise(output.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
+                            unsynced = 0
                     if response.read(1):
                         raise ValueError("graph_download_oversize")
                 output.flush()

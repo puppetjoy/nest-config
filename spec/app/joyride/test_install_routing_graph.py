@@ -75,6 +75,16 @@ class GraphInstall(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "insufficient_graph_staging_space"):
                 installer.install(self.root)
 
+    def test_streaming_bounds_dirty_page_writeback(self):
+        self.raw = b"x" * (17 * 1024 * 1024)
+        with patch.object(installer, "SIZE", len(self.raw)), \
+                patch.object(installer, "verify"), \
+                patch.object(installer.os, "fsync", wraps=os.fsync) as sync, \
+                patch.object(installer.os, "posix_fadvise") as evict:
+            self.download()
+        self.assertEqual(evict.call_count, 1)
+        self.assertGreaterEqual(sync.call_count, 3)
+
     def test_production_refused(self):
         with patch.dict(os.environ, {"RUNTIME_ENV": "production"}):
             with self.assertRaisesRegex(ValueError, "test_only"):
