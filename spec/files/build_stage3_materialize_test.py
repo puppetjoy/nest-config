@@ -44,6 +44,7 @@ class MaterializeTests(unittest.TestCase):
                 {'Type': 'bind', 'Source': '/nest', 'Destination': '/nest'},
                 {'Type': 'bind', 'Source': '/falcon', 'Destination': '/falcon'},
                 {'Type': 'volume', 'Source': str(self.repos), 'Destination': '/var/db/repos', 'Name': 'fixture-frozen-repos'}]}
+        self.row['GraphDriver'] = {'Name': 'overlay', 'Data': {'UpperDir': '/fixture/diff', 'LowerDir': '/fixture/base'}}
         self.vol = {'Name': 'fixture-frozen-repos', 'Driver': 'local', 'Options': {}, 'Mountpoint': str(self.repos)}
         self.commands = []
         self.sealed = False
@@ -58,6 +59,7 @@ class MaterializeTests(unittest.TestCase):
         if args[:2] == ['podman', 'ps']:
             return self.identity + '\n'
         if args[:2] == ['podman', 'mount']:
+            self.row['GraphDriver']['Data']['MergedDir'] = str(self.source)
             return str(self.source) + '\n'
         if args[0] == 'rsync':
             return subprocess.run(args, capture_output=True, text=True, check=True).stdout
@@ -93,6 +95,14 @@ class MaterializeTests(unittest.TestCase):
         self.assertFalse(any(args[1] in ['start', 'stop', 'destroy', 'rm'] for args in self.commands if len(args) > 1))
         self.assertLess(next(i for i, args in enumerate(self.commands) if args[:2] == ['podman', 'unmount']),
                         next(i for i, args in enumerate(self.commands) if args[:2] == ['zpool', 'sync']))
+
+    def test_inspection_ignores_only_transient_merged_mount_path(self):
+        with patch.object(MAT, 'command', side_effect=self.command):
+            before = MAT.inspect('fixture')
+            self.command(['podman', 'mount', self.identity])
+            self.assertEqual(MAT.inspect('fixture'), before)
+            self.row['GraphDriver']['Data']['LowerDir'] = '/different/base'
+            self.assertNotEqual(MAT.inspect('fixture'), before)
 
     def test_nonempty_target_refuses_without_podman_or_reservation(self):
         (self.target / 'existing').write_bytes(b'keep')

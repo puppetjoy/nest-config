@@ -46,6 +46,9 @@ def inspect(container):
             # Emulation helpers are build-only binds, never copied into the root.
             require(re.fullmatch(r'/usr/bin/qemu-[a-z0-9_]+', destination) is not None)
             require(mount['Type'] == 'bind' and mount['Source'] == destination and mount['RW'] is False)
+    # Podman adds this transient path while our own mount is open. It is not
+    # container identity; keep comparing every other field, including layers.
+    row.get('GraphDriver', {}).get('Data', {}).pop('MergedDir', None)
     return row
 
 
