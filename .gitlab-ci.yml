@@ -139,6 +139,7 @@ stages:
     PYTHONDONTWRITEBYTECODE: '1'
   script:
     - 'python3 spec/app/joyride/test_private_access.py'
+    - 'python3 spec/app/joyride/test_install_routing_graph.py'
     - 'python3 spec/app/joyride/test_fixture_resources.py'
     - 'python3 spec/app/joyride/test_production_ops.py'
     - 'python3 -m venv .production-boundary-venv'

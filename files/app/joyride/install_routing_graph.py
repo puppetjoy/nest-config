@@ -1,0 +1,104 @@
+"""Install the reviewed private TEST graph; retain immutable files for rollback."""
+import hashlib
+from contextlib import closing
+import json
+import os
+from pathlib import Path
+import shutil
+import sqlite3
+import tempfile
+import urllib.request
+
+BUILD = "metro-20261025-v2"
+SIZE = 1205555200
+SHA256 = "f13481cb4e1ba95e28165d9259b692216acd635d2266ccc5cc1be6b6c89ca104"
+URL = ("https://gitlab.joyfullee.me/api/v4/projects/83/packages/generic/"
+       "joyride-routing-private/metro-20261025-v2/" + SHA256 + ".sqlite3")
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):
+        raise ValueError("redirect_denied")
+
+
+def verify(path):
+    if path.stat().st_size != SIZE:
+        raise ValueError("graph_size_mismatch")
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    if digest.hexdigest() != SHA256:
+        raise ValueError("graph_checksum_mismatch")
+    with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)) as db:
+        if db.execute("PRAGMA integrity_check").fetchall() != [("ok",)]:
+            raise ValueError("graph_integrity_failed")
+        metadata = {key: json.loads(value) for key, value in db.execute("SELECT * FROM metadata")}
+    if metadata["graph_build"] != BUILD or metadata["unresolved_migrations"]:
+        raise ValueError("graph_metadata_mismatch")
+
+
+def select(root, name, target):
+    temporary = root / ("." + name)
+    temporary.unlink(missing_ok=True)
+    temporary.symlink_to(target)
+    os.replace(temporary, root / name)
+
+
+def install(root=Path("/data/private/routing")):
+    if os.environ.get("RUNTIME_ENV") != "test":
+        raise ValueError("test_only")
+    os.umask(0o077)
+    root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    current = root / "current.sqlite3"
+    if current.exists() and not current.is_symlink():
+        raise ValueError("retain_unmanaged_graph_before_selection")
+    destination = root / (BUILD + "-" + SHA256 + ".sqlite3")
+    if not destination.exists():
+        # Stage on the same filesystem. Renaming and symlink selection need no
+        # second graph copy; leave 256 MiB headroom and never remove old data.
+        if shutil.disk_usage(root).free < SIZE + 256 * 1024 * 1024:
+            raise ValueError("insufficient_graph_staging_space")
+        token = Path("/package-reader/GITLAB_READ_API_TOKEN").read_text().strip()
+        request = urllib.request.Request(URL, headers={"PRIVATE-TOKEN": token})
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(dir=root, prefix=".download-", delete=False) as output:
+                temporary = Path(output.name)
+                with urllib.request.build_opener(NoRedirect).open(request, timeout=120) as response:
+                    remaining = SIZE
+                    while remaining:
+                        chunk = response.read(min(1024 * 1024, remaining))
+                        if not chunk:
+                            raise ValueError("graph_download_truncated")
+                        output.write(chunk)
+                        remaining -= len(chunk)
+                    if response.read(1):
+                        raise ValueError("graph_download_oversize")
+                output.flush()
+                os.fsync(output.fileno())
+            verify(temporary)
+            temporary.chmod(0o400)
+            os.replace(temporary, destination)
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
+    else:
+        verify(destination)
+    if current.is_symlink() and os.readlink(current) != destination.name:
+        select(root, "previous.sqlite3", os.readlink(current))
+    select(root, "current.sqlite3", destination.name)
+    descriptor = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    print("private routing graph checksum, integrity and selection verified")
+
+
+if __name__ == "__main__":
+    try:
+        install()
+    except Exception:
+        # Never leak credentials, private payloads or exception text into logs.
+        raise SystemExit("private_routing_graph_install_failed") from None

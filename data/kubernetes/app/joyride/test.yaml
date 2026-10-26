@@ -5,9 +5,9 @@ service_name: '%{nest::kubernetes::service}'
 fqdn: '%{nest::kubernetes::service}.eyrie'
 runtime_environment: test
 ingress_class: contour-test
-# Admitted basemap v3; app MR 40, merged-main pipeline 11957, build 50154.
-# Authoritative image.json head 6e7ebd228020f56e78fd1c7a9343300967eb9e0f; retains trusted TEST member correction.
-joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:bf6bf1128338399fdcb1d7483916d738a9e356b909d660f3599767a157883f6a
+# Routing MR 42, successful merged-main pipeline 12204, build 52004 image.json.
+# Head dd05b3ce7705fa1cfaee818b545d39b43f83694e; preserves admitted basemap v3.
+joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:16f20746d48e8e9c7c48845951fd7ffc6e5dbec74bbfd68a978660f965eafd62
 affinity: {}
 tolerations: []
 resources:
@@ -143,6 +143,7 @@ resources:
     binaryData:
       import_artifacts.py: '%{nest::service::joyride::artifact_import_base64}'
       test_delivery_controller.py: '%{nest::service::joyride::test_delivery_base64}'
+      install_routing_graph.py: '%{nest::service::joyride::routing_installer_base64}'
   delivery_journal:
     apiVersion: v1
     kind: ConfigMap
@@ -429,6 +430,8 @@ resources:
         metadata:
           labels:
             app: '%{nest::kubernetes::service}'
+          annotations:
+            nest/routing-installer-sha256: '%{nest::service::joyride::routing_installer_sha256}'
         spec:
           # Endpoint withdrawal precedes TERM; retain time for 120-second uploads.
           terminationGracePeriodSeconds: 150
@@ -604,6 +607,29 @@ resources:
               mountPath: /data
             - name: tmp
               mountPath: /data/tmp
+          - name: routing-graph
+            image: '%{lookup(''joyride_image'')}'
+            securityContext: *id001
+            command: [python, -B, /platform/install_routing_graph.py]
+            env:
+            - name: RUNTIME_ENV
+              value: test
+            resources:
+              requests:
+                cpu: 100m
+                memory: 64Mi
+              limits:
+                memory: 256Mi
+            volumeMounts:
+            - name: data
+              mountPath: /data/private
+              subPath: private
+            - name: routing-installer
+              mountPath: /platform
+              readOnly: true
+            - name: package-reader
+              mountPath: /package-reader
+              readOnly: true
           containers:
           - name: web
             image: '%{lookup(''joyride_image'')}'
@@ -839,6 +865,12 @@ resources:
             - manage.py
             - worker
           volumes:
+          - name: routing-installer
+            configMap:
+              name: '%{nest::kubernetes::service}-scripts'
+              items:
+              - key: install_routing_graph.py
+                path: install_routing_graph.py
           - name: curated-input
             emptyDir:
               sizeLimit: 16Mi

@@ -61,7 +61,7 @@ class RuntimeOwnership(unittest.TestCase):
         self.assertFalse(resources['artifact_import']['spec']['jobTemplate']['spec']
                          ['template']['spec']['automountServiceAccountToken'])
         self.assertEqual(set(resources['scripts']['binaryData']),
-                         {'import_artifacts.py', 'test_delivery_controller.py'})
+                         {'import_artifacts.py', 'test_delivery_controller.py', 'install_routing_graph.py'})
         self.assertRegex(data['joyride_image'], r'@sha256:[0-9a-f]{64}$')
         self.assertFalse(resources['app']['spec']['template']['spec']['automountServiceAccountToken'])
 
