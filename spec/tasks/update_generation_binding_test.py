@@ -85,8 +85,16 @@ class GenerationBindingTests(unittest.TestCase):
             with self.subTest(policies=policies), self.assertRaises(ValueError):
                 release.generation_binding(self.manifest, policies)
 
+    def test_catalog_source_can_advance_without_rebuilding_or_relabeling_the_root(self):
+        before = copy.deepcopy(self.manifest)
+        scope = dict(self.scope, config_source='f' * 40)
+        result = release.generation_binding(self.manifest, self.policies, scope)
+        self.assertEqual(result['manifest_digest'], release.digest(before))
+        self.assertEqual(self.manifest, before)
+        self.assertEqual(result['hosts'], self.bind()['hosts'])
+
     def test_wave_release_config_kernel_platform_and_complete_scope_refuse(self):
-        for key, value in [('release', 'sha256:' + '0' * 64), ('config_source', 'f' * 40),
+        for key, value in [('release', 'sha256:' + '0' * 64), ('config_source', 'main'),
                            ('hosts', []), ('hosts', self.scope['hosts'] * 2)]:
             with self.subTest(key=key), self.assertRaises(ValueError):
                 release.generation_binding(self.manifest, self.policies, dict(self.scope, **{key: value}))

@@ -50,6 +50,10 @@ Unavailable buses/incomplete inventories never pass. No counters are cleared,
 units masked, TLS weakened, new identities enrolled or historical failures hidden.
 
 Preparation uses its existing complete `preparation` and `release_manifest`.
+The manifest preserves the exact config source used to build the immutable root.
+Policy `config_source` separately selects the normal main catalog expected after
+boot. It may advance for a tooling/catalog fix without rebuilding or relabeling
+that root; actual main apply and converged repeat must still match the policy.
 Lifecycle instead requires `observations`, mapping every selected inventory
 hostname to exactly `{ "transaction": "ID" }`, plus existing canonical
 `output_dir`. Do not pass preparation or a release manifest to lifecycle.
