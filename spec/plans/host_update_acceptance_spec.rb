@@ -55,6 +55,8 @@ RSpec.describe 'nest::host::update_acceptance' do
     expect(result.ok?).to be(true), result.value.to_s
     expect(events.index('begin:catalog')).to be < events.index('catalog')
     expect(events.index('complete:catalog')).to be < events.index('evidence:')
+    expect(events).not_to include('begin:health')
+    expect(events).to include('complete:health')
     expect(result.value['accepted']['cli_accepted']).to be(true)
   end
 

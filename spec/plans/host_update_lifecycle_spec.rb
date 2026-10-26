@@ -100,6 +100,7 @@ RSpec.describe 'nest::host::update_lifecycle' do
       expect(events.index("accept:#{name}")).to be < events.index("finalize:#{name}")
     end
     expect(result.value['host_count']).to eq(2)
+    expect(events).not_to include('begin:fixture-good:reboot', 'begin:fixture-other:reboot')
   end
 
   it 'never submits any reboot when a preparation is failed or unknown' do

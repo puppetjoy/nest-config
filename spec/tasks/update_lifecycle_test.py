@@ -152,6 +152,22 @@ class LifecycleTest(unittest.TestCase):
         with self.assertRaises(FileExistsError):
             lifecycle.step(dict(p, action='begin'), self.bound)
 
+    def test_read_only_steps_retain_results_without_mutation_intents(self):
+        for name in ('reboot', 'health'):
+            p = dict(self.p, step=name)
+            receipt = publish_document({'kind': 'fixture-observation'}, self.directory, name + '-fixture')
+            result = lifecycle.step(dict(p, action='complete', result=receipt), self.bound)
+            self.assertTrue(result['complete'])
+            self.assertFalse(result['intent'])
+            self.assertFalse(lifecycle.journal(p, self.bound).exists())
+            self.assertEqual(lifecycle.step(dict(p, action='read'), self.bound)['receipt'], receipt)
+
+    def test_mutating_steps_still_require_intent_before_completion(self):
+        receipt = publish_document({'kind': 'fixture-result'}, self.directory, 'fixture-result')
+        for name in ('catalog', 'submit', 'canary-service'):
+            with self.subTest(step=name), self.assertRaisesRegex(ValueError, 'missing operation intent'):
+                lifecycle.step(dict(self.p, step=name, action='complete', result=receipt), self.bound)
+
     def test_modified_or_missing_reports_refuse_on_resume(self):
         self.observations()
         receipt = lifecycle.step(dict(self.p, action='read', step='health'), self.bound)['receipt']
