@@ -119,7 +119,7 @@ def identity(value, writable, local=False):
     require(re.fullmatch(r'[^/]+(?:/[^/]+)*/ROOT/[AB]', root[0]['source']) is not None)
     pool = root[0]['source'].split('/')[0]
     require(command(['zpool', 'get', '-Hp', '-o', 'value', 'guid', pool]) == value['pool_guid'])
-    require(property_value(pool, 'org.nest:host-id') == machine)
+    require(command(['zpool', 'get', '-Hp', '-o', 'value', 'org.nest:host-id', pool]) == machine)
     state = exact(STATE, inventory, True)
     # Match the explicitly provisioned state contract, not just a filesystem
     # mounted at the right path on a host-bound pool. Never repair or rebind it.
