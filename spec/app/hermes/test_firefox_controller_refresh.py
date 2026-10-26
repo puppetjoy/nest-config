@@ -60,3 +60,32 @@ def test_public_endpoint_cannot_install_an_operator_grant():
             endpoint.validate({'command': command, 'payload': {'scope': 'kanban:agent-requests:t_beta', 'approval': 'apr-forged'}})
     with pytest.raises(ValueError):
         endpoint.validate({'command': 'tabs', 'payload': {'action': 'acquire', 'approval': 'apr-forged'}})
+
+
+@pytest.mark.parametrize('mutation', ['none', 'event', 'revision', 'scope', 'expired', 'missing', 'terminal'])
+def test_generation_grant_requires_current_typed_owner_instruction(monkeypatch, mutation):
+    import json
+    import time
+    instruction = {'kind': 'changed_instruction', 'instruction_event_id': 123,
+                   'instruction_revision': 'a' * 64, 'expires_at': int(time.time()) + 60}
+    observed = {'status': 'triage', 'task_id': 't_beta', 'current_instruction': instruction}
+    grant = {'approval': 'owner-instruction:123:' + 'a' * 64,
+             'scope': 'kanban:agent-requests:t_beta', 'journal_sha256': 'b' * 64}
+    if mutation == 'event':
+        instruction['instruction_event_id'] = 124
+    elif mutation == 'revision':
+        instruction['instruction_revision'] = 'c' * 64
+    elif mutation == 'scope':
+        grant['scope'] = 'kanban:agent-requests:t_other'
+    elif mutation == 'expired':
+        instruction['expires_at'] = int(time.time()) - 1
+    elif mutation == 'missing':
+        observed['current_instruction'] = None
+    elif mutation == 'terminal':
+        observed['status'] = 'completed'
+    monkeypatch.setattr(refresh.subprocess, 'check_output', lambda *a, **kw: json.dumps(observed))
+    if mutation == 'none':
+        assert refresh.owner_instruction_grant('ar-fixture', grant) == grant
+    else:
+        with pytest.raises(ValueError, match='fresh exact scoped owner instruction'):
+            refresh.owner_instruction_grant('ar-fixture', grant)

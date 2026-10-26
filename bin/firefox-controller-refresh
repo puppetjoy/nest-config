@@ -40,6 +40,25 @@ def approved_request(request_id, approval_id, proposal_hash):
         conn.close()
 
 
+def owner_instruction_grant(request_id, grant):
+    """Verify the current typed owner receipt, never an approval-shaped label."""
+    import time
+    observed = json.loads(subprocess.check_output([
+        '/opt/hermes-agent/bin/agent-request-maintain', request_id, '--board',
+        'agent-requests', '--inspect-operational-recovery', '--json'], text=True))
+    instruction = observed.get('current_instruction') or {}
+    reference = 'owner-instruction:{}:{}'.format(instruction.get('instruction_event_id'),
+                                                instruction.get('instruction_revision'))
+    if (observed.get('status') in {'done', 'completed', 'archived', 'cancelled', 'denied', 'superseded'}
+            or instruction.get('kind') != 'changed_instruction'
+            or not instruction.get('instruction_event_id')
+            or instruction.get('expires_at', 0) <= time.time()
+            or grant.get('approval') != reference
+            or grant.get('scope') != 'kanban:agent-requests:' + str(observed.get('task_id'))):
+        raise ValueError('fresh exact scoped owner instruction required')
+    return grant
+
+
 def resident(data):
     """Private administrator exec, not an authenticated public bridge command."""
     import fcntl
@@ -75,8 +94,32 @@ def resident(data):
     spec = importlib.util.spec_from_file_location('refresh_windows', destination / 'firefox_windows.py')
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    if module.process_generation(controller['pid']) != controller['generation']:
-        raise ValueError('native browser generation changed; no refresh')
+    generation_grant = data.get('generation_grant')
+    if generation_grant:
+        native_pids = []
+        profile = '/home/kasm-user/.mozilla/firefox/nest-secure-browser'
+        for process in Path('/proc').iterdir():
+            if not process.name.isdigit():
+                continue
+            try:
+                argv = (process / 'cmdline').read_bytes().split(b'\0')
+                if argv and Path(os.fsdecode(argv[0])).name == 'firefox' and profile.encode() in argv:
+                    native_pids.append(int(process.name))
+            except FileNotFoundError:
+                pass
+        if len(native_pids) != 1:
+            raise ValueError('one exact existing native Firefox required')
+        native_pid = native_pids[0]
+        native_generation = module.process_generation(native_pid)
+        if native_generation == controller['generation']:
+            raise ValueError('generation recovery cannot retire a live native identity')
+        if module.driver_request('GET', '/status').get('ready') is not True:
+            raise ValueError('native driver occupied; preserve session')
+    else:
+        native_pid = controller['pid']
+        native_generation = module.process_generation(native_pid)
+        if native_generation != controller['generation']:
+            raise ValueError('native browser generation changed; no refresh')
     processes = []
     for path in Path('/proc').iterdir():
         if path.name.isdigit():
@@ -119,6 +162,8 @@ def resident(data):
         check._save = lambda: None
         check.authorize_creation_recovery(grant)
         args += ['--recover-creation', json.dumps(grant)]
+    if generation_grant:
+        args += ['--reconcile-generation', json.dumps(generation_grant)]
     os.kill(pid, signal.SIGTERM)  # Observer/server only; driver and Firefox stay alive.
     deadline = time.monotonic() + 5
     lease = (state_dir / 'windows-controller.lock').open('a+')
@@ -147,14 +192,25 @@ def resident(data):
             fcntl.flock(lock, fcntl.LOCK_UN)
             with urllib.request.urlopen(request, timeout=2) as reply:
                 result = json.load(reply)
-            if result.get('browser_generation') != controller['epoch'] or result.get('window_source_sha256') != hashes['firefox_windows.py']:
+            if result.get('window_source_sha256') != hashes['firefox_windows.py']:
                 raise ValueError('controller readback differs from managed overlay')
             after = json.loads((state_dir / 'windows.json').read_bytes())
-            if after['controller'] != controller or any(after['windows'].get(k) != v for k, v in state['windows'].items() if k not in {data.get('scope'), data.get('creation_scope')}):
+            if generation_grant:
+                if (result.get('bidi_available') is not True
+                        or after.get('reconciliation', {}).get('approval') != generation_grant['approval']
+                        or after.get('controller', {}).get('pid') != native_pid
+                        or after['controller']['generation'] != native_generation
+                        or module.process_generation(native_pid) != native_generation):
+                    raise ValueError('generation recovery readback differs; preserve browser')
+            elif (result.get('browser_generation') != controller['epoch']
+                  or after['controller'] != controller
+                  or any(after['windows'].get(k) != v for k, v in state['windows'].items()
+                         if k not in {data.get('scope'), data.get('creation_scope')})):
                 raise ValueError('unrelated binding changed during refresh')
-            print(json.dumps({'status': 'ok', 'browser_restarted': False, 'generation': controller['epoch'],
+            print(json.dumps({'status': 'ok', 'browser_restarted': False, 'generation': result['browser_generation'],
                               'overlay': revision, 'source_hashes': hashes,
-                              'recovery_scope': data.get('scope') or data.get('creation_scope')}))
+                              'recovery_scope': generation_grant['scope'] if generation_grant else
+                              data.get('scope') or data.get('creation_scope')}))
             return
         except (OSError, urllib.error.URLError):
             if time.monotonic() >= deadline:
@@ -175,7 +231,16 @@ def main():
     parser.add_argument('--proposal-hash')
     parser.add_argument('--creation-recovery-scope', help='explicit administrator operation: preserve unknown creation, admit one new binding')
     parser.add_argument('--creation-recovery-authorization', help='existing authorization request identifier, provenance only')
+    parser.add_argument('--generation-recovery-request', help='nonterminal request with current typed owner repair instruction')
+    parser.add_argument('--generation-recovery-grant', type=json.loads, help='exact fresh local generation reconciliation grant')
     args = parser.parse_args()
+    if bool(args.generation_recovery_request) != bool(args.generation_recovery_grant):
+        raise ValueError('exact generation request and grant required')
+    if args.generation_recovery_grant and any((args.request_id, args.approval_id, args.proposal_hash,
+                                              args.creation_recovery_scope, args.creation_recovery_authorization)):
+        raise ValueError('do not combine distinct recovery operations')
+    generation_grant = (owner_instruction_grant(args.generation_recovery_request, args.generation_recovery_grant)
+                        if args.generation_recovery_grant else None)
     if bool(args.creation_recovery_scope) != bool(args.creation_recovery_authorization):
         raise ValueError('exact creation scope and existing authorization provenance required')
     if args.creation_recovery_scope and any((args.request_id, args.approval_id, args.proposal_hash)):
@@ -187,7 +252,7 @@ def main():
         scope = approved_request(args.request_id, args.approval_id, args.proposal_hash)
     data = {'sources': {name: (args.source_dir / name).read_text() for name in ASSETS},
             'expected_generation': args.expected_generation, 'expected_source': args.expected_source,
-            'scope': scope, 'approval_id': args.approval_id,
+            'scope': scope, 'approval_id': args.approval_id, 'generation_grant': generation_grant,
             'creation_scope': args.creation_recovery_scope, 'creation_authorization': args.creation_recovery_authorization}
     # Fixed deployment and container, never accept arbitrary host/process targets.
     script = Path(__file__).read_text()

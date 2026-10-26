@@ -222,3 +222,67 @@ def test_driver_startup_read_can_retry_without_native_mutation(engine, monkeypat
     controller.reconcile_generation(grant_for(controller))
     assert attempts == [('GET', '/status'), ('GET', '/status')]
     assert native.calls == calls
+
+
+def second_loss(engine, monkeypatch):
+    controller, native = lost(engine, monkeypatch)
+    first = grant_for(controller)
+    controller.reconcile_generation(first)
+    controller.state['windows'][A] = {'state': 'open', 'epoch': controller.epoch}
+    controller.state['controller'] = {'state': 'ready', 'epoch': controller.epoch,
+                                     'pid': 123456, 'generation': 'previous-native-generation'}
+    controller._save()
+    monkeypatch.setattr(windows, 'process_generation', lambda pid: 'new-native-generation')
+    return windows.Windows(controller.path, connect=lambda: native), native, first
+
+
+@pytest.mark.parametrize('reference', ['apr-second-fixture-only', 'owner-instruction:123:' + 'a' * 64])
+def test_second_generation_accepts_fresh_owner_instruction_without_native_input(engine, monkeypatch, reference):
+    controller, native, first = second_loss(engine, monkeypatch)
+    before = controller.path.read_bytes()
+    calls = native.calls.copy()
+    grant = grant_for(controller)
+    grant['approval'] = reference
+    controller.reconcile_generation(grant)
+    assert controller.orphaned is False
+    assert native.calls == calls
+    archives = list((controller.path.parent / 'generation-history').glob('*.json'))
+    assert len(archives) == 2
+    bundle = json.loads((controller.path.parent / 'generation-history' /
+                         (grant['journal_sha256'] + '.json')).read_text())
+    assert bundle['journals']['windows.json'].encode() == before
+    assert json.loads(bundle['journals']['windows.json'])['reconciliation']['approval'] == first['approval']
+    assert 'old-key' in controller.state['retired_action_keys']
+    assert controller.recovery(B)['reason'] == 'binding_retired_with_history'
+    assert controller.state['windows'][B] == json.loads(before)['windows'][B]
+
+
+def test_old_grant_cannot_unfence_a_second_lost_generation(engine, monkeypatch):
+    controller, native, first = second_loss(engine, monkeypatch)
+    before = controller.path.read_bytes()
+    calls = native.calls.copy()
+    controller.reconcile_generation(first)
+    assert controller.orphaned is True
+    assert controller.path.read_bytes() == before
+    assert native.calls == calls
+
+
+def test_new_grant_cannot_retire_an_active_generation(engine, monkeypatch):
+    controller, native, first = second_loss(engine, monkeypatch)
+    monkeypatch.setattr(controller, '_resumable', lambda: True)
+    grant = grant_for(controller)
+    grant['approval'] = 'owner-instruction:123:' + 'a' * 64
+    with pytest.raises(RuntimeError, match='unconnected lost generation'):
+        controller.reconcile_generation(grant)
+
+
+@pytest.mark.parametrize('reference', ['owner-instruction:0:' + 'a' * 64,
+                                      'owner-instruction:123:not-a-revision', 'unverified-prose'])
+def test_malformed_owner_instruction_reference_refuses(engine, monkeypatch, reference):
+    controller, native = lost(engine, monkeypatch)
+    grant = grant_for(controller)
+    grant['approval'] = reference
+    before = controller.path.read_bytes()
+    with pytest.raises(ValueError):
+        controller.reconcile_generation(grant)
+    assert controller.path.read_bytes() == before

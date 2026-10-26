@@ -145,24 +145,27 @@ class Windows:
             if len(allowed) != len(exemptions):
                 raise ValueError("duplicate historical retirement fingerprint")
             scope = valid_scope(grant["scope"])
-            if scope == "owner" or not re.fullmatch(r"apr-[A-Za-z0-9_-]+", grant["approval"]):
-                raise ValueError("exact request and owner approval receipt required")
+            approval = grant["approval"]
+            if (scope == "owner" or not isinstance(approval, str)
+                    or not re.fullmatch(r"(?:apr-[A-Za-z0-9_-]+|owner-instruction:[1-9][0-9]*:[a-f0-9]{64})", approval)):
+                raise ValueError("exact request and owner approval reference required")
             previous = self.state.get("reconciliation")
-            if previous and previous.get("approval") == grant["approval"]:
+            if previous and previous.get("approval") == approval:
                 if (previous.get("scope") != scope or previous.get("journal_sha256") != grant["journal_sha256"]
                         or previous.get("retire_unresolved", []) != exemptions):
                     raise RuntimeError("conflicting reconciliation receipt")
                 return  # Never retire the newly established generation twice.
-            if previous or not self.orphaned or self._resumable() or self.browser is not None:
+            if not self.orphaned or self._resumable() or self.browser is not None:
                 raise RuntimeError("only an unconnected lost generation may be retired")
-            if self.state["windows"].get(scope, {}).get("state") == "closed":
+            scoped = self.state["windows"].get(scope, {})
+            if scoped.get("state") == "closed" or scoped.get("terminal"):
                 raise RuntimeError("terminal acceptance scope cannot be reopened")
             journals = {p.name: p.read_bytes() for p in sorted(self.path.parent.glob("*.json"))}
             digest = hashlib.sha256(json.dumps({name: hashlib.sha256(raw).hexdigest()
                                                for name, raw in journals.items()}, sort_keys=True).encode()).hexdigest()
             if digest != grant["journal_sha256"] or json.loads(journals[self.path.name]) != self.state:
                 raise RuntimeError("journal changed since the authorized safety read")
-            retired_keys = set(self.legacy_keys)
+            retired_keys = set(self.legacy_keys) | set(self.state.get("retired_action_keys", []))
             matched = set()
             for name, raw in journals.items():
                 journal = json.loads(raw)
@@ -217,7 +220,7 @@ class Windows:
                     os.fsync(directory)
                 finally:
                     os.close(directory)
-            retired = {key: record if record.get("state") == "closed" else {"state": "retired", "archive": archive.name}
+            retired = {key: record if record.get("state") in {"closed", "retired"} else {"state": "retired", "archive": archive.name}
                        for key, record in self.state["windows"].items()
                        if key not in {"owner", scope}}
             # Keep every action key non-replayable; full original bindings and
