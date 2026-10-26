@@ -282,14 +282,18 @@ limit behavior still require the separately approved disruptive canary.
 
 ### Checked kernel Puppet outcomes
 
-`nest::base::cli` selects `=app-admin/nest-cli-0.9.0_p20261021-r6::nest`
-from overlay MR !10, merge `d1c339be0a777b90f94ffc487bdb7885c773cdea`.
-It packages CLI MR !15, merge `b1952f110d99b5db4b4de7e57d3f5e39392d134a`.
+`nest::base::cli` selects `=app-admin/nest-cli-0.9.0_p20261021-r7::nest`
+from overlay MR !11, merge `e68eb79f3c73b820a9cb2125da162b079c692044`.
+It packages CLI MR !16, merge `685e2d2e70cbcd76d3a0bd392e1d8ffb1d981122`.
 The complete 31-library-file aggregate SHA256 is
-`f142e7e2f430854d9bde85bd4dec1cc3be1c3d9e9edb0b4f141830b99c743ead`.
+`ea61e9dafd0047972881caf1eaaeafd850dd9834ba28dd57d13464afe2efeebc`.
 Verify the entire installed source map and exact Portage revision after ordinary
 inventory-backed `nest_cli_package` delivery. Package and source CI are not
 installed acceptance. No service restart or reboot is needed for this tooling pin.
+
+Generation and shared-state admission read pool host identity with `zpool get`,
+not `zfs get`. Dataset identity remains independently checked; no host identity,
+capacity policy or lifecycle eligibility check is bypassed by this correction.
 
 Successful kernel `puppet` commands preserve native integer exit 2 as applied,
 distinct from exit 0 as converged. The complete kernel phase still has aggregate
