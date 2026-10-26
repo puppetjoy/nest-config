@@ -116,6 +116,10 @@ nest::service::gitlab_runner::instances:
     # nested build container, so both need the same shared build paths.
     volumes:
       - '/nest:/nest'
+      # Native export/publication uses ordinary Joy/Bolt, not root SSH.
+      # Only this trusted builder (already holding the root Podman socket)
+      # exposes Joy's existing agent; selected jobs opt in with SSH_AUTH_SOCK.
+      - '/run/user/1000/ssh-agent.socket:/run/nest-build-ssh-agent:ro'
 
 # Hermes profiles run as named instances; the root/default profile is not a
 # long-running Nesty agent.
