@@ -124,8 +124,10 @@ def main():
     for name, branch in [('src', 'nest'), ('agent-request-broker', 'main')]:
         repo = install / name
         subprocess.run(['git', '-C', str(repo), 'checkout', '-B', branch], check=True)
+        manifest = repo / 'pyproject.toml'
+        manifest.write_text(manifest.read_text() + '\n# Local rolling convergence probe\n')
         subprocess.run(['git', '-C', str(repo), '-c', 'user.name=Test', '-c',
-                        'user.email=test@example.invalid', 'commit', '--allow-empty', '-m',
+                        'user.email=test@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-am',
                         'Local rolling convergence probe'], check=True)
     command = [sys.executable, '-I', str(helper)]
     assert subprocess.run([*command, 'check', str(install)]).returncode != 0
