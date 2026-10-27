@@ -77,3 +77,12 @@ Apply the Hermes adapter via `nest::puppet::deploy` and the tagged
 hashes in the task handoff. The original parent retains GitHub description
 editing and independent public API verification; neither belongs to this
 repair's source change.
+
+The managed build from `c1ebd11837e6e481482877b451378e12aeaf4f7a`
+passed standard smoke and baked-image native canary checks. Remote digest
+pull-back verified image
+`registry.gitlab.joyfullee.me/nest/tools/firefox@sha256:31a97988d3e05e700d5be8dae87a7fcb3e1f2600c8d14ca7dffc2d28e4248170`,
+config `2927697b125d906a2be5459aa859ec3b38787e72c91bf2f6252317fca444bbc1`.
+Extracted controller and endpoint bytes match the source hashes. The new
+image pin is the durable baseline for a future authorized pod replacement;
+this repair activates only the controller overlay, not a Recreate rollout.
