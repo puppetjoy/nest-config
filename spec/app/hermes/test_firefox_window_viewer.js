@@ -5,6 +5,36 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 
+// Execute the resident's actual fixed guard, not a copy of its selector logic.
+function targetGuards() {
+  const source = fs.readFileSync(path.resolve(__dirname, '../../../files/firefox-browser/firefox_windows.py'), 'utf8');
+  const declaration = source.match(/ELEMENT = """([\s\S]*?)"""/)[1];
+  const element = (width = 24, visibility = 'visible') => ({
+    getBoundingClientRect: () => ({left: 10, top: 20, width, height: width}),
+    style: {visibility, display: 'flex'}, disabled: false, contains: () => false,
+    getAttribute: () => '', matches: () => false
+  });
+  const visible = element(), hidden = element(0), collapsed = element(24, 'hidden');
+  let matches = [hidden, visible, collapsed], hit = visible;
+  const guard = vm.runInNewContext('(' + declaration + ')', {
+    document: {querySelectorAll: () => matches, elementFromPoint: () => hit},
+    getComputedStyle: e => e.style, innerWidth: 500, innerHeight: 497
+  });
+  assert.equal(guard('button', 0, 0).node, visible);
+  matches = [visible, element()];
+  assert.throws(() => guard('button', 0, 0), /target is not unique/);
+  matches = [hidden, collapsed];
+  assert.throws(() => guard('button', 0, 0), /target is not unique/);
+  matches = [visible];
+  hit = element();
+  assert.throws(() => guard('button', 0, 0), /intercepted/);
+  hit = visible;
+  visible.disabled = true;
+  assert.throws(() => guard('button', 0, 0), /target unavailable/);
+  visible.disabled = false;
+  assert.equal(guard(null, 12, 25).node, visible);
+}
+
 async function run(failInput = false) {
   const listeners = {};
   const requests = [];
@@ -54,4 +84,4 @@ async function run(failInput = false) {
     assert.equal(Object.hasOwn(request.body, 'scope'), false);
   }
 }
-(async () => { await run(); await run(true); console.log('Firefox window viewer regressions passed'); })().catch(error => { console.error(error); process.exitCode = 1; });
+(async () => { targetGuards(); await run(); await run(true); console.log('Firefox target guard and window viewer regressions passed'); })().catch(error => { console.error(error); process.exitCode = 1; });
