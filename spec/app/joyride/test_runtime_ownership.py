@@ -7,6 +7,35 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 class RuntimeOwnership(unittest.TestCase):
+    def test_routing_propose_response_window_is_exact_and_private(self):
+        data = yaml.safe_load((ROOT / 'data/kubernetes/app/joyride/test.yaml').read_text())
+        resources = data['resources']
+        ordinary = resources['ingress']
+        propose = resources['routing_propose_ingress']
+        timeout = 'projectcontour.io/response-timeout'
+        self.assertNotIn(timeout, ordinary['metadata']['annotations'])
+        self.assertEqual(propose['metadata']['annotations'], {
+            'ingress.kubernetes.io/force-ssl-redirect': 'true', timeout: '45s',
+        })
+        self.assertEqual(propose['spec']['ingressClassName'], ordinary['spec']['ingressClassName'])
+        self.assertEqual(propose['spec']['tls'], ordinary['spec']['tls'])
+        self.assertEqual(propose['spec']['rules'], [{
+            'host': ordinary['spec']['rules'][0]['host'],
+            'http': {'paths': [{
+                'path': '/admin/routing/propose', 'pathType': 'Exact',
+                'backend': {'service': {
+                    'name': '%{nest::kubernetes::service}-internal-web', 'port': {'number': 8003},
+                }},
+            }]},
+        }])
+        for name, resource in resources.items():
+            if resource.get('kind') == 'Ingress' and name != 'routing_propose_ingress':
+                self.assertNotIn(timeout, resource['metadata'].get('annotations', {}))
+        containers = resources['app']['spec']['template']['spec']['containers']
+        for container in containers:
+            if container['name'] in ('web', 'internal-web'):
+                self.assertEqual(container['command'][container['command'].index('--timeout') + 1], '60')
+
     def test_test_rollout_keeps_serving_version_until_application_ready(self):
         data = yaml.safe_load((ROOT / 'data/kubernetes/app/joyride/test.yaml').read_text())
         deployment = data['resources']['app']['spec']
