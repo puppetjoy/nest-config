@@ -6,11 +6,13 @@
   String[1] $hermes_home_dir,
   String[1] $pythonpath,
   String[1] $command,
+  Optional[String] $runtime_bin = undef,
+  Optional[String] $runtime_venv = undef,
 | -%>
 #!/bin/sh
 set -eu
-export PATH=<%= $venv_dir %>/bin:/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-export VIRTUAL_ENV=<%= $venv_dir %>
+export PATH=<%= pick($runtime_bin, "${venv_dir}/bin") %>:/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export VIRTUAL_ENV=<%= $runtime_venv ? { undef => $venv_dir, default => $runtime_venv } %>
 export HERMES_SRC=<%= $source_dir %>
 export HERMES_HOME=<%= $hermes_home_dir %>
 export PYTHONPATH=<%= $pythonpath %>

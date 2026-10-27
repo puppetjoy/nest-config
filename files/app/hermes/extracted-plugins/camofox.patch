@@ -1,0 +1,239 @@
+diff --git a/camofox_client.py b/camofox_client.py
+index db2c513..a3088a1 100644
+--- a/camofox_client.py
++++ b/camofox_client.py
+@@ -43,7 +43,7 @@ def _env(name: str) -> str:
+ 
+ def get_camofox_url() -> str:
+     """The configured Camofox server URL (``CAMOFOX_URL``, trailing slash dropped), or ""."""
+-    return _env("CAMOFOX_URL").rstrip("/")
++    return (_env("CAMOFOX_URL") or str(get_camofox_config().get("url") or "")).rstrip("/")
+ 
+ 
+ def _auth_headers() -> dict[str, str]:
+@@ -338,11 +338,29 @@ def resync_tab(session: dict[str, Any]) -> bool:
+     return bool(mine)
+ 
+ 
+-def ensure_tab(task_id: Optional[str], url: str = "about:blank") -> dict[str, Any]:
++def configured_viewport(config: dict[str, Any]) -> dict[str, int]:
++    """Keep a usable desktop viewport even when configuration is malformed."""
++    viewport = config.get("viewport")
++    viewport = viewport if isinstance(viewport, dict) else {}
++    result = {}
++    for key, default, minimum in (("width", 1365, 320), ("height", 768, 240)):
++        try:
++            value = int(viewport.get(key, default))
++        except (ValueError, TypeError):
++            value = default
++        result[key] = value if value >= minimum else default
++    return result
++
++
++def ensure_tab(task_id: Optional[str], url: Optional[str] = None) -> dict[str, Any]:
+     """The task's session with a tab, creating one at ``url`` if needed."""
+     session = get_session(task_id)
+     if not session["tab_id"]:
+-        data = post("/tabs", {"userId": session["user_id"], "listItemId": session["session_key"], "url": url})
++        body = {"userId": session["user_id"], "listItemId": session["session_key"],
++                "viewport": configured_viewport(get_camofox_config())}
++        if url is not None:
++            body["url"] = url
++        data = post("/tabs", body)
+         session["tab_id"] = data.get("tabId")
+     return session
+ 
+diff --git a/camofox_tools.py b/camofox_tools.py
+index 93663ea..a7e10c3 100644
+--- a/camofox_tools.py
++++ b/camofox_tools.py
+@@ -7,6 +7,7 @@ adapt the registry's call shape; ``task_id`` arrives in ``kw`` and keys the Camo
+ from __future__ import annotations
+ 
+ import base64
++import io
+ import json
+ import logging
+ import os
+@@ -72,7 +73,10 @@ def _navigate_tab(task_id: Optional[str], browser_url: str) -> tuple[dict[str, A
+             logger.warning("Camofox tab %s returned %s — tab is gone. Creating a fresh tab.",
+                            session["tab_id"], e.response.status_code)
+             session["tab_id"] = None
+-    return client.ensure_tab(task_id, browser_url), {"ok": True, "url": browser_url}
++    session = client.ensure_tab(task_id)
++    data = client.post(client.tab_path(session, "navigate"),
++                       {"userId": session["user_id"], "url": browser_url}, timeout=60)
++    return session, data
+ 
+ 
+ _TAB_GONE_ERROR = ("The browser tab is gone (the Camofox server reaped it or restarted). "
+@@ -318,13 +322,45 @@ def _save_screenshot(content: bytes) -> str:
+     return str(path)
+ 
+ 
++def capture_viewport_screenshot(session: dict[str, Any]) -> tuple[bytes, dict[str, Any]]:
++    """Capture only the viewport and disclose the actual image and browser dimensions."""
++    response = client.get_raw(client.tab_path(session, "screenshot"),
++                              params={**client.user_params(session), "fullPage": "false"})
++    metadata: dict[str, Any] = {"primary_capture_params": {"fullPage": "false"}, "fallback_used": False}
++    try:
++        from PIL import Image
++        with Image.open(io.BytesIO(response.content)) as image:
++            width, height = image.size
++        metadata["primary_capture_dimensions"] = {"width": width, "height": height}
++        metadata["final_dimensions"] = metadata["primary_capture_dimensions"]
++        result = client.post(client.tab_path(session, "evaluate"), {
++            "userId": session["user_id"],
++            "expression": "JSON.stringify({innerWidth:window.innerWidth,innerHeight:window.innerHeight})",
++        })
++        metrics = result.get("result", result.get("value", result))
++        if isinstance(metrics, str):
++            metrics = json.loads(metrics)
++        if isinstance(metrics, dict):
++            metadata["viewport_metrics"] = metrics
++            expected = {"width": int(metrics.get("innerWidth", 0)), "height": int(metrics.get("innerHeight", 0))}
++            if expected["width"] > 0 and expected["height"] > 0:
++                if expected == metadata["final_dimensions"]:
++                    metadata["dimension_check"] = "primary_capture_matches_viewport"
++                else:
++                    metadata["dimension_check"] = "browser_viewport_mismatch"
++                    metadata["expected_viewport_dimensions"] = expected
++    except Exception as exc:
++        metadata["dimension_check_error"] = str(exc)
++    return response.content, metadata
++
++
+ def browser_vision(question: str, task_id: Optional[str] = None, *, llm: Any = None) -> str:
+     """Screenshot the tab and answer ``question`` with the auxiliary vision model (``ctx.llm``,
+     task ``camofox_vision``, which inherits ``auxiliary.vision``)."""
+     def body(session):
+-        resp = client.get_raw(client.tab_path(session, "screenshot"), params=client.user_params(session))
+-        screenshot_path = _save_screenshot(resp.content)
+-        img_b64 = base64.b64encode(resp.content).decode("utf-8")
++        image_bytes, screenshot_metadata = capture_viewport_screenshot(session)
++        screenshot_path = _save_screenshot(image_bytes)
++        img_b64 = base64.b64encode(image_bytes).decode("utf-8")
+         timeout, temperature = _vision_settings()
+         try:
+             result = llm.complete(
+@@ -335,12 +371,13 @@ def browser_vision(question: str, task_id: Optional[str] = None, *, llm: Any = N
+         except Exception as e:
+             logger.warning("browser_vision analysis failed: %s", e)
+             return _dumps({"success": False, "error": f"Error during vision analysis: {e!s}",
+-                           "screenshot_path": screenshot_path,
++                           "screenshot_path": screenshot_path, "screenshot_metadata": screenshot_metadata,
+                            "note": "Screenshot was captured but vision analysis failed. "
+                                    "You can still share it via MEDIA:<path>."})
+         analysis = (result.text or "").strip() or "Vision analysis returned no content."
+         # Secrets the vision model read off the page never reach the conversation.
+-        return _dumps({"success": True, "analysis": policy.redact_text(analysis), "screenshot_path": screenshot_path})
++        return _dumps({"success": True, "analysis": policy.redact_text(analysis), "screenshot_path": screenshot_path,
++                       "screenshot_metadata": screenshot_metadata})
+     return _with_tab(task_id, body, read_only=True)
+ 
+ 
+diff --git a/tests/test_camofox_tools.py b/tests/test_camofox_tools.py
+index 05fa00c..b21a5a0 100644
+--- a/tests/test_camofox_tools.py
++++ b/tests/test_camofox_tools.py
+@@ -22,7 +22,9 @@ class TestNavigate:
+         assert result["url"] == "https://example.com"
+         assert "[e1]" in result["snapshot"] and result["element_count"] == 2
+         (created,) = camofox.calls("POST", "/tabs")
+-        assert created["body"]["url"] == "https://example.com"
++        assert "url" not in created["body"]
++        assert created["body"]["viewport"] == {"width": 1365, "height": 768}
++        assert camofox.calls("POST", "/navigate")[0]["body"]["url"] == "https://example.com"
+         assert created["body"]["listItemId"] == "task_t1"
+         assert created["body"]["userId"].startswith("hermes_")
+ 
+@@ -46,7 +48,8 @@ class TestNavigate:
+         t.browser_navigate("https://example.com", task_id="t1")
+         t.browser_navigate("https://example.org", task_id="t1")
+         assert len(camofox.calls("POST", "/tabs")) == 1
+-        (nav,) = camofox.calls("POST", "/navigate")
++        first, nav = camofox.calls("POST", "/navigate")
++        assert first["body"]["url"] == "https://example.com"
+         assert nav["body"]["url"] == "https://example.org"
+ 
+     def test_garbage_collected_tab_is_recreated(self, camofox):
+@@ -62,7 +65,8 @@ class TestNavigate:
+         camofox.overrides[("POST", "/tabs/tab-1/navigate")] = (410, {"error": "Tab no longer exists", "code": "browser_restarted"})
+         result = _j(t.browser_navigate("https://example.org", task_id="t1"))
+         assert result["success"] is True
+-        assert [c["body"]["url"] for c in camofox.calls("POST", "/tabs")] == ["https://example.com", "https://example.org"]
++        assert all("url" not in c["body"] for c in camofox.calls("POST", "/tabs"))
++        assert camofox.calls("POST", "/navigate")[-1]["body"]["url"] == "https://example.org"
+         assert client.get_session("t1")["tab_id"] == "tab-2"
+ 
+     def test_other_navigate_errors_keep_the_tab(self, camofox):
+@@ -109,7 +113,8 @@ class TestNavigate:
+         assert result["url_rewrite"]["to"] == "host.docker.internal"
+         assert result["requested_url"] == "http://127.0.0.1:8766/#settings"
+         (created,) = camofox.calls("POST", "/tabs")
+-        assert created["body"]["url"] == "http://host.docker.internal:8766/#settings"
++        assert "url" not in created["body"]
++        assert camofox.calls("POST", "/navigate")[0]["body"]["url"] == "http://host.docker.internal:8766/#settings"
+ 
+     def test_loopback_rewrite_reads_config_and_env_alias_wins(self, camofox, monkeypatch, write_config):
+         write_config("browser:\n  camofox:\n    rewrite_loopback_urls: true\n"
+diff --git a/tests/test_nest_viewport.py b/tests/test_nest_viewport.py
+new file mode 100644
+index 0000000..43914fa
+--- /dev/null
++++ b/tests/test_nest_viewport.py
+@@ -0,0 +1,54 @@
++"""Nest regressions: configured desktop size, navigation order, viewport-only pixels/metadata."""
++import io
++import json
++from types import SimpleNamespace
++from unittest.mock import patch
++
++from PIL import Image
++import pytest
++
++from camofox_plugin import camofox_client as client
++from camofox_plugin import camofox_tools as tools
++
++
++@pytest.mark.parametrize('config,expected', [
++    ({}, {'width': 1365, 'height': 768}),
++    ({'viewport': {'width': 1920, 'height': 1080}}, {'width': 1920, 'height': 1080}),
++    ({'viewport': {'width': 20, 'height': 'bad'}}, {'width': 1365, 'height': 768}),
++])
++def test_viewport_defaults_and_config(config, expected):
++    assert client.configured_viewport(config) == expected
++
++
++def test_config_url_fallback(monkeypatch, write_config):
++    monkeypatch.delenv('CAMOFOX_URL', raising=False)
++    write_config('browser:\n  camofox:\n    url: http://camofox.invalid/\n')
++    assert client.get_camofox_url() == 'http://camofox.invalid'
++
++
++def test_blank_tab_then_navigation_with_configured_desktop(camofox, write_config):
++    write_config('browser:\n  camofox:\n    viewport: {width: 1920, height: 1080}\n')
++    assert json.loads(tools.browser_navigate('https://example.org', task_id='nest'))['success']
++    calls = [r for r in camofox.requests if r['method'] == 'POST']
++    assert calls[0]['path'] == '/tabs'
++    assert 'url' not in calls[0]['body']
++    assert calls[0]['body']['viewport'] == {'width': 1920, 'height': 1080}
++    assert calls[1]['path'].endswith('/navigate')
++    assert calls[1]['body']['url'] == 'https://example.org'
++
++
++@pytest.mark.parametrize('viewport,check', [((640, 480), 'primary_capture_matches_viewport'),
++                                          ((1365, 768), 'browser_viewport_mismatch')])
++def test_viewport_screenshot_metadata(viewport, check):
++    image = io.BytesIO()
++    Image.new('RGB', (640, 480)).save(image, format='PNG')
++    session = {'tab_id': 'tab', 'user_id': 'user'}
++    with patch.object(client, 'get_raw', return_value=SimpleNamespace(content=image.getvalue())) as get_raw, \
++            patch.object(client, 'post', return_value={'result': json.dumps(dict(zip(('innerWidth', 'innerHeight'), viewport)))}):
++        content, metadata = tools.capture_viewport_screenshot(session)
++    assert content == image.getvalue()
++    assert get_raw.call_args.kwargs['params'] == {'userId': 'user', 'fullPage': 'false'}
++    assert metadata['final_dimensions'] == {'width': 640, 'height': 480}
++    assert metadata['viewport_metrics'] == dict(zip(('innerWidth', 'innerHeight'), viewport))
++    assert metadata['dimension_check'] == check
++    assert metadata['fallback_used'] is False

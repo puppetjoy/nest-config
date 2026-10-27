@@ -199,7 +199,7 @@ def installed_hermes_version() -> str:
             return metadata.version(dist)
         except metadata.PackageNotFoundError:
             pass
-    venv_python = Path("/opt/hermes-agent/venv/bin/python")
+    venv_python = Path("/opt/hermes-agent/bin/hermes-python")
     if venv_python.exists():
         code = """
 import importlib.metadata as m
@@ -346,7 +346,7 @@ def watch_vaultwarden() -> WatchResult:
 
 
 def installed_python_package_version(pkgname: str) -> str:
-    venv_python = Path("/opt/hermes-agent/venv/bin/python")
+    venv_python = Path("/opt/hermes-agent/bin/hermes-python")
     code = f"""
 import importlib.metadata as m
 try:

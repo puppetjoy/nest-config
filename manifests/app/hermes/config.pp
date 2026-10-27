@@ -429,14 +429,14 @@ class nest::app::hermes::config {
     $talon_plugins_dir = "${profiles_dir}/talon/plugins"
     $talon_prompt_plugin_dir = "${talon_plugins_dir}/talon-operational-prompt"
 
-    file { $talon_plugins_dir:
-      ensure  => directory,
-      mode    => '0700',
-      owner   => $nest::user,
-      group   => $nest::user,
-      tag     => 'talon_operational_prompt',
-      require => File["${profiles_dir}/talon"],
-    }
+    ensure_resource('file', $talon_plugins_dir, {
+      'ensure'  => 'directory',
+      'mode'    => '0700',
+      'owner'   => $nest::user,
+      'group'   => $nest::user,
+      'tag'     => 'talon_operational_prompt',
+      'require' => File["${profiles_dir}/talon"],
+    })
 
     file { $talon_prompt_plugin_dir:
       ensure  => directory,
@@ -465,13 +465,13 @@ class nest::app::hermes::config {
   $patternkit_plugin_dir = "${patternkit_profile_plugins_dir}/patternkit-session"
 
   if 'star' in $instances {
-    file { $patternkit_profile_plugins_dir:
-      ensure  => directory,
-      mode    => '0700',
-      owner   => $nest::user,
-      group   => $nest::user,
-      require => File["${profiles_dir}/star"],
-    }
+    ensure_resource('file', $patternkit_profile_plugins_dir, {
+      'ensure'  => 'directory',
+      'mode'    => '0700',
+      'owner'   => $nest::user,
+      'group'   => $nest::user,
+      'require' => File["${profiles_dir}/star"],
+    })
 
     file { $star_command_policy_plugin_dir:
       ensure  => directory,

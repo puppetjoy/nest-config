@@ -5,8 +5,10 @@
   String[1] $profile,
   String[1] $user,
   Boolean   $dev_board = false,
+  Boolean   $pm_enabled = false,
+  String[1] $install_dir = '/opt/hermes-agent',
 | -%>
-#!<%= $venv_dir %>/bin/python
+#!/usr/bin/python3
 import os
 import sys
 
@@ -42,4 +44,8 @@ os.environ['HERMES_KANBAN_DB'] = '/home/<%= $user %>/.hermes/kanban/boards/agent
 <% } -%>
 os.environ['SHLVL'] = '1'
 os.environ['PYTHONPATH'] = '<%= $source_dir %>:<%= $broker_source_dir %>/src'
+<% if $pm_enabled { -%>
+os.execv('<%= $install_dir %>/bin/hermes-python', ['<%= $install_dir %>/bin/hermes-python', '-m', 'hermes_cli.main', '--profile', '<%= $profile %>', *sys.argv[1:]])
+<% } else { -%>
 os.execv('<%= $venv_dir %>/bin/hermes', ['<%= $venv_dir %>/bin/hermes', '--profile', '<%= $profile %>', *sys.argv[1:]])
+<% } -%>

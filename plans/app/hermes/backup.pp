@@ -56,7 +56,7 @@ plan nest::app::hermes::backup (
     }
     $command = [
       'runuser', '-u', $user, '--',
-      '/opt/hermes-agent/venv/bin/hermes', '--profile', $quick_profile,
+      '/usr/local/bin/hermes', '--profile', $quick_profile,
       'backup', '--quick',
     ].shellquote
 
@@ -143,7 +143,7 @@ plan nest::app::hermes::backup (
     $helper_args = [
       $helper, 'backup',
       '--backup-dir', $backup_dir,
-      '--hermes-bin', '/opt/hermes-agent/venv/bin/hermes',
+      '--hermes-bin', '/usr/local/bin/hermes',
       '--stage-dir', $stage_dir,
       '--retain', String($retain),
     ] + $required_profile_args + $checkpoint_args + $retention_args

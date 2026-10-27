@@ -111,9 +111,9 @@ def _run_google_api(parts: list[str]) -> dict[str, Any] | list[Any] | str:
     # Star's profile-scoped google_token.json.  Keep this Hermes tool on the
     # profile-scoped Python client path so reads and sends use the OAuth token
     # Joy granted to Star, not an unrelated/stale gws keyring entry.
-    env["PATH"] = "/opt/hermes-agent/venv/bin:/usr/bin:/bin"
+    env["PATH"] = "/opt/hermes-agent/bin:/usr/bin:/bin"
     result = subprocess.run(
-        ["/opt/hermes-agent/venv/bin/python", str(script), *parts],
+        ["/opt/hermes-agent/bin/hermes-python", str(script), *parts],
         capture_output=True,
         text=True,
         timeout=60,
@@ -331,7 +331,7 @@ def google_workspace_status_tool(args: dict[str, Any], **_kw) -> str:
         env = os.environ.copy()
         env["HERMES_HOME"] = str(_hermes_home())
         result = subprocess.run(
-            ["/opt/hermes-agent/venv/bin/python", str(setup), "--check"],
+            ["/opt/hermes-agent/bin/hermes-python", str(setup), "--check"],
             capture_output=True,
             text=True,
             timeout=30,

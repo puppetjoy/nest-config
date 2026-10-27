@@ -1,0 +1,9 @@
+<%- | String[1] $install_dir, String[1] $home_dir, Boolean $pm_enabled, String[1] $venv_dir | -%>
+#!/bin/sh
+set -eu
+<% if $pm_enabled { -%>
+export HERMES_HOME="${HERMES_HOME:-<%= $home_dir %>}"
+exec /usr/bin/python3.14 -I <%= $install_dir %>/bin/hermes-pm python <%= $install_dir %> "$@"
+<% } else { -%>
+exec <%= $venv_dir %>/bin/python "$@"
+<% } -%>
