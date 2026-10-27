@@ -19,7 +19,7 @@ class nest::app::hermes::install {
     default => $python_ready,
   }
   $python_wrapper_ready = $pm_enabled ? {
-    true    => File["${install_dir}/bin/hermes-pm"],
+    true    => Exec['install_hermes_agent'],
     default => $python_ready,
   }
   $venv_pip          = "${venv_dir}/bin/pip"
@@ -39,10 +39,6 @@ class nest::app::hermes::install {
   $python_world_atom       = $pm_enabled ? {
     true    => 'dev-lang/python:3.14',
     default => 'dev-lang/python:3.13',
-  }
-
-  if $pm_enabled and ($git_commit !~ /^[0-9a-f]{40}$/ or $broker_git_ref !~ /^[0-9a-f]{40}$/) {
-    fail('Hermes PM activation requires coordinated rollout immutable core and broker pins')
   }
 
   if $pm_enabled {
@@ -157,6 +153,11 @@ class nest::app::hermes::install {
     }
   }
 
+  $source_ready = $git_commit ? {
+    undef   => Vcsrepo[$source_dir],
+    default => Exec['verify_hermes_source_ref_pin'],
+  }
+
   exec { 'set_hermes_agent_request_broker_remote':
     command => "/usr/sbin/git -C ${broker_source_dir} remote set-url origin ${broker_git_url}",
     onlyif  => "/bin/sh -c 'test -d ${broker_source_dir}/.git && test \"$(/usr/sbin/git -C ${broker_source_dir} remote get-url origin)\" != \"${broker_git_url}\"'",
@@ -248,6 +249,18 @@ class nest::app::hermes::install {
       require => Vcsrepo[$broker_source_dir],
     }
 
+    # Minimum safe ancestry, not permanent production HEAD pins. Run before
+    # importing the candidate core or changing any active runtime wrapper.
+    exec { 'verify_hermes_pm_checkpoint':
+      command => "/usr/bin/python3.14 ${install_dir}/bin/hermes-pm verify ${install_dir}",
+      require => [
+        $python_ready,
+        $source_ready,
+        Vcsrepo[$broker_source_dir],
+        File["${install_dir}/bin/hermes-pm"],
+      ],
+    }
+
     exec { 'install_hermes_agent':
       command     => "/usr/bin/python3.14 ${install_dir}/bin/hermes-pm sync ${install_dir}",
       unless      => "/usr/bin/python3.14 ${install_dir}/bin/hermes-pm check ${install_dir}",
@@ -263,8 +276,18 @@ class nest::app::hermes::install {
         $python_ready,
         Vcsrepo[$source_dir],
         Vcsrepo[$broker_source_dir],
-        Exec['verify_hermes_source_ref_pin'],
-        File["${install_dir}/bin/hermes-python"],
+        $source_ready,
+        Exec['verify_hermes_pm_checkpoint'],
+        File["${source_dir}/tools/agent_request_tool.py"],
+        File["${source_dir}/tools/google_photos_tool.py"],
+        File["${source_dir}/tools/google_workspace_tool.py"],
+        File["${source_dir}/tools/oauth_browser_tool.py"],
+        File["${source_dir}/tools/secure_browser_oauth_tool.py"],
+        File["${source_dir}/tools/secure_browser_legacy_support.py"],
+        File["${source_dir}/tools/secure_browser_tool.py"],
+        File["${source_dir}/tools/secure_browser_local_bidi.py"],
+        File["${source_dir}/tools/secure_browser_bidi.py"],
+        File["${source_dir}/tools/shopping_browser_tool.py"],
         File["${install_dir}/tools"],
         File["${broker_source_dir}/plugin.yaml"],
         File["${broker_source_dir}/__init__.py"],

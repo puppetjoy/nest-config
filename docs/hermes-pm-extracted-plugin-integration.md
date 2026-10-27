@@ -5,8 +5,8 @@ Source-only prerequisite for Agent Request ^2205 / task t_fc1cf4cf. This change 
 ## Source identities
 
 - Deployed Hermes comparison: `04fe62345b00986e6a1f4d4776296f7c1e82e1ce`, retained by the parent as `safety/t_fc1cf4cf-nest-04fe62345b`.
-- Exact immutable core tested here: `085f562af53a6fedadac3681e2c498fc71316132`. The acceptance harness exports this commit, never the parent's conflicted working tree.
-- Broker package tested here: `59f6ed9808c98cb4a74b096140b26edc894e0ebb`, exported from the read-only broker repository.
+- Exact immutable core tested here: `6854ac37123350da8da84291b37b12116a25e46b`. The acceptance harness checks out this commit in an isolated clone, never the parent's working tree.
+- Broker acceptance fixture: local merge `0fc1b8b7e4d1185f8ef143f2c5430876c7541437`, tree `168f153f632c83ffdb4eaab9c3c46a9fd732d3f6`. This combines compatibility MR !207 (`5c6dbe92560a1240e8f61c9a12cbdaaa0eba0079`) with installed hardening `8fb0efaf46333d572674609195a78decbd7ee162`; it is not a deployed or published broker commit. Do not install the older compatibility head alone.
 - Honcho: `plastic-labs/honcho` at `e2d2aba182862deeb846e5cd4a30a41bce0ed82a`, subdirectory `hermes-plugin-honcho`.
 - Camofox: `NousResearch/hermes-official-plugins` at `190593f4ce4c481a80ed27448535c867c5c6e27f`, subdirectory `camofox`.
 - Copilot: `NousResearch/hermes-labs-plugins` at `346cfe972f72b6a966e84c1004cf8742554b193d`, subdirectory `github-copilot`.
@@ -17,7 +17,9 @@ The delivered `staged-plugins/sources.json` records the source URLs, exact commi
 
 ## Activation and ownership
 
-`nest::app::hermes::pm_enabled` defaults to `false`. No host Hiera activation is included. Enabling PM requires full immutable core `git_commit` and broker `broker_git_ref` pins; a catalog with incomplete pins fails before applying any resources.
+`nest::app::hermes::pm_enabled` defaults to `false`. No host Hiera activation is included. Normal PM operation supports `git_ref: nest`, `git_commit: undef` and `broker_git_ref: main`; temporary pins remain optional. The source gate requires the core checkpoint above and both broker ancestors above, not equality to those commits. Future fast-forward rolling updates therefore require no per-commit production pin changes. Preserve those ancestors in promotion history; a squash/rebase that removes a checkpoint deliberately fails closed and requires a reviewed checkpoint update with fresh acceptance, not a bypass.
+
+After source checkout, `verify_hermes_pm_checkpoint` checks ancestry before importing candidate core code. The PM install requires that gate and all managed source overlays. Only a successful PM sync with unchanged exact core/broker HEADs and tracked file bytes writes `tools/nest-source-state.json`; stable Python wrapper activation depends on that install. Currency checks and launches reject stale receipts. This binds a particular transaction without pinning future Puppet catalogs to its commits. Existing services still must be drained for source replacement: an ancestry gate does not make mutable editable source safe under running processes.
 
 Legacy mode retains Python 3.13, the existing virtualenv and its dependency installers. The new stable `bin/hermes-python` wrapper delegates to that same interpreter in legacy mode. CLI, profile, gateway, dashboard, broker, Google helpers, Star's order runner, release inspection, and backup/restore entry points no longer need to guess the PM generation's location. Backup and restore use the published `/usr/local/bin/hermes` command.
 
@@ -44,10 +46,10 @@ From this configuration checkout, with Python 3.14 available:
     python3.14 scripts/test-hermes-managed-integration.py \
       --core-repo /path/to/read-only/hermes-agent \
       --broker-repo /path/to/read-only/hermes-agent-request-broker \
-      --broker-sha 59f6ed9808c98cb4a74b096140b26edc894e0ebb \
+      --broker-sha 0fc1b8b7e4d1185f8ef143f2c5430876c7541437 \
       --work /path/to/a/new/empty/local-workspace
 
-The harness refuses an existing destination, strips ambient profile/provider context, exports immutable source snapshots, stages and verifies the actual patches, performs the production PM sync, then adds a test-only pytest member through PM. It runs every group through the real PM-shaped launcher. JUnit and `results.json` retain failure, error and skip counts; any skipped test fails this acceptance harness. No live profile or service is used.
+Use a local broker integration clone containing the fixture commit, or reproduce the clean non-squash merge of the two broker inputs above and pass its actual commit SHA. The harness refuses an existing destination, strips ambient profile/provider context, checks out exact sources in isolated shared clones, stages and verifies the actual patches, performs the production PM sync, then adds a test-only pytest member through PM. It runs every group through the real PM-shaped launcher. It also refuses the old deployed core and compatibility-only broker before PM sync, then advances real local `nest`/`main` branches and verifies stale detection, PM resync, repeat currency and broker/Honcho imports. JUnit and `results.json` retain failure, error and skip counts; any skipped test fails this acceptance harness. No live profile or service is used.
 
 The complete fresh run passed:
 
@@ -58,15 +60,15 @@ The complete fresh run passed:
 | Copilot | 144 | 0 | 0 | 0 |
 | Runtime and real external discovery | 6 | 0 | 0 | 0 |
 
-This is 395 Python tests, in addition to focused Puppet/Quill/model-policy/backup-plan tests and `pdk validate`. These are managed-source acceptance results, not the parent's full-suite result or production verification. The deliverable includes the fresh run's JUnit files, logs and machine-readable results. Earlier failed probes are not substituted for final receipts.
+This is 395 Python tests, in addition to 39 focused Puppet/Quill/model-policy/backup-plan examples (including the wrapper for five local Git checkpoint/transaction regressions) and `pdk validate`. These are managed-source acceptance results, not the parent's full-suite result or production verification. The deliverable includes the fresh run's JUnit files, logs and machine-readable results. Earlier failed probes are not substituted for final receipts.
 
 ## Promotion and install order — rollout ^2206 only
 
 1. Parent independently verifies the archive hash and staged-file hashes, runs the exported tests against the exact target, finishes core conflicts and its complete non-pass ledger, and produces its unmerged exact-head Hermes MR. Do not use this source-only child as approval of the core port.
 2. Verify both final MR heads and CI, inventory-backed Bolt transport, the exact currently deployed core/broker/config revisions and a complete native Hermes-root backup. Preserve the old source checkout and Python 3.13 runtime as rollback material. Keep backup staging local; `/nest/backup` is the final destination.
 3. Freeze automatic Puppet follow-through for the coordinated interval and drain/stop affected gateways and dashboards using the established managed operational path. Do not replace files under processes that can lazily import a mixture of releases.
-4. Rollout owns all merges. Promote the reviewed core and this configuration together with an activation change setting `pm_enabled: true`, the final tested immutable core pin and the chosen tested immutable broker pin. Do not merge the port to a floating production ref and let an ordinary legacy Puppet run consume it first.
-5. Apply through the existing inventory-backed Bolt/Puppet path. The catalog verifies the source pin, realizes exact external sources plus patches, provisions the PM-owned dependency union as the Nest user, switches stable wrappers/services, installs profile links and manages the upstream plugin/toolset selection. Frontend builds depend on the completed PM runtime before using the Python build-state helper.
+4. Rollout owns all merges. Promote the certified core to rolling `nest`, merge broker compatibility into current `main` without dropping newer hardening, and promote this configuration together with the activation change. Set `pm_enabled: true`, `git_ref: nest`, remove any temporary `git_commit` override, and change the host's existing broker pin to `broker_git_ref: main` only after that branch contains both required broker ancestors. Capture the exact promoted heads and run `git merge-base --is-ancestor` for every checkpoint; also prove promoted tree parity against the parent's certification. Do not merge the port to a floating production ref and let an ordinary legacy Puppet run consume it first. Later rolling updates retain these settings rather than updating pins.
+5. Apply through the existing inventory-backed Bolt/Puppet path. The catalog checks safe source ancestry (plus exact pin verification if a temporary core pin is supplied), realizes external sources plus patches, and provisions the PM-owned dependency union as the Nest user. Before switching wrappers, the adapter records exact unchanged source identities. Read back `tools/nest-source-state.json` and `bin/hermes-pm verify /opt/hermes-agent`; require equal heads/content plus a successful `bin/hermes-pm check /opt/hermes-agent` under the managed Nest-user environment. Frontend builds depend on the completed PM runtime before using the Python build-state helper. Retain these exact transaction readbacks with the rollout receipt; they are evidence, not permanent configuration pins.
 6. Before accepting traffic, verify PM currency and package imports through the stable wrapper, core/broker/source identities, real external provider and tool discovery for each actual profile, the required Honcho boundaries and browser behavior, Quill employer/helper/delegation/Hawk behavior, Beryl policy, backup entry points and rebuilt frontends. Start only the intended services and inspect actual runtime readiness. This child has not performed those live checks.
 
 ## Rollback order

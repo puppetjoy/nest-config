@@ -6,17 +6,15 @@ inputs are exported at immutable commits; PM owns every Python dependency change
 """
 import argparse
 import importlib.util
-import io
 import json
 import os
 from pathlib import Path
 import subprocess
 import sys
-import tarfile
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
-CORE_SHA = '085f562af53a6fedadac3681e2c498fc71316132'
+CORE_SHA = '6854ac37123350da8da84291b37b12116a25e46b'
 
 
 def load(name, path):
@@ -30,9 +28,8 @@ def export(repo, revision, destination):
     actual = subprocess.check_output(['git', '-C', str(repo), 'rev-parse', revision + '^{commit}'], text=True).strip()
     if actual != revision or len(revision) != 40:
         raise ValueError('Expected a full immutable source revision')
-    archive = subprocess.check_output(['git', '-C', str(repo), 'archive', revision])
-    with tarfile.open(fileobj=io.BytesIO(archive)) as source:
-        source.extractall(destination, filter='data')
+    subprocess.run(['git', 'clone', '--shared', '--no-checkout', str(repo), str(destination)], check=True)
+    subprocess.run(['git', '-C', str(destination), 'checkout', '--detach', revision], check=True)
 
 
 def main():
@@ -73,6 +70,19 @@ def main():
     (install / 'extracted-plugins').symlink_to(stage, target_is_directory=True)
     helper = ROOT / 'files/app/hermes/hermes-pm.py'
     manager = load('nest_pm', helper)
+    refusals = {}
+    for name, unsafe, restored in [
+        ('src', '04fe62345b00986e6a1f4d4776296f7c1e82e1ce', CORE_SHA),
+        ('agent-request-broker', '5c6dbe92560a1240e8f61c9a12cbdaaa0eba0079', args.broker_sha),
+    ]:
+        repo = install / name
+        subprocess.run(['git', '-C', str(repo), 'checkout', '--detach', unsafe], check=True)
+        refusal = subprocess.run([sys.executable, '-I', str(helper), 'sync', str(install)],
+                                 text=True, capture_output=True)
+        assert refusal.returncode != 0 and 'safe checkpoint missing' in refusal.stderr, refusal.stderr
+        assert not manager.receipt_path(install).exists()
+        refusals[name] = {'rejected': unsafe, 'exit_code': refusal.returncode}
+        subprocess.run(['git', '-C', str(repo), 'checkout', '--detach', restored], check=True)
     source = manager.configure(install)
     import pm
     # First exercise exactly the production extras/members, with no test dependency.
@@ -93,7 +103,7 @@ def main():
         'runtime-discovery': [ROOT / 'spec/files/extracted_plugins/test_pm_runtime.py',
                               ROOT / 'spec/files/extracted_plugins/test_external_discovery.py'],
     }
-    results = {'core': CORE_SHA, 'broker': args.broker_sha, 'groups': {}}
+    results = {'core': CORE_SHA, 'broker': args.broker_sha, 'activation_refusals': refusals, 'groups': {}}
     failed = False
     for name, paths in groups.items():
         report = work / (name + '.xml')
@@ -109,6 +119,21 @@ def main():
         results['groups'][name] = row
         failed |= bool(result.returncode or row['failures'] or row['errors'] or row['skipped'])
         print(name + ': ' + json.dumps(row), flush=True)
+    # Advance real local rolling branches after the exact-source plugin tests.
+    # No source refs in either input repository are changed.
+    for name, branch in [('src', 'nest'), ('agent-request-broker', 'main')]:
+        repo = install / name
+        subprocess.run(['git', '-C', str(repo), 'checkout', '-B', branch], check=True)
+        subprocess.run(['git', '-C', str(repo), '-c', 'user.name=Test', '-c',
+                        'user.email=test@example.invalid', 'commit', '--allow-empty', '-m',
+                        'Local rolling convergence probe'], check=True)
+    command = [sys.executable, '-I', str(helper)]
+    assert subprocess.run([*command, 'check', str(install)]).returncode != 0
+    subprocess.run([*command, 'sync', str(install)], check=True)
+    subprocess.run([*command, 'check', str(install)], check=True)
+    subprocess.run([*command, 'python', str(install), '-c',
+                    'import agent_request_broker.kanban_backend, honcho; print("Rolling PM imports passed")'], check=True)
+    results['rolling_convergence'] = manager.source_state(install)
     (work / 'results.json').write_text(json.dumps(results, indent=2) + '\n')
     return 1 if failed else 0
 

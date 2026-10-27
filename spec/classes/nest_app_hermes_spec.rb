@@ -136,10 +136,13 @@ describe 'nest::app::hermes' do
           expect(config.fetch('platform_toolsets').fetch('telegram')).to include('browser', 'camofox')
         end
 
-        context 'without an immutable core pin' do
-          let(:params) { super().merge(git_commit: nil) }
+        context 'with normal rolling core and broker refs' do
+          let(:params) { super().merge(git_commit: :undef, git_ref: 'nest', broker_git_ref: 'main') }
 
-          it { is_expected.to compile.and_raise_error(%r{immutable core and broker pins}) }
+          it { is_expected.to compile.with_all_deps }
+          it { is_expected.not_to contain_exec('verify_hermes_source_ref_pin') }
+          it { is_expected.to contain_exec('install_hermes_agent').that_requires('Exec[verify_hermes_pm_checkpoint]') }
+          it { is_expected.to contain_file('/opt/hermes-agent/bin/hermes-python').that_requires('Exec[install_hermes_agent]') }
         end
       end
     end
