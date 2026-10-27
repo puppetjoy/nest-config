@@ -17,7 +17,7 @@ RSpec.describe 'Hermes main model assignments' do
     )
     expect(instances.fetch('quill')).to include(
       'model_provider' => 'copilot',
-      'model_name' => 'gpt-6-luna',
+      'model_name' => 'gpt-6.1-terra',
     )
   end
 

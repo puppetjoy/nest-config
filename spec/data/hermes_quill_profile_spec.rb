@@ -13,7 +13,7 @@ RSpec.describe 'Quill Hermes work profile' do
       'display_name' => 'Quill',
       'profile_icon' => '🪶',
       'model_provider' => 'copilot',
-      'model_name' => 'gpt-6-luna',
+      'model_name' => 'gpt-6.1-terra',
       'model_api_mode' => 'codex_responses',
       'agent_reasoning_effort' => 'max',
       'inherit_shared_credentials' => false,
