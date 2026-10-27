@@ -86,6 +86,37 @@ No tailnet grant, VIP, NetworkPolicy, domain, token or production authority is
 added. The graph remains private and read-only. Parent-owned Luna backchannel
 and final route acceptance remain separate from engineering endpoint checks.
 
+### Shared review request bodies
+
+Only exact raw `GET`/`POST /routing/reviews` and
+`/routing/reviews/<lowercase UUID>` receive the inclusive 8,388,608-byte
+nginx body allowance. These requests still discard all caller headers except
+content type and reach only trusted port 8002. Queries, trailing slashes,
+encoded/normalized aliases, malformed IDs and other methods remain refused.
+The bound counts the complete UTF-8 JSON body, including envelope, title and
+revision, not characters or just the embedded artifacts. Nginx enforces the
+same bound on Content-Length and chunked bodies; one byte above returns 413.
+
+The corresponding exact `/admin/routing/reviews` collection and lowercase UUID
+resources on the private nginx listener receive the same cap but go to
+internal-web port 8003, retaining owner session cookies, Origin and CSRF headers.
+The ordinary owner's TEST path instead reaches Contour TEST ingress, then
+internal-web directly: it does not traverse private nginx. That streaming
+ingress has no configured body buffer/size override, so no ingress-wide setting
+is raised. The authenticated application adapter enforces the same inclusive
+review-only limit, retaining global Django and unrelated-operation bounds.
+Application authentication, CSRF and no-store responses remain authoritative;
+nginx does not turn owner requests into trusted calls.
+
+Generic `/routing/`, import/match/export and fallback web bounds stay at 1 MiB.
+No grants, peer identities, TLS, storage, published content or production routes
+change. The pinned nginx fixture verifies actual UTF-8 bytes and hashes for
+1,260,000, 8,388,607 and 8,388,608-byte bodies on all four collection/resource
+paths using Content-Length and chunked framing, and rejects 8,388,609 bytes.
+Large synthetic bodies belong only in isolated fixtures, never live drafts.
+Parent-owned application/frontend deployment and the real full-fidelity
+save/readback remain separate from this proxy acceptance.
+
 ### Trusted TEST member administration
 
 The raw method/path allowance reaches only port 8002:
