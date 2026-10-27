@@ -4,6 +4,7 @@ Run with python3 spec/app/joyride/test_private_access.py. Requires Podman/OpenSS
 Upstreams are explicit local fixtures, not substitutes for live app acceptance.
 """
 import base64
+import hashlib
 import json
 from pathlib import Path
 
@@ -22,12 +23,15 @@ ROOT = Path(__file__).resolve().parents[3]
 IMAGE = "mirror.gcr.io/nginxinc/nginx-unprivileged@sha256:f5116ed4606f3eb015dd4a8e28cb9b351476dc0ad4bc6e9f93b19cec130cdf03"
 PYTHON = "mirror.gcr.io/library/python@sha256:a1165e272e578941b84abc79e4ab38a0305cd12803a5c4247979ac7655f4d641"
 UPSTREAM = '''
-import http.server, json
+import hashlib, http.server, json
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
+        body = self.rfile.read(int(self.headers.get('Content-Length', 0)))
         self.send_response(200)
+        self.send_header('Cache-Control', 'no-store')
         self.end_headers()
-        self.wfile.write(json.dumps({'path':self.path,'headers':dict(self.headers)}).encode())
+        self.wfile.write(json.dumps({'path':self.path,'headers':dict(self.headers),
+                                    'body_bytes':len(body),'body_sha256':hashlib.sha256(body).hexdigest()}).encode())
     def log_message(self, format, *args):
         pass
     do_POST = do_GET
@@ -35,12 +39,33 @@ http.server.ThreadingHTTPServer(('0.0.0.0', 8000), Handler).serve_forever()
 '''
 CLIENT = '''
 import base64, http.client, json, socket, ssl, sys
-target, path, host, sni, extra, method = sys.argv[1:]
+target, path, host, sni, extra, method, size, framing = sys.argv[1:]
+size = int(size)
+body = b''
+if size:
+    prefix, suffix = b'{"title":"', b'"}'
+    available = size - len(prefix) - len(suffix)
+    body = prefix + ('é' * (available // 2)).encode() + b'x' * (available % 2) + suffix
+    extra += 'Content-Type: application/json\\r\\n'
+    if framing == 'chunked':
+        extra += 'Transfer-Encoding: chunked\\r\\n'
+    else:
+        extra += 'Content-Length: '+str(size)+'\\r\\n'
 try:
     context = ssl.create_default_context(cafile='/tls/tls.crt')
-    with socket.create_connection((target,8443),timeout=5) as raw:
+    with socket.create_connection((target,8443),timeout=30) as raw:
         with context.wrap_socket(raw,server_hostname=sni) as sock:
             sock.sendall((method+' '+path+' HTTP/1.1\\r\\nHost: '+host+'\\r\\nConnection: close\\r\\n'+extra+'\\r\\n').encode())
+            try:
+                if framing == 'chunked':
+                    for offset in range(0, len(body), 16384):
+                        chunk = body[offset:offset+16384]
+                        sock.sendall(('%x\\r\\n' % len(chunk)).encode() + chunk + b'\\r\\n')
+                    sock.sendall(b'0\\r\\n\\r\\n')
+                elif body:
+                    sock.sendall(body)
+            except (BrokenPipeError, ConnectionResetError, ssl.SSLError):
+                pass  # nginx may reject an oversized body before the writer finishes.
             response = http.client.HTTPResponse(sock, method=method)
             response.begin()
             data = response.read()
@@ -96,7 +121,7 @@ class PrivateAccess(unittest.TestCase):
             cls.address = nginx_info["NetworkSettings"]["Networks"][cls.network]["IPAddress"]
             for _ in range(30):
                 try:
-                    probe = run("podman", "exec", cls.upstream, "python", "-c", CLIENT, cls.address, "/", "joyride-test.eyrie", "joyride-test.eyrie", "", "GET")
+                    probe = run("podman", "exec", cls.upstream, "python", "-c", CLIENT, cls.address, "/", "joyride-test.eyrie", "joyride-test.eyrie", "", "GET", "0", "length")
                     if json.loads(probe.stdout).get("status") == 200:
                         break
                 except RuntimeError:
@@ -109,8 +134,8 @@ class PrivateAccess(unittest.TestCase):
             # unittest runs registered class cleanups even when setup fails.
             raise
 
-    def request(self, path="/", host="joyride-test.eyrie", sni="joyride-test.eyrie", extra="", method="GET"):
-        result = json.loads(run("podman", "exec", self.upstream, "python", "-c", CLIENT, self.address, path, host, sni, extra, method).stdout)
+    def request(self, path="/", host="joyride-test.eyrie", sni="joyride-test.eyrie", extra="", method="GET", size=0, framing="length"):
+        result = json.loads(run("podman", "exec", self.upstream, "python", "-c", CLIENT, self.address, path, host, sni, extra, method, str(size), framing).stdout)
         if result.get("ssl_error"):
             raise ssl.SSLError("Fixture TLS handshake rejected")
         return result["status"], base64.b64decode(result["data"])
@@ -153,7 +178,7 @@ class PrivateAccess(unittest.TestCase):
                     self.assertNotIn(b"forged", data)
             for method in ("HEAD", "PUT", "PATCH", "DELETE", "OPTIONS"):
                 self.assertEqual(self.request(path=path, method=method)[0], 405)
-            self.assertEqual(self.request(path=path, method="POST", extra="Content-Length: 1048577\r\n")[0], 413)
+            self.assertEqual(self.request(path=path, method="POST", extra="Content-Length: 8388609\r\n")[0], 413)
             for suffix in ("?", "?x=1", "/", "/extra"):
                 for method in ("GET", "POST"):
                     self.assertEqual(self.request(path=path + suffix, method=method)[0], 404)
@@ -173,6 +198,58 @@ class PrivateAccess(unittest.TestCase):
             for method in ("GET", "POST"):
                 with self.subTest(path=path, method=method):
                     self.assertIn(self.request(path=path, method=method)[0], (400, 404))
+
+    def test_review_body_bytes_inclusive_utf8_and_chunked(self):
+        identifier = "bfa1494e-0443-4c8a-9aab-1074b615f2a3"
+        for prefix in ("/routing/reviews", "/admin/routing/reviews"):
+            for path in (prefix, prefix + "/" + identifier):
+                for framing in ("length", "chunked"):
+                    for size in (1260000, 8388607, 8388608):
+                        with self.subTest(path=path, framing=framing, size=size):
+                            status, data = self.request(path=path, method="POST", size=size, framing=framing)
+                            self.assertEqual(status, 200)
+                            received = json.loads(data)
+                            available = size - len(b'{"title":""}')
+                            body = b'{"title":"' + ("é" * (available // 2)).encode() + b'x' * (available % 2) + b'"}'
+                            self.assertEqual(received["body_bytes"], size)
+                            self.assertEqual(received["body_sha256"], hashlib.sha256(body).hexdigest())
+                    # Length framing can reject solely from the declared length.
+                    if framing == "chunked":
+                        status, _ = self.request(path=path, method="POST", size=8388609, framing=framing)
+                    else:
+                        status, _ = self.request(path=path, method="POST", extra="Content-Length: 8388609\r\n")
+                    self.assertEqual(status, 413)
+
+    def test_owner_reviews_exact_admission_preserves_session_and_csrf(self):
+        identifier = "bfa1494e-0443-4c8a-9aab-1074b615f2a3"
+        for path in ("/admin/routing/reviews", "/admin/routing/reviews/" + identifier):
+            for method in ("GET", "POST"):
+                status, data = self.request(path=path, method=method, extra=(
+                    "Cookie: sessionid=fixture; csrftoken=fixture\r\nX-CSRFToken: fixture\r\n"
+                    "Origin: https://joyride-test.eyrie\r\nX-Joyride-Trusted-Test: forged\r\n"
+                    "Tailscale-User-Login: forged\r\n"))
+                self.assertEqual(status, 200)
+                headers = json.loads(data)["headers"]
+                self.assertEqual(headers["Cookie"], "sessionid=fixture; csrftoken=fixture")
+                self.assertEqual(headers["X-CSRFToken"], "fixture")
+                self.assertEqual(headers["Origin"], "https://joyride-test.eyrie")
+                self.assertNotIn(b"forged", data)
+            for method in ("HEAD", "PUT", "PATCH", "DELETE", "OPTIONS"):
+                self.assertEqual(self.request(path=path, method=method)[0], 405)
+            for suffix in ("?", "?x=1", "/", "/extra"):
+                self.assertEqual(self.request(path=path + suffix, method="POST")[0], 404)
+        for path in ("/admin/routing/reviews/" + identifier.upper(),
+                     "/admin/routing/reviews/unknown", "/admin/routing/%72eviews",
+                     "/admin/routing/reviews/../../", "/admin/routing/reviews%2f" + identifier,
+                     "//admin/routing/reviews", "/other/../admin/routing/reviews"):
+            self.assertIn(self.request(path=path, method="POST")[0], (400, 404))
+
+    def test_review_cap_does_not_raise_unrelated_limits(self):
+        for path in ("/", "/admin", "/admin/routing/import", "/admin/routing/match",
+                     "/admin/routing/export", "/routing/match", "/routing/propose",
+                     "/routing/export", "/routing/settle"):
+            with self.subTest(path=path):
+                self.assertEqual(self.request(path=path, method="POST", extra="Content-Length: 1048577\r\n")[0], 413)
 
     def test_routing_raw_uri_tricks_are_refused(self):
         for path in ("/routing", "/routing/unknown", "//routing/status", "/routing//status",
