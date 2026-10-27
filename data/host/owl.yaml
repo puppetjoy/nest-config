@@ -711,7 +711,7 @@ nest::app::hermes::instances:
     # OpenAI voice, GitLab, or Agent Request operator credentials.
     inherit_shared_credentials: false
     model_provider: 'copilot'
-    model_name: 'gpt-6-luna'
+    model_name: 'gpt-6.1-terra'
     model_base_url: 'https://api.githubcopilot.com'
     model_api_mode: 'codex_responses'
     agent_reasoning_effort: 'max'
