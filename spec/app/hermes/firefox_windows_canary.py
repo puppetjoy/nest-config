@@ -36,7 +36,8 @@ class Fixture(BaseHTTPRequestHandler):
                 '<textarea id="draft" autofocus></textarea><input id="password" type="password">'
                 '<script>window.sends=0;document.querySelector("#draft").addEventListener("keydown",e=>{'
                 'if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();window.sends++}})</script>'
-                '<button onclick="document.querySelector(\'h1\').textContent=\'Clicked\'">Click</button>'
+                '<button aria-label="Edit repository metadata" onclick="document.querySelector(\'h1\').textContent=\'Clicked\'">Click</button>'
+                '<div style="display:none"><button aria-label="Edit repository metadata">Hidden responsive duplicate</button></div>'
                 '<p>Subtotal $12.00</p><p>Tax $2.00</p><p>Total $14.00</p>'
                 f'<pre id="long" style="width:300px;white-space:pre-wrap">{long_text}</pre></body>').encode()
         self.send_response(200)
@@ -112,6 +113,23 @@ try:
         engine.dispatch("navigate", {"scope": scope, "url": url + ("/alpha" if index == 0 else "/beta")})
     assert all(logged for path, logged in login_seen if path in {"/alpha", "/beta"})
     emit("shared-login", confirmed=True, exported_cookie=False)
+    # Responsive pages repeat labels in hidden layouts. Only one rendered
+    # match is admissible; real visible duplicates must still fail closed.
+    selector = 'button[aria-label="Edit repository metadata"]'
+    clicked = engine.dispatch("selector_action", {"scope": scopes[0], "operation": "click", "selector": selector,
+        "action_key": "responsive-about-click"})
+    assert clicked["status"] == "delivered"
+    assert engine._evaluate(bindings[0]["context"], "document.querySelector('h1').textContent") == "Clicked"
+    engine._evaluate(bindings[0]["context"], "document.querySelector('div[style]').style.display='block'")
+    try:
+        engine.dispatch("selector_action", {"scope": scopes[0], "operation": "click", "selector": selector,
+            "action_key": "ambiguous-about-click"})
+        raise AssertionError("visible duplicate accepted")
+    except RuntimeError as exc:
+        assert getattr(exc, "code", None) == "FIREFOX_TARGET_UNAVAILABLE"
+        assert getattr(exc, "outcome", None) == "not_started"
+    assert "ambiguous-about-click" not in engine.state["actions"]
+    emit("responsive-selector", hidden_duplicate_clicked=True, visible_duplicate_refused=True, no_rejected_input_journal=True)
     # Same-URL contexts still resolve by immutable native binding.
     for scope in scopes:
         engine.dispatch("navigate", {"scope": scope, "url": url + "/alpha"})

@@ -105,3 +105,38 @@ def test_owner_viewer_origin_capability_and_exact_scope(tmp_path):
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
+
+
+@pytest.mark.parametrize("code,outcome", [
+    ("FIREFOX_TARGET_UNAVAILABLE", "not_started"),
+    ("FIREFOX_OBSERVATION_UNAVAILABLE", "not_started"),
+    ("FIREFOX_WINDOW_BUDGET", "not_started"),
+    ("FIREFOX_NATIVE_OUTCOME_UNCERTAIN", "uncertain"),
+    (None, "uncertain"),
+])
+def test_endpoint_preserves_preflight_vs_delivery_boundary(tmp_path, code, outcome):
+    spec = importlib.util.spec_from_file_location("error_endpoint", ROOT / "files/firefox-browser/firefox-bridge-server.py")
+    endpoint = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(endpoint)
+    endpoint.LOCK_PATH = tmp_path / "endpoint.lock"
+    engine = windows.Windows(tmp_path / "windows.json")
+    server = endpoint.Server(("127.0.0.1", 0), endpoint.Handler)
+    server.windows = engine
+    server.bridge_token = "synthetic-only-not-a-real-credential"
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    error = windows.ControlError(code, "fixed safe refusal", outcome) if code else RuntimeError("private detail")
+    try:
+        with patch.object(engine, "dispatch", side_effect=error):
+            request = urllib.request.Request(f"http://127.0.0.1:{server.server_port}" + endpoint.API_PATH,
+                data=json.dumps({"command": "selector_action", "payload": {"scope": A}}).encode(),
+                headers={"Content-Type": "application/json", "Authorization": "Bearer " + server.bridge_token})
+            with urllib.request.urlopen(request, timeout=3) as reply:
+                result = json.load(reply)
+        assert result["error"] == (code or "FIREFOX_OUTCOME_UNCERTAIN")
+        assert result["outcome"] == outcome
+        assert "private detail" not in json.dumps(result)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
