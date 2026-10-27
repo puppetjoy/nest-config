@@ -146,7 +146,7 @@ class PrivateAccess(unittest.TestCase):
         self.assertEqual(self.request()[0], 200)
 
     def test_routing_exact_methods_and_header_boundary(self):
-        for operation in ("status", "propose", "match", "settle", "export"):
+        for operation in ("status", "propose", "import", "match", "settle", "export"):
             path = "/routing/" + operation
             method = "GET" if operation == "status" else "POST"
             status, data = self.request(path=path, method=method, extra=(
@@ -249,9 +249,36 @@ class PrivateAccess(unittest.TestCase):
     def test_review_cap_does_not_raise_unrelated_limits(self):
         for path in ("/", "/admin", "/admin/routing/import", "/admin/routing/match",
                      "/admin/routing/export", "/routing/match", "/routing/propose",
-                     "/routing/export", "/routing/settle"):
+                     "/routing/export", "/routing/settle", "/routing/import"):
             with self.subTest(path=path):
                 self.assertEqual(self.request(path=path, method="POST", extra="Content-Length: 1048577\r\n")[0], 413)
+
+    def test_import_raw_targets_are_refused(self):
+        for path in ("//routing/import", "/routing//import", "/routing/%69mport",
+                     "/%72outing/import", "/other/../routing/import",
+                     "/routing/import/../import", "/routing/import/../../admin",
+                     "/routing/import%2f", "/routing/import%3fx=1", "/routing/import%00",
+                     "/routing/Import", "/routing/imports"):
+            with self.subTest(path=path):
+                self.assertIn(self.request(path=path, method="POST")[0], (400, 404))
+
+    def test_import_body_limit_and_owner_header_isolation(self):
+        for framing in ("length", "chunked"):
+            status, data = self.request(path="/routing/import", method="POST", size=1048576, framing=framing)
+            self.assertEqual(status, 200)
+            self.assertEqual(json.loads(data)["body_bytes"], 1048576)
+            self.assertEqual(self.request(path="/routing/import", method="POST", size=1048577, framing=framing)[0], 413)
+        status, data = self.request(path="/admin/routing/import", method="POST", extra=(
+            "Cookie: sessionid=fixture; csrftoken=fixture\r\nX-CSRFToken: fixture\r\n"
+            "Origin: https://joyride-test.eyrie\r\nX-Joyride-Trusted-Test: forged\r\n"
+            "Tailscale-User-Login: forged\r\n"))
+        self.assertEqual(status, 200)
+        headers = json.loads(data)["headers"]
+        self.assertEqual(headers["Cookie"], "sessionid=fixture; csrftoken=fixture")
+        self.assertEqual(headers["X-CSRFToken"], "fixture")
+        self.assertEqual(headers["Origin"], "https://joyride-test.eyrie")
+        self.assertNotIn(b"forged", data)
+        self.assertEqual(self.request(path="/routing/import", host="joyride.eyrie", method="POST")[0], 421)
 
     def test_routing_raw_uri_tricks_are_refused(self):
         for path in ("/routing", "/routing/unknown", "//routing/status", "/routing//status",
