@@ -282,15 +282,36 @@ limit behavior still require the separately approved disruptive canary.
 
 ### Checked kernel Puppet outcomes
 
-`nest::base::cli` selects `=app-admin/nest-cli-0.9.0_p20261021-r8::nest`
-from overlay MR !12, merge `0b01c701b5da805850d8a8beb74bee256e291bcc`.
-It packages CLI MR !17, merge `1aee2c84fcd9e287cee3e7bf8302d48766962eb6`,
-including the checked kernel outcomes from MR !16.
+`nest::base::cli` selects `=app-admin/nest-cli-0.9.0_p20261021-r9::nest`
+from overlay MR !13, merge `7195ca13c77eb261db35402b19c149c4b7e95002`.
+It packages CLI MR !18, merge `5ccf7d4cda8cb46b73d089a6414d5f5b72f194f3`,
+retaining the checked kernel outcomes from MR !16 and MR !17.
 The complete 31-library-file aggregate SHA256 is
-`5ce530992688c50ef8d1e53bc6aaf77905385dad88eaac7a3ba26d603686e93c`.
+`4f1902e9e40a0b1dffef84a0e46d73ae34c5e32d0ec11712281e1db4591c6af5`.
 Verify the entire installed source map and exact Portage revision after ordinary
 inventory-backed `nest_cli_package` delivery. Package and source CI are not
 installed acceptance. No service restart or reboot is needed for this tooling pin.
+
+### Explicit postboot policy continuation
+
+The r9 CLI documents `reset-postboot-policy.md` alongside its other installed
+contracts. `nest reset status ID --format=json` observes current source/policy
+drift separately from the immutable preparation record, without writing a lock
+or journal. Preparation, resume and reboot still require original identities.
+
+After independently proving a changed boot into the exact prepared target,
+`nest reset accept ID --evidence REPORT.json --postboot-policy CONTEXT.json`
+can retain separately reviewed current CLI/filter identities. The original
+release, preparation policy, source, phases and reboot receipt are unchanged.
+The context grants no acceptance authority and waives no report gate. Any
+historical failure disposition still needs its exact approval and evidence.
+
+Finalize consumes the retained context and rechecks the accepted boot and all
+identity guards. An evolved-policy transaction permits only empty non-deleting
+owned cleanup; it cannot delete snapshots, origins or either BE. No force flag,
+digest rewrite, reset/reboot replay or additional outage is implied. Keep the
+original failed first-boot evidence and distinguish repaired incident acceptance
+from clean-first-boot or rollback-boot proof.
 
 Native reset cycles persist a transaction-owned `nest-reset-ID` snapshot identity
 through plan, capacity admission, clone, resume, promotion and finalize. Retained
