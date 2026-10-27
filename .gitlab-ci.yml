@@ -46,6 +46,7 @@ stages:
   stage: 'Test'
   script:
     - 'pdk validate'
+    - 'python3 spec/files/reset_identity_filter_test.py'
 
 'Unit Test':
   extends: .all-branch-ci
