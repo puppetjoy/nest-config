@@ -13,6 +13,10 @@
 # Global rules
 P /boot/**
 - /etc/hostid
+# Keep the host identity across generic Stage 3 payloads. The first boot needs
+# it for Host= network matches and stable DHCP identity before Puppet can run.
+- /etc/hostname
+- /etc/machine-id
 - /etc/mtab
 - /etc/printcap
 - /etc/resolv.conf
