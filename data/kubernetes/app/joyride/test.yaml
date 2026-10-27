@@ -5,9 +5,9 @@ service_name: '%{nest::kubernetes::service}'
 fqdn: '%{nest::kubernetes::service}.eyrie'
 runtime_environment: test
 ingress_class: contour-test
-# History salvage MR 47, successful merged-main pipeline 12278, build 52537 image.json.
-# Head 474f8f614b363f48199db94fc150f520a2399463; retains sidewalk continuity MR 46.
-joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:437df0055eed4b7bb116b6ff1e9164342c9787362194b9ecbfb5ff2e1fd611b3
+# Retain installed routing repair MR 51; successful main pipeline 12336, build 52855 image.json.
+# Head 9eeab6aad0de5074d5a1805c892f83f74b7d4007; do not roll back during ingress convergence.
+joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:bbd12f499b6a759629072c8b14ababebb1f9fcd6210dd89d0f6247235c6e4b75
 affinity: {}
 tolerations: []
 resources:
@@ -982,6 +982,33 @@ resources:
                   number: 8001
           - path: /
             pathType: Prefix
+            backend:
+              service:
+                name: '%{nest::kubernetes::service}-internal-web'
+                port:
+                  number: 8003
+  routing_propose_ingress:
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: '%{nest::kubernetes::service}-routing-propose'
+      namespace: '%{nest::kubernetes::namespace}'
+      annotations:
+        ingress.kubernetes.io/force-ssl-redirect: 'true'
+        # Isolate the longer response window from /ops/ and all other web paths.
+        projectcontour.io/response-timeout: 45s
+    spec:
+      ingressClassName: '%{lookup(''ingress_class'')}'
+      tls:
+      - hosts:
+        - '%{lookup(''fqdn'')}'
+        secretName: '%{nest::kubernetes::service}-tls'
+      rules:
+      - host: '%{lookup(''fqdn'')}'
+        http:
+          paths:
+          - path: /admin/routing/propose
+            pathType: Exact
             backend:
               service:
                 name: '%{nest::kubernetes::service}-internal-web'

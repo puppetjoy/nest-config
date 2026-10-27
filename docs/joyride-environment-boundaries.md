@@ -38,6 +38,29 @@ IP or private network location alone never establishes that principal. Installed
 pre-SNAT Tailscale guards and all additive pod policies are required. See
 `joyride-luna-private-access.md` for exact pairs, encoding and admission bounds.
 
+### Bounded private routing response window
+
+The TEST-only `joyride-test-routing-propose` Ingress gives the exact
+`/admin/routing/propose` path a finite Contour response timeout of 45 seconds,
+below the unchanged 60-second application worker timeout. The installed bounded
+single-bearing request takes about 25 seconds, exceeding Envoy's unconfigured
+15-second default. The chartless KubeCM resource map supports a separate Ingress,
+so there is no need for an Ingress-wide timeout on the existing `/` and `/ops/`
+routes, a new Service, or an HTTPProxy migration.
+
+The exact route reuses the existing host, ingress class, TLS Secret, HTTPS
+redirect and internal-web Service on port 8003. It does not bypass owner/session
+or CSRF checks, expose public port 8000, route to trusted port 8002, or change
+Luna's Tailscale grant. Ingress matching is method-independent; all methods on
+this exact path receive the response window, but application method/auth checks
+remain authoritative. Trailing-slash, descendant and other routing paths retain
+the existing `/` fallback and default timeout. Production source is unchanged.
+
+Verify the rendered and installed exact route and Envoy timeout alongside the
+unchanged fallback routes, TLS and anonymous/public denial. Final authenticated
+owner-browser and actual Luna trusted-path acceptance belong to the parent
+routing delivery task; configuration readback alone is not workflow acceptance.
+
 ## Dormant production source preparation
 
 `data/kubernetes/app/joyride/joyride.yaml` prepares a distinct `joyride` service
