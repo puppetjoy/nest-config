@@ -39,8 +39,10 @@ http.server.ThreadingHTTPServer(('0.0.0.0', 8000), Handler).serve_forever()
 '''
 CLIENT = '''
 import base64, http.client, json, socket, ssl, sys
-target, path, host, sni, extra, method, size, framing = sys.argv[1:]
-size = int(size)
+target, path, host, sni, extra, method = sys.argv[1:7]
+# Production/lifecycle fixtures import this client with the original arguments.
+size = int(sys.argv[7]) if len(sys.argv) > 7 else 0
+framing = sys.argv[8] if len(sys.argv) > 8 else 'length'
 body = b''
 if size:
     prefix, suffix = b'{"title":"', b'"}'
