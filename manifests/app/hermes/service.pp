@@ -162,7 +162,7 @@ class nest::app::hermes::service {
         PrivateTmp=true
         ProtectHome=read-only
         ProtectSystem=strict
-        ReadWritePaths=/run/patternkit-session-broker
+        ReadWritePaths=/run/patternkit-session-broker /home/${nest::user}/.hermes/installs
 
         [Install]
         WantedBy=multi-user.target
