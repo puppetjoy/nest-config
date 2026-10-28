@@ -130,6 +130,7 @@ stages:
     - 'python3 -m venv .hermes-fixture-venv'
     - '.hermes-fixture-venv/bin/python -m pip install --disable-pip-version-check --only-binary=:all: PyYAML==6.0.3'
     - '.hermes-fixture-venv/bin/python spec/files/hermes_build_state_test.py'
+    - '.hermes-fixture-venv/bin/python spec/files/hermes_frontend_build_test.py'
     - '.hermes-fixture-venv/bin/python spec/files/hermes_source_sync_test.py'
 
 'Joyride private access':
