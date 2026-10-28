@@ -1,4 +1,5 @@
 <%- | String[1] $venv_python | -%>
 #!/bin/sh
 set -eu
+export HERMES_DASHBOARD_PUBLIC_URL="${NEST_STANDALONE_DASHBOARD_PUBLIC_URL}"
 exec <%= $venv_python %> -m hermes_cli.main --profile "$1" dashboard --host "${HERMES_DASHBOARD_BIND_HOST}" --port "${HERMES_DASHBOARD_PORT}" --no-open --skip-build --insecure --isolated

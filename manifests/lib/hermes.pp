@@ -645,7 +645,7 @@ define nest::lib::hermes (
   $systemd_env_lines = [
     "HERMES_DASHBOARD_BIND_HOST=${dashboard_bind_host}",
     "HERMES_DASHBOARD_PORT=${dashboard_port}",
-    "HERMES_DASHBOARD_PUBLIC_URL=${dashboard_public_url}",
+    "NEST_STANDALONE_DASHBOARD_PUBLIC_URL=${dashboard_public_url}",
     $ssh_auth_sock ? {
       undef   => [],
       default => ["SSH_AUTH_SOCK=${ssh_auth_sock}"],
@@ -939,7 +939,8 @@ define nest::lib::hermes (
       'dispatch_in_gateway' => $kanban_dispatch_in_gateway,
     },
     'dashboard'        => {
-      'public_url' => $dashboard_public_url,
+      # Only the standalone dashboard answers this external URL
+      'public_url' => '',
       'oauth'      => {
         'client_id'  => $dashboard_oauth_client_id_value,
         'portal_url' => $dashboard_oauth_portal_url_value,
