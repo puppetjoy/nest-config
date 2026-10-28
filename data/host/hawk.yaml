@@ -10,6 +10,10 @@ nest::classes:
 
 nest::app::spotify::backend: web
 
+# Retain Hawk's recovered vmwgfx fix in the maintained stable patchset.
+nest::kernel_tag: 'stable/v6.18.57'
+nest::kernel_revision: 'c6b206f17b9bf9b8d5510bde99f1f1fa1fe80669'
+
 nest::dvorak: true
 nest::gui_scaling_factor: 2.0
 nest::vpn: true
