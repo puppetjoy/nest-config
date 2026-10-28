@@ -6,7 +6,10 @@ import os
 from pathlib import Path
 import sys
 
-import yaml
+try:
+    import hermes_yaml as yaml
+except ImportError:
+    import yaml
 
 
 def reconcile(current, managed):
