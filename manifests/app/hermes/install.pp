@@ -3,7 +3,6 @@ class nest::app::hermes::install {
   $git_url           = $nest::app::hermes::git_url
   $git_ref           = $nest::app::hermes::git_ref
   $git_commit        = $nest::app::hermes::git_commit
-  $git_revision      = pick($git_commit, $git_ref)
   $venv_dir          = "${install_dir}/venv"
   $pm_enabled        = $nest::app::hermes::pm_enabled
   $venv_python       = $pm_enabled ? {
@@ -120,27 +119,41 @@ class nest::app::hermes::install {
     ],
   }
 
-  exec { 'reattach_hermes_source_ref':
-    command => "/bin/sh -c 'set -e; /usr/sbin/git -C ${source_dir} fetch origin; if /usr/sbin/git -C ${source_dir} rev-parse --verify --quiet origin/${git_ref}^{commit} >/dev/null; then /usr/sbin/git -C ${source_dir} checkout -B ${git_ref} origin/${git_ref}; else /usr/sbin/git -C ${source_dir} checkout ${git_ref}; fi'",
-    onlyif  => "/bin/sh -c 'test -z \"${git_commit}\" && test -d ${source_dir}/.git && ! /usr/sbin/git -C ${source_dir} symbolic-ref --quiet HEAD >/dev/null'",
-    require => [
+  # vcsrepo only bootstraps the repository. All subsequent ref movement goes
+  # through the journaled overlay-aware helper, including rolling updates.
+  vcsrepo { $source_dir:
+    ensure   => present,
+    provider => git,
+    source   => $git_url,
+    tag      => 'hermes_source',
+    require  => [
       File[$install_dir],
       Class['nest::base::git'],
       Exec['set_hermes_source_remote'],
     ],
   }
 
-  vcsrepo { $source_dir:
-    ensure   => latest,
-    provider => git,
-    source   => $git_url,
-    revision => $git_revision,
-    tag      => 'hermes_source',
-    require  => [
-      File[$install_dir],
-      Class['nest::base::git'],
-      Exec['set_hermes_source_remote'],
-      Exec['reattach_hermes_source_ref'],
+  file { "${install_dir}/bin/hermes-source-sync":
+    ensure  => file,
+    source  => 'puppet:///modules/nest/app/hermes/hermes-source-sync.py',
+    mode    => '0755',
+    tag     => 'hermes_source',
+    require => File["${install_dir}/bin"],
+  }
+
+  $source_pin_arg = $git_commit ? {
+    undef   => '',
+    default => " --commit ${git_commit}",
+  }
+
+  exec { 'sync_hermes_source':
+    command => "/usr/bin/python3.13 ${install_dir}/bin/hermes-source-sync ${source_dir} ${git_ref}${source_pin_arg}",
+    tag     => 'hermes_source',
+    timeout => 600,
+    require => [
+      Vcsrepo[$source_dir],
+      File["${install_dir}/bin/hermes-source-sync"],
+      Package['dev-lang/python:3.13'],
     ],
   }
 
@@ -149,14 +162,27 @@ class nest::app::hermes::install {
       tag     => 'hermes_source',
       command => "/bin/sh -c 'echo Hermes source HEAD must match pinned commit ${git_commit} on ref ${git_ref} >&2; exit 1'",
       unless  => "/bin/sh -c 'test \"$(/usr/sbin/git -C ${source_dir} rev-parse HEAD)\" = ${git_commit} && /usr/sbin/git -C ${source_dir} merge-base --is-ancestor ${git_commit} origin/${git_ref}'",
-      require => Vcsrepo[$source_dir],
+      require => Exec['sync_hermes_source'],
     }
   }
 
   $source_ready = $git_commit ? {
-    undef   => Vcsrepo[$source_dir],
+    undef   => Exec['sync_hermes_source'],
     default => Exec['verify_hermes_source_ref_pin'],
   }
+
+  # Order every managed overlay behind the transaction, even for tagged runs.
+  # Keep this explicit list in step with hermes-source-sync.py's allowlist.
+  $source_overlays = [
+    'agent_request_tool.py', 'google_photos_tool.py', 'google_workspace_tool.py',
+    'oauth_browser_tool.py', 'secure_browser_oauth_tool.py',
+    'secure_browser_tool.py', 'firefox_ui_bridge.py',
+    'secure_browser_local_bidi.py', 'secure_browser_bidi.py',
+    'secure_browser_legacy_support.py', 'shopping_browser_tool.py',
+  ]
+  $source_overlay_paths = $source_overlays.map |$name| { "${source_dir}/tools/${name}" }
+  Exec['sync_hermes_source'] -> File[$source_overlay_paths]
+  Exec['sync_hermes_source'] -> Exec['build_hermes_tui']
 
   exec { 'set_hermes_agent_request_broker_remote':
     command => "/usr/sbin/git -C ${broker_source_dir} remote set-url origin ${broker_git_url}",
