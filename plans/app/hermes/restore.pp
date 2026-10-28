@@ -32,7 +32,7 @@ plan nest::app::hermes::restore (
         systemctl --user -M ${user}@ stop "$${unit}" || true
       done
     done
-    runuser -u ${user.shellquote} -- /opt/hermes-agent/venv/bin/hermes import ${force_flag} ${archive.shellquote}
+    runuser -u ${user.shellquote} -- /usr/local/bin/hermes import ${force_flag} ${archive.shellquote}
     for active_unit in "$${state_dir}"/*; do
       [ -e "$${active_unit}" ] || continue
       active_unit_name="$$(basename "$${active_unit}")"

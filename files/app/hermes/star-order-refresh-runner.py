@@ -1,4 +1,4 @@
-#!/opt/hermes-agent/venv/bin/python
+#!/opt/hermes-agent/bin/hermes-python
 """Run Star's safe retail-order refresh loop.
 
 This small systemd-friendly wrapper calls the retail_order tool entry point in

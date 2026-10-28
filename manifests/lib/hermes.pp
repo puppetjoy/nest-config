@@ -116,7 +116,10 @@ define nest::lib::hermes (
   }
 
   $venv_dir                         = "${install_dir}/venv"
-  $venv_python                      = "${venv_dir}/bin/python"
+  $venv_python                      = $nest::app::hermes::pm_enabled ? {
+    true    => "${install_dir}/bin/hermes-python",
+    default => "${venv_dir}/bin/python",
+  }
   $hermes_home_dir                  = "/home/${user}/.hermes"
   $profiles_dir                     = "${hermes_home_dir}/profiles"
   $profile_dir                      = "${profiles_dir}/${profile}"
@@ -131,6 +134,10 @@ define nest::lib::hermes (
   $hermes_managed_config_path       = "${profile_dir}/managed-config.yaml"
   $hermes_config_manager_path       = "${install_dir}/bin/manage-hermes-config"
   $hermes_honcho_config_path        = "${profile_dir}/honcho.json"
+  $honcho_dependency                = $nest::app::hermes::pm_enabled ? {
+    true    => Exec['install_hermes_agent'],
+    default => Python::Pip['hermes-agent-honcho-deps'],
+  }
   $hermes_skins_dir                 = "${profile_dir}/skins"
   $hermes_persona_media_dir         = "${profile_dir}/persona-media"
   $kubeconfig_dir                   = "${profile_dir}/kubeconfigs"
@@ -177,9 +184,15 @@ define nest::lib::hermes (
     'web',
   ]
   $base_effective_toolsets           = pick($toolsets, $telegram_toolsets, $default_toolsets)
+  $pm_browser_enabled               = $nest::app::hermes::pm_enabled and 'browser' in $base_effective_toolsets
+  $external_browser_toolsets        = $pm_browser_enabled ? {
+    true    => ['camofox'],
+    default => [],
+  }
+  $managed_toolsets                 = $base_effective_toolsets + $external_browser_toolsets
   $effective_toolsets                = $google_photos_enabled ? {
-    true    => unique($base_effective_toolsets + ['google_photos']),
-    default => $base_effective_toolsets,
+    true    => unique($managed_toolsets + ['google_photos']),
+    default => $managed_toolsets,
   }
   $platform_toolsets                 = [
     'cli',
@@ -230,6 +243,38 @@ define nest::lib::hermes (
     owner   => $user,
     group   => $user,
     require => File[$profiles_dir],
+  }
+
+  if $nest::app::hermes::pm_enabled {
+    ensure_resource('file', "${profile_dir}/plugins", {
+      'ensure'  => 'directory',
+      'mode'    => '0700',
+      'owner'   => $user,
+      'group'   => $user,
+      'require' => File[$profile_dir],
+    })
+
+    $extracted_plugins = $pm_browser_enabled ? {
+      true    => ['honcho', 'github-copilot', 'camofox'],
+      default => ['honcho', 'github-copilot'],
+    }
+    $extracted_plugins.each |String $plugin_name| {
+      file { "${profile_dir}/plugins/${plugin_name}":
+        ensure  => link,
+        target  => "${install_dir}/extracted-plugins/${plugin_name}",
+        owner   => $user,
+        group   => $user,
+        require => [File["${profile_dir}/plugins"], Exec['install_hermes_agent']],
+      }
+    }
+
+    file { "${profile_dir}/plugins/nest-agent-request-broker":
+      ensure  => link,
+      target  => "${install_dir}/agent-request-broker",
+      owner   => $user,
+      group   => $user,
+      require => [File["${profile_dir}/plugins"], Exec['install_hermes_agent']],
+    }
   }
 
   file { "${profile_dir}/SOUL.md":
@@ -361,7 +406,7 @@ define nest::lib::hermes (
         File[$glab_config_path],
         File["${glab_config_path}.puppet"],
         File["${install_dir}/bin/manage-glab-config"],
-        Python::Pyvenv[$venv_dir],
+        Exec['install_hermes_agent'],
       ],
     }
   }
@@ -634,7 +679,15 @@ define nest::lib::hermes (
     undef   => [],
     default => ["image_gen/${image_gen_provider}"],
   }
-  $effective_plugins = ($enabled_plugins + $image_gen_plugins).unique
+  $browser_plugins = $pm_browser_enabled ? {
+    true    => ['camofox'],
+    default => [],
+  }
+  $broker_plugins = $nest::app::hermes::pm_enabled ? {
+    true    => ['nest-agent-request-broker'],
+    default => [],
+  }
+  $effective_plugins = ($enabled_plugins + $image_gen_plugins + $browser_plugins + $broker_plugins).unique
   $plugins_config = empty($effective_plugins) ? {
     true    => {},
     default => {
@@ -1067,7 +1120,7 @@ define nest::lib::hermes (
   $configure_require = $has_custom_skin ? {
     true    => [
       Exec['install_hermes_agent'],
-      Python::Pip['hermes-agent-honcho-deps'],
+      $honcho_dependency,
       File[$hermes_config_path],
       File[$hermes_config_manager_path],
       File[$hermes_managed_config_path],
@@ -1076,7 +1129,7 @@ define nest::lib::hermes (
     ],
     default => [
       Exec['install_hermes_agent'],
-      Python::Pip['hermes-agent-honcho-deps'],
+      $honcho_dependency,
       File[$hermes_config_path],
       File[$hermes_config_manager_path],
       File[$hermes_managed_config_path],

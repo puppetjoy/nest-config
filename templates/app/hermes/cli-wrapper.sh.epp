@@ -1,6 +1,8 @@
 <%- |
   String[1] $venv_dir,
   String[1] $ca_bundle_file,
+  Boolean   $pm_enabled = false,
+  String[1] $install_dir = '/opt/hermes-agent',
 | -%>
 #!/bin/sh
 set -eu
@@ -8,4 +10,8 @@ export SSL_CERT_FILE=<%= $ca_bundle_file %>
 export REQUESTS_CA_BUNDLE=<%= $ca_bundle_file %>
 export CURL_CA_BUNDLE=<%= $ca_bundle_file %>
 export SSL_CERT_DIR=/etc/ssl/certs
+<% if $pm_enabled { -%>
+exec <%= $install_dir %>/bin/hermes-python -m hermes_cli.main "$@"
+<% } else { -%>
 exec <%= $venv_dir %>/bin/hermes "$@"
+<% } -%>

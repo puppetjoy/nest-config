@@ -3,6 +3,7 @@ class nest::app::hermes (
   String[1]                      $git_url                        = 'https://gitlab.joyfullee.me/nest/forks/hermes-agent.git',
   String[1]                      $git_ref                        = 'main',
   Optional[String[1]]            $git_commit                     = undef,
+  Boolean                        $pm_enabled                     = false,
   Stdlib::Absolutepath           $ca_bundle_file                 = '/etc/ssl/certs/ca-certificates.crt',
   String[1]                      $broker_git_url                 = 'https://gitlab.joyfullee.me/nest/hermes-agent-request-broker.git',
   String[1]                      $broker_git_ref                 = 'main',

@@ -1,8 +1,23 @@
 class nest::app::hermes::service {
   $install_dir             = $nest::app::hermes::install_dir
   $venv_dir                = "${install_dir}/venv"
-  $venv_python             = "${venv_dir}/bin/python"
+  $venv_python             = $nest::app::hermes::pm_enabled ? {
+    true    => "${install_dir}/bin/hermes-python",
+    default => "${venv_dir}/bin/python",
+  }
   $source_dir              = "${install_dir}/src"
+  $runtime_bin             = $nest::app::hermes::pm_enabled ? {
+    true    => "${install_dir}/bin",
+    default => "${venv_dir}/bin",
+  }
+  $runtime_venv            = $nest::app::hermes::pm_enabled ? {
+    true    => '',
+    default => $venv_dir,
+  }
+  $pty_dependency          = $nest::app::hermes::pm_enabled ? {
+    true    => Exec['install_hermes_agent'],
+    default => Exec['install_hermes_pty_deps'],
+  }
   $broker_source_dir            = "${install_dir}/agent-request-broker"
   $pythonpath                   = "${source_dir}:${broker_source_dir}/src"
   $hermes_home_dir              = "/home/${nest::user}/.hermes"
@@ -248,6 +263,8 @@ class nest::app::hermes::service {
       content => epp('nest/app/hermes/agent-request-command.sh.epp', {
         'venv_dir'          => $venv_dir,
         'venv_python'       => $venv_python,
+        'runtime_bin'       => $runtime_bin,
+        'runtime_venv'      => $runtime_venv,
         'source_dir'        => $source_dir,
         'broker_source_dir' => $broker_source_dir,
         'hermes_home_dir'   => $hermes_home_dir,
@@ -680,8 +697,8 @@ class nest::app::hermes::service {
       'ExecStart'              => "${venv_python} -m hermes_cli.main --profile %i gateway run --replace --force",
       'WorkingDirectory'       => "/home/${nest::user}",
       'Environment'            => [
-        "PATH=${venv_dir}/bin:/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-        "VIRTUAL_ENV=${venv_dir}",
+        "PATH=${runtime_bin}:/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "VIRTUAL_ENV=${runtime_venv}",
         "PYTHONPATH=${pythonpath}",
         "HERMES_HOME=${hermes_home_dir}",
         "SSL_CERT_FILE=${ca_bundle_file}",
@@ -726,8 +743,8 @@ class nest::app::hermes::service {
       'ExecStart'        => "${install_dir}/bin/hermes-dashboard %i",
       'WorkingDirectory' => "/home/${nest::user}",
       'Environment'      => [
-        "PATH=${venv_dir}/bin:/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-        "VIRTUAL_ENV=${venv_dir}",
+        "PATH=${runtime_bin}:/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "VIRTUAL_ENV=${runtime_venv}",
         "PYTHONPATH=${pythonpath}",
         "HERMES_HOME=${hermes_home_dir}",
         'HERMES_DASHBOARD_TUI=1',
@@ -747,7 +764,7 @@ class nest::app::hermes::service {
     },
     require       => [
       Exec['install_hermes_agent'],
-      Exec['install_hermes_pty_deps'],
+      $pty_dependency,
       Exec['build_hermes_tui'],
     ],
     notify        => Systemd::Daemon_reload['hermes-systemd-user-daemon-reload'],

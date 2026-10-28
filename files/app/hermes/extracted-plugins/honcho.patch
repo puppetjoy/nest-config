@@ -1,0 +1,2558 @@
+diff --git a/README.md b/README.md
+index 6dea11e..20296fb 100644
+--- a/README.md
++++ b/README.md
+@@ -349,6 +349,16 @@ Host key is derived from the active Hermes profile: `hermes` (default) or `herme
+ | `reasoningHeuristic` | bool | `true` | Query-adaptive: auto-scale the auto-injected dialectic's level up by query length (+1 at ≥120 chars, +2 at ≥400), clamped at `reasoningLevelCap`. `false` pins every auto call to `dialecticReasoningLevel` |
+ | `reasoningLevelCap` | string | `"high"` | Ceiling for `reasoningHeuristic` scaling: `"minimal"`, `"low"`, `"medium"`, `"high"`, `"max"` |
+ 
++Hermes also adds a compact output contract to every Honcho dialectic `.chat()`
++query. The contract asks for one short paragraph or up to four bullets, no
++preamble/tool narration/raw transcripts, and a conservative character cap by
++reasoning level (minimal 500, low 700, medium 900, high 1100, max 1300). If a
++useful answer cannot fit, the model may return `NO_CONCISE_HONCHO_RESULT`,
++which Hermes treats as an empty/degraded dialectic result rather than injecting
++partial memory context. This protects self-hosted local-Qwen deployments from
++wasting a full generation that ends at `finish_reason='length'`; it does not
++relax Honcho's correctness guard against truncated outputs.
++
+ ### Token Budgets
+ 
+ | Key | Type | Default | Description |
+@@ -425,10 +435,144 @@ Presets:
+ | `hermes honcho mode <mode>` | Change recall or observation mode |
+ | `hermes honcho peer --user <name>` | Update user peer name |
+ | `hermes honcho peer --ai <name>` | Update AI peer name |
++| `hermes honcho sync` | Sync Honcho config to all existing Hermes profiles |
++| `hermes honcho eval` | Maintain a content-safe memory-quality evaluation ledger for recurring self-improvement loops |
+ | `hermes honcho tokens --context <N>` | Set context token budget |
+ | `hermes honcho tokens --dialectic <N>` | Set dialectic max chars |
+ | `hermes honcho map <name>` | Map current directory to a session name |
+-| `hermes honcho sync` | Create host blocks for all Hermes profiles |
++
++## Memory-quality evaluation ledger
++
++Recurring Honcho self-improvement jobs can use `hermes honcho eval` to keep
++longitudinal, content-safe state instead of judging each run in isolation:
++
++```bash
++hermes honcho eval init
++hermes honcho eval native-probes --probe --record --note "hourly loop"
++hermes honcho eval probe --input aggregate-probes.json --record --note "hourly loop"
++hermes honcho eval report
++hermes honcho eval guidance
++```
++
++`eval native-probes` is the preferred hourly source for native Honcho north-star
++evidence. It reads the active profile's Honcho peer card, session context, and a
++small fixed query set in-process, but prints/records only fixed labels and safe
++counts. Use `--probe` to see the sanitized eval-probe payload or `--record` to
++record it directly. It is equivalent to feeding its JSON into `eval probe`, not
++to bypassing the content-safe runner.
++
++`eval probe` is the hourly-safe probe runner for the fixed quality labels
++`recall_usefulness`, `freshness`, `noise`, and `regression` plus operational
++labels `dream_success`, `representation_freshness`, and `budget_efficiency`.
++Feed it a JSON object containing only aggregate counts, ages, rates, booleans,
++and deterministic IDs/labels. The hourly memory-quality contract has two safe
++input shapes:
++
++1. Pre-counted aggregates, for example:
++
++```json
++{
++  "aggregates": {
++    "recall_attempts": 10,
++    "useful_recall_count": 8,
++    "recall_error_count": 1,
++    "fact_count": 20,
++    "recent_fact_count": 16,
++    "stale_fact_count": 2,
++    "max_age_hours": 24,
++    "retrieved_item_count": 30,
++    "irrelevant_item_count": 3,
++    "duplicate_item_count": 2,
++    "regression_checks_total": 5,
++    "regression_checks_failed": 1,
++    "probe_window_label": "hourly-light"
++  }
++}
++```
++
++2. Fixed labeled probe outcomes derived from native Honcho tool results. The
++   hourly loop may call `honcho_profile`, `honcho_context`, and `honcho_search`,
++   but it must reduce their output immediately to sanitized labels such as
++   `query_label`, `probe_label`, `recall_label`, `freshness_label`,
++   `noise_label`, and `regression_label`. The probe runner converts those labels
++   to counts before recording, and never persists retrieved excerpts or peer-card
++   text:
++
++```json
++{
++  "aggregates": {
++    "probe_window_label": "hourly-light",
++    "native_honcho_probe_results": [
++      {
++        "query_label": "talon_identity",
++        "recall_label": "useful",
++        "freshness_label": "fresh",
++        "noise_label": "clean",
++        "regression_label": "pass"
++      },
++      {
++        "query_label": "stale_request_policy",
++        "recall_label": "irrelevant",
++        "freshness_label": "stale",
++        "noise_label": "stale",
++        "regression_label": "fail"
++      }
++    ]
++  }
++}
++```
++
++Labeled probe rows are accepted only when every field name is in the fixed
++contract and every value matches the safe label alphabet `[a-zA-Z0-9_.:/@+-]`.
++Rows containing raw content fields, free-form text, spaces, excerpts, peer-card
++text, prompt/response bodies, secrets, or PII are ignored instead of recorded.
++
++If enough aggregate evidence is present, `eval probe` emits 0..1 scores for the
++labels it can score and, with `--record`, writes only those scores plus safe
++aggregate metadata to the ledger. If quality evidence is missing but operational
++evidence is present, the quality probes are omitted while the operational probes
++still score; this is measurement insufficiency for the omitted labels, not a
++zero-score memory-quality regression. If evidence is missing, the runner records
++omitted probe IDs with machine-safe reasons such as `insufficient_recall_counts`
++instead of guessing.
++
++The hourly operational aggregate contract accepts these content-safe field names
++(aliases may be added as the cron script evolves):
++
++- `dream_success`: `honcho_health_ok`/`health_ok`, `cnpg_query_ok`,
++  `k8s_rollouts_ok`, `hermes_honcho_status_rc`/`honcho_status_rc`,
++  `dream_observation_mode_label=passive`, `dream_schedule_attempted=0`,
++  `dream_schedule_http_status`/`scheduled_joy_talon_dream_http`,
++  `dream_processed`, `queue_error_2h`, `pending_dream_rows`,
++  `deriver_15m_dream_start_markers`/`deriver_2h_dream_start_markers`,
++  `dream_completion_markers`, `deriver_2h_completion_with_errors_count`,
++  `incomplete`/`deriver_2h_incomplete_count`, and
++  `tracebacks`/`deriver_2h_traceback_count`. For passive hourly loops, no
++  active/pending dream is healthy when service and queue evidence are clean;
++  `schedule_dream` status fields are optional legacy evidence, not required.
++- `representation_freshness`: `card_context_readable`/
++  `native_card_context_readable`, `hermes_honcho_status_rc`/
++  `honcho_status_rc`, `queue_error_2h`, and `pending_representation_rows`. A
++  backlog is scored as pressure; it is not treated as missing evidence.
++- `budget_efficiency`: `limiter_15m_503`, `limiter_90m_503`,
++  `limiter_2h_503_count`, `limiter_15m_400`, `limiter_90m_400`,
++  `limiter_2h_400_count`, `limiter_15m_timeout`, `limiter_90m_timeout`,
++  `limiter_2h_timeout_count`, `limiter_15m_prompt_tokens_p95`,
++  `limiter_2h_prompt_tokens_p95`, `limiter_15m_completion_tokens_p95`,
++  `limiter_2h_completion_tokens_p95`, `finish_length`,
++  `deriver_2h_finish_length_count`, `limiter_90m_finish_length`, and
++  `limiter_2h_finish_length_count`.
++
++The default ledger lives under the active profile at
++`state/honcho/memory_quality_ledger.json`. It stores only numeric probe scores,
++aggregate counts, deterministic labels, short sanitized notes, baselines,
++interventions, and deltas. Do not store raw message excerpts, peer-card text,
++retrieved Honcho excerpts, secrets, prompt bodies, or full API responses in the
++input JSON, ledger, logs, Agent Requests, or cron reports. The built-in probe
++suite tracks recall usefulness, freshness, noise, regression, dream success,
++representation freshness, and budget efficiency; cron jobs should compare the
++current score to both the prior run and the current baseline before filing or
++steering Agent Requests.
+ 
+ ## Example Config
+ 
+diff --git a/__init__.py b/__init__.py
+index a6442a0..a16f637 100644
+--- a/__init__.py
++++ b/__init__.py
+@@ -581,10 +581,10 @@ class HonchoMemoryProvider(DialecticMixin, MemoryProvider):
+                 # A failed init still owes the user its one-time notice.
+                 return self._log_injection("session-not-ready", self._pop_auth_notice() or self._pop_peer_notice())
+ 
+-        # Trivial turns start no work, but may consume a ready pending result.
++        # Acknowledgements must not consume delayed recall from an older topic.
+         if self._is_trivial_prompt(query):
+-            ready = self._consume_pending_dialectic()
+-            return self._log_injection("trivial-prompt", self._truncate_to_budget(ready) if ready else "")
++            self._discard_pending_prefetch()
++            return self._log_injection("trivial-prompt")
+ 
+         # One-time notice, relayed by the model, that auth is dead and memory is paused.
+         parts = [self._pop_auth_notice()]
+@@ -682,18 +682,24 @@ class HonchoMemoryProvider(DialecticMixin, MemoryProvider):
+         self._spawn_dialectic(query, thread_name="honcho-prefetch", fired_at=self._turn_count, log_label="prefetch")
+ 
+     # Shared with the core prefetch gate so the two classifiers can never drift apart.
+-    _is_trivial_prompt = staticmethod(is_trivial_prompt)
++    @staticmethod
++    def _is_trivial_prompt(text):
++        # Keep deployed acknowledgement boundaries on the pinned externalization
++        # target as well as cores whose shared classifier already includes them.
++        return is_trivial_prompt(text) or bool(re.fullmatch(
++            r"(?:yup|exactly|woohoo|woot|yay)(?:[\W_])*", (text or "").strip(), re.IGNORECASE))
+ 
+     def identity_signature(self) -> Dict[str, Any]:
+         """Identity-mapping values from honcho.json that bust a cached gateway agent when they change.
+ 
+-        Memoized on the file's mtime and size, so the per-message call is one stat. ``{}`` when the
++        Memoized on the file's stat and content identity. ``{}`` when the
+         config cannot be read."""
+         try:
+             path = resolve_config_path()
+             try:
+                 stat = path.stat()
+-                memo_key = (str(path), stat.st_mtime_ns, stat.st_size)
++                memo_key = (str(path), stat.st_mtime_ns, stat.st_size,
++                            stat.st_dev, stat.st_ino, hashlib.sha256(path.read_bytes()).hexdigest())
+             except OSError:
+                 memo_key = (str(path), None, None)
+             cached = self._identity_signature_memo.get(memo_key)
+diff --git a/cli.py b/cli.py
+index ff90542..a4420bc 100644
+--- a/cli.py
++++ b/cli.py
+@@ -1841,6 +1841,344 @@ Step 6  Next steps
+     print()
+ 
+ 
++_NATIVE_PROBE_QUERIES = (
++    ("identity", "stable identity and role preferences"),
++    ("workflow", "current project workflow and review preferences"),
++    ("memory_quality", "Honcho memory quality evaluation goals"),
++    ("agent_requests", "Agent Request routing and review policy"),
++)
++_NATIVE_SAFE_PEER_LABELS = {"user": "user", "ai": "ai"}
++
++
++def _native_safe_peer_label(peer: str, index: int) -> str:
++    """Return a deterministic non-PII peer bucket for native eval labels."""
++
++    normalized = peer.strip().lower()
++    return _NATIVE_SAFE_PEER_LABELS.get(normalized, f"custom_peer_{index}")
++
++
++def _native_context_has_recall(context: object) -> bool:
++    """Return whether a context payload contains non-card recall evidence."""
++
++    if not isinstance(context, dict):
++        return False
++    return any(context.get(key) for key in ("summary", "representation", "recent_messages"))
++
++
++def _native_peer_card_omission_reason(peer_label: str, context: object) -> str | None:
++    """Return a safe omission label for an empty peer-card probe.
++
++    Self-hosted Honcho can have a useful AI self-representation before a
++    first-class AI peer card exists. Treat that as measurement-degraded
++    evidence instead of counting the missing card as a regression failure or as
++    a successful recall row. User peer-card gaps still fail normally because the
++    user card is the primary native profile surface.
++    """
++
++    if peer_label == "ai" and _native_context_has_recall(context):
++        return "ai_peer_card_missing_context_available"
++    return None
++
++
++def _native_honcho_probe_rows(peers: list[str] | tuple[str, ...] | None = None) -> dict[str, object]:
++    """Collect fixed-label Honcho probe rows without returning raw memory content.
++
++    The hourly self-improvement cron needs native Honcho evidence, but the eval
++    ledger must not persist retrieved excerpts, peer-card text, or session
++    context.  This helper inspects those native surfaces in-process and emits
++    only deterministic labels/counts that `eval probe` can safely sanitize and
++    score.
++    """
++
++    from .client import HonchoClientConfig, get_honcho_client
++    from .session import HonchoSessionManager
++
++    hcfg = HonchoClientConfig.from_global_config(host=_host_key())
++    if not hcfg.enabled:
++        raise RuntimeError("Honcho is disabled for the active profile")
++    if not (hcfg.api_key or hcfg.base_url):
++        raise RuntimeError("Honcho has no API key or base URL configured")
++
++    client = get_honcho_client(hcfg)
++    manager = HonchoSessionManager(honcho=client, config=hcfg)
++    session_key = hcfg.resolve_session_name() or hcfg.workspace_id
++    manager.get_or_create(session_key)
++
++    selected_peers = tuple(peers or ("user", "ai"))
++    rows: list[dict[str, str]] = []
++    attempts = 0
++    errors = 0
++    omissions: dict[str, int] = {}
++
++    def add_row(
++        label: str,
++        *,
++        ok: bool,
++        empty: bool = False,
++        error: bool = False,
++        category: str = "native_probe",
++    ) -> None:
++        nonlocal attempts, errors
++        attempts += 1
++        if error:
++            errors += 1
++        failure_reason = "tool_error" if error else ("empty_recall" if empty else None)
++        row = {
++            "query_label": label,
++            "category_label": category,
++            "bucket_label": category,
++            "recall_label": "tool_error" if error else ("empty" if empty else "useful"),
++            "freshness_label": "stale" if error or empty else "fresh",
++            "noise_label": "empty" if empty else "clean",
++            "regression_label": "fail" if error or not ok else "pass",
++        }
++        if failure_reason:
++            row["failure_reason_label"] = failure_reason
++        rows.append(row)
++
++    def add_omission(reason: str) -> None:
++        omissions[reason] = omissions.get(reason, 0) + 1
++
++    for peer_index, peer in enumerate(selected_peers):
++        peer_label = _native_safe_peer_label(str(peer), peer_index)
++        context: dict[str, object] | None = None
++        context_error = False
++        try:
++            context = manager.get_session_context(session_key, peer=peer)
++        except Exception:
++            context_error = True
++
++        try:
++            card = manager.get_peer_card(session_key, peer=peer)
++            omission_reason = None
++            if not card:
++                omission_reason = _native_peer_card_omission_reason(peer_label, context)
++            if omission_reason:
++                add_omission(omission_reason)
++            else:
++                add_row(f"peer_card:{peer_label}", ok=bool(card), empty=not bool(card), category="peer_card")
++        except Exception:
++            add_row(f"peer_card:{peer_label}", ok=False, error=True, category="peer_card")
++
++        if context_error:
++            add_row(f"session_context:{peer_label}", ok=False, error=True, category="session_context")
++        else:
++            context_keys = ("summary", "representation", "card", "recent_messages")
++            has_context = (
++                any(context.get(key) for key in context_keys)
++                if isinstance(context, dict)
++                else False
++            )
++            add_row(
++                f"session_context:{peer_label}",
++                ok=has_context,
++                empty=not has_context,
++                category="session_context",
++            )
++
++        for query_label, query in _NATIVE_PROBE_QUERIES:
++            try:
++                result = manager.search_context(session_key, query, max_tokens=600, peer=peer)
++                add_row(f"search:{peer_label}:{query_label}", ok=bool(result), empty=not bool(result), category="retrieval")
++            except Exception:
++                add_row(f"search:{peer_label}:{query_label}", ok=False, error=True, category="retrieval")
++
++    aggregates: dict[str, object] = {
++        "probe_window_label": "hourly-light",
++        "native_honcho_probe_attempts": attempts,
++        "native_honcho_probe_error_count": errors,
++        "native_honcho_probe_results": rows,
++    }
++    if omissions:
++        aggregates["native_honcho_probe_omission_count"] = sum(omissions.values())
++        for reason, count in sorted(omissions.items()):
++            aggregates[f"native_honcho_probe_omitted_{reason}_count"] = count
++
++    return {"aggregates": aggregates}
++
++
++def cmd_eval(args) -> None:
++    """Manage the content-safe Honcho memory-quality evaluation ledger."""
++    from .evaluation import (
++        build_content_safe_probe_evidence,
++        guidance,
++        ledger_path,
++        load_ledger,
++        record_run,
++        render_report,
++        save_ledger,
++    )
++
++    action = getattr(args, "eval_command", None) or "report"
++    path = getattr(args, "ledger", None)
++
++    if action == "init":
++        p = save_ledger(load_ledger(path), path)
++        print(f"Initialized Honcho memory-quality ledger: {p}")
++        return
++
++    if action == "path":
++        print(ledger_path(path))
++        return
++
++    if action == "record":
++        input_path = getattr(args, "input", None)
++        if input_path in (None, "-"):
++            payload = sys.stdin.read()
++        else:
++            payload = Path(input_path).read_text(encoding="utf-8")
++        try:
++            evidence = json.loads(payload or "{}")
++        except json.JSONDecodeError as e:
++            raise SystemExit(f"Invalid JSON evidence: {e}") from e
++        if not isinstance(evidence, dict):
++            raise SystemExit("Evidence must be a JSON object")
++        _ledger, entry = record_run(
++            evidence,
++            path=path,
++            note=getattr(args, "note", None),
++            intervention_id=getattr(args, "intervention", None),
++            baseline=bool(getattr(args, "baseline", False)),
++        )
++        print(json.dumps(entry, indent=2, sort_keys=True))
++        return
++
++    if action == "probe":
++        input_path = getattr(args, "input", None)
++        if input_path in (None, "-"):
++            payload = sys.stdin.read()
++        else:
++            payload = Path(input_path).read_text(encoding="utf-8")
++        try:
++            raw_evidence = json.loads(payload or "{}")
++        except json.JSONDecodeError as e:
++            raise SystemExit(f"Invalid JSON evidence: {e}") from e
++        if not isinstance(raw_evidence, dict):
++            raise SystemExit("Evidence must be a JSON object")
++        evidence = build_content_safe_probe_evidence(raw_evidence)
++        if getattr(args, "record", False):
++            _ledger, entry = record_run(
++                evidence,
++                path=path,
++                note=getattr(args, "note", None),
++                intervention_id=getattr(args, "intervention", None),
++                baseline=bool(getattr(args, "baseline", False)),
++            )
++            print(json.dumps(entry, indent=2, sort_keys=True))
++        else:
++            print(json.dumps(evidence, indent=2, sort_keys=True))
++        return
++
++    if action == "native-probes":
++        peers = getattr(args, "peer", None) or None
++        raw_evidence = _native_honcho_probe_rows(peers=peers)
++        if getattr(args, "probe", False) or getattr(args, "record", False):
++            evidence = build_content_safe_probe_evidence(raw_evidence)
++            if getattr(args, "record", False):
++                _ledger, entry = record_run(
++                    evidence,
++                    path=path,
++                    note=getattr(args, "note", None),
++                    intervention_id=getattr(args, "intervention", None),
++                    baseline=bool(getattr(args, "baseline", False)),
++                )
++                print(json.dumps(entry, indent=2, sort_keys=True))
++            else:
++                print(json.dumps(evidence, indent=2, sort_keys=True))
++        else:
++            print(json.dumps(raw_evidence, indent=2, sort_keys=True))
++        return
++
++    data = guidance(load_ledger(path))
++    if action == "guidance":
++        print(json.dumps(data, indent=2, sort_keys=True))
++    else:
++        print(render_report(data))
++
++
++def cmd_identity_audit(args) -> None:
++    """Audit a peer card for identity/entity-relation conflation."""
++    from .identity_audit import audit_peer_card_identity_relations
++
++    def _read_lines(path: str | None) -> list[str]:
++        if not path:
++            return []
++        text = Path(path).read_text(encoding="utf-8")
++        try:
++            loaded = json.loads(text)
++            if isinstance(loaded, list):
++                return [str(item) for item in loaded]
++            if isinstance(loaded, dict) and isinstance(loaded.get("card"), list):
++                return [str(item) for item in loaded["card"]]
++        except Exception:
++            pass
++        return [line.strip() for line in text.splitlines() if line.strip()]
++
++    card = _read_lines(getattr(args, "card_file", None))
++    evidence_texts = _read_lines(getattr(args, "evidence_file", None))
++    peer = getattr(args, "peer", None) or "user"
++
++    cfg = _read_config()
++    known_entities = list(getattr(args, "known_entity", None) or [])
++    # Include configured/profile AI peer names as collision candidates. Operators
++    # can pass extra --known-entity values for agents/services not visible in the
++    # current config; this keeps the command read-only and review-oriented.
++    for _, _host, block in _all_profile_host_configs():
++        value = block.get("aiPeer")
++        if value:
++            known_entities.append(str(value))
++    value = cfg.get("aiPeer")
++    if value:
++        known_entities.append(str(value))
++
++    if not card:
++        try:
++            from .client import HonchoClientConfig, get_honcho_client, reset_honcho_client
++            from .session import HonchoSessionManager
++
++            reset_honcho_client()
++            hcfg = HonchoClientConfig.from_global_config(host=_host_key())
++            client = get_honcho_client(hcfg)
++            mgr = HonchoSessionManager(honcho=client, config=hcfg)
++            session_key = hcfg.resolve_session_name() or "default"
++            mgr.get_or_create(session_key)
++            card = mgr.get_peer_card(session_key, peer=peer)
++        except Exception as e:
++            print(f"  Could not fetch Honcho peer card: {e}")
++            print("  Pass --card-file with one fact per line or a JSON list to run offline.\n")
++            return
++
++    report = audit_peer_card_identity_relations(
++        card,
++        peer=peer,
++        evidence_texts=evidence_texts,
++        known_entity_names=known_entities,
++    )
++
++    if getattr(args, "json", False):
++        print(json.dumps(report.as_dict(), indent=2, sort_keys=True))
++        return
++
++    print("\nHoncho identity relation audit\n" + "─" * 34)
++    print(f"  Peer: {report.peer}")
++    print(f"  Review required: {'yes' if report.review_required else 'no'}")
++    print(f"  {report.summary}")
++    if report.findings:
++        print("\nFindings:")
++        for finding in report.findings:
++            print(f"  - {finding.severity}: {finding.field}={finding.value!r}")
++            print(f"    fact: {finding.fact}")
++            for reason in finding.reasons:
++                print(f"    reason: {reason}")
++            print(f"    proposal: {finding.proposal}")
++    print("\nProposed peer card for review:")
++    for fact in report.proposed_card:
++        print(f"  - {fact}")
++    print("\nIntegration notes:")
++    for note in report.integration_notes:
++        print(f"  - {note}")
++    print()
++
+ # ── dispatch / argparse ────────────────────────────────────────────────────
+ 
+ # (subcommand, help, handler, ((arg, kwargs), ...)); order defines --help order.
+@@ -1887,6 +2225,8 @@ _SUBCOMMANDS = (
+ )
+ _HANDLERS = {name: handler for name, _help, handler, _args in _SUBCOMMANDS if handler}
+ 
++_HANDLERS.update({"eval": cmd_eval, "audit-identity": cmd_identity_audit})
++
+ 
+ def honcho_command(args) -> None:
+     """Route honcho subcommands."""
+@@ -1900,7 +2240,7 @@ def honcho_command(args) -> None:
+     handler = cmd_status if sub is None else _HANDLERS.get(sub)
+     if handler is None:
+         return print(f"  Unknown honcho command: {sub}\n"
+-                     "  Available: status, sessions, map, peer, mode, strategy, tokens, identity, migrate, enable, disable, sync\n")
++                     "  Available: status, sessions, map, peer, mode, strategy, tokens, identity, audit-identity, migrate, enable, disable, sync, eval\n")
+     try:
+         handler(args)
+     except ConfigWriteRefused as e:
+@@ -1916,4 +2256,139 @@ def register_cli(subparser) -> None:
+         parser = subs.add_parser(name, help=help_text)
+         for flag, kwargs in arguments:
+             parser.add_argument(flag, **kwargs)
++    audit_parser = subs.add_parser(
++        "audit-identity",
++        help="Review peer-card identity fields for alias/entity-relation conflation",
++    )
++    audit_parser.add_argument(
++        "--peer", default="user",
++        help="Peer to audit (default: user). Accepts built-in aliases or an explicit peer ID.",
++    )
++    audit_parser.add_argument(
++        "--card-file",
++        help="Offline peer-card fixture: one fact per line, a JSON list, or {'card': [...]}.",
++    )
++    audit_parser.add_argument(
++        "--evidence-file",
++        help="Optional raw-evidence fixture; strong alias evidence suppresses alias warnings.",
++    )
++    audit_parser.add_argument(
++        "--known-entity",
++        action="append",
++        default=[],
++        help="Known agent/profile/service name that should collide with alias claims. Repeatable.",
++    )
++    audit_parser.add_argument(
++        "--json", action="store_true", help="Emit a machine-readable JSON report",
++    )
++
++    eval_parser = subs.add_parser(
++        "eval",
++        help="Manage content-safe memory-quality evaluation ledger",
++    )
++    eval_parser.add_argument(
++        "--ledger",
++        metavar="PATH",
++        help="Override ledger path (default: profile state/honcho/memory_quality_ledger.json)",
++    )
++    eval_sub = eval_parser.add_subparsers(dest="eval_command")
++    eval_sub.add_parser("init", help="Create or normalize the evaluation ledger")
++    eval_sub.add_parser("path", help="Print the resolved ledger path")
++    eval_sub.add_parser("report", help="Print a concise baseline/previous comparison report")
++    eval_sub.add_parser("guidance", help="Print JSON probe definitions and AR-filing guidance")
++    record_parser = eval_sub.add_parser(
++        "record",
++        help="Record aggregate-only probe evidence from JSON stdin or --input",
++    )
++    record_parser.add_argument(
++        "--input",
++        "-i",
++        metavar="PATH",
++        default="-",
++        help="JSON evidence file; '-' or omitted reads stdin",
++    )
++    record_parser.add_argument(
++        "--note",
++        metavar="TEXT",
++        help="Short non-secret note for this run",
++    )
++    record_parser.add_argument(
++        "--intervention",
++        metavar="ID",
++        help="Existing intervention/Agent Request identifier being evaluated",
++    )
++    record_parser.add_argument(
++        "--baseline",
++        action="store_true",
++        help="Also mark this run as a new baseline",
++    )
++
++    probe_parser = eval_sub.add_parser(
++        "probe",
++        help="Build fixed content-safe recall/freshness/noise/regression probe scores from aggregate JSON",
++    )
++    probe_parser.add_argument(
++        "--input",
++        "-i",
++        metavar="PATH",
++        default="-",
++        help="Aggregate-only JSON evidence file; '-' or omitted reads stdin",
++    )
++    probe_parser.add_argument(
++        "--record",
++        action="store_true",
++        help="Record the sanitized probe output in the evaluation ledger",
++    )
++    probe_parser.add_argument(
++        "--note",
++        metavar="TEXT",
++        help="Short non-secret note for this run when --record is set",
++    )
++    probe_parser.add_argument(
++        "--intervention",
++        metavar="ID",
++        help="Existing intervention/Agent Request identifier being evaluated when --record is set",
++    )
++    probe_parser.add_argument(
++        "--baseline",
++        action="store_true",
++        help="Also mark this run as a new baseline when --record is set",
++    )
++
++    native_parser = eval_sub.add_parser(
++        "native-probes",
++        help="Collect fixed-label native Honcho probe rows without printing raw memory content",
++    )
++    native_parser.add_argument(
++        "--peer",
++        action="append",
++        choices=("user", "ai"),
++        help="Peer alias to probe; repeat to include both (default: user and ai)",
++    )
++    native_parser.add_argument(
++        "--probe",
++        action="store_true",
++        help="Print sanitized eval-probe output instead of raw fixed-label rows",
++    )
++    native_parser.add_argument(
++        "--record",
++        action="store_true",
++        help="Record sanitized native probe output in the evaluation ledger",
++    )
++    native_parser.add_argument(
++        "--note",
++        metavar="TEXT",
++        help="Short non-secret note for this run when --record is set",
++    )
++    native_parser.add_argument(
++        "--intervention",
++        metavar="ID",
++        help="Existing intervention/Agent Request identifier being evaluated when --record is set",
++    )
++    native_parser.add_argument(
++        "--baseline",
++        action="store_true",
++        help="Also mark this run as a new baseline when --record is set",
++    )
++
+     subparser.set_defaults(func=honcho_command)
+diff --git a/dialectic.py b/dialectic.py
+index beb89f8..7210ed3 100644
+--- a/dialectic.py
++++ b/dialectic.py
+@@ -48,6 +48,18 @@ class DialecticMixin:
+             return False
+         return True
+ 
++    def _discard_pending_prefetch(self) -> None:
++        """Drop delayed dialectic context on an acknowledgement turn."""
++        with self._prefetch_lock:
++            if self._prefetch_result:
++                logger.debug(
++                    "Honcho pending dialectic discarded for trivial prompt: fired_at=%d, turn=%d",
++                    self._prefetch_result_fired_at,
++                    self._turn_count,
++                )
++            self._prefetch_result = ""
++            self._prefetch_result_fired_at = -999
++
+     def _effective_cadence(self) -> int:
+         """Cadence plus empty-streak backoff, capped at _BACKOFF_MAX × base."""
+         cadence, streak = self._dialectic_cadence, self._dialectic_empty_streak
+diff --git a/evaluation.py b/evaluation.py
+new file mode 100644
+index 0000000..30c76ad
+--- /dev/null
++++ b/evaluation.py
+@@ -0,0 +1,1420 @@
++"""Content-safe Honcho memory quality evaluation ledger.
++
++The hourly self-improvement loop should not treat every run as fresh evidence.
++This module provides a small durable ledger that records aggregate-only probe
++scores, compares each run to a baseline and the previous run, and emits guidance
++that cron prompts can use before filing Agent Requests.
++"""
++
++from __future__ import annotations
++
++import json
++import math
++import re
++import uuid
++from dataclasses import dataclass
++from datetime import datetime, timezone
++from pathlib import Path
++from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
++
++from hermes_constants import get_hermes_home
++from utils import atomic_json_write
++
++LEDGER_SCHEMA_VERSION = 1
++DEFAULT_LEDGER_RELATIVE_PATH = Path("state") / "honcho" / "memory_quality_ledger.json"
++MAX_RUNS = 400
++
++SAFE_PROBE_RUNNER_ID = "honcho-eval-safe-probes-v1"
++QUALITY_PROBE_IDS = ("recall_usefulness", "freshness", "noise", "regression")
++_SAFE_LABEL_RE = re.compile(r"^[a-zA-Z0-9_.:/@+-]{1,96}$")
++_UNSAFE_AGGREGATE_VALUE_NAMES = {
++    "raw",
++    "content",
++    "message",
++    "messages",
++    "text",
++    "excerpt",
++    "excerpts",
++    "card",
++    "prompt",
++    "response",
++    "secret",
++}
++_UNSAFE_AGGREGATE_SCALAR_PARTS = _UNSAFE_AGGREGATE_VALUE_NAMES - {"card", "prompt"}
++_SAFE_PROBE_RESULT_LIST_KEYS = (
++    "fixed_probe_results",
++    "native_honcho_probe_results",
++    "recall_probe_results",
++    "sanitized_probe_results",
++)
++_SAFE_PROBE_RESULT_KEYS = {
++    "age_bucket_label",
++    "bucket_label",
++    "category_label",
++    "failure_reason_label",
++    "label",
++    "probe_id",
++    "probe_label",
++    "query_label",
++    "source_label",
++    "recall_label",
++    "recall_outcome",
++    "freshness_label",
++    "freshness_outcome",
++    "noise_label",
++    "noise_outcome",
++    "regression_label",
++    "regression_outcome",
++}
++_SAFE_PROBE_FAILURE_DETAIL_KEYS = {
++    "age_bucket_label",
++    "bucket_label",
++    "category_label",
++    "failure_reason_label",
++    "probe_label",
++    "query_label",
++    "source_label",
++}
++_USEFUL_RECALL_LABELS = {"actionable", "hit", "pass", "relevant", "useful"}
++_RECALL_ERROR_LABELS = {"error", "tool_error", "timeout"}
++_RECENT_FRESHNESS_LABELS = {"current", "fresh", "recent"}
++_STALE_FRESHNESS_LABELS = {"expired", "old", "stale"}
++_NOISE_LABELS = {"duplicate", "empty", "irrelevant", "noisy", "stale"}
++_REGRESSION_FAILURE_LABELS = {"fail", "failed", "regressed", "regression"}
++_REGRESSION_PASS_LABELS = {"ok", "pass", "passed", "stable"}
++_SAFE_FAILURE_REASON_LABELS = {
++    "duplicate_retrieval",
++    "empty_recall",
++    "irrelevant_retrieval",
++    "noisy_retrieval",
++    "regression_check_failure",
++    "stale_card",
++    "stale_context",
++    "stale_fact",
++    "stale_retrieved_item",
++    "tool_error",
++}
++_WARNING_FAILURE_REASONS_BY_PROBE = {
++    "recall_usefulness": {
++        "empty_recall",
++        "irrelevant_retrieval",
++        "noisy_retrieval",
++        "stale_retrieved_item",
++        "tool_error",
++    },
++    "freshness": {"stale_card", "stale_context", "stale_fact", "stale_retrieved_item"},
++    "noise": {
++        "duplicate_retrieval",
++        "empty_recall",
++        "irrelevant_retrieval",
++        "noisy_retrieval",
++        "stale_retrieved_item",
++    },
++    "regression": {"regression_check_failure"},
++}
++SAFE_PROBE_INPUT_CONTRACT: Dict[str, Any] = {
++    "description": "Content-safe hourly Honcho probe inputs accepted by eval probe.",
++    "allowed_scalar_values": "numbers, booleans, and fixed safe *_label/*_id/source/window strings only",
++    "allowed_labeled_result_keys": sorted(_SAFE_PROBE_RESULT_KEYS),
++    "allowed_failure_detail_keys": sorted(_SAFE_PROBE_FAILURE_DETAIL_KEYS),
++    "labeled_result_lists": list(_SAFE_PROBE_RESULT_LIST_KEYS),
++    "safe_failure_details": [
++        "safe_probe_failures is a list of fixed labels only: query_label/source_label/probe_label/category_label/bucket_label/failure_reason_label/age_bucket_label.",
++        "Accepted failure_reason_label enums: " + ", ".join(sorted(_SAFE_FAILURE_REASON_LABELS)) + ".",
++        "Repeated north-star regression warnings should cite these labels and aggregate counts, not raw Honcho memory content.",
++    ],
++    "operational_evidence_required": [
++        "Queue-derived fields require cnpg_query_ok/database_query_ok=1 or queue_evidence_ok=1; "
++        "failed or unknown collection must use cnpg_query_ok=0 and/or queue_evidence_missing=1, "
++        "not fallback-zero counts.",
++        "Current self-hosted Honcho queue schema uses active_queue_sessions.last_updated, "
++        "queue.created_at, and boolean queue.processed; do not use stale started_at/processed_at examples.",
++    ],
++    "forbidden": [
++        "raw messages",
++        "retrieved excerpts",
++        "peer-card text",
++        "prompt/response bodies",
++        "secrets",
++        "PII",
++    ],
++    "derived_quality_counts": [
++        "recall_attempts/useful_recall_count/recall_error_count",
++        "fact_count/recent_fact_count/stale_fact_count/max_age_hours",
++        "retrieved_item_count/irrelevant_item_count/duplicate_item_count/stale_retrieved_item_count",
++        "regression_checks_total/regression_checks_failed/regression_checks_passed",
++    ],
++    "budget_efficiency_safe_scalars": [
++        "limiter_<window>_503_count, limiter_<window>_400_count, and limiter_<window>_timeout_count for limiter pressure; "
++        "accepted windows include 15m, 45m, 90m, and 2h, and legacy names without _count are accepted for 15m/90m.",
++        "limiter_<window>_prompt_tokens_count/p50/p95, limiter_<window>_completion_tokens_count/p50/p95, "
++        "and limiter_<window>_total_tokens_count/p50/p95 for token shape; at least p95 evidence from prompt/completion or total tokens is needed to score token pressure.",
++        "limiter_<window>_finish_length_count, deriver_<window>_finish_length_count, "
++        "deriver_<window>_incomplete_llm_output_count, and deriver_<window>_tool_loop_max_count for truncation/retry/tool-loop pressure.",
++        "dream_success, observation_yield_marker_count, and no_observation_marker_count for dream yield; these are scalar success/count fields only, never raw observations.",
++        "For passive hourly observation loops that no longer induce dreams, set dream_observation_mode_label=passive and dream_schedule_attempted=0. In that mode, no active/pending dream is healthy evidence, not missing dream evidence.",
++        "If collection failed or the source is unknown, set budget_evidence_missing=1 or the source-specific *_evidence_missing flag; do not default missing counts to zero.",
++    ],
++}
++
++_QUEUE_EVIDENCE_OK_KEYS = (
++    "cnpg_query_ok",
++    "database_query_ok",
++    "queue_query_ok",
++    "queue_evidence_ok",
++)
++_QUEUE_EVIDENCE_MISSING_KEYS = (
++    "cnpg_query_failed",
++    "database_query_failed",
++    "queue_query_failed",
++    "queue_evidence_missing",
++)
++_QUEUE_DERIVED_KEYS = {
++    "active_dream_count",
++    "active_dream_rows",
++    "dream_errors_2h",
++    "dream_queue_error_count",
++    "dream_queue_pending_rows",
++    "dream_queue_processed",
++    "in_progress_dream_rows",
++    "joy_talon_dream_active_count",
++    "joy_talon_dream_pending_count",
++    "pending_deriver_rows",
++    "pending_dream_rows",
++    "pending_representation_rows",
++    "queue_error_2h",
++    "representation_pending_rows",
++    "representation_queue_error_count",
++}
++
++# Positive weights reward the probe value; negative weights penalize it.
++PROBE_DEFINITIONS: Dict[str, Dict[str, Any]] = {
++    "recall_usefulness": {
++        "description": "Human/agent rating that recalled context was relevant and actionable",
++        "direction": "higher_is_better",
++        "weight": 0.28,
++        "target": 0.80,
++    },
++    "freshness": {
++        "description": "Relevant recent facts are represented without stale dominance",
++        "direction": "higher_is_better",
++        "weight": 0.18,
++        "target": 0.75,
++    },
++    "noise": {
++        "description": "Irrelevant/stale/duplicative memory seen during recall or card review",
++        "direction": "lower_is_better",
++        "weight": -0.16,
++        "target": 0.20,
++    },
++    "regression": {
++        "description": "Known previously-good recall/usefulness checks that now fail",
++        "direction": "lower_is_better",
++        "weight": -0.18,
++        "target": 0.05,
++    },
++    "dream_success": {
++        "description": "Dream/memory observation health: natural dreams complete cleanly, or passive no-dream windows remain healthy",
++        "direction": "higher_is_better",
++        "weight": 0.12,
++        "target": 0.85,
++    },
++    "representation_freshness": {
++        "description": "Peer cards/conclusions/representations appear fresh from metadata only",
++        "direction": "higher_is_better",
++        "weight": 0.10,
++        "target": 0.75,
++    },
++    "budget_efficiency": {
++        "description": "Useful synthesis per local model/GPU budget; penalizes truncation/retry pressure",
++        "direction": "higher_is_better",
++        "weight": 0.08,
++        "target": 0.70,
++    },
++}
++
++DEFAULT_RECURRING_PROBES: List[Dict[str, str]] = [
++    {
++        "id": "recall_usefulness",
++        "cadence": "hourly-light; weekly-human-review",
++        "method": "Score aggregate evidence from honcho_search/context/profile outcomes; store only 0..1 score and notes, never raw excerpts.",
++    },
++    {
++        "id": "freshness",
++        "cadence": "hourly-light",
++        "method": "Compare metadata ages, recent-session coverage, and card/context availability; store counts/ages only.",
++    },
++    {
++        "id": "noise",
++        "cadence": "hourly-light",
++        "method": "Track duplicate/stale/irrelevant-memory indicators from safe counts and reviewer labels.",
++    },
++    {
++        "id": "regression",
++        "cadence": "hourly-light",
++        "method": "Replay a fixed set of content-safe query labels and score pass/fail from sanitized expectations.",
++    },
++    {
++        "id": "dream_success",
++        "cadence": "hourly",
++        "method": "Use aggregate dream queue/log markers when a dream is naturally active; in passive observation mode, score no active/pending dream as healthy when service/queue evidence is clean.",
++    },
++    {
++        "id": "representation_freshness",
++        "cadence": "daily/weekly",
++        "method": "Use representation/card metadata ages and queue health; no peer-card raw text in reports.",
++    },
++    {
++        "id": "budget_efficiency",
++        "cadence": "hourly",
++        "method": "Estimate from aggregate token, limiter, truncation, retry, and useful-output scores.",
++    },
++]
++
++
++@dataclass(frozen=True)
++class ScoreResult:
++    score: float
++    normalized: Dict[str, float]
++    missing: List[str]
++    warnings: List[str]
++
++
++def ledger_path(path: Optional[str | Path] = None) -> Path:
++    if path:
++        return Path(path).expanduser()
++    return get_hermes_home() / DEFAULT_LEDGER_RELATIVE_PATH
++
++
++def utc_now_iso() -> str:
++    return datetime.now(timezone.utc).isoformat(timespec="seconds")
++
++
++def _default_ledger() -> Dict[str, Any]:
++    return {
++        "schema_version": LEDGER_SCHEMA_VERSION,
++        "created_at": utc_now_iso(),
++        "updated_at": None,
++        "safety": {
++            "content_safe": True,
++            "rules": [
++                "Store only scores, aggregate counts, hashes/labels, and short non-secret notes.",
++                "Do not store raw message content, peer-card text, secrets, API responses, or prompt bodies.",
++                "Agent Requests are filed only after comparing current evidence with this ledger and active requests.",
++            ],
++        },
++        "probes": DEFAULT_RECURRING_PROBES,
++        "baselines": [],
++        "interventions": [],
++        "runs": [],
++    }
++
++
++def load_ledger(path: Optional[str | Path] = None) -> Dict[str, Any]:
++    p = ledger_path(path)
++    if not p.exists():
++        return _default_ledger()
++    try:
++        data = json.loads(p.read_text(encoding="utf-8"))
++    except (OSError, json.JSONDecodeError):
++        return _default_ledger()
++    if not isinstance(data, dict):
++        return _default_ledger()
++    base = _default_ledger()
++    base.update(data)
++    base.setdefault("probes", DEFAULT_RECURRING_PROBES)
++    base.setdefault("baselines", [])
++    base.setdefault("interventions", [])
++    base.setdefault("runs", [])
++    return base
++
++
++def save_ledger(data: Mapping[str, Any], path: Optional[str | Path] = None) -> Path:
++    p = ledger_path(path)
++    mutable = dict(data)
++    mutable["schema_version"] = LEDGER_SCHEMA_VERSION
++    mutable["updated_at"] = utc_now_iso()
++    atomic_json_write(p, mutable, indent=2, sort_keys=True)
++    return p
++
++
++def _clamp01(value: Any) -> Optional[float]:
++    if value is None or isinstance(value, bool):
++        return None
++    try:
++        f = float(value)
++    except (TypeError, ValueError):
++        return None
++    if not math.isfinite(f):
++        return None
++    if f > 1.0 and f <= 100.0:
++        f = f / 100.0
++    return min(1.0, max(0.0, f))
++
++
++def _extract_probe_values(evidence: Mapping[str, Any]) -> Dict[str, Any]:
++    probes = evidence.get("probes")
++    if isinstance(probes, Mapping):
++        return dict(probes)
++    return {k: evidence.get(k) for k in PROBE_DEFINITIONS if k in evidence}
++
++
++def _number(data: Mapping[str, Any], *keys: str) -> Optional[float]:
++    for key in keys:
++        value = data.get(key)
++        if value is None or isinstance(value, bool):
++            continue
++        try:
++            numeric = float(value)
++        except (TypeError, ValueError):
++            continue
++        if math.isfinite(numeric):
++            return numeric
++    return None
++
++
++def _count(data: Mapping[str, Any], *keys: str) -> Optional[float]:
++    value = _number(data, *keys)
++    if value is None or value < 0:
++        return None
++    return value
++
++
++def _ratio(numerator: Optional[float], denominator: Optional[float]) -> Optional[float]:
++    if numerator is None or denominator is None or denominator <= 0:
++        return None
++    return min(1.0, max(0.0, numerator / denominator))
++
++
++def _mean(values: Iterable[Optional[float]]) -> Optional[float]:
++    usable = [float(v) for v in values if v is not None and math.isfinite(float(v))]
++    if not usable:
++        return None
++    return sum(usable) / len(usable)
++
++
++def _bool_score(data: Mapping[str, Any], *keys: str) -> Optional[float]:
++    for key in keys:
++        value = data.get(key)
++        if isinstance(value, bool):
++            return 1.0 if value else 0.0
++        if isinstance(value, (int, float)) and not isinstance(value, bool) and value in (0, 1):
++            return float(value)
++    return None
++
++
++def _has_any_key(data: Mapping[str, Any], keys: Iterable[str]) -> bool:
++    return any(key in data for key in keys)
++
++
++def _queue_evidence_state(data: Mapping[str, Any]) -> Optional[bool]:
++    """Return queue evidence state: True=ok, False=failed/missing, None=unused.
++
++    The hourly probe accepts aggregate counts from several sources.  Queue and
++    CNPG-derived values are especially dangerous to default to zero after a SQL
++    failure: zero pending rows is healthy only when the query itself succeeded.
++    When a caller provides queue-derived fields, require an explicit ok marker;
++    otherwise treat the source as unknown/missing so downstream probes are
++    omitted instead of recording perfect health from fallback zeros.
++    """
++
++    for key in _QUEUE_EVIDENCE_MISSING_KEYS:
++        if _bool_score(data, key) == 1.0:
++            return False
++    for key in _QUEUE_EVIDENCE_OK_KEYS:
++        score = _bool_score(data, key)
++        if score == 0.0:
++            return False
++        if score == 1.0:
++            return True
++    if _has_any_key(data, _QUEUE_DERIVED_KEYS):
++        return False
++    return None
++
++
++def _zero_is_good_score(data: Mapping[str, Any], *keys: str, tolerance: float = 0.0) -> Optional[float]:
++    value = _count(data, *keys)
++    if value is None:
++        return None
++    if tolerance <= 0:
++        return 1.0 if value <= 0 else 0.0
++    return max(0.0, 1.0 - min(1.0, value / tolerance))
++
++
++def _status_ok_score(data: Mapping[str, Any], *keys: str, ok_values: Iterable[float]) -> Optional[float]:
++    value = _number(data, *keys)
++    if value is None:
++        return None
++    return 1.0 if value in set(float(v) for v in ok_values) else 0.0
++
++
++def _any_positive_count(data: Mapping[str, Any], *keys: str) -> bool:
++    for key in keys:
++        value = _count(data, key)
++        if value is not None and value > 0:
++            return True
++    return False
++
++
++def _sum_counts(data: Mapping[str, Any], *keys: str) -> Optional[float]:
++    values = [_count(data, key) for key in keys]
++    usable = [float(value) for value in values if value is not None]
++    if not usable:
++        return None
++    return sum(usable)
++
++
++def _sanitized_aggregate_values(evidence: Mapping[str, Any]) -> Dict[str, Any]:
++    aggregates = evidence.get("aggregates")
++    if not isinstance(aggregates, Mapping):
++        aggregates = evidence
++    safe: Dict[str, Any] = {"probe_runner": SAFE_PROBE_RUNNER_ID}
++    for key, value in aggregates.items():
++        name = str(key)
++        name_parts = set(re.split(r"[^a-z0-9]+", name.lower()))
++        if name.lower() in _UNSAFE_AGGREGATE_VALUE_NAMES:
++            continue
++        if isinstance(value, bool):
++            if name_parts & _UNSAFE_AGGREGATE_SCALAR_PARTS:
++                continue
++            safe[name] = value
++        elif isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(float(value)):
++            if name_parts & _UNSAFE_AGGREGATE_SCALAR_PARTS:
++                continue
++            safe[name] = value
++        elif (
++            isinstance(value, str)
++            and not (name_parts & _UNSAFE_AGGREGATE_VALUE_NAMES)
++            and (name.endswith("_label") or name.endswith("_id") or name in {"source", "window"})
++            and _SAFE_LABEL_RE.fullmatch(value)
++        ):
++            safe[name] = value
++    return safe
++
++
++def _safe_probe_label(value: Any) -> Optional[str]:
++    if not isinstance(value, str):
++        return None
++    label = value.strip().lower()
++    if not _SAFE_LABEL_RE.fullmatch(label):
++        return None
++    return label
++
++
++def _iter_safe_labeled_probe_results(evidence: Mapping[str, Any]) -> Iterable[Mapping[str, str]]:
++    """Yield fixed-label probe result rows without retaining raw content.
++
++    Hourly cron runs can summarize native Honcho tool outcomes as rows such as
++    {"query_label": "recent_profile", "recall_label": "useful"}. Rows with
++    unexpected fields or unsafe label values are ignored wholesale, preventing
++    raw excerpts or peer-card text from becoming ledger aggregates.
++    """
++
++    sources: List[Any] = []
++    aggregates = evidence.get("aggregates")
++    for source in (evidence, aggregates if isinstance(aggregates, Mapping) else None):
++        if not isinstance(source, Mapping):
++            continue
++        for key in _SAFE_PROBE_RESULT_LIST_KEYS:
++            value = source.get(key)
++            if isinstance(value, list):
++                sources.extend(value)
++
++    for item in sources:
++        if not isinstance(item, Mapping):
++            continue
++        raw_keys = {str(key) for key in item}
++        if not raw_keys or raw_keys - _SAFE_PROBE_RESULT_KEYS:
++            continue
++        safe_item: Dict[str, str] = {}
++        unsafe_value = False
++        for key, value in item.items():
++            label = _safe_probe_label(value)
++            if label is None:
++                unsafe_value = True
++                break
++            safe_item[str(key)] = label
++        if unsafe_value:
++            continue
++        yield safe_item
++
++
++def _failure_category_from_item(item: Mapping[str, str], reason: str) -> str:
++    category = item.get("category_label")
++    if category:
++        return category
++    labels = " ".join(
++        item.get(key, "")
++        for key in ("query_label", "source_label", "probe_label", "bucket_label")
++    )
++    if "peer_card" in labels or "peer-card" in labels:
++        return "peer_card"
++    if "session_context" in labels or "context" in labels:
++        return "session_context"
++    if "search" in labels or reason in {
++        "empty_recall",
++        "stale_retrieved_item",
++        "irrelevant_retrieval",
++        "noisy_retrieval",
++        "duplicate_retrieval",
++    }:
++        return "retrieval"
++    if reason == "regression_check_failure":
++        return "regression"
++    return "memory_quality"
++
++
++def _stale_reason_from_item(item: Mapping[str, str]) -> str:
++    labels = " ".join(item.get(key, "") for key in ("query_label", "source_label", "bucket_label"))
++    if "peer_card" in labels or "peer-card" in labels:
++        return "stale_card"
++    if "session_context" in labels or "context" in labels:
++        return "stale_context"
++    if "retriev" in labels or "search" in labels:
++        return "stale_retrieved_item"
++    return "stale_fact"
++
++
++def _failure_reasons_from_item(item: Mapping[str, str]) -> List[str]:
++    explicit = item.get("failure_reason_label")
++    if explicit:
++        return [explicit] if explicit in _SAFE_FAILURE_REASON_LABELS else []
++
++    reasons: List[str] = []
++    recall_label = item.get("recall_label") or item.get("recall_outcome")
++    freshness_label = item.get("freshness_label") or item.get("freshness_outcome")
++    noise_label = item.get("noise_label") or item.get("noise_outcome")
++    regression_label = item.get("regression_label") or item.get("regression_outcome")
++
++    if recall_label == "empty":
++        reasons.append("empty_recall")
++    elif recall_label in _RECALL_ERROR_LABELS:
++        reasons.append("tool_error")
++    elif recall_label == "irrelevant":
++        reasons.append("irrelevant_retrieval")
++    elif recall_label == "stale":
++        reasons.append("stale_retrieved_item")
++    elif recall_label in {"miss", "noisy"}:
++        reasons.append("noisy_retrieval")
++
++    if freshness_label in _STALE_FRESHNESS_LABELS:
++        reasons.append(_stale_reason_from_item(item))
++
++    if noise_label == "duplicate":
++        reasons.append("duplicate_retrieval")
++    elif noise_label == "irrelevant":
++        reasons.append("irrelevant_retrieval")
++    elif noise_label == "stale":
++        reasons.append("stale_retrieved_item")
++    elif noise_label == "empty":
++        reasons.append("empty_recall")
++    elif noise_label == "noisy":
++        reasons.append("noisy_retrieval")
++
++    if regression_label in _REGRESSION_FAILURE_LABELS:
++        reasons.append("regression_check_failure")
++
++    return list(dict.fromkeys(reasons))
++
++
++def _safe_probe_failure_details(evidence: Mapping[str, Any]) -> List[Dict[str, str]]:
++    details: List[Dict[str, str]] = []
++    seen: set[Tuple[Tuple[str, str], ...]] = set()
++    for item in _iter_safe_labeled_probe_results(evidence):
++        for reason in _failure_reasons_from_item(item):
++            detail: Dict[str, str] = {}
++            for key in ("query_label", "source_label", "probe_label", "bucket_label", "age_bucket_label"):
++                value = item.get(key)
++                if value:
++                    detail[key] = value
++            detail.setdefault("query_label", item.get("label") or item.get("probe_id") or "unknown")
++            detail["category_label"] = _failure_category_from_item(item, reason)
++            detail.setdefault("bucket_label", detail["category_label"])
++            detail["failure_reason_label"] = reason
++            key_tuple = tuple(sorted(detail.items()))
++            if key_tuple not in seen:
++                details.append(detail)
++                seen.add(key_tuple)
++    return details
++
++
++def _dedupe_probe_failure_details(details: Iterable[Mapping[str, str]]) -> List[Dict[str, str]]:
++    safe_details: List[Dict[str, str]] = []
++    seen: set[Tuple[Tuple[str, str], ...]] = set()
++    for item in details:
++        detail = dict(item)
++        key_tuple = tuple(sorted(detail.items()))
++        if key_tuple in seen:
++            continue
++        safe_details.append(detail)
++        seen.add(key_tuple)
++    return safe_details
++
++
++def _sanitize_probe_failure_details(value: Any) -> List[Dict[str, str]]:
++    if not isinstance(value, list):
++        return []
++    safe_details: List[Dict[str, str]] = []
++    for item in value:
++        if not isinstance(item, Mapping):
++            continue
++        raw_keys = {str(key) for key in item}
++        if not raw_keys or raw_keys - _SAFE_PROBE_FAILURE_DETAIL_KEYS:
++            continue
++        detail: Dict[str, str] = {}
++        for key, raw in item.items():
++            label = _safe_probe_label(raw)
++            if label is None:
++                detail = {}
++                break
++            detail[str(key)] = label
++        if detail and "failure_reason_label" in detail:
++            if detail["failure_reason_label"] not in _SAFE_FAILURE_REASON_LABELS:
++                continue
++            safe_details.append(detail)
++    return _dedupe_probe_failure_details(safe_details)
++
++
++def _all_safe_probe_failure_details(evidence: Mapping[str, Any]) -> List[Dict[str, str]]:
++    return _dedupe_probe_failure_details(
++        [
++            *_sanitize_probe_failure_details(evidence.get("safe_probe_failures")),
++            *_safe_probe_failure_details(evidence),
++        ]
++    )
++
++
++def _merge_failure_detail_label_counts(safe_aggs: Dict[str, Any], details: Iterable[Mapping[str, str]]) -> None:
++    counts: Dict[str, int] = {}
++    for detail in details:
++        reason = detail.get("failure_reason_label")
++        if reason not in _SAFE_FAILURE_REASON_LABELS:
++            continue
++        key = f"{reason}_label_count"
++        counts[key] = counts.get(key, 0) + 1
++    for key, value in counts.items():
++        existing = safe_aggs.get(key)
++        if isinstance(existing, bool):
++            existing_count = int(existing)
++        elif isinstance(existing, (int, float)):
++            existing_count = int(existing)
++        else:
++            existing_count = 0
++        safe_aggs[key] = max(existing_count, value)
++
++
++def _merge_labeled_probe_result_counts(safe_aggs: Dict[str, Any], evidence: Mapping[str, Any]) -> None:
++    recall_attempts = useful_recall = recall_errors = 0
++    fact_count = recent_facts = stale_facts = 0
++    retrieved_items = irrelevant_items = duplicate_items = stale_retrieved_items = empty_recalls = 0
++    regression_total = regression_failed = regression_passed = 0
++    accepted_rows = 0
++
++    for item in _iter_safe_labeled_probe_results(evidence):
++        accepted_rows += 1
++        recall_label = item.get("recall_label") or item.get("recall_outcome")
++        if recall_label:
++            recall_attempts += 1
++            retrieved_items += 1
++            if recall_label in _USEFUL_RECALL_LABELS:
++                useful_recall += 1
++            if recall_label in _RECALL_ERROR_LABELS:
++                recall_errors += 1
++            if recall_label in {"irrelevant", "miss"}:
++                irrelevant_items += 1
++            if recall_label == "stale":
++                stale_retrieved_items += 1
++            if recall_label == "empty":
++                empty_recalls += 1
++
++        freshness_label = item.get("freshness_label") or item.get("freshness_outcome")
++        if freshness_label:
++            fact_count += 1
++            if freshness_label in _RECENT_FRESHNESS_LABELS:
++                recent_facts += 1
++            if freshness_label in _STALE_FRESHNESS_LABELS:
++                stale_facts += 1
++                stale_retrieved_items += 1
++
++        noise_label = item.get("noise_label") or item.get("noise_outcome")
++        if noise_label:
++            retrieved_items += 1
++            if noise_label == "irrelevant":
++                irrelevant_items += 1
++            elif noise_label == "duplicate":
++                duplicate_items += 1
++            elif noise_label == "stale":
++                stale_retrieved_items += 1
++            elif noise_label in {"empty", "noisy"}:
++                empty_recalls += 1
++
++        regression_label = item.get("regression_label") or item.get("regression_outcome")
++        if regression_label:
++            regression_total += 1
++            if regression_label in _REGRESSION_FAILURE_LABELS:
++                regression_failed += 1
++            elif regression_label in _REGRESSION_PASS_LABELS:
++                regression_passed += 1
++
++    def set_if_absent(key: str, value: int) -> None:
++        if value and key not in safe_aggs:
++            safe_aggs[key] = value
++
++    set_if_absent("recall_attempts", recall_attempts)
++    set_if_absent("useful_recall_count", useful_recall)
++    set_if_absent("recall_error_count", recall_errors)
++    set_if_absent("fact_count", fact_count)
++    set_if_absent("recent_fact_count", recent_facts)
++    set_if_absent("stale_fact_count", stale_facts)
++    set_if_absent("retrieved_item_count", retrieved_items)
++    set_if_absent("irrelevant_item_count", irrelevant_items)
++    set_if_absent("duplicate_item_count", duplicate_items)
++    set_if_absent("stale_retrieved_item_count", stale_retrieved_items)
++    set_if_absent("empty_recall_count", empty_recalls)
++    set_if_absent("regression_checks_total", regression_total)
++    set_if_absent("regression_checks_failed", regression_failed)
++    set_if_absent("regression_checks_passed", regression_passed)
++    set_if_absent("fixed_probe_label_count", accepted_rows)
++
++
++def _omission(probe_id: str, reason: str) -> Dict[str, str]:
++    return {"id": probe_id, "reason": reason}
++
++
++def build_content_safe_probe_evidence(evidence: Mapping[str, Any]) -> Dict[str, Any]:
++    """Build sanitized hourly quality probe evidence from aggregate-only inputs.
++
++    The probe runner intentionally consumes only counts, ages, rates, booleans,
++    and deterministic labels. It never inspects or persists raw Honcho messages,
++    retrieved excerpts, peer-card text, or prompt/response bodies. When a probe
++    lacks enough aggregate evidence, the probe is omitted and recorded as
++    missing instead of guessing a score.
++    """
++
++    safe_aggs = _sanitized_aggregate_values(evidence)
++    _merge_labeled_probe_result_counts(safe_aggs, evidence)
++    safe_failures = _all_safe_probe_failure_details(evidence)
++    _merge_failure_detail_label_counts(safe_aggs, safe_failures)
++    probes: Dict[str, float] = {}
++    for name, value in _extract_probe_values(evidence).items():
++        if name in PROBE_DEFINITIONS:
++            normalized = _clamp01(value)
++            if normalized is not None:
++                probes[name] = normalized
++
++    omissions: List[Dict[str, str]] = []
++    queue_evidence_state = _queue_evidence_state(safe_aggs)
++    if queue_evidence_state is False:
++        safe_aggs.setdefault("queue_evidence_missing", True)
++        safe_aggs.setdefault("queue_evidence_state_label", "missing_or_failed")
++
++    recall_total = _count(safe_aggs, "recall_attempts", "recall_probe_count", "recall_total")
++    useful = _count(safe_aggs, "useful_recall_count", "actionable_recall_count", "relevant_recall_count")
++    recall_errors = _count(safe_aggs, "recall_error_count", "search_error_count") or 0.0
++    recall_ratio = _ratio(useful, recall_total)
++    if recall_ratio is None:
++        omissions.append(_omission("recall_usefulness", "insufficient_recall_counts"))
++    else:
++        error_penalty = 1.0 - min(1.0, recall_errors / recall_total) if recall_total else 0.0
++        probes["recall_usefulness"] = round(max(0.0, recall_ratio * error_penalty), 4)
++
++    total_facts = _count(safe_aggs, "fact_count", "memory_item_count", "representation_item_count")
++    recent_facts = _count(safe_aggs, "recent_fact_count", "recent_memory_item_count", "fresh_item_count")
++    stale_facts = _count(safe_aggs, "stale_fact_count", "stale_memory_item_count", "stale_item_count")
++    max_age = _number(safe_aggs, "max_age_hours", "max_fact_age_hours", "peer_card_age_hours")
++    max_expected_age = _number(safe_aggs, "max_expected_age_hours", "freshness_window_hours") or 168.0
++    freshness_score = _mean([
++        _ratio(recent_facts, total_facts),
++        (1.0 - _ratio(stale_facts, total_facts)) if _ratio(stale_facts, total_facts) is not None else None,
++        (1.0 - min(1.0, max_age / max_expected_age)) if max_age is not None and max_expected_age > 0 else None,
++    ])
++    if freshness_score is None:
++        omissions.append(_omission("freshness", "insufficient_age_or_freshness_counts"))
++    else:
++        probes["freshness"] = round(max(0.0, min(1.0, freshness_score)), 4)
++
++    retrieved_total = _count(safe_aggs, "retrieved_item_count", "memory_item_count", "recall_item_count", "recall_attempts")
++    noisy = sum(v or 0.0 for v in (
++        _count(safe_aggs, "irrelevant_item_count", "irrelevant_recall_count"),
++        _count(safe_aggs, "duplicate_item_count", "duplicate_memory_count"),
++        _count(safe_aggs, "stale_retrieved_item_count", "stale_recall_count"),
++        _count(safe_aggs, "empty_recall_count"),
++    ))
++    noise_score = _ratio(noisy, retrieved_total)
++    if noise_score is None:
++        omissions.append(_omission("noise", "insufficient_noise_counts"))
++    else:
++        probes["noise"] = round(noise_score, 4)
++
++    regression_total = _count(safe_aggs, "regression_checks_total", "fixed_probe_count", "regression_probe_count")
++    failed = _count(safe_aggs, "regression_checks_failed", "failed_regression_count", "regressed_probe_count")
++    if failed is None:
++        passed = _count(safe_aggs, "regression_checks_passed", "passed_regression_count")
++        failed = (regression_total - passed) if regression_total is not None and passed is not None else None
++    regression_score = _ratio(failed, regression_total)
++    if regression_score is None:
++        omissions.append(_omission("regression", "insufficient_regression_counts"))
++    else:
++        probes["regression"] = round(regression_score, 4)
++
++    dream_starts = _count(
++        safe_aggs,
++        "dream_start_markers",
++        "deriver_dream_start_markers",
++        "deriver_15m_dream_start_markers",
++        "deriver_2h_dream_start_markers",
++        "dream_started_count",
++    )
++    dream_completions = _count(
++        safe_aggs,
++        "dream_completion_markers",
++        "dream_completed_count",
++        "completed_dream_count",
++        "deriver_2h_completion_markers",
++        "deriver_2h_completion_with_errors_count",
++    )
++    dream_in_progress = _any_positive_count(
++        safe_aggs,
++        "active_dream_count",
++        "active_dream_rows",
++        "in_progress_dream_rows",
++        "pending_dream_rows",
++        "dream_queue_pending_rows",
++        "joy_talon_dream_active_count",
++        "joy_talon_dream_pending_count",
++    ) or bool(_bool_score(safe_aggs, "dream_in_progress", "active_dream") == 1.0)
++    if dream_in_progress:
++        safe_aggs.setdefault("dream_in_progress", True)
++        safe_aggs.setdefault("dream_state_label", "active_in_progress")
++
++    passive_observation = _safe_probe_label(safe_aggs.get("dream_observation_mode_label")) in {
++        "passive",
++        "passive_observation",
++        "natural",
++        "natural_observation",
++    } or bool(
++        _bool_score(
++            safe_aggs,
++            "dream_passive_observation",
++            "passive_dream_observation",
++            "dream_schedule_suppressed",
++        )
++        == 1.0
++    )
++    dream_schedule_attempted = _any_positive_count(
++        safe_aggs,
++        "dream_schedule_attempted",
++        "dream_schedule_attempt_count",
++        "schedule_dream_attempted",
++    )
++    if passive_observation:
++        safe_aggs.setdefault("dream_observation_mode_label", "passive")
++        safe_aggs.setdefault("dream_schedule_attempted", 0)
++
++    dream_progress = None if dream_in_progress else _mean([
++        1.0 if passive_observation and not dream_in_progress and not dream_schedule_attempted else None,
++        _ratio(dream_completions, dream_starts),
++        1.0 if dream_completions is not None and dream_completions > 0 else None,
++        _bool_score(safe_aggs, "dream_processed", "dream_queue_processed"),
++        _status_ok_score(safe_aggs, "dream_schedule_http_status", "dream_http_status", "scheduled_joy_talon_dream_http", ok_values=(200, 202, 204)),
++    ])
++    if passive_observation and not dream_in_progress and not dream_schedule_attempted:
++        safe_aggs.setdefault("dream_state_label", "passive_no_active_dream")
++    dream_health = _mean([
++        _bool_score(safe_aggs, "honcho_health_ok", "honcho_ok", "health_ok"),
++        _bool_score(safe_aggs, "cnpg_query_ok", "database_query_ok"),
++        _bool_score(safe_aggs, "k8s_rollouts_ok", "rollouts_ok"),
++        _zero_is_good_score(safe_aggs, "hermes_honcho_status_rc", "honcho_status_rc"),
++        _zero_is_good_score(safe_aggs, "queue_error_2h", "dream_queue_error_count", "dream_errors_2h"),
++        _zero_is_good_score(safe_aggs, "tracebacks", "traceback_count", "dream_tracebacks", "deriver_2h_traceback_count"),
++        _zero_is_good_score(safe_aggs, "incomplete", "incomplete_count", "incomplete_output_count", "deriver_2h_incomplete_count", tolerance=4.0),
++    ])
++    dream_score = None if dream_in_progress else _mean([dream_progress, dream_health])
++    if "dream_success" not in probes:
++        if queue_evidence_state is False:
++            omissions.append(_omission("dream_success", "queue_evidence_missing"))
++        elif dream_in_progress:
++            omissions.append(_omission("dream_success", "dream_active_in_progress"))
++        elif dream_score is None:
++            omissions.append(_omission("dream_success", "insufficient_dream_operational_counts"))
++        else:
++            probes["dream_success"] = round(max(0.0, min(1.0, dream_score)), 4)
++    elif queue_evidence_state is False:
++        probes.pop("dream_success", None)
++        omissions.append(_omission("dream_success", "queue_evidence_missing"))
++
++    representation_score = _mean([
++        _bool_score(safe_aggs, "card_context_readable", "peer_card_context_readable", "native_card_context_readable"),
++        _zero_is_good_score(safe_aggs, "hermes_honcho_status_rc", "honcho_status_rc"),
++        _zero_is_good_score(safe_aggs, "queue_error_2h", "representation_queue_error_count", "deriver_queue_error_count"),
++        # A large representation backlog is useful operational evidence, not a
++        # reason to omit the probe.  The 4096-row tolerance keeps the score
++        # bounded while still making backlog pressure visible in the report.
++        _zero_is_good_score(safe_aggs, "pending_representation_rows", "representation_pending_rows", "pending_deriver_rows", tolerance=4096.0),
++    ])
++    if "representation_freshness" not in probes:
++        if queue_evidence_state is False:
++            omissions.append(_omission("representation_freshness", "queue_evidence_missing"))
++        elif representation_score is None:
++            omissions.append(_omission("representation_freshness", "insufficient_representation_operational_counts"))
++        else:
++            probes["representation_freshness"] = round(max(0.0, min(1.0, representation_score)), 4)
++    elif queue_evidence_state is False:
++        probes.pop("representation_freshness", None)
++        omissions.append(_omission("representation_freshness", "queue_evidence_missing"))
++
++    limiter_failures = _sum_counts(
++        safe_aggs,
++        "limiter_15m_503",
++        "limiter_15m_503_count",
++        "limiter_45m_503_count",
++        "limiter_90m_503",
++        "limiter_90m_503_count",
++        "limiter_2h_503_count",
++        "limiter_503_count",
++        "limiter_15m_400",
++        "limiter_15m_400_count",
++        "limiter_45m_400_count",
++        "limiter_90m_400",
++        "limiter_90m_400_count",
++        "limiter_2h_400_count",
++        "limiter_400_count",
++        "limiter_15m_timeout",
++        "limiter_15m_timeout_count",
++        "limiter_45m_timeout_count",
++        "limiter_90m_timeout",
++        "limiter_90m_timeout_count",
++        "limiter_2h_timeout_count",
++        "limiter_timeout_count",
++    )
++    prompt_p95 = _number(
++        safe_aggs,
++        "limiter_15m_prompt_tokens_p95",
++        "limiter_45m_prompt_tokens_p95",
++        "limiter_90m_prompt_tokens_p95",
++        "limiter_2h_prompt_tokens_p95",
++        "prompt_tokens_p95",
++    )
++    completion_p95 = _number(
++        safe_aggs,
++        "limiter_15m_completion_tokens_p95",
++        "limiter_45m_completion_tokens_p95",
++        "limiter_90m_completion_tokens_p95",
++        "limiter_2h_completion_tokens_p95",
++        "completion_tokens_p95",
++    )
++    total_p95 = _number(
++        safe_aggs,
++        "limiter_15m_total_tokens_p95",
++        "limiter_45m_total_tokens_p95",
++        "limiter_90m_total_tokens_p95",
++        "limiter_2h_total_tokens_p95",
++        "total_tokens_p95",
++    )
++    token_score = _mean([
++        (1.0 - min(1.0, prompt_p95 / 8192.0)) if prompt_p95 is not None else None,
++        (1.0 - min(1.0, completion_p95 / 4096.0)) if completion_p95 is not None else None,
++        (1.0 - min(1.0, total_p95 / 12288.0)) if total_p95 is not None else None,
++    ])
++    dream_yield_score = _mean([
++        _clamp01(safe_aggs.get("dream_success")),
++        _ratio(
++            _count(safe_aggs, "observation_yield_marker_count", "observation_yield_markers"),
++            sum(v or 0.0 for v in (
++                _count(safe_aggs, "observation_yield_marker_count", "observation_yield_markers"),
++                _count(safe_aggs, "no_observation_marker_count", "no_observation_markers"),
++            )),
++        ),
++        _zero_is_good_score(safe_aggs, "no_observation_marker_count", "no_observation_markers", tolerance=4.0),
++    ])
++    budget_score = _mean([
++        (1.0 if limiter_failures == 0.0 else max(0.0, 1.0 - min(1.0, limiter_failures / 10.0)))
++        if limiter_failures is not None else None,
++        token_score,
++        _zero_is_good_score(
++            safe_aggs,
++            "finish_length",
++            "finish_length_count",
++            "deriver_45m_finish_length_count",
++            "deriver_2h_finish_length_count",
++            tolerance=8.0,
++        ),
++        _zero_is_good_score(
++            safe_aggs,
++            "limiter_45m_finish_length_count",
++            "limiter_90m_finish_length",
++            "finish_length_90m",
++            "limiter_2h_finish_length_count",
++            tolerance=12.0,
++        ),
++        _zero_is_good_score(
++            safe_aggs,
++            "deriver_45m_incomplete_llm_output_count",
++            "deriver_2h_incomplete_count",
++            "deriver_incomplete_llm_output_count",
++            tolerance=8.0,
++        ),
++        _zero_is_good_score(
++            safe_aggs,
++            "deriver_45m_tool_loop_max_count",
++            "deriver_2h_tool_loop_max_count",
++            "deriver_tool_loop_max_count",
++            tolerance=12.0,
++        ),
++        dream_yield_score,
++    ])
++    if "budget_efficiency" not in probes:
++        if _bool_score(safe_aggs, "budget_evidence_missing", "budget_efficiency_evidence_missing") == 1.0:
++            omissions.append(_omission("budget_efficiency", "budget_evidence_missing"))
++        elif queue_evidence_state is False and _has_any_key(safe_aggs, _QUEUE_DERIVED_KEYS):
++            omissions.append(_omission("budget_efficiency", "queue_evidence_missing"))
++        elif budget_score is None:
++            omissions.append(_omission("budget_efficiency", "insufficient_budget_operational_counts"))
++        else:
++            probes["budget_efficiency"] = round(max(0.0, min(1.0, budget_score)), 4)
++    elif _bool_score(safe_aggs, "budget_evidence_missing", "budget_efficiency_evidence_missing") == 1.0:
++        probes.pop("budget_efficiency", None)
++        omissions.append(_omission("budget_efficiency", "budget_evidence_missing"))
++    elif queue_evidence_state is False and _has_any_key(safe_aggs, _QUEUE_DERIVED_KEYS):
++        probes.pop("budget_efficiency", None)
++        omissions.append(_omission("budget_efficiency", "queue_evidence_missing"))
++
++    note = (
++        "content-safe hourly quality probe run; dream_active_in_progress"
++        if dream_in_progress
++        else "content-safe hourly quality probe run"
++    )
++    result: Dict[str, Any] = {
++        "probe_runner": SAFE_PROBE_RUNNER_ID,
++        "probe_labels": list(probes),
++        "probes": probes,
++        "aggregates": safe_aggs,
++        "omissions": omissions,
++        "note": note,
++    }
++    if safe_failures:
++        result["safe_probe_failures"] = safe_failures
++    return result
++
++
++def _warning_failure_detail_summary(probe_id: str, evidence: Mapping[str, Any]) -> str:
++    """Return a compact content-safe failure summary for probe warnings."""
++
++    wanted_reasons = _WARNING_FAILURE_REASONS_BY_PROBE.get(probe_id, set())
++    if not wanted_reasons:
++        return ""
++
++    details = [
++        detail
++        for detail in _all_safe_probe_failure_details(evidence)
++        if detail.get("failure_reason_label") in wanted_reasons
++    ]
++    rendered_details = [
++        rendered
++        for rendered in (_format_safe_probe_failure(detail) for detail in details[:3])
++        if rendered
++    ]
++    if rendered_details:
++        suffix = ""
++        if len(details) > len(rendered_details):
++            suffix = f"; +{len(details) - len(rendered_details)} more"
++        return "safe_failure_buckets: " + "; ".join(rendered_details) + suffix
++
++    aggregates = evidence.get("aggregates")
++    if not isinstance(aggregates, Mapping):
++        aggregates = evidence
++    safe_aggs = _sanitized_aggregate_values({"aggregates": aggregates})
++    count_labels = []
++    for reason in sorted(wanted_reasons):
++        key = f"{reason}_label_count"
++        value = _count(safe_aggs, key)
++        if value:
++            count_labels.append(f"{key}={int(value)}")
++    if count_labels:
++        return "safe_failure_counts: " + ", ".join(count_labels)
++    return ""
++
++
++def _warning_with_safe_detail(probe_id: str, warning: str, evidence: Mapping[str, Any]) -> str:
++    detail = _warning_failure_detail_summary(probe_id, evidence)
++    return f"{warning}; {detail}" if detail else warning
++
++
++def score_evidence(evidence: Mapping[str, Any]) -> ScoreResult:
++    raw = _extract_probe_values(evidence)
++    normalized: Dict[str, float] = {}
++    missing: List[str] = []
++    warnings: List[str] = []
++    weighted = 0.0
++    total_weight = 0.0
++
++    for name, definition in PROBE_DEFINITIONS.items():
++        value = _clamp01(raw.get(name))
++        if value is None:
++            missing.append(name)
++            continue
++        normalized[name] = value
++        weight = abs(float(definition["weight"]))
++        contribution = value if definition["direction"] == "higher_is_better" else 1.0 - value
++        weighted += contribution * weight
++        total_weight += weight
++        target = float(definition["target"])
++        if definition["direction"] == "higher_is_better" and value < target:
++            warning = f"{name} below target ({value:.2f} < {target:.2f})"
++            warnings.append(_warning_with_safe_detail(name, warning, evidence))
++        elif definition["direction"] == "lower_is_better" and value > target:
++            warning = f"{name} above target ({value:.2f} > {target:.2f})"
++            warnings.append(_warning_with_safe_detail(name, warning, evidence))
++
++    score = weighted / total_weight if total_weight else 0.0
++    return ScoreResult(score=round(score, 4), normalized=normalized, missing=missing, warnings=warnings)
++
++
++def _safe_note(text: Any, *, limit: int = 240) -> str:
++    if text is None:
++        return ""
++    value = " ".join(str(text).split())
++    blocked = ("BEGIN PRIVATE KEY", "api_key", "password", "token=", "Authorization:")
++    if any(marker.lower() in value.lower() for marker in blocked):
++        return "[redacted: unsafe note marker]"
++    return value[:limit]
++
++
++def _latest_run(ledger: Mapping[str, Any]) -> Optional[Mapping[str, Any]]:
++    runs = ledger.get("runs")
++    if isinstance(runs, list) and runs:
++        last = runs[-1]
++        if isinstance(last, Mapping):
++            return last
++    return None
++
++
++def _baseline(ledger: Mapping[str, Any]) -> Optional[Mapping[str, Any]]:
++    baselines = ledger.get("baselines")
++    if isinstance(baselines, list) and baselines:
++        item = baselines[-1]
++        if isinstance(item, Mapping):
++            return item
++    run = _latest_run(ledger)
++    return run
++
++
++def _delta(current: float, other: Optional[Mapping[str, Any]]) -> Optional[float]:
++    if not other:
++        return None
++    score = other.get("score")
++    if score is None:
++        return None
++    try:
++        return round(current - float(score), 4)
++    except (TypeError, ValueError):
++        return None
++
++
++def record_run(
++    evidence: Mapping[str, Any],
++    *,
++    path: Optional[str | Path] = None,
++    note: Optional[str] = None,
++    intervention_id: Optional[str] = None,
++    baseline: bool = False,
++    run_id: Optional[str] = None,
++) -> Tuple[Dict[str, Any], Dict[str, Any]]:
++    ledger = load_ledger(path)
++    prior = _latest_run(ledger)
++    base = _baseline(ledger)
++    scored = score_evidence(evidence)
++    now = utc_now_iso()
++    entry: Dict[str, Any] = {
++        "id": run_id or f"mq-{uuid.uuid4().hex[:10]}",
++        "recorded_at": now,
++        "score": scored.score,
++        "probes": scored.normalized,
++        "missing_probes": scored.missing,
++        "warnings": scored.warnings,
++        "delta_from_previous": _delta(scored.score, prior),
++        "delta_from_baseline": _delta(scored.score, base),
++        "intervention_id": _safe_note(intervention_id, limit=80) or None,
++        "note": _safe_note(note if note is not None else evidence.get("note")),
++    }
++    aggregates = evidence.get("aggregates")
++    if isinstance(aggregates, Mapping):
++        safe_aggs = _sanitized_aggregate_values({"aggregates": aggregates})
++        if safe_aggs:
++            entry["aggregates"] = safe_aggs
++
++    safe_failures = _sanitize_probe_failure_details(evidence.get("safe_probe_failures"))
++    if safe_failures:
++        entry["safe_probe_failures"] = safe_failures
++
++    omissions = evidence.get("omissions")
++    if isinstance(omissions, list):
++        safe_omissions = []
++        for item in omissions:
++            if not isinstance(item, Mapping):
++                continue
++            probe_id = str(item.get("id", ""))
++            reason = str(item.get("reason", ""))
++            if probe_id in PROBE_DEFINITIONS and _SAFE_LABEL_RE.fullmatch(reason):
++                safe_omissions.append({"id": probe_id, "reason": reason})
++        if safe_omissions:
++            entry["omitted_probe_details"] = safe_omissions
++
++    runs = ledger.setdefault("runs", [])
++    if not isinstance(runs, list):
++        runs = []
++        ledger["runs"] = runs
++    runs.append(entry)
++    del runs[:-MAX_RUNS]
++
++    if baseline or not ledger.get("baselines"):
++        baselines = ledger.setdefault("baselines", [])
++        if not isinstance(baselines, list):
++            baselines = []
++            ledger["baselines"] = baselines
++        baselines.append({
++            "id": f"baseline-{entry['id']}",
++            "source_run_id": entry["id"],
++            "recorded_at": now,
++            "score": entry["score"],
++            "probes": dict(entry["probes"]),
++            "note": "initial baseline" if not baseline else "operator-marked baseline",
++        })
++        del baselines[:-20]
++
++    save_ledger(ledger, path)
++    return ledger, entry
++
++
++def guidance(ledger: Optional[Mapping[str, Any]] = None) -> Dict[str, Any]:
++    ledger = ledger or load_ledger()
++    last = _latest_run(ledger)
++    base = _baseline(ledger)
++    active_interventions = [
++        item for item in ledger.get("interventions", [])
++        if isinstance(item, Mapping) and item.get("status") in {"active", "watching"}
++    ]
++    recommendations = [
++        "Before filing a Honcho-memory Agent Request, compare current probe scores to delta_from_baseline and delta_from_previous.",
++        "File only when a concrete metric regression/opportunity is not already covered by a nonterminal Agent Request.",
++        "Include probe ids, aggregate counts, deltas, and acceptance criteria; never include raw messages, peer-card text, or secrets.",
++        "For hourly_cron, collect native honcho_profile/context/search outcomes as fixed labels only: query_label/probe_label plus recall/freshness/noise/regression pass/fail labels. Feed those labels or their counts to eval probe; never persist excerpts.",
++        "When a north-star regression warning repeats, cite safe_probe_failures entries such as query_label/category_label/bucket_label/failure_reason_label and *_label_count aggregates to target the failing recall/freshness/regression bucket without raw content.",
++        "For passive hourly dream observation, do not induce/schedule dreams; report dream_observation_mode_label=passive and dream_schedule_attempted=0 so no active/pending dream can score as healthy when service and queue evidence are clean.",
++    ]
++    if last:
++        missing = last.get("missing_probes") or []
++        probes = last.get("probes") or {}
++        if missing and not probes:
++            recommendations.append("No probes were scored; treat this run as measurement-insufficient rather than a memory-quality regression.")
++        elif missing:
++            recommendations.append("Missing probes mean evidence is incomplete for those labels; evaluate scored probes separately before treating deltas as a quality regression.")
++        if last.get("delta_from_baseline") is not None and float(last["delta_from_baseline"]) < -0.05:
++            recommendations.append("Current score regressed more than 0.05 below baseline; prioritize regression/root-cause investigation.")
++        if last.get("warnings"):
++            recommendations.append("Open warnings identify the concrete probe areas to address before broad tuning.")
++    return {
++        "ledger_schema_version": LEDGER_SCHEMA_VERSION,
++        "last_run": last,
++        "baseline": base,
++        "active_interventions": active_interventions,
++        "probe_definitions": PROBE_DEFINITIONS,
++        "input_contract": SAFE_PROBE_INPUT_CONTRACT,
++        "recurring_probes": DEFAULT_RECURRING_PROBES,
++        "recommendations": recommendations,
++    }
++
++
++def _format_safe_probe_failure(detail: Mapping[str, Any]) -> str:
++    parts: List[str] = []
++    for key in (
++        "query_label",
++        "probe_label",
++        "source_label",
++        "category_label",
++        "bucket_label",
++        "failure_reason_label",
++        "age_bucket_label",
++    ):
++        value = detail.get(key)
++        if isinstance(value, str) and _SAFE_LABEL_RE.fullmatch(value):
++            parts.append(f"{key}={value}")
++    return " ".join(parts)
++
++
++def _safe_failure_label_count_lines(aggregates: Mapping[str, Any]) -> List[str]:
++    items: List[str] = []
++    for key, value in sorted(aggregates.items()):
++        if not key.endswith("_label_count"):
++            continue
++        if not isinstance(value, (int, float)) or isinstance(value, bool):
++            continue
++        if not math.isfinite(float(value)):
++            continue
++        reason = key[: -len("_label_count")]
++        if reason in _SAFE_FAILURE_REASON_LABELS:
++            items.append(f"{key}={int(value)}")
++    return items
++
++
++def render_report(data: Mapping[str, Any]) -> str:
++    lines = ["Honcho memory-quality evaluation"]
++    last = data.get("last_run")
++    base = data.get("baseline")
++    if not last:
++        lines.append("No runs recorded yet. Record aggregate probe scores to establish a baseline.")
++    else:
++        lines.append(f"Last run: {last.get('id')} score={float(last.get('score', 0.0)):.3f}")
++        lines.append(f"Δ previous: {last.get('delta_from_previous')}  Δ baseline: {last.get('delta_from_baseline')}")
++        if base:
++            lines.append(f"Baseline: {base.get('id') or base.get('source_run_id')} score={float(base.get('score', 0.0)):.3f}")
++        if last.get("warnings"):
++            lines.append("Warnings: " + "; ".join(str(w) for w in last.get("warnings", [])))
++        if last.get("missing_probes"):
++            lines.append("Missing probes: " + ", ".join(str(m) for m in last.get("missing_probes", [])))
++            if last.get("probes"):
++                lines.append("Measurement note: missing probes mark insufficient evidence for those labels; scored probes remain valid operational evidence.")
++            else:
++                lines.append("Measurement note: no probes scored, so this run is measurement-insufficient rather than evidence of memory-quality regression.")
++        safe_failures = last.get("safe_probe_failures")
++        if isinstance(safe_failures, list) and safe_failures:
++            lines.append("Safe failure buckets:")
++            rendered_count = 0
++            for detail in safe_failures[:8]:
++                if not isinstance(detail, Mapping):
++                    continue
++                rendered = _format_safe_probe_failure(detail)
++                if rendered:
++                    lines.append(f"- {rendered}")
++                    rendered_count += 1
++            remaining = len(safe_failures) - rendered_count
++            if remaining > 0:
++                lines.append(f"- ... {remaining} more safe failure bucket(s)")
++        aggregates = last.get("aggregates")
++        if isinstance(aggregates, Mapping):
++            failure_counts = _safe_failure_label_count_lines(aggregates)
++            if failure_counts:
++                lines.append("Safe failure counts: " + ", ".join(failure_counts))
++    lines.append("Guidance:")
++    for rec in data.get("recommendations", []):
++        lines.append(f"- {rec}")
++    return "\n".join(lines)
++
++
++__all__ = [
++    "DEFAULT_LEDGER_RELATIVE_PATH",
++    "DEFAULT_RECURRING_PROBES",
++    "LEDGER_SCHEMA_VERSION",
++    "PROBE_DEFINITIONS",
++    "QUALITY_PROBE_IDS",
++    "SAFE_PROBE_INPUT_CONTRACT",
++    "SAFE_PROBE_RUNNER_ID",
++    "build_content_safe_probe_evidence",
++    "guidance",
++    "ledger_path",
++    "load_ledger",
++    "record_run",
++    "render_report",
++    "save_ledger",
++    "score_evidence",
++]
+diff --git a/identity_audit.py b/identity_audit.py
+new file mode 100644
+index 0000000..1f23286
+--- /dev/null
++++ b/identity_audit.py
+@@ -0,0 +1,308 @@
++"""Peer-card identity/relation quality audit helpers for Honcho.
++
++The audit is intentionally proposal-only.  High-trust identity facts such as
++names, aliases, pronouns, and roles should not be rewritten silently from an
++agent heuristic; callers surface the report for human review instead.
++"""
++
++from __future__ import annotations
++
++import re
++from dataclasses import dataclass, field
++from typing import Any, Iterable
++
++
++_DEFAULT_RESERVED_ENTITY_NAMES = {
++    "agent",
++    "assistant",
++    "beryl",
++    "beryl bee",
++    "claude",
++    "codex",
++    "eyrie",
++    "gemini",
++    "gpt",
++    "hermes",
++    "honcho",
++    "joy agent",
++    "openai",
++    "openrouter",
++    "puppet",
++    "qwen",
++    "star",
++    "talon",
++}
++
++_STRONG_ALIAS_EVIDENCE_PATTERNS = (
++    re.compile(r"\b(?:call|called|calls)\s+(?:me|the user|them|him|her)\s+(?:by\s+)?['\"]?{alias}['\"]?\b", re.I),
++    re.compile(r"\b(?:i|the user|they|he|she)\s+(?:also\s+)?(?:go|goes|went)\s+by\s+['\"]?{alias}['\"]?\b", re.I),
++    re.compile(r"\b(?:my|their|the user's)\s+(?:alias|nickname|preferred name)\s+is\s+['\"]?{alias}['\"]?\b", re.I),
++    re.compile(r"\b(?:i am|i'm|they are|the user is)\s+(?:also\s+)?(?:known as|called)\s+['\"]?{alias}['\"]?\b", re.I),
++)
++
++_RELATIONSHIP_HINT_RE = re.compile(
++    r"\b(?:agent|assistant|bot|service|tool|profile|works? with|uses?|administers?|owns?|operates?)\b",
++    re.I,
++)
++
++_ALIAS_FIELD_RE = re.compile(
++    r"^(?:(?P<section>[A-Z][A-Z _-]*):\s*)?(?P<label>aliases?|also known as|nicknames?)\s*:\s*(?P<value>.+)$",
++    re.I,
++)
++
++
++@dataclass(frozen=True)
++class AliasCandidate:
++    """One alias-like value extracted from a peer-card fact."""
++
++    value: str
++    fact_index: int
++    fact: str
++
++
++@dataclass(frozen=True)
++class IdentityAuditFinding:
++    """A reviewable issue found in a peer card."""
++
++    code: str
++    severity: str
++    field: str
++    value: str
++    fact: str
++    reasons: tuple[str, ...]
++    evidence_status: str
++    proposal: str
++
++    def as_dict(self) -> dict[str, Any]:
++        return {
++            "code": self.code,
++            "severity": self.severity,
++            "field": self.field,
++            "value": self.value,
++            "fact": self.fact,
++            "reasons": list(self.reasons),
++            "evidence_status": self.evidence_status,
++            "proposal": self.proposal,
++        }
++
++
++@dataclass(frozen=True)
++class IdentityAuditReport:
++    """Proposal-only peer-card audit report."""
++
++    peer: str
++    findings: tuple[IdentityAuditFinding, ...] = ()
++    proposed_card: tuple[str, ...] = ()
++    review_required: bool = True
++    summary: str = ""
++    integration_notes: tuple[str, ...] = field(default_factory=tuple)
++
++    def as_dict(self) -> dict[str, Any]:
++        return {
++            "peer": self.peer,
++            "review_required": self.review_required,
++            "summary": self.summary,
++            "findings": [finding.as_dict() for finding in self.findings],
++            "proposed_card": list(self.proposed_card),
++            "integration_notes": list(self.integration_notes),
++        }
++
++
++def _normalize_name(value: str) -> str:
++    return re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
++
++
++def _split_alias_values(raw: str) -> list[str]:
++    raw = raw.strip().strip("[]")
++    values = re.split(r",|/|;|\band\b", raw, flags=re.I)
++    cleaned = []
++    for value in values:
++        value = value.strip().strip("'\"`*-")
++        if value:
++            cleaned.append(value)
++    return cleaned
++
++
++def extract_alias_candidates(card: Iterable[str]) -> list[AliasCandidate]:
++    """Return alias values explicitly stored in alias-like peer-card fields."""
++
++    candidates: list[AliasCandidate] = []
++    for index, fact in enumerate(card):
++        match = _ALIAS_FIELD_RE.match(str(fact).strip())
++        if not match:
++            continue
++        for value in _split_alias_values(match.group("value")):
++            candidates.append(AliasCandidate(value=value, fact_index=index, fact=str(fact)))
++    return candidates
++
++
++def _has_strong_alias_evidence(alias: str, evidence_texts: Iterable[str]) -> bool:
++    escaped = re.escape(alias)
++    for text in evidence_texts:
++        for pattern in _STRONG_ALIAS_EVIDENCE_PATTERNS:
++            if pattern.pattern.format(alias=escaped):
++                compiled = re.compile(pattern.pattern.format(alias=escaped), pattern.flags)
++                if compiled.search(text):
++                    return True
++    return False
++
++
++def _relationship_targets_from_card(
++    card: Iterable[str],
++    suspicious_aliases: Iterable[str],
++    known_entity_names: Iterable[str] = (),
++) -> list[str]:
++    """Infer relationship target names that should be preserved in a typed relation."""
++
++    names: list[str] = []
++    seen: set[str] = set()
++    alias_by_norm = {_normalize_name(alias): alias for alias in suspicious_aliases}
++    known_by_norm = {
++        _normalize_name(name): str(name).strip()
++        for name in known_entity_names
++        if str(name).strip()
++    }
++    candidates_by_norm = {**known_by_norm, **alias_by_norm}
++
++    for fact in card:
++        fact_text = str(fact)
++        if not _RELATIONSHIP_HINT_RE.search(fact_text):
++            continue
++        for norm, name in candidates_by_norm.items():
++            if re.search(rf"\b{re.escape(name)}\b", fact_text, re.I) and norm not in seen:
++                names.append(name)
++                seen.add(norm)
++
++    for alias in suspicious_aliases:
++        norm = _normalize_name(alias)
++        if norm not in seen:
++            names.append(alias)
++            seen.add(norm)
++    return names
++
++
++def _join_names(names: list[str]) -> str:
++    if not names:
++        return ""
++    if len(names) == 1:
++        return names[0]
++    if len(names) == 2:
++        return f"{names[0]} and {names[1]}"
++    return f"{', '.join(names[:-1])}, and {names[-1]}"
++
++
++def _rewrite_alias_fact(fact: str, suspicious_values: set[str]) -> str | None:
++    match = _ALIAS_FIELD_RE.match(fact.strip())
++    if not match:
++        return fact
++    remaining = [
++        value for value in _split_alias_values(match.group("value"))
++        if _normalize_name(value) not in suspicious_values
++    ]
++    if not remaining:
++        return None
++    prefix = ""
++    if match.group("section"):
++        prefix = f"{match.group('section')}: "
++    label = match.group("label")
++    return f"{prefix}{label}: {', '.join(remaining)}"
++
++
++def audit_peer_card_identity_relations(
++    card: Iterable[str],
++    *,
++    peer: str = "user",
++    evidence_texts: Iterable[str] = (),
++    known_entity_names: Iterable[str] = (),
++) -> IdentityAuditReport:
++    """Audit a Honcho peer card for alias/entity-relation conflation.
++
++    The audit flags alias entries that collide with known agents/services or
++    relationship targets unless raw evidence strongly supports the alias claim.
++    It returns a proposed replacement card for review; it never mutates Honcho.
++    """
++
++    card_list = [str(fact) for fact in card if str(fact).strip()]
++    reserved = {_normalize_name(name) for name in _DEFAULT_RESERVED_ENTITY_NAMES}
++    reserved.update(_normalize_name(name) for name in known_entity_names if str(name).strip())
++
++    candidates = extract_alias_candidates(card_list)
++    findings: list[IdentityAuditFinding] = []
++    suspicious_norms: set[str] = set()
++    suspicious_values: list[str] = []
++
++    for candidate in candidates:
++        norm = _normalize_name(candidate.value)
++        if not norm:
++            continue
++        has_evidence = _has_strong_alias_evidence(candidate.value, evidence_texts)
++        reasons: list[str] = []
++        collides_with_entity = norm in reserved
++        appears_as_relationship = any(
++            _RELATIONSHIP_HINT_RE.search(fact)
++            and re.search(rf"\b{re.escape(candidate.value)}\b", fact, re.I)
++            for fact in card_list
++        )
++        if collides_with_entity:
++            reasons.append("alias collides with a known agent, profile, service, or infrastructure entity")
++        if appears_as_relationship:
++            reasons.append("same name appears in relationship/service context on the peer card")
++        if (collides_with_entity or appears_as_relationship) and not has_evidence:
++            reasons.append("no strong raw alias evidence such as 'call me X' or 'I also go by X' was supplied")
++        if not reasons or has_evidence:
++            continue
++
++        suspicious_norms.add(norm)
++        suspicious_values.append(candidate.value)
++        findings.append(
++            IdentityAuditFinding(
++                code="identity_relation_conflation",
++                severity="high" if norm in reserved else "medium",
++                field="aliases",
++                value=candidate.value,
++                fact=candidate.fact,
++                reasons=tuple(reasons),
++                evidence_status="missing_strong_alias_evidence",
++                proposal="Remove from Aliases after review and preserve as a typed relationship if applicable.",
++            )
++        )
++
++    relationship_targets = _relationship_targets_from_card(
++        card_list,
++        suspicious_values,
++        known_entity_names=known_entity_names,
++    )
++    relationship_fact = ""
++    if relationship_targets:
++        relationship_fact = f"Works with AI agents including {_join_names(relationship_targets)}"
++
++    proposed: list[str] = []
++    for fact in card_list:
++        rewritten = _rewrite_alias_fact(fact, suspicious_norms)
++        if rewritten:
++            proposed.append(rewritten)
++    if relationship_fact and not any(_normalize_name(fact) == _normalize_name(relationship_fact) for fact in proposed):
++        proposed.append(relationship_fact)
++
++    if findings:
++        summary = (
++            f"Found {len(findings)} suspicious alias identity claim(s) on peer '{peer}'; "
++            "review proposed typed relationship replacements before mutating Honcho."
++        )
++    else:
++        summary = f"No suspicious alias/entity-relation conflation found on peer '{peer}'."
++
++    integration_notes = (
++        "Run after Honcho peer-card refreshes in the self-improvement loop and include the report in the memory-quality artifact.",
++        "Treat identity fields (Name, Aliases, Pronouns, Role) as high-trust: create reviewable proposals, do not auto-delete or auto-rewrite.",
++        "Pass known Hermes profiles/agents/services as collision names so aliases that are really relationship targets are flagged.",
++        "Use raw Honcho/session excerpts as evidence_texts; only strong phrases such as 'call me X' or 'I also go by X' should suppress an alias warning.",
++    )
++    return IdentityAuditReport(
++        peer=peer,
++        findings=tuple(findings),
++        proposed_card=tuple(proposed),
++        review_required=bool(findings),
++        summary=summary,
++        integration_notes=integration_notes,
++    )
+diff --git a/session_context.py b/session_context.py
+index 021789f..5cfac7a 100644
+--- a/session_context.py
++++ b/session_context.py
+@@ -10,6 +10,14 @@ from .session_auth import HonchoAuthError
+ 
+ logger = logging.getLogger("plugins.memory.honcho.session")
+ 
++_DIALECTIC_OUTPUT_BUDGET_CHARS = {
++    "minimal": 500,
++    "low": 700,
++    "medium": 900,
++    "high": 1100,
++    "max": 1300,
++}
++
+ _FAILED = object()  # sentinel: a guarded call raised (distinct from a legitimately empty/None result)
+ 
+ # Reasoning-channel markers a summarizer model can leave inside a persisted session summary.
+@@ -371,6 +379,35 @@ class SessionContextMixin:
+             "Failed to fetch AI representation: %s",
+         )
+ 
++    def _dialectic_output_budget(self, reasoning_level: str | None) -> int:
++        """Return a conservative character budget for a dialectic result."""
++        level = reasoning_level if reasoning_level in _DIALECTIC_OUTPUT_BUDGET_CHARS else "low"
++        return _DIALECTIC_OUTPUT_BUDGET_CHARS[level]
++
++    def _with_dialectic_output_contract(self, query: str, reasoning_level: str | None) -> str:
++        """Add a compact-output contract while preserving the input guard."""
++        budget = self._dialectic_output_budget(reasoning_level)
++        contract = (
++            "Output contract for this Honcho memory answer:\n"
++            f"- Return at most {budget} characters.\n"
++            "- Use one short paragraph or up to 4 bullets.\n"
++            "- No preamble, chain-of-thought, tool narration, markdown tables, or raw transcripts.\n"
++            "- Include only durable facts or immediately relevant active context.\n"
++            "- If a useful answer cannot fit, return exactly NO_CONCISE_HONCHO_RESULT."
++        )
++        separator = "\n\nQuestion:\n"
++        max_chars = max(1, self._dialectic_max_input_chars)
++        query_budget = max_chars - len(contract) - len(separator)
++        if query_budget <= 0:
++            return contract[:max_chars]
++        if len(query) > query_budget:
++            truncated = query[:query_budget]
++            last_space = truncated.rfind(" ")
++            if last_space > query_budget * 0.6:
++                truncated = truncated[:last_space]
++            query = truncated.rstrip()
++        return f"{contract}{separator}{query}"[:max_chars]
++
+     def dialectic_query(
+         self, session_key: str, query: str, reasoning_level: str | None = None, peer: str = "user",
+         apply_injection_cap: bool = True, raise_errors: bool = False,
+@@ -394,9 +431,8 @@ class SessionContextMixin:
+         target_peer_id = self._resolve_peer_id(session, peer) if session else None
+         if target_peer_id is None:
+             return ""
+-        if len(query) > self._dialectic_max_input_chars:
+-            query = query[:self._dialectic_max_input_chars].rsplit(" ", 1)[0]
+         level = reasoning_level if (self._dialectic_dynamic and reasoning_level) else self._dialectic_reasoning_level
++        query = self._with_dialectic_output_contract(query, level)
+ 
+         def _chat_once() -> str:
+             # The AI peer observes others when allowed; otherwise each peer queries its own context.
+@@ -406,6 +442,8 @@ class SessionContextMixin:
+             return self._get_or_create_peer(target_peer_id).chat(query, reasoning_level=level) or ""
+         try:
+             result = self._authed_call("dialectic query", _chat_once)
++            if result and result.strip() == "NO_CONCISE_HONCHO_RESULT":
++                return ""
+             cap = self._dialectic_max_chars if apply_injection_cap else 0
+             return result[:cap].rsplit(" ", 1)[0] + " …" if result and cap and len(result) > cap else result
+         except HonchoAuthError:

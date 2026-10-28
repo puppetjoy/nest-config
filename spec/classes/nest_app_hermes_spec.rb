@@ -1,4 +1,5 @@
 require 'spec_helper'
+require 'yaml'
 
 describe 'nest::app::hermes' do
   on_supported_os.each do |os, facts|
@@ -106,6 +107,43 @@ describe 'nest::app::hermes' do
         expect(content).to include('--board agent-requests-dev --gitlab-url https://gitlab-test.eyrie')
         expect(content).not_to match(%r{AGENT_REQUEST_KANBAN_BOARD=agent-requests(?:\s|$)})
         expect(content).not_to include('gitlab.joyfullee.me')
+      end
+
+      context 'with the coordinated PM cutover explicitly activated' do
+        let(:params) do
+          super().merge(pm_enabled: true, git_commit: 'a' * 40, broker_git_ref: 'b' * 40)
+        end
+
+        it { is_expected.to compile.with_all_deps }
+        it { is_expected.not_to contain_python__pyvenv('/opt/hermes-agent/venv') }
+        it { is_expected.not_to contain_python__pip('hermes-agent-honcho-deps') }
+        it { is_expected.to contain_class('nest::app::hermes::extracted_plugins') }
+        it { is_expected.to contain_exec('install_hermes_agent').that_requires('Class[nest::app::hermes::extracted_plugins]') }
+
+        it 'uses PM launch selection for gateway and profile commands' do
+          wrapper = catalogue.resource('File', '/usr/local/bin/talon')[:content]
+          service = catalogue.resource('Systemd::Manage_unit', 'hermes-gateway@.service')[:service_entry]
+
+          expect(wrapper).to include('/opt/hermes-agent/bin/hermes-python')
+          expect(wrapper).not_to include('/venv/bin/hermes')
+          expect(service['ExecStart']).to include('/opt/hermes-agent/bin/hermes-python -m hermes_cli.main')
+        end
+
+        it 'retains external plugin dependencies and migrates the selected browser toolset' do
+          config = YAML.safe_load(catalogue.resource('File', '/home/joy/.hermes/profiles/talon/managed-config.yaml')[:content])
+
+          expect(config.fetch('plugins').fetch('enabled')).to include('camofox', 'nest-agent-request-broker')
+          expect(config.fetch('platform_toolsets').fetch('telegram')).to include('browser', 'camofox')
+        end
+
+        context 'with normal rolling core and broker refs' do
+          let(:params) { super().merge(git_commit: :undef, git_ref: 'nest', broker_git_ref: 'main') }
+
+          it { is_expected.to compile.with_all_deps }
+          it { is_expected.not_to contain_exec('verify_hermes_source_ref_pin') }
+          it { is_expected.to contain_exec('install_hermes_agent').that_requires('Exec[verify_hermes_pm_checkpoint]') }
+          it { is_expected.to contain_file('/opt/hermes-agent/bin/hermes-python').that_requires('Exec[install_hermes_agent]') }
+        end
       end
     end
   end

@@ -1,4 +1,4 @@
-#!/opt/hermes-agent/venv/bin/python
+#!/opt/hermes-agent/bin/hermes-python
 """Operator-only OAuth helper for the profile-scoped Google Photos Picker token.
 
 This helper never prints tokens or client-secret contents. Joy completes the

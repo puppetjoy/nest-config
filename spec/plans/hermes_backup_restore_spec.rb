@@ -26,7 +26,7 @@ RSpec.describe 'Hermes full-home backup generations' do
   it 'stops every required profile service around a shared-root restore' do
     expect(restore_plan).to include("['talon', 'star', 'beryl', 'quill']")
     expect(restore_plan).to include('for restore_profile in ${profile_args}')
-    expect(restore_plan).to include('/opt/hermes-agent/venv/bin/hermes import')
+    expect(restore_plan).to include('/usr/local/bin/hermes import')
   end
 
   it 'passes local staging and an explicit non-pruning capture option' do
