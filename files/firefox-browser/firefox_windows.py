@@ -32,7 +32,9 @@ class ControlError(RuntimeError):
 
 # Fixed source only. Selectors and text are JSON arguments, never source.
 ELEMENT = """(selector, inputX, inputY) => {
- const found=selector ? [...document.querySelectorAll(selector)] : [document.elementFromPoint(inputX,inputY)];
+ const rendered=e=>{if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);
+ return !!(r.width&&r.height)&&s.visibility!=='hidden'&&s.visibility!=='collapse'&&s.display!=='none'};
+ const found=selector ? [...document.querySelectorAll(selector)].filter(rendered) : [document.elementFromPoint(inputX,inputY)];
  if(found.length!==1 || !found[0])throw Error('target is not unique');
  const e=found[0], r=e.getBoundingClientRect(), s=getComputedStyle(e);
  if(!r.width||!r.height||s.visibility==='hidden'||s.display==='none'||e.disabled)throw Error('target unavailable');
@@ -509,7 +511,7 @@ class Windows:
                     self.acquire("owner")
                 if (sum(r.get("state") not in {"closed", "retired"} for r in self.state["windows"].values()) >= 12
                         or len({c["clientWindow"] for c in tree if c.get("clientWindow")}) >= 12):
-                    raise RuntimeError("owned window budget reached; no replacement created")
+                    raise ControlError("FIREFOX_WINDOW_BUDGET", "native window budget reached; preserve existing windows; no operation started")
                 record = {"state": "creating", "epoch": self.epoch, "creation_id": secrets.token_hex(24),
                           "prior_windows": sorted({c["clientWindow"] for c in tree if c.get("clientWindow")})}
                 self.state["windows"][scope] = record
@@ -690,17 +692,21 @@ class Windows:
             self._save()
             return {**receipt, "closed": True}
 
-    def _evaluate(self, context, expression):
+    def _evaluate(self, context, expression, *, read_only=False):
         import secure_browser_bidi as observation
         reply = self._call("script.evaluate", {"expression": expression, "target": {"context": context}, "awaitPromise": True})
         if reply.get("type") == "exception":
+            if read_only:
+                raise ControlError("FIREFOX_OBSERVATION_UNAVAILABLE", "bounded page observation unavailable; no input started")
             raise RuntimeError("bounded page observation unavailable")
         return observation.legacy.CdpSession._bidi_value(reply.get("result") or {})
 
-    def _function(self, context, declaration, arguments):
+    def _function(self, context, declaration, arguments, *, preflight=False):
         reply = self._call("script.callFunction", {"functionDeclaration": declaration, "target": {"context": context},
                            "awaitPromise": True, "arguments": arguments, "resultOwnership": "none"})
         if reply.get("type") == "exception":
+            if preflight:
+                raise ControlError("FIREFOX_TARGET_UNAVAILABLE", "target must be uniquely rendered, available and unobstructed; no input started")
             raise RuntimeError("window target unavailable or protected")
         return reply.get("result") or {}
 
@@ -822,7 +828,7 @@ class Windows:
         text_read = bool(observation.TEXT_EXPRESSION.fullmatch(expression))
         if cursor is not None and not text_read:
             raise ValueError("cursor requires document.readText")
-        raw = self._evaluate(cid, script)
+        raw = self._evaluate(cid, script, read_only=True)
         if text_read:
             if not isinstance(raw, dict) or not isinstance(raw.get("text"), str) or len(raw["text"]) > observation.MAX_TEXT_CHARS:
                 raise ValueError("bounded text observation unavailable")
@@ -897,11 +903,11 @@ class Windows:
         coord = coordinate or {}
         args = [{"type": "string", "value": selector} if selector else {"type": "null"},
                 {"type": "number", "value": coord.get("x", 0)}, {"type": "number", "value": coord.get("y", 0)}]
-        target = self._function(cid, ELEMENT, args)
+        target = self._function(cid, ELEMENT, args, preflight=True)
         values = {k: v for k, v in target.get("value", [])}
         node = values.get("node", {})
         if not node.get("sharedId"):
-            raise RuntimeError("native element identity unavailable")
+            raise ControlError("FIREFOX_TARGET_UNAVAILABLE", "native element identity unavailable; no input started")
         element = {"sharedId": node["sharedId"]}
         details = CdpSession._bidi_value(target)
         if details.get("protected"):
@@ -914,7 +920,7 @@ class Windows:
             raise ValueError("control characters and native special keys cannot be passed as public text")
         if operation == "type" and "\n" in text and not details.get("multiline"):
             raise ValueError("multiline public text requires a multiline editable target")
-        focused = CdpSession._bidi_value(self._function(cid, FIELD, [element])) if operation == "type" else {}
+        focused = CdpSession._bidi_value(self._function(cid, FIELD, [element], preflight=True)) if operation == "type" else {}
         self._resolve(record)
         self.state["actions"][key] = {"scope": payload["scope"], "digest": digest, "state": "started"}
         self._save()

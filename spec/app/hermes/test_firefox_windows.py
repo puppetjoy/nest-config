@@ -164,7 +164,7 @@ def test_invalid_public_control_input_is_rejected_before_action(engine, monkeypa
     monkeypatch.setitem(sys.modules, "secure_browser_local_bidi", SimpleNamespace(
         CdpSession=SimpleNamespace(_bidi_value=lambda value: {
             "protected": False, "editable": True, "multiline": multiline})))
-    monkeypatch.setattr(controller, "_function", lambda *args: {"value": [("node", {"sharedId": "element"})]})
+    monkeypatch.setattr(controller, "_function", lambda *args, **kwargs: {"value": [("node", {"sharedId": "element"})]})
     monkeypatch.setattr(controller, "_summary", lambda cid: {"url": "https://same.example/"})
     with pytest.raises(ValueError, match="multiline|control characters"):
         controller._input("type", {"scope": A, "action_key": "invalid-control", "selector": "#draft", "text": text}, record, {})
@@ -463,7 +463,7 @@ def test_delivered_input_with_lost_response_is_not_replayed(engine, monkeypatch)
     record = controller.acquire(A)
     monkeypatch.setitem(sys.modules, "secure_browser_local_bidi", SimpleNamespace(
         CdpSession=SimpleNamespace(_bidi_value=lambda value: {"protected": False, "x": 10, "y": 20})))
-    monkeypatch.setattr(controller, "_function", lambda *args: {"value": [("node", {"sharedId": "element"})]})
+    monkeypatch.setattr(controller, "_function", lambda *args, **kwargs: {"value": [("node", {"sharedId": "element"})]})
     monkeypatch.setattr(controller, "_summary", lambda cid: {"url": "https://same.example/"})
     sent = []
     def pointer(*args):
@@ -478,3 +478,70 @@ def test_delivered_input_with_lost_response_is_not_replayed(engine, monkeypatch)
     assert repeat["delivery"]["replay_blocked"] is True
     assert repeat["delivery"]["input_sent"] is False
     assert sent == [True]
+
+
+def test_preflight_script_exception_is_not_started_and_has_no_journal_entry(engine, monkeypatch):
+    controller, native = engine
+    record = controller.acquire(A)
+    monkeypatch.setitem(sys.modules, "secure_browser_local_bidi", SimpleNamespace(CdpSession=object))
+    monkeypatch.setattr(controller, "_summary", lambda cid: {"url": "https://same.example/"})
+    monkeypatch.setattr(controller, "_call", lambda *args: {"type": "exception", "exceptionDetails": {"text": "private page content"}})
+    with pytest.raises(windows.ControlError) as refused:
+        controller._input("click", {"scope": A, "action_key": "not-sent", "selector": "#missing"}, record, {})
+    assert refused.value.code == "FIREFOX_TARGET_UNAVAILABLE"
+    assert refused.value.outcome == "not_started"
+    assert "private page content" not in str(refused.value)
+    assert controller.state["actions"] == {}
+    assert not any(m == "input.performActions" for m, _ in native.calls)
+    # A later field failure after the journal boundary must remain uncertain.
+    with pytest.raises(RuntimeError) as failed:
+        controller._function(record["context"], windows.FIELD, [])
+    assert not isinstance(failed.value, windows.ControlError)
+
+
+def test_native_budget_refuses_before_reservation_and_preserves_unknown_windows(engine):
+    controller, native = engine
+    controller.acquire("owner")
+    native.tree.extend({"context": f"foreign-{n}", "clientWindow": f"foreign-{n}"} for n in range(11))
+    before = json.loads(controller.path.read_text())
+    with pytest.raises(windows.ControlError) as refused:
+        controller.acquire(A)
+    assert refused.value.code == "FIREFOX_WINDOW_BUDGET"
+    assert refused.value.outcome == "not_started"
+    assert json.loads(controller.path.read_text()) == before
+    assert native.created == 0
+    assert not any(m == "browsingContext.close" for m, _ in native.calls)
+
+
+def test_read_only_script_exception_does_not_claim_input_uncertainty(engine, monkeypatch):
+    controller, _ = engine
+    monkeypatch.setitem(sys.modules, "secure_browser_bidi", SimpleNamespace())
+    monkeypatch.setattr(controller, "_call", lambda *args: {"type": "exception"})
+    with pytest.raises(windows.ControlError) as refused:
+        controller._evaluate("context", "fixed read", read_only=True)
+    assert refused.value.code == "FIREFOX_OBSERVATION_UNAVAILABLE"
+    assert refused.value.outcome == "not_started"
+    with pytest.raises(RuntimeError) as failed:
+        controller._evaluate("context", "post-input read")
+    assert not isinstance(failed.value, windows.ControlError)
+
+
+@pytest.mark.parametrize("code", ["FIREFOX_TARGET_UNAVAILABLE", "FIREFOX_OBSERVATION_UNAVAILABLE", "FIREFOX_WINDOW_BUDGET"])
+def test_adapter_retains_preinput_refusals_without_retry(tmp_path, monkeypatch, code):
+    from test_secure_browser_firefox_ui import load_tool
+    from test_firefox_endpoint import Reply
+    module, _ = load_tool()
+    module.CONTROL_MODE = "firefox-windows-v3"
+    module.BRIDGE_TOKEN_FILE = tmp_path / "token"
+    module.BRIDGE_TOKEN_FILE.write_text("synthetic-test-credential-only")
+    module._session_env = lambda key: ""
+    monkeypatch.setenv("HERMES_KANBAN_TASK", "t_alpha")
+    monkeypatch.setenv("HERMES_KANBAN_BOARD", "agent-requests")
+    calls = []
+    def send(*args, **kwargs):
+        calls.append(True)
+        return Reply(json.dumps({"status": "error", "error": code, "outcome": "not_started"}).encode())
+    monkeypatch.setattr("urllib.request.OpenerDirector.open", send)
+    result = json.loads(module.secure_browser_page_snapshot_tool({}))
+    assert result["error"] == code and result["outcome"] == "not_started"
+    assert calls == [True]
