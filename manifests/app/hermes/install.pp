@@ -515,22 +515,57 @@ class nest::app::hermes::install {
     require => File["${install_dir}/bin"],
   }
 
+  file { "${install_dir}/bin/hermes-frontend-build":
+    ensure  => file,
+    source  => 'puppet:///modules/nest/app/hermes/hermes-frontend-build.py',
+    mode    => '0755',
+    require => File["${install_dir}/bin"],
+  }
+
+  # Source installs need upstream release tags: the fork remote carries only
+  # rolling branches. VersionInfo reads the package version at the reachable tag.
+  exec { 'fetch_hermes_release_metadata':
+    command => "/usr/sbin/git -C ${source_dir} fetch --no-tags https://github.com/NousResearch/hermes-agent.git 'refs/tags/v*:refs/tags/v*'",
+    require => $source_ready,
+    timeout => 600,
+  }
+
+  $frontend_build = "${venv_python} ${install_dir}/bin/hermes-frontend-build"
+  $frontend_env = [
+    "HOME=/home/${nest::user}",
+    "HERMES_HOME=/home/${nest::user}/.hermes",
+    "HERMES_RUNTIME_DIR=${install_dir}/tools",
+  ]
+
   # Relevant workspace inputs and output bytes, not UI copy or minified
   # identifiers, establish whether the last successful build is still valid.
+  $build_hermes_tui_command = $pm_enabled ? {
+    true    => "${frontend_build} build ${source_dir} tui",
+    default => "${npm_command} ci --silent --no-fund --no-audit --progress=false && ${npm_command} run build && ${build_state} record ${source_dir} tui ${tui_revision_file}.json ${npm_cli} && git -C ${source_dir} rev-parse HEAD > ${tui_revision_file}",
+  }
+
+  $build_hermes_tui_unless = $pm_enabled ? {
+    true    => "${frontend_build} check ${source_dir} tui",
+    default => "${build_state} check ${source_dir} tui ${tui_revision_file}.json ${npm_cli}",
+  }
+
+  $build_hermes_tui_environment = $pm_enabled ? {
+    true    => $frontend_env,
+    default => ['HOME=/root', 'NPM_CONFIG_CACHE=/root/.npm'],
+  }
+
   exec { 'build_hermes_tui':
-    command     => "${npm_command} ci --silent --no-fund --no-audit --progress=false && ${npm_command} run build && ${build_state} record ${source_dir} tui ${tui_revision_file}.json ${npm_cli} && git -C ${source_dir} rev-parse HEAD > ${tui_revision_file}",
+    command     => $build_hermes_tui_command,
     cwd         => "${source_dir}/ui-tui",
-    unless      => "${build_state} check ${source_dir} tui ${tui_revision_file}.json ${npm_cli}",
-    environment => [
-      'HOME=/root',
-      'NPM_CONFIG_CACHE=/root/.npm',
-    ],
+    unless      => $build_hermes_tui_unless,
+    environment => $build_hermes_tui_environment,
     path        => ['/bin', '/usr/bin', '/usr/sbin'],
     timeout     => 600,
     require     => [
       Vcsrepo[$source_dir],
       Exec['install_hermes_npm'],
       File["${install_dir}/bin/hermes-build-state"],
+      File["${install_dir}/bin/hermes-frontend-build"],
       $runtime_ready,
     ],
   }
@@ -687,19 +722,36 @@ class nest::app::hermes::install {
       target => "${gws_dir}/node_modules/.bin/gws",
     }
 
+    $build_hermes_dashboard_web_command = $pm_enabled ? {
+      true    => "${frontend_build} build ${source_dir} web",
+      default => "${npm_command} ci --silent --no-fund --no-audit --progress=false && ${npm_command} run build && ${build_state} record ${source_dir} web ${web_revision_file}.json ${npm_cli} && git -C ${source_dir} rev-parse HEAD > ${web_revision_file}",
+    }
+
+    $build_hermes_dashboard_web_unless = $pm_enabled ? {
+      true    => "${frontend_build} check ${source_dir} web",
+      default => "${build_state} check ${source_dir} web ${web_revision_file}.json ${npm_cli}",
+    }
+
+    $build_hermes_dashboard_web_environment = $pm_enabled ? {
+      true    => $frontend_env,
+      default => ['HOME=/root'],
+    }
+
     exec { 'build_hermes_dashboard_web':
       # Both workspaces consume the root lockfile. Do not rewrite a shared
       # build input with npm install after recording the TUI build state.
-      command => "${npm_command} ci --silent --no-fund --no-audit --progress=false && ${npm_command} run build && ${build_state} record ${source_dir} web ${web_revision_file}.json ${npm_cli} && git -C ${source_dir} rev-parse HEAD > ${web_revision_file}",
-      unless  => "${build_state} check ${source_dir} web ${web_revision_file}.json ${npm_cli}",
-      cwd     => "${source_dir}/web",
-      path    => ['/bin', '/usr/bin', '/usr/sbin'],
-      require => [
+      command     => $build_hermes_dashboard_web_command,
+      unless      => $build_hermes_dashboard_web_unless,
+      environment => $build_hermes_dashboard_web_environment,
+      cwd         => "${source_dir}/web",
+      path        => ['/bin', '/usr/bin', '/usr/sbin'],
+      require     => [
         Class['nodejs'],
         Vcsrepo[$source_dir],
         Exec['install_hermes_npm'],
         Exec['build_hermes_tui'],
         File["${install_dir}/bin/hermes-build-state"],
+        File["${install_dir}/bin/hermes-frontend-build"],
         $runtime_ready,
       ],
     }
