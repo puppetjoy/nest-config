@@ -76,6 +76,10 @@ describe 'nest::app::hermes' do
         expect(guard).to eq("/bin/sh -c \"test -x /opt/hermes-agent/venv/bin/python && /opt/hermes-agent/venv/bin/python -c 'import sys; assert sys.version_info[:2] == (3, 13)'\"")
       end
       it { is_expected.to contain_exec('build_hermes_tui').that_requires('Exec[install_hermes_npm]') }
+      it { is_expected.to contain_exec('sync_hermes_source').that_requires('Vcsrepo[/opt/hermes-agent/src]') }
+      it { is_expected.to contain_exec('sync_hermes_source').that_comes_before('File[/opt/hermes-agent/src/tools/secure_browser_tool.py]') }
+      it { is_expected.to contain_exec('sync_hermes_source').that_comes_before('File[/opt/hermes-agent/src/tools/agent_request_tool.py]') }
+      it { is_expected.to contain_exec('sync_hermes_source').that_comes_before('Exec[build_hermes_tui]') }
       it 'refreshes gateways for real runtime and glab changes, not UI build receipts' do
         subscriptions = catalogue.resource('Exec', 'restart_hermes_gateway_talon')[:subscribe].map(&:to_s)
 
