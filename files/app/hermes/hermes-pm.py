@@ -79,11 +79,11 @@ def sync(install, *, check=False):
     inputs = dependency_inputs(install)
     if check:
         return 0 if (verified_receipt(install, before)
-                     and pm.venv_is_current(extras=['all'], plugins=inputs, project_root=source)
+                     and pm.venv_is_current(extras=['all', 'telegram'], plugins=inputs, project_root=source)
                      and source_state(install) == before) else 1
     # This public PM operation owns the whole dependency union, including the
     # broker's buildable immutable source member and the external plugin manifests.
-    pm.sync_venv(['all'], explicit=True, plugins=inputs, project_root=source)
+    pm.sync_venv(['all', 'telegram'], explicit=True, plugins=inputs, project_root=source)
     if source_state(install) != before:
         raise RuntimeError('Managed source changed during PM sync; wrappers must not activate')
     receipt = receipt_path(install)
