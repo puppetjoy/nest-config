@@ -8,10 +8,11 @@ describe 'Hermes broker runtime deployment boundary' do
   let(:service) { File.read(File.join(root, 'manifests/app/hermes/service.pp')) }
   let(:tag) { "tag         => 'hermes_agent_request_broker_runtime'" }
 
-  it 'pins the merged broker independently of the Hermes core' do
-    expect(owl.fetch('nest::app::hermes::broker_git_ref')).to eq('8fb0efaf46333d572674609195a78decbd7ee162')
+  it 'activates checkpoint-gated rolling PM sources together' do
+    expect(owl.fetch('nest::app::hermes::pm_enabled')).to be(true)
+    expect(owl.fetch('nest::app::hermes::broker_git_ref')).to eq('main')
     expect(owl.fetch('nest::app::hermes::git_ref')).to eq('nest')
-    expect(owl.fetch('nest::app::hermes::git_commit')).to match(%r{\A[0-9a-f]{40}\z})
+    expect(owl).not_to have_key('nest::app::hermes::git_commit')
   end
 
   it 'gives the watchdog the managed poller environment and configured GitLab host' do

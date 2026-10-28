@@ -36,6 +36,7 @@ def main():
     sys.dont_write_bytecode = True
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--core-repo', required=True, type=Path)
+    parser.add_argument('--core-sha', default=CORE_SHA)
     parser.add_argument('--broker-repo', required=True, type=Path)
     parser.add_argument('--broker-sha', required=True)
     parser.add_argument('--work', required=True, type=Path)
@@ -57,7 +58,7 @@ def main():
             os.environ.pop(key, None)
     os.environ.update(HOME=str(home), HERMES_HOME=str(install), TMPDIR=str(scratch), TMP=str(scratch),
                       TEMP=str(scratch), PYTHONDONTWRITEBYTECODE='1')
-    export(args.core_repo, CORE_SHA, install / 'src')
+    export(args.core_repo, args.core_sha, install / 'src')
     export(args.broker_repo, args.broker_sha, install / 'agent-request-broker')
     broker = install / 'agent-request-broker'
     (broker / 'plugin.yaml').write_text("name: nest-agent-request-broker\nversion: '1.0'\ndescription: Nest Agent Request broker runtime package\n")
@@ -72,7 +73,7 @@ def main():
     manager = load('nest_pm', helper)
     refusals = {}
     for name, unsafe, restored in [
-        ('src', '04fe62345b00986e6a1f4d4776296f7c1e82e1ce', CORE_SHA),
+        ('src', '04fe62345b00986e6a1f4d4776296f7c1e82e1ce', args.core_sha),
         ('agent-request-broker', '5c6dbe92560a1240e8f61c9a12cbdaaa0eba0079', args.broker_sha),
     ]:
         repo = install / name
@@ -103,7 +104,7 @@ def main():
         'runtime-discovery': [ROOT / 'spec/files/extracted_plugins/test_pm_runtime.py',
                               ROOT / 'spec/files/extracted_plugins/test_external_discovery.py'],
     }
-    results = {'core': CORE_SHA, 'broker': args.broker_sha, 'activation_refusals': refusals, 'groups': {}}
+    results = {'core': args.core_sha, 'broker': args.broker_sha, 'activation_refusals': refusals, 'groups': {}}
     failed = False
     for name, paths in groups.items():
         report = work / (name + '.xml')

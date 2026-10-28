@@ -1,6 +1,6 @@
 # Managed Hermes PM and extracted-plugin integration
 
-Source-only prerequisite for Agent Request ^2205 / task t_fc1cf4cf. This change is not a live upgrade and does not release rollout ^2206. The configuration MR must remain unmerged until that coordinated rollout.
+Source-only prerequisite for Agent Request ^2205 / task t_fc1cf4cf, now including the source activation delta for rollout ^2206. This change is not a live upgrade. The configuration MR must remain unmerged until that coordinated rollout.
 
 ## Source identities
 
@@ -17,7 +17,7 @@ The delivered `staged-plugins/sources.json` records the source URLs, exact commi
 
 ## Activation and ownership
 
-`nest::app::hermes::pm_enabled` defaults to `false`. No host Hiera activation is included. Normal PM operation supports `git_ref: nest`, `git_commit: undef` and `broker_git_ref: main`; temporary pins remain optional. The source gate requires the core checkpoint above and both broker ancestors above, not equality to those commits. Future fast-forward rolling updates therefore require no per-commit production pin changes. Preserve those ancestors in promotion history; a squash/rebase that removes a checkpoint deliberately fails closed and requires a reviewed checkpoint update with fresh acceptance, not a bypass.
+`nest::app::hermes::pm_enabled` defaults to `false`. Owl's source activation now sets it to `true`, retains `git_ref: nest`, removes the old `git_commit` override and sets `broker_git_ref: main`. These settings must not reach production before coordinated source promotion and drain. Temporary pins remain optional. The source gate requires the core checkpoint above and both broker ancestors above, not equality to those commits. Future fast-forward rolling updates therefore require no per-commit production pin changes. Preserve those ancestors in promotion history; a squash/rebase that removes a checkpoint deliberately fails closed and requires a reviewed checkpoint update with fresh acceptance, not a bypass.
 
 After source checkout, `verify_hermes_pm_checkpoint` checks ancestry before importing candidate core code. The PM install requires that gate and all managed source overlays. Only a successful PM sync with unchanged exact core/broker HEADs and tracked file bytes writes `tools/nest-source-state.json`; stable Python wrapper activation depends on that install. Currency checks and launches reject stale receipts. This binds a particular transaction without pinning future Puppet catalogs to its commits. Existing services still must be drained for source replacement: an ancestry gate does not make mutable editable source safe under running processes.
 
@@ -37,7 +37,7 @@ Camofox's patch retains configured/default desktop dimensions, creates a blank t
 
 Copilot requires no Nest source delta on the pinned external plugin, so its patch file is deliberately empty. This was checked against the deployed provider profiles, `hermes_cli/copilot_auth.py` and the ACP client rather than inferred from commit titles. The external implementation moves authentication/client logic behind the target's generic provider seams. Unlike the old resolver's `gh auth token` fallback, the upstream plugin deliberately obtains credentials through Hermes only. Its tests prohibit reading CLI token stores or invoking the CLI for credentials. Real profile discovery retains `copilot`, `github-copilot` and `copilot-acp` identities; a scoped credential test verifies employer-token precedence and refusal to borrow ambient personal GitHub tokens when the scope is empty.
 
-Quill's existing `copilot/gpt-6.1-terra` primary, Copilot helper/delegation routes, non-inherited credentials and Hawk SSH backend are unchanged. No host data, personal provider assignment or Beryl local-only model policy is changed.
+Quill's existing `copilot/gpt-6.1-terra` primary with `max` reasoning and `codex_responses`, Luna Copilot helper/delegation routes, non-inherited credentials and Hawk SSH backend are unchanged. Only Owl's source activation settings change in host data; personal provider assignments and Beryl local-only model policy are unchanged.
 
 ## Reproduce the isolated acceptance
 
@@ -61,6 +61,24 @@ The complete fresh run passed:
 | Runtime and real external discovery | 6 | 0 | 0 | 0 |
 
 This is 395 Python tests, in addition to 39 focused Puppet/Quill/model-policy/backup-plan examples (including the wrapper for five local Git checkpoint/transaction regressions) and `pdk validate`. These are managed-source acceptance results, not the parent's full-suite result or production verification. The deliverable includes the fresh run's JUnit files, logs and machine-readable results. Earlier failed probes are not substituted for final receipts.
+
+## Source activation acceptance
+
+The activation tree integrates `origin/main` at `d1399a2c9fd26eb1f68c606c4c48a0634e71845e` without conflicts, preserving current Firefox repairs and the broker repair history. The former Owl broker pin `4bb92244fc5d1e2681c35e261b28a6ca0fa7abc1` is not discarded: rollout must retain it as an ancestor of promoted broker `main`.
+
+Fresh isolated acceptance uses certified core `8199b2592b3ad4efd5c7ad8fcf861cffc5514b17` and local broker integration `cacba780ea097e185b6d1803678c68760515f98b`, tree `08ccf8eb33afc5435745cc0fbbc1c9f9e5a96ee4`. This fixture merges compatibility MR !207 at `afb0017c5f804706e3402512097f02fa2da9415d` into repaired broker `4bb92244fc5d1e2681c35e261b28a6ca0fa7abc1`. It is not a published or installed broker commit. All original safe checkpoints remain ancestors. The native board-scoped connector and `hermes_cli.kanban_db_notify.add_notify_sub` import are preserved.
+
+Reproduce with the existing command above, substituting that broker fixture and adding:
+
+    --core-sha 8199b2592b3ad4efd5c7ad8fcf861cffc5514b17
+
+The actual combined tree passes `pdk validate` and this focused command:
+
+    pdk test unit --tests=spec/classes/nest_app_hermes_spec.rb,spec/data/hermes_quill_profile_spec.rb,spec/data/hermes_main_model_assignments_spec.rb,spec/files/hermes_pm_checkpoint_spec.rb,spec/files/hermes_broker_runtime_spec.rb,spec/plans/hermes_backup_restore_spec.rb
+
+Results: 42 PDK examples with no failures; 395 plugin/runtime tests with no failures, errors or skips; unsafe source refusals, rolling advancement, stale detection, resync and imports all pass. An additional real-import broker probe passes six board/profile connections, absent facade `connect`, and the native delegated-child read-only fence without module stubs. The probe requires the same clean isolated environment as the harness, not the worker's inherited profile/selection environment. The certified core full suite is not repeated.
+
+Rollout must independently verify the eventual promoted broker tree against this combined fixture (or rerun acceptance if newer changes intervene), all ancestry checkpoints including the current repair above, and the final configuration MR head and CI. Local integration receipts are not production receipts. All merge, freeze/drain, managed deploy/apply, live verification, backup and rollback responsibilities remain with ^2206.
 
 ## Promotion and install order — rollout ^2206 only
 
