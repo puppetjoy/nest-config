@@ -2,6 +2,23 @@
 
 ## Private routing engine
 
+Current TEST selection follows Joyride MR 70, merged revision
+`c9edcec8bdd1abbc9fe69bab2f8821d740a8498d`, successful pipeline 12626,
+build 54139 and managed deployment 54141. The application image is
+`sha256:b11f93a41492b4b4797eec9f43337d0e827f0abe96d9a356cd2d0f3b981e6670`.
+The graph package is `metro-20261101-cycleway-tags-v1`, 1,231,110,144 bytes,
+SHA-256 `eb49aa2387e28d4c0d93dd2be59c9fe2cdcfd75dd13be13b95cfa7be908d333c`.
+It restores dropped cycleway and bicycle qualifier tags from the exact original
+DC/MD/VA input checksums. All 2,034,000 edge identities, geometry, profiles,
+use counts, bans and ancillary history tables remain unchanged. Graph topology
+lineage stays `metro-20261025-v2`; separate `tag_restoration` metadata binds the
+original graph hash and repair. Existing drafts and historical decisions are
+not rewritten. Retain the enriched-history graph below for rollback, including
+its installer pin if rolling back. Preserve active frontend/content selections.
+No production deployment or live Western Reach span replacement is included.
+
+Historical enriched-history selection:
+
 The enriched-history TEST selection follows Joyride MR 47, merged-main revision
 `474f8f614b363f48199db94fc150f520a2399463`, pipeline 12278 with successful
 check/build/smoke. Build 52537 `image.json` binds the multiarchitecture image

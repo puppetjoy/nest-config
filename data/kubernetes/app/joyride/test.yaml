@@ -5,9 +5,9 @@ service_name: '%{nest::kubernetes::service}'
 fqdn: '%{nest::kubernetes::service}.eyrie'
 runtime_environment: test
 ingress_class: contour-test
-# Retain installed routing repair MR 51; successful main pipeline 12336, build 52855 image.json.
-# Head 9eeab6aad0de5074d5a1805c892f83f74b7d4007; do not roll back during ingress convergence.
-joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:bbd12f499b6a759629072c8b14ababebb1f9fcd6210dd89d0f6247235c6e4b75
+# Retain installed routing repair MR 70; successful main pipeline 12626, build 54139 image.json.
+# Head c9edcec8bdd1abbc9fe69bab2f8821d740a8498d; preserve the managed TEST delivery.
+joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:b11f93a41492b4b4797eec9f43337d0e827f0abe96d9a356cd2d0f3b981e6670
 affinity: {}
 tolerations: []
 resources:
