@@ -69,6 +69,24 @@ describe 'nest::app::hermes' do
       let(:development_timer_path) { '/home/joy/.config/systemd/user/hermes-agent-request-gitlab-mr-notes-dev.timer' }
 
       it { is_expected.to compile }
+      it 'quiesces the retired lifecycle writer before installing replacement runtime code' do
+        expect(catalogue).to contain_class('nest::app::hermes::retired_lifecycle').that_comes_before('Class[nest::app::hermes::install]')
+        expect(catalogue).to contain_nest__lib__user_service('retire-hermes-agent-request-moving-tickets-timer').with(
+          ensure: 'stopped', enable: false, unit: 'hermes-agent-request-moving-tickets.timer',
+        )
+        expect(catalogue).to contain_nest__lib__user_service('retire-hermes-agent-request-moving-tickets-service').with(
+          ensure: 'stopped', enable: false, unit: 'hermes-agent-request-moving-tickets.service',
+        ).that_requires('Nest::Lib::User_service[retire-hermes-agent-request-moving-tickets-timer]')
+      end
+      it 'purges retired writer units and launcher after quiescence without removing GitLab note ingress' do
+        ['service', 'timer'].each do |suffix|
+          path = "/home/joy/.config/systemd/user/hermes-agent-request-moving-tickets.#{suffix}"
+          expect(catalogue).to contain_file(path).with_ensure('absent').that_requires('Class[nest::app::hermes::retired_lifecycle]')
+        end
+        expect(catalogue).to contain_file('/opt/hermes-agent/bin/agent-request-reconcile-moving-tickets').with_ensure('absent')
+        expect(catalogue).to contain_file(production_timer_path).with_ensure('file')
+        expect(catalogue).to contain_file(development_timer_path).with_ensure('file')
+      end
       it { is_expected.to contain_python__pyvenv('/opt/hermes-agent/venv').with_python_path('/usr/bin/python3.13').that_requires('Package[dev-lang/python:3.13]') }
       it 'checks a new virtualenv through an existing shell before its interpreter exists' do
         guard = catalogue.resource('Exec', 'python_virtualenv_/opt/hermes-agent/venv')[:unless]
@@ -134,7 +152,7 @@ describe 'nest::app::hermes' do
         end
 
         it 'retains external plugin dependencies and migrates the selected browser toolset' do
-          config = YAML.safe_load(catalogue.resource('File', '/home/joy/.hermes/profiles/talon/managed-config.yaml')[:content])
+          config = YAML.safe_load(catalogue.resource('File', '/home/joy/.hermes/profiles/talon/managed-config.yaml')[:content], aliases: true)
 
           expect(config.fetch('plugins').fetch('enabled')).to include('camofox', 'nest-agent-request-broker')
           expect(config.fetch('platform_toolsets').fetch('telegram')).to include('browser', 'camofox')

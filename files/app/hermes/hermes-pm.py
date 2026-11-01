@@ -97,9 +97,13 @@ def launch(install, args):
     if not verified_receipt(install, source_state(install)):
         raise RuntimeError('Managed source has no exact successful PM sync receipt')
     source = configure(install)
-    from hermes_cli._launchers import resolve_store_python, runtime_command
-    python = resolve_store_python(source)
-    if python is None:
+    from pm.environments import project_python
+    from hermes_cli._launchers import runtime_command
+    # Invoke the committed environment interpreter. Besides carrying this install's
+    # dependencies, its venv identity lets Native bootstrap safely retain its own
+    # packages when a caller selects a separate HERMES_HOME (for example a profile).
+    python = project_python(source)
+    if not python.is_file():
         raise RuntimeError('Managed interpreter is missing; apply the gated PM install first')
     # Keep the old Python-shaped consumers (services, config helpers, build state)
     # without pinning a venv or bypassing hermes_bootstrap activation and leases.
