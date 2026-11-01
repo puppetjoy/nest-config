@@ -42,7 +42,7 @@ stages:
 
 'Validate':
   extends: .all-branch-ci
-  image: '${CI_REGISTRY}/nest/tools/pdk'
+  image: 'registry.gitlab.joyfullee.me/nest/tools/pdk@sha256:7a4e1fcb8b186055e35c232af8273997023839246f712408178d8e725a134673'
   stage: 'Test'
   script:
     - 'pdk validate'
@@ -50,7 +50,7 @@ stages:
 
 'Unit Test':
   extends: .all-branch-ci
-  image: '${CI_REGISTRY}/nest/tools/pdk'
+  image: 'registry.gitlab.joyfullee.me/nest/tools/pdk@sha256:7a4e1fcb8b186055e35c232af8273997023839246f712408178d8e725a134673'
   stage: 'Test'
   script:
     - 'pdk test unit --parallel'
