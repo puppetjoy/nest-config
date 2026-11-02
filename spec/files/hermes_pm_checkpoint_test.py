@@ -48,6 +48,7 @@ class CheckpointTests(unittest.TestCase):
         patch.dict(sys.modules, {'pm': self.pm}).start()
         patch.object(manager, 'dependency_inputs', return_value=object()).start()
         patch.object(manager, 'configure', return_value=self.install / 'src').start()
+        patch.object(manager, 'prepare_runtime_lease').start()
 
     def advance(self, name):
         repo = self.install / name
@@ -90,6 +91,76 @@ class CheckpointTests(unittest.TestCase):
         self.assertEqual(manager.sync(self.install, check=True), 1)
         with self.assertRaisesRegex(RuntimeError, 'no exact successful PM sync receipt'):
             manager.launch(self.install, ['-c', 'pass'])
+
+
+    def test_sync_checks_owner_lease_before_publishing_receipt(self):
+        with patch.object(manager, 'prepare_runtime_lease', create=True) as lease:
+            lease.side_effect = lambda source: self.assertFalse(manager.receipt_path(self.install).exists())
+            self.assertEqual(manager.sync(self.install), 0)
+            lease.assert_called_once_with(self.install / 'src')
+
+    def test_failed_owner_lease_does_not_publish_success(self):
+        with patch.object(manager, 'prepare_runtime_lease', create=True,
+                          side_effect=PermissionError('lease unavailable')):
+            with self.assertRaises(PermissionError):
+                manager.sync(self.install)
+        self.assertFalse(manager.receipt_path(self.install).exists())
+
+
+    def test_current_check_requires_owner_lease_readiness(self):
+        manager.sync(self.install)
+        manager.prepare_runtime_lease.reset_mock()
+        self.assertEqual(manager.sync(self.install, check=True), 0)
+        manager.prepare_runtime_lease.assert_called_once_with(self.install / 'src')
+        manager.prepare_runtime_lease.side_effect = PermissionError('lease denied')
+        with self.assertRaises(PermissionError):
+            manager.sync(self.install, check=True)
+
+
+class LeaseReadinessTests(unittest.TestCase):
+    def exercise(self, *, held=True, denied=False):
+        from contextlib import contextmanager
+        events = []
+        source = Path('/isolated/source')
+        environment = Path('/isolated/generation/venv')
+        @contextmanager
+        def lock(project):
+            self.assertEqual(project, source)
+            events.append('locked')
+            try:
+                yield held
+            finally:
+                events.append('unlocked')
+        def selected(project):
+            self.assertEqual(events, ['locked'])
+            self.assertEqual(project, source)
+            return environment
+        def lease(path):
+            self.assertEqual(path, environment)
+            events.append('lease')
+            if denied:
+                raise PermissionError('denied')
+            return lambda: events.append('released')
+        modules = {'pm.environments': types.SimpleNamespace(selected_venv=selected),
+                   'hermes_cli.runtime_state': types.SimpleNamespace(runtime_lock=lock, lease_generation=lease)}
+        with patch.dict(sys.modules, modules):
+            if not held:
+                with self.assertRaisesRegex(RuntimeError, 'lock unavailable'):
+                    manager.prepare_runtime_lease(source)
+                self.assertEqual(events, ['locked', 'unlocked'])
+            elif denied:
+                with self.assertRaises(PermissionError):
+                    manager.prepare_runtime_lease(source)
+                self.assertEqual(events, ['locked', 'lease', 'unlocked'])
+            else:
+                manager.prepare_runtime_lease(source)
+                self.assertEqual(events, ['locked', 'lease', 'released', 'unlocked'])
+    def test_selection_and_lease_are_inside_owner_lock(self):
+        self.exercise()
+    def test_lock_failure_never_selects_or_leases(self):
+        self.exercise(held=False)
+    def test_lease_denial_releases_install_lock(self):
+        self.exercise(denied=True)
 
 
 if __name__ == '__main__':
