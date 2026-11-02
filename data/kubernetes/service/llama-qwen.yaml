@@ -19,8 +19,9 @@ image_max_tokens: '4096'
 # Qwen request asks for thinking without a smaller budget.
 reasoning_budget: '2048'
 min_p: '0.0'
-ctx_size: '1048576'
-parallel_requests: '4'
+# Two full-sized 262144-token slots; reduce total KV allocation with concurrency.
+ctx_size: '524288'
+parallel_requests: '2'
 spec_type: draft-mtp
 spec_draft_n_max: '2'
 cpu_request: '8'
