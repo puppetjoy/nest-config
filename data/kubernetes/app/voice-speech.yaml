@@ -12,7 +12,7 @@ cert_issuer: eyrie-ca
 cert_issuer_kind: ClusterIssuer
 ingress_class: contour-compute
 image: docker.io/rocm/pytorch:rocm7.2.4_ubuntu24.04_py3.12_pytorch_release_2.9.1
-app_version: '0.3.2'
+app_version: '0.3.3'
 roundtrip_monitor_schedule: '17 * * * *'
 roundtrip_monitor_image: "%{lookup('config_registry')}/nest/stage1/server"
 roundtrip_monitor_expected_words: 'Joy,Talon,Star,voice,speech,request,recorded'
@@ -242,11 +242,24 @@ resources:
             if rtf > MAX_RTF:
                 fail('tts rtf too high', rtf=rtf, max_rtf=MAX_RTF, audio_stats=stats)
 
+            stt_start = time.monotonic()
             transcript = post_multipart_transcription(audio).get('text', '')
+            stt_wall = time.monotonic() - stt_start
             lower = transcript.lower()
             missing_words = [word for word in EXPECTED_WORDS if word not in lower]
             if missing_words:
                 fail('stt transcript missing expected words', missing_words=missing_words, transcript=transcript)
+
+            health = get_json('/health')
+            if not health.get('ok') or not health.get('cuda_available'):
+                fail('required GPU is not healthy', health=health)
+            for path in ('tts', 'stt'):
+                evidence = health.get('inference', {}).get(path, {})
+                if evidence.get('model_devices') != ['cuda:0'] or not evidence.get('stages'):
+                    fail('missing GPU inference evidence', path=path, evidence=evidence)
+                for stage, details in evidence['stages'].items():
+                    if details.get('calls', 0) < 1 or details.get('inputs') != ['cuda:0'] or details.get('outputs') != ['cuda:0']:
+                        fail('non-GPU inference stage', path=path, stage=stage, details=details)
 
             restarts = pod_restarts()
             if restarts is not None:
@@ -265,6 +278,8 @@ resources:
                 'voices_checked': EXPECTED_VOICES,
                 'tts_wall_seconds': round(wall, 3),
                 'tts_rtf': rtf,
+                'stt_wall_seconds': round(stt_wall, 3),
+                'gpu_inference': health.get('inference'),
                 'audio': stats,
                 'transcript': transcript,
                 'pod_restarts': restarts,
@@ -362,6 +377,7 @@ resources:
       namespace: "%{nest::kubernetes::namespace}"
     data:
       server.py: |
+        import contextlib
         import glob
         import importlib.metadata
         import io
@@ -375,7 +391,7 @@ resources:
         import torch
         import whisper
         from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-        from fastapi.responses import Response
+        from fastapi.responses import JSONResponse, Response
         from kokoro import KPipeline
         from pydantic import BaseModel
 
@@ -385,10 +401,13 @@ resources:
             resample_poly = None
 
         app = FastAPI(title='Nest voice-speech', version='%{lookup("app_version")}')
-        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        # This deployment requires ROCm. Never choose CPU because allocation failed.
+        device = 'cuda'
         lock = threading.Lock()
         tts_pipelines = {}
         stt_models = {}
+        inference_evidence = {}
+        inference_errors = {}
         STT_MODELS = [
             'tiny',
             'base',
@@ -482,7 +501,12 @@ resources:
         def get_tts_pipeline(voice: str):
             lang_code = voice_lang_code(voice)
             if lang_code not in tts_pipelines:
-                tts_pipelines[lang_code] = KPipeline(lang_code=lang_code)
+                require_gpu()
+                try:
+                    tts_pipelines[lang_code] = KPipeline(lang_code=lang_code, device=device)
+                except Exception as exc:
+                    inference_errors['tts'] = f'Model load failed: {type(exc).__name__}: {exc}'
+                    raise
             return tts_pipelines[lang_code]
 
         def cached_voices():
@@ -505,13 +529,94 @@ resources:
             if model_name not in STT_MODELS:
                 raise HTTPException(status_code=400, detail=f'Unsupported STT model: {name}')
             if model_name not in stt_models:
-                stt_models[model_name] = whisper.load_model(model_name, device=device)
+                require_gpu()
+                try:
+                    stt_models[model_name] = whisper.load_model(model_name, device=device, download_root='/cache/whisper')
+                except Exception as exc:
+                    inference_errors['stt'] = f'Model load failed: {type(exc).__name__}: {exc}'
+                    raise
             return stt_models[model_name]
+
+        def tensor_devices(value):
+            if isinstance(value, torch.Tensor):
+                return {str(value.device)}
+            if isinstance(value, dict):
+                return tensor_devices(tuple(value.values()))
+            if isinstance(value, (tuple, list)):
+                return set().union(*(tensor_devices(item) for item in value))
+            return set()
+
+        def check_tensors(stage, value):
+            devices = sorted(tensor_devices(value))
+            if not devices or any(not value.startswith('cuda:') for value in devices):
+                raise RuntimeError(f'{stage} requires GPU tensors, got {devices}')
+            return devices
+
+        @contextlib.contextmanager
+        def gpu_inference(path, model, stages):
+            require_gpu()
+            handles = []
+            evidence = {'model_devices': model_devices(model), 'stages': {}}
+            try:
+                if not evidence['model_devices'] or any(
+                    not value.startswith('cuda:') for value in evidence['model_devices']
+                ):
+                    raise RuntimeError(f'{path} requires GPU parameters: {evidence["model_devices"]}')
+                for name, module in stages.items():
+                    def observe(module, inputs, output, name=name):
+                        stage = evidence['stages'].setdefault(name, {'calls': 0})
+                        stage['inputs'] = check_tensors(name, inputs)
+                        stage['outputs'] = check_tensors(name, output)
+                        stage['calls'] += 1
+                    handles.append(module.register_forward_hook(observe))
+                yield
+                torch.cuda.synchronize()
+                if set(evidence['stages']) != set(stages):
+                    raise RuntimeError(f'{path} did not execute every required GPU stage')
+                evidence['completed_at'] = time.time()
+                evidence['allocated_bytes'] = torch.cuda.memory_allocated()
+                evidence['reserved_bytes'] = torch.cuda.memory_reserved()
+                inference_evidence[path] = evidence
+                inference_errors.pop(path, None)
+            except Exception as exc:
+                inference_errors[path] = f'{type(exc).__name__}: {exc}'
+                raise
+            finally:
+                for handle in handles:
+                    handle.remove()
+
+        def model_devices(model):
+            return sorted({str(parameter.device) for parameter in model.parameters()})
+
+        def gpu_errors():
+            errors = []
+            if not torch.cuda.is_available():
+                errors.append('Required GPU unavailable: check device-plugin allocation, /dev/kfd and render node')
+            for name, model in [
+                *[(f'tts:{lang}', pipeline.model) for lang, pipeline in list(tts_pipelines.items())],
+                *[(f'stt:{name}', model) for name, model in list(stt_models.items())],
+            ]:
+                devices = model_devices(model)
+                if not devices or any(not value.startswith('cuda:') for value in devices):
+                    errors.append(f'{name} has non-GPU parameters: {devices}')
+            errors.extend(f'{path}: {error}' for path, error in list(inference_errors.items()))
+            return errors
+
+        def require_gpu():
+            if not torch.cuda.is_available():
+                raise HTTPException(status_code=503, detail='This service requires a GPU; CPU fallback is disabled')
+
+        @app.get('/live')
+        def live():
+            return {'ok': True}
 
         @app.get('/health')
         def health():
-            return {
-                'ok': True,
+            errors = gpu_errors()
+            payload = {
+                'ok': not errors,
+                'required_device': 'cuda',
+                'errors': errors,
                 'version': app.version,
                 'torch': torch.__version__,
                 'kokoro': importlib.metadata.version('kokoro'),
@@ -520,9 +625,17 @@ resources:
                 'miopen_find_mode': os.environ.get('MIOPEN_FIND_MODE'),
                 'loaded_tts_langs': sorted(tts_pipelines.keys()),
                 'loaded_stt_models': sorted(stt_models.keys()),
+                'effective_devices': {
+                    'tts': {lang: model_devices(p.model) for lang, p in list(tts_pipelines.items())},
+                    'stt': {name: model_devices(m) for name, m in list(stt_models.items())},
+                },
+                'inference': dict(inference_evidence),
+                'cpu_operations': ['text normalization and phonemization', 'audio decode/resample and WAV encode',
+                                   'Whisper token sampling/text decode', 'Kokoro output audio copy'],
                 'cached_voices': cached_voices(),
                 'cached_stt_models': cached_stt_models(),
             }
+            return JSONResponse(content=payload, status_code=503 if errors else 200)
 
         @app.get('/v1/audio/voices')
         def voices():
@@ -557,9 +670,10 @@ resources:
             with lock:
                 pipeline = get_tts_pipeline(request.voice)
                 chunks = []
-                for item in pipeline(input_text, voice=request.voice, speed=request.speed):
-                    audio = getattr(item, 'audio', item[-1] if isinstance(item, tuple) else item)
-                    chunks.append(audio)
+                with gpu_inference('tts', pipeline.model, {'bert': pipeline.model.bert, 'decoder': pipeline.model.decoder}):
+                    for item in pipeline(input_text, voice=request.voice, speed=request.speed):
+                        audio = getattr(item, 'audio', item[-1] if isinstance(item, tuple) else item)
+                        chunks.append(audio)
             if not chunks:
                 raise HTTPException(status_code=500, detail='TTS produced no audio')
             arrays = [chunk.detach().cpu().numpy() if hasattr(chunk, 'detach') else np.asarray(chunk) for chunk in chunks]
@@ -606,11 +720,12 @@ resources:
                     'language': language,
                     'temperature': temperature,
                     'condition_on_previous_text': condition_on_previous_text,
-                    'fp16': torch.cuda.is_available(),
+                    'fp16': True,
                 }
                 if initial_prompt:
                     options['initial_prompt'] = initial_prompt
-                result = stt.transcribe(audio, **options)
+                with gpu_inference('stt', stt, {'encoder': stt.encoder, 'decoder': stt.decoder}):
+                    result = stt.transcribe(audio, **options)
             return {'text': result.get('text', '').strip()}
 
         if __name__ == '__main__':
@@ -699,7 +814,7 @@ resources:
                 timeoutSeconds: 2
               livenessProbe:
                 httpGet:
-                  path: /health
+                  path: /live
                   port: 8080
                 periodSeconds: 30
                 failureThreshold: 3
