@@ -2,10 +2,14 @@
 
 ## Private routing engine
 
-Current TEST selection follows Joyride MR 70, merged revision
-`c9edcec8bdd1abbc9fe69bab2f8821d740a8498d`, successful pipeline 12626,
-build 54139 and managed deployment 54141. The application image is
-`sha256:b11f93a41492b4b4797eec9f43337d0e827f0abe96d9a356cd2d0f3b981e6670`.
+Current TEST backend selection follows Joyride MR 71, merged revision
+`a4b1be6c9cb9539ad8903c005709601da3370758`, successful pipeline 12635,
+build 54208 and managed deployment 54210. The application image is
+`sha256:b41036893aa52daeea1ec23ea64c912b28aa770d1e90af377e2c7eee283cfc3b`.
+Doctrine `skate-v4-shared-bus-bike` recognizes direction-applicable
+`share_busway` as its own bike-suitable category, without changing admission,
+solo pricing, matching ranks or existing drafts. No endpoint operation or
+Wisconsin approval is included. The graph restoration from MR 70 is unchanged.
 The graph package is `metro-20261101-cycleway-tags-v1`, 1,231,110,144 bytes,
 SHA-256 `eb49aa2387e28d4c0d93dd2be59c9fe2cdcfd75dd13be13b95cfa7be908d333c`.
 It restores dropped cycleway and bicycle qualifier tags from the exact original
