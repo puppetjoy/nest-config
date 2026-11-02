@@ -5,6 +5,7 @@
 # @param environment The Puppet environment to use
 # @param noop Run Puppet in noop mode
 # @param skip_module_rebuild Skip kernel module rebuild
+# @param skip_tags Exclude resources with these tags during a guarded apply
 # @param tags Only apply resources with these tags
 plan nest::puppet::run (
   TargetSpec $targets,
@@ -12,6 +13,7 @@ plan nest::puppet::run (
   Optional[String]         $environment         = undef,
   Boolean                  $noop                = false,
   Boolean                  $skip_module_rebuild = false,
+  Array[String]            $skip_tags           = [],
   Array[String]            $tags                = [],
 ) {
   if $build {
@@ -44,6 +46,12 @@ plan nest::puppet::run (
     $tags_args = []
   }
 
+  if !empty($skip_tags) {
+    $skip_tags_args = ['--skip_tags', $skip_tags.join(',')]
+  } else {
+    $skip_tags_args = []
+  }
+
   $windows_targets = get_targets('windows')
   get_targets($targets).each |$target| {
     $run_as = $target in $windows_targets ? {
@@ -52,7 +60,7 @@ plan nest::puppet::run (
     }
     run_script('nest/scripts/run_puppet.sh', $target, 'Run Puppet', {
       _env_vars => $build_env + $skip_env + {
-        'PUPPET_EXTRA_ARGS' => shellquote($environment_args + $noop_args + $tags_args),
+        'PUPPET_EXTRA_ARGS' => shellquote($environment_args + $noop_args + $tags_args + $skip_tags_args),
       },
       _run_as   => $run_as,
     })

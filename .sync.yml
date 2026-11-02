@@ -116,3 +116,10 @@ spec/spec_helper.rb:
           File.expand_path(File.join(__dir__, 'fixtures', 'modules')),
         ].join(File::PATH_SEPARATOR)
       end
+
+Gemfile:
+  optional:
+    ':development':
+      - gem: 'syslog'
+        version: '>= 0'
+        platforms: ['ruby']

@@ -62,7 +62,7 @@ def main():
     export(args.broker_repo, args.broker_sha, install / 'agent-request-broker')
     broker = install / 'agent-request-broker'
     (broker / 'plugin.yaml').write_text("name: nest-agent-request-broker\nversion: '1.0'\ndescription: Nest Agent Request broker runtime package\n")
-    (broker / '__init__.py').write_text('def register(ctx):\n    pass\n')
+    (broker / '__init__.py').write_text('from agent_request_broker.blocked_writer_plugin import register\n')
     (install / 'config.yaml').write_text('memory:\n  provider: default\nplugins:\n  enabled: []\n')
     stage = work / 'plugins'
     staging = load('nest_staging', ROOT / 'files/app/hermes/stage-extracted-plugins.py')
@@ -84,6 +84,8 @@ def main():
         assert not manager.receipt_path(install).exists()
         refusals[name] = {'rejected': unsafe, 'exit_code': refusal.returncode}
         subprocess.run(['git', '-C', str(repo), 'checkout', '--detach', restored], check=True)
+    (install / 'src/tools/agent_request_tool.py').symlink_to(
+        broker / 'src/tools/agent_request_tool.py')
     source = manager.configure(install)
     import pm
     # First exercise exactly the production extras/members, with no test dependency.
@@ -92,7 +94,7 @@ def main():
     # Test-only member: no pytest or test mutation enters the production manifest.
     tests = work / 'test-dependencies'
     tests.mkdir()
-    (tests / 'pyproject.toml').write_text('[project]\nname="nest-hermes-contract-tests"\nversion="1.0"\ndependencies=["pytest==9.1.1"]\n')
+    (tests / 'pyproject.toml').write_text('[project]\nname="nest-hermes-contract-tests"\nversion="1.0"\ndependencies=["pytest==9.1.1", "pytest-xdist"]\n')
     from pm.plugin_inputs import Candidates
     members = manager.dependency_inputs(install)
     pm.sync_venv(['all'], explicit=True, plugins=Candidates([*members.dirs, tests]), project_root=source)
@@ -105,20 +107,29 @@ def main():
                               ROOT / 'spec/files/extracted_plugins/test_external_discovery.py'],
     }
     results = {'core': args.core_sha, 'broker': args.broker_sha, 'activation_refusals': refusals, 'groups': {}}
+    workers = max(1, (getattr(os, 'process_cpu_count', os.cpu_count)() or os.cpu_count() or 1))
+    results['workers'] = workers
     failed = False
     for name, paths in groups.items():
         report = work / (name + '.xml')
-        command = [sys.executable, '-I', str(helper), 'python', str(install), '-m', 'pytest', '-q',
+        command = [sys.executable, '-I', str(helper), 'python', str(install), '-m', 'pytest', '-vv', '-n', str(workers), '--max-worker-restart=0',
                    '--junitxml=' + str(report), *map(str, paths)]
         with (work / (name + '.log')).open('w') as log:
             result = subprocess.run(command, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT, timeout=300)
+        startup = [line for line in (work / (name + '.log')).read_text().splitlines()
+                   if 'created:' in line and 'workers' in line]
+        observed_workers = any(f'created: {workers}/{workers} workers' in line for line in startup)
         tree = ET.parse(report)
         cases = tree.findall('.//testcase')
         row = {'tests': len(cases), 'failures': len(tree.findall('.//failure')),
                'errors': len(tree.findall('.//error')), 'skipped': len(tree.findall('.//skipped')),
-               'exit_code': result.returncode}
+               'exit_code': result.returncode, 'worker_startup': startup,
+               'observed_workers': observed_workers,
+               'case_ids': [(c.get('classname'), c.get('name')) for c in cases]}
         results['groups'][name] = row
-        failed |= bool(result.returncode or row['failures'] or row['errors'] or row['skipped'])
+        failed |= bool(result.returncode or row['failures'] or row['errors'] or row['skipped']
+                       or not observed_workers or not cases
+                       or len(row['case_ids']) != len(set(row['case_ids'])))
         print(name + ': ' + json.dumps(row), flush=True)
     # Advance real local rolling branches after the exact-source plugin tests.
     # No source refs in either input repository are changed.
@@ -137,6 +148,26 @@ def main():
     subprocess.run([*command, 'python', str(install), '-c',
                     'import agent_request_broker.kanban_backend, honcho; print("Rolling PM imports passed")'], check=True)
     results['rolling_convergence'] = manager.source_state(install)
+    # The supported named profile belongs to the installation-owning data root
+    profile = install / 'profiles/talon'
+    profile.mkdir(parents=True)
+    (profile / 'config.yaml').write_text(
+        'memory:\n  provider: default\nplugins:\n  enabled:\n    - agent-request-blocked-writer\n')
+    shared = work / 'registration-board'
+    shared.mkdir()
+    probe_env = dict(os.environ, HERMES_HOME=str(profile), HERMES_PROFILE='talon',
+                     HERMES_KANBAN_HOME=str(shared))
+    probe = subprocess.run(
+        [*command, 'python', str(install), str(ROOT / 'scripts/test-hermes-managed-registration.py'),
+         str(work), str(install), str(profile), str(shared)],
+        env=probe_env, text=True, capture_output=True, timeout=120)
+    (work / 'registration.stdout').write_text(probe.stdout)
+    (work / 'registration.stderr').write_text(probe.stderr)
+    results['registration_exit_code'] = probe.returncode
+    if probe.returncode:
+        failed = True
+    else:
+        results['registration'] = json.loads(probe.stdout)
     (work / 'results.json').write_text(json.dumps(results, indent=2) + '\n')
     return 1 if failed else 0
 

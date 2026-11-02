@@ -29,12 +29,13 @@ def test_launch_activates_union_without_inheriting_old_venv(tmp_path):
         'agent_request_broker.kanban_backend; from hermes_constants import get_hermes_home; '
         'print(json.dumps({"version":list(sys.version_info[:2]),"broker":m.version("hermes-agent-request-broker"),'
         '"honcho":m.version("honcho-ai"),"home":str(get_hermes_home()),'
-        '"venv":os.environ.get("VIRTUAL_ENV"),"path":sys.path}))', home=tmp_path))
+        '"venv":os.environ.get("VIRTUAL_ENV"),"managed_venv":sys.prefix != sys.base_prefix,"path":sys.path}))', home=tmp_path))
     assert result['version'] == [3, 14]
     assert result['broker'] == '0.1.0'
     assert result['honcho']
     assert result['home'] == str(INSTALL / 'profiles' / tmp_path.name)
     assert result['venv'] is None
+    assert result['managed_venv'] is True
     assert '/nonexistent/hostile' not in result['path']
 
 

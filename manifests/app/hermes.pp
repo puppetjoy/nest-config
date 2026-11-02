@@ -14,8 +14,6 @@ class nest::app::hermes (
   Boolean                        $gitlab_mr_note_dev_enabled     = false,
   String[1]                      $gitlab_mr_note_dev_board       = 'agent-requests-dev',
   Stdlib::HTTPUrl                $gitlab_mr_note_dev_url         = 'https://gitlab-test.eyrie',
-  Boolean                        $moving_ticket_enabled          = false,
-  String[1]                      $moving_ticket_interval         = '5min',
   Boolean                        $star_order_refresh_enabled     = true,
   String[1]                      $star_order_refresh_profile     = 'star',
   String[1]                      $star_order_refresh_interval    = '6h',
@@ -90,11 +88,13 @@ class nest::app::hermes (
   case $facts['os']['family'] {
     'Gentoo': {
       contain nest::tool::gitlab_cli
+      contain nest::app::hermes::retired_lifecycle
       contain nest::app::hermes::install
       contain nest::app::hermes::service
       contain nest::app::hermes::config
 
       Class['nest::tool::gitlab_cli']
+      -> Class['nest::app::hermes::retired_lifecycle']
       -> Class['nest::app::hermes::install']
       -> Class['nest::app::hermes::service']
       -> Class['nest::app::hermes::config']

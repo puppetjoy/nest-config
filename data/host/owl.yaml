@@ -30,9 +30,9 @@ nest::lib::toolchains::env:
   MAKEOPTS: '-j4 -l4'
   EMERGE_DEFAULT_OPTS: '--usepkg --jobs=1 --load-average=4'
 
-nest::app::hermes::git_ref: 'nest'
+nest::app::hermes::git_ref: '5e006f58bb71aa5e839e025deedbac56791c954f'
 nest::app::hermes::pm_enabled: true
-nest::app::hermes::broker_git_ref: 'c4efc539308d63632a2340ef8ca8efd5822a7254'
+nest::app::hermes::broker_git_ref: '4530cc2469f63c7db317a523db551df211311c9a'
 nest::app::hermes::auxiliary_provider: 'openai-codex'
 nest::app::hermes::auxiliary_compress_model: 'gpt-6-luna'
 nest::app::hermes::auxiliary_extract_model: 'gpt-6-luna'
@@ -46,7 +46,6 @@ nest::app::hermes::patternkit_session_token: 'ENC[PKCS7,MIIBuQYJKoZIhvcNAQcDoIIB
 nest::app::hermes::gitlab_mr_note_poller_enabled: true
 nest::app::hermes::gitlab_mr_note_dev_enabled: true
 nest::app::hermes::gitlab_mr_note_poller_profile: 'talon'
-nest::app::hermes::moving_ticket_enabled: true
 # Ordinary browser tools use the singleton Camofox REST API by default.
 # Chrome and agent-browser remain installed for rollback by clearing this
 # managed setting.
