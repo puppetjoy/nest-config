@@ -13,7 +13,9 @@ describe 'Hermes broker runtime deployment boundary' do
   it 'keeps PM core rolling and broker releases independently pinned' do
     expect(owl.fetch('nest::app::hermes::pm_enabled')).to be(true)
     expect(owl.fetch('nest::app::hermes::broker_git_ref')).to match(%r{\A[0-9a-f]{40}\z})
-    expect(owl.fetch('nest::app::hermes::git_ref')).to eq('nest')
+    # The default remains rolling; the coordinated release host is source-pinned.
+    expect(File.read(File.join(root, 'manifests/app/hermes.pp'))).to match(%r{\$git_ref\s*=\s*'main'})
+    expect(owl.fetch('nest::app::hermes::git_ref')).to eq('5e006f58bb71aa5e839e025deedbac56791c954f')
     expect(owl).not_to have_key('nest::app::hermes::git_commit')
   end
 
@@ -38,7 +40,18 @@ describe 'Hermes broker runtime deployment boundary' do
       junior.authorize_command = lambda *a, **k: None
       defect = types.ModuleType('agent_request_broker.owner_defect_command')
       defect.request_command = lambda *a, **k: None
-      for module in (backend, terminal, junior, defect): sys.modules[module.__name__] = module
+      package = types.ModuleType('agent_request_broker')
+      package.__path__ = []
+      sys.modules[package.__name__] = package
+      writer = types.ModuleType('agent_request_broker.blocked_writer_plugin')
+      # This unit models the delegated broker API, not its implementation.
+      def register_writer(context):
+          context.register_command('independent-defect', defect.request_command)
+          context.register_command('junior-authorize', junior.authorize_command)
+          context.register_hook('kanban_task_blocked', backend.on_kanban_task_blocked)
+          context.register_hook('kanban_task_completed', terminal.on_completed)
+      writer.register = register_writer
+      for module in (backend, terminal, junior, defect, writer): sys.modules[module.__name__] = module
       class Context:
           def register_hook(self, name, callback): calls.append(('hook', name, callback))
           def register_command(self, name, callback, **kwargs): calls.append(('command', name, callback))

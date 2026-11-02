@@ -30,7 +30,7 @@ nest::lib::toolchains::env:
   MAKEOPTS: '-j4 -l4'
   EMERGE_DEFAULT_OPTS: '--usepkg --jobs=1 --load-average=4'
 
-nest::app::hermes::git_ref: 'nest'
+nest::app::hermes::git_ref: '5e006f58bb71aa5e839e025deedbac56791c954f'
 nest::app::hermes::pm_enabled: true
 nest::app::hermes::broker_git_ref: '4530cc2469f63c7db317a523db551df211311c9a'
 nest::app::hermes::auxiliary_provider: 'openai-codex'
