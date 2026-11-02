@@ -16,7 +16,7 @@ describe 'Hermes broker runtime deployment boundary' do
     # The default remains rolling; the coordinated release host is source-pinned.
     expect(File.read(File.join(root, 'manifests/app/hermes.pp'))).to match(%r{\$git_ref\s*=\s*'main'})
     expect(owl.fetch('nest::app::hermes::git_ref')).to eq('nest')
-    expect(owl.fetch('nest::app::hermes::git_commit')).to eq('5e006f58bb71aa5e839e025deedbac56791c954f')
+    expect(owl.fetch('nest::app::hermes::git_commit')).to eq('be49faf1424d2d5ee279e86666d1ecf716f148cf')
   end
 
   it 'removes the applying lifecycle reconciler while retaining GitLab note ingress' do
