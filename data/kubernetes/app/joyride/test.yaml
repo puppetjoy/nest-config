@@ -5,9 +5,9 @@ service_name: '%{nest::kubernetes::service}'
 fqdn: '%{nest::kubernetes::service}.eyrie'
 runtime_environment: test
 ingress_class: contour-test
-# Retain shared bus/bike suitability MR 71; successful main pipeline 12635, build 54208 image.json.
-# Head a4b1be6c9cb9539ad8903c005709601da3370758; preserve the managed TEST delivery.
-joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:b41036893aa52daeea1ec23ea64c912b28aa770d1e90af377e2c7eee283cfc3b
+# Retain on-graph endpoint MR 72; successful main pipeline 12639, build 54242 image.json.
+# Head 43685849fdbc6a14f62f1ad23df37e4c3f2be1fa; preserve the managed TEST delivery.
+joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:aa9093f36374dde46387c39ca84f118dd011ad9440c934d370e080a82c0a5dfb
 affinity: {}
 tolerations: []
 resources:

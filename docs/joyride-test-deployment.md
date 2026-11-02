@@ -2,14 +2,19 @@
 
 ## Private routing engine
 
-Current TEST backend selection follows Joyride MR 71, merged revision
-`a4b1be6c9cb9539ad8903c005709601da3370758`, successful pipeline 12635,
-build 54208 and managed deployment 54210. The application image is
-`sha256:b41036893aa52daeea1ec23ea64c912b28aa770d1e90af377e2c7eee283cfc3b`.
+Current TEST backend selection follows Joyride MR 72, merged revision
+`43685849fdbc6a14f62f1ad23df37e4c3f2be1fa`, successful pipeline 12639,
+build 54242 and managed deployment 54244. The application image is
+`sha256:aa9093f36374dde46387c39ca84f118dd011ad9440c934d370e080a82c0a5dfb`.
+The on-graph `reanchor_endpoints` refinement operation accepts independent
+precise start/finish edge offsets and retained-middle join anchors. It preserves
+frozen decisions, middle geometry, protections and history through the existing
+owner/Luna transports and revision CAS. There are no off-grid connectors or
+automatic live draft edits; placement and application remain with Luna/Joy.
 Doctrine `skate-v4-shared-bus-bike` recognizes direction-applicable
 `share_busway` as its own bike-suitable category, without changing admission,
-solo pricing, matching ranks or existing drafts. No endpoint operation or
-Wisconsin approval is included. The graph restoration from MR 70 is unchanged.
+solo pricing, matching ranks or existing drafts. No Wisconsin approval is
+included. The graph restoration from MR 70 is unchanged.
 The graph package is `metro-20261101-cycleway-tags-v1`, 1,231,110,144 bytes,
 SHA-256 `eb49aa2387e28d4c0d93dd2be59c9fe2cdcfd75dd13be13b95cfa7be908d333c`.
 It restores dropped cycleway and bicycle qualifier tags from the exact original
