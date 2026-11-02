@@ -2,10 +2,10 @@
 
 ## Private routing engine
 
-The TEST backend pin follows Joyride MR 74, merged revision
-`dc1eb982f57c7ca5d5379f9f443a48a922a50b55`, successful pipeline 12647
-and build 54307. The managed delivery lane is preview job 54309. Its image is
-`sha256:d684f2dcc2ba32b978d1b6dc88fe37bca9e8dae9f99a9b78e461255944c34971`.
+The TEST backend pin follows Joyride MR 75, merged revision
+`c152ac23c9ae77766d98590a76c0817669eb4c20`, successful pipeline 12678
+and build 54515. The managed delivery lane is preview job 54517. Its image is
+`sha256:6c512d061b0fec926705dda2661b1fe8e3f17c1c68196b0a70301c2b0a121e06`.
 This retains schema-4 bike-network support and pins the measured immutable
 `v4-bike-network` archive, SHA-256
 `5009c8457038541556e91761592c3219b75549e8b4ec535fe6d266da45aaf9f9`.
@@ -22,10 +22,14 @@ precise start/finish edge offsets and retained-middle join anchors. It preserves
 frozen decisions, middle geometry, protections and history through the existing
 owner/Luna transports and revision CAS. There are no off-grid connectors or
 automatic live draft edits; placement and application remain with Luna/Joy.
-Doctrine `skate-v4-shared-bus-bike` recognizes direction-applicable
-`share_busway` as its own bike-suitable category, without changing admission,
-solo pricing, matching ranks or existing drafts. No Wisconsin approval is
-included. The graph restoration from MR 70 is unchanged.
+Doctrine `skate-v5-minor-arterials` prices admitted forward group travel on
+secondary and secondary_link street carriageways as ordinary streets. Solo
+tax and primary/trunk behavior remain unchanged. Directional shared_lane
+evidence is minor-group-only; existing shared bus/bike suitability remains.
+The owner approval list is empty, retiring Irving's redundant exception.
+Bans, contraflow, sidewalk comfort, observation matching and saved drafts are
+unchanged; only new generation/refinement uses the new prices. No per-street
+Sargent, 13th or Wisconsin approval is included. Graph restoration is unchanged.
 The graph package is `metro-20261101-cycleway-tags-v1`, 1,231,110,144 bytes,
 SHA-256 `eb49aa2387e28d4c0d93dd2be59c9fe2cdcfd75dd13be13b95cfa7be908d333c`.
 It restores dropped cycleway and bicycle qualifier tags from the exact original
