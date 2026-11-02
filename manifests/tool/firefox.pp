@@ -145,6 +145,13 @@ class nest::tool::firefox (
     require => File['/opt/nest/firefox'],
   }
 
+  file { '/opt/nest/firefox/bin/smoke-kasmvnc-memory.py':
+    ensure  => file,
+    mode    => '0755',
+    source  => 'puppet:///modules/nest/firefox-browser/smoke-kasmvnc-memory.py',
+    require => File['/opt/nest/firefox/bin'],
+  }
+
   file { '/opt/nest/firefox/bin/smoke-webdriver.py':
     ensure  => file,
     mode    => '0755',
