@@ -27,6 +27,7 @@ def test_owl_tracks_merged_hermes_and_shared_auxiliary_policy() -> None:
     host_config = load_yaml(OWL_DATA)
 
     assert host_config["nest::app::hermes::git_ref"] == "nest"
+    assert host_config["nest::app::hermes::git_commit"] == "5e006f58bb71aa5e839e025deedbac56791c954f"
     assert host_config["nest::app::hermes::auxiliary_provider"] == EXPECTED_PROVIDER
     assert host_config["nest::app::hermes::auxiliary_compress_model"] == EXPECTED_HELPER_MODEL
     assert host_config["nest::app::hermes::auxiliary_extract_model"] == EXPECTED_HELPER_MODEL
