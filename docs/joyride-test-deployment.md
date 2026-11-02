@@ -2,15 +2,21 @@
 
 ## Private routing engine
 
-Current TEST backend selection follows Joyride MR 73, merged revision
-`6c7c132a5e40080bd20b5b94d42539f54f86b6d9`, successful pipeline 12644,
-build 54280 and managed deployment 54282. The application image is
-`sha256:1802a2bc26cf53da71dca14da2a614fd9189910ec9cdc8598d405dbd89ca7e80`.
-This adds schema-4 bike-network extraction, admission and metadata capability
-while preserving legacy v3 archive support. A new immutable map archive must
-still finish its real regional build and admission before separate explicit
-registration/promotion. Capability deployment alone does not select new tiles.
-Frontend styling and route edits remain outside this data release.
+The TEST backend pin follows Joyride MR 74, merged revision
+`dc1eb982f57c7ca5d5379f9f443a48a922a50b55`, successful pipeline 12647
+and build 54307. The managed delivery lane is preview job 54309. Its image is
+`sha256:d684f2dcc2ba32b978d1b6dc88fe37bca9e8dae9f99a9b78e461255944c34971`.
+This retains schema-4 bike-network support and pins the measured immutable
+`v4-bike-network` archive, SHA-256
+`5009c8457038541556e91761592c3219b75549e8b4ec535fe6d266da45aaf9f9`.
+The manifest SHA-256 is
+`a0b0f1d67ef61711af90b2e375ae939fee1251b74e9bfb1b86f6aa9e228564c9`.
+The actual archive passed full regional admission and corrected engineering
+diagnostics; all five package files were checksum/readback verified. The
+administrative delivery sequence registers and explicitly promotes the map
+before rolling out the fixed installer. It preserves v3 rollback files,
+legacy archive support and active selection across future pod replacements.
+Luna owns frontend styling; no frontend or live route edit is part of this pin.
 The on-graph `reanchor_endpoints` refinement operation accepts independent
 precise start/finish edge offsets and retained-middle join anchors. It preserves
 frozen decisions, middle geometry, protections and history through the existing
