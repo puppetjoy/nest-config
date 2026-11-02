@@ -72,20 +72,34 @@ def dependency_inputs(install):
                       + [install / 'agent-request-broker'])
 
 
+def prepare_runtime_lease(source):
+    """Initialize lease state as the install owner before root-run consumers."""
+    from pm.environments import selected_venv
+    from hermes_cli.runtime_state import lease_generation, runtime_lock
+    with runtime_lock(source) as held:
+        if not held:
+            raise RuntimeError('Managed runtime lease initialization lock unavailable')
+        release = lease_generation(selected_venv(source))
+        release()
+
+
 def sync(install, *, check=False):
     before = source_state(install)
     source = configure(install)
     import pm
     inputs = dependency_inputs(install)
     if check:
-        return 0 if (verified_receipt(install, before)
-                     and pm.venv_is_current(extras=['all', 'telegram'], plugins=inputs, project_root=source)
-                     and source_state(install) == before) else 1
+        if not (verified_receipt(install, before)
+                and pm.venv_is_current(extras=['all', 'telegram'], plugins=inputs, project_root=source)):
+            return 1
+        prepare_runtime_lease(source)
+        return 0 if source_state(install) == before else 1
     # This public PM operation owns the whole dependency union, including the
     # broker's buildable immutable source member and the external plugin manifests.
     pm.sync_venv(['all', 'telegram'], explicit=True, plugins=inputs, project_root=source)
     if source_state(install) != before:
         raise RuntimeError('Managed source changed during PM sync; wrappers must not activate')
+    prepare_runtime_lease(source)
     receipt = receipt_path(install)
     temporary = receipt.with_suffix('.tmp')
     temporary.write_text(json.dumps(before, sort_keys=True) + '\n')
