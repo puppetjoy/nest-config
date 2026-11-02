@@ -156,6 +156,14 @@ already admitted host-local generation. No historical root is retrofitted here.
 
 ### Explicit local Stage 3 root publication
 
+Storage placement requires an explicit decision: follow the
+[host scratch and durable storage policy](nest-update-tooling.md#storage-placement-and-cleanup-responsibility).
+`/nest/releases` is a deliberate publication interface, not an approved scratch
+allocation. Use `/var/tmp` for incidental experiments and transfer files; ask
+before provisioning new durable publication/staging datasets or using another
+location when local scratch lacks capacity. Remove temporary files and mounts
+after the operation, while preserving required identity and rollback material.
+
 `files/build/publish-stage3-root.py` copies an already completed, offline local
 build tree into a new versioned filesystem, then seals and independently admits
 it. This is an executing storage operation, not a read-only plan. Invoke it only

@@ -1,5 +1,36 @@
 # Nest update tooling
 
+## Storage placement and cleanup responsibility
+
+`/nest` is deliberate durable data storage, **not agent scratch**. Host-side
+experiments, build troubleshooting, temporary transfer/staging files, disk
+images and inspection mounts belong in a bounded task-specific directory under
+`/var/tmp`. Check that filesystem's available capacity before starting. Hermes
+tool-session probes still use the scratch directory prescribed by their runtime.
+
+If more space or another storage allocation is genuinely necessary, ask Joy
+before using `/nest`, another durable location or new ZFS datasets. Approval to
+build, test or run a canary does not implicitly approve a storage namespace.
+Existing explicitly approved release publication, host roots, identity stores
+and final backups remain deliberate data; their documented paths are not a
+license to create incidental staging trees beside them. `/nest/backup` receives
+necessary final recovery artifacts, never temporary working copies.
+
+The executing agent owns cleanup: identify filesystem/NFS backing, exact dataset
+GUIDs, descendants, snapshots, clones, holds, exports, mounted namespaces and
+readers before removing an obsolete experiment. Preserve current and alternate
+boot environments, their origin snapshots, unrelated user data and necessary
+unique identities/rollback in existing approved secure storage. Do not dispose
+of unresolved unique data, force dependent-clone destruction, or move garbage
+into a different persistent namespace. Retire source recreation/export paths
+where they exist, verify exact names and mounts are absent afterward, and remove
+the task's own temporary files and mounts. Report live before/after space without
+adding overlapping ZFS parent and child usage.
+
+Nest host tools are system-provided. Do not download package-manager executable
+bundles or install Chrome/Chromium; preserve Firefox and any active migration
+to the system-tool installation boundary.
+
 This implementation is staged under request ^2045. The completed audit ^2036
 is the design input, not a new authorization to reset or reboot hosts. Source
 publication, installed tooling, and actual boot acceptance are separate facts.
