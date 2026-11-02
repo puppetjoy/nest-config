@@ -29,6 +29,26 @@ elif new not in text:
     raise SystemExit('KasmVNC sccache setup contract changed')
 PY
 
+# KasmVNC 1.5.0's HTTP/failed-handshake exits free the websocket context
+# without ws_socket_free(), leaking SSL/SSL_CTX per HTTPS request (including
+# readiness probes). Release TLS ownership in the common destructor as well.
+# Do not close the socket here: subthread() owns closure on a NULL handshake.
+# Successful websocket teardown already nulls these pointers, so it is safe.
+python3 - "$src_dir/common/network/websocket.c" <<'PY'
+import sys
+from pathlib import Path
+path = Path(sys.argv[1])
+text = path.read_text()
+old = 'void free_ws_ctx(ws_ctx_t *ctx) {\n'
+new = old + '''    if (ctx->ssl) SSL_free(ctx->ssl);
+    if (ctx->ssl_ctx) SSL_CTX_free(ctx->ssl_ctx);
+'''
+if new not in text:
+    if text.count(old) != 1:
+        raise SystemExit('KasmVNC websocket destructor contract changed')
+    path.write_text(text.replace(old, new, 1))
+PY
+
 # KasmVNC v1.4.0 vendor helper scripts fetch a few current upstream CMake
 # projects whose old cmake_minimum_required() values are rejected by modern
 # CMake. Keep the source-build path deterministic by injecting the compatibility
