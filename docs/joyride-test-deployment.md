@@ -2,10 +2,20 @@
 
 ## Private routing engine
 
-The TEST backend pin follows Joyride MR 75, merged revision
-`c152ac23c9ae77766d98590a76c0817669eb4c20`, successful pipeline 12678
-and build 54515. The managed delivery lane is preview job 54517. Its image is
-`sha256:6c512d061b0fec926705dda2661b1fe8e3f17c1c68196b0a70301c2b0a121e06`.
+The TEST backend pin follows Joyride MR 76, merged revision
+`e41b83870051da2a1d56dfdf1a46d3b527f53362`, successful pipeline 12691
+and build 54609. The managed delivery lane is preview job 54611. Its image is
+`sha256:bbdb2d9354fb76836350f076ebdd147685a70aae25663c48cd8f1619193f9b68`.
+Doctrine `skate-v6-corridor-fidelity` adds group-only sustained longitudinal
+strand cost after short connector grace, with conservative directed street
+association and explicit run/gap search state. It retains V5 arterial tiers,
+empty owner approvals, bans, contraflow, solo costs and comfort rules. Explicit
+path endpoints remain authoritative. No matching, graph or saved draft changes.
+The Sargent audit found explicit crossing tags, not missing sidewalk tags;
+wider enclosing V5 anchors already choose carriageway. The general rule has
+separate weighted-search regression coverage and real-preview guards.
+Full actual served r117 validation ran 671 tests with 11 skips, no failures
+or errors; the independent focused run passed all 71 tests with no skips.
 This retains schema-4 bike-network support and pins the measured immutable
 `v4-bike-network` archive, SHA-256
 `5009c8457038541556e91761592c3219b75549e8b4ec535fe6d266da45aaf9f9`.

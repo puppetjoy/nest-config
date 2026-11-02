@@ -5,9 +5,9 @@ service_name: '%{nest::kubernetes::service}'
 fqdn: '%{nest::kubernetes::service}.eyrie'
 runtime_environment: test
 ingress_class: contour-test
-# Retain minor-arterial doctrine MR 75; main pipeline 12678, build 54515 image.json.
-# Head c152ac23c9ae77766d98590a76c0817669eb4c20; no automatic draft rerouting.
-joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:6c512d061b0fec926705dda2661b1fe8e3f17c1c68196b0a70301c2b0a121e06
+# Retain group corridor fidelity MR 76; main pipeline 12691, build 54609 image.json.
+# Head e41b83870051da2a1d56dfdf1a46d3b527f53362; no automatic draft rerouting.
+joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:bbdb2d9354fb76836350f076ebdd147685a70aae25663c48cd8f1619193f9b68
 affinity: {}
 tolerations: []
 resources:
