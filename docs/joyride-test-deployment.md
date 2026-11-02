@@ -2,10 +2,15 @@
 
 ## Private routing engine
 
-Current TEST backend selection follows Joyride MR 72, merged revision
-`43685849fdbc6a14f62f1ad23df37e4c3f2be1fa`, successful pipeline 12639,
-build 54242 and managed deployment 54244. The application image is
-`sha256:aa9093f36374dde46387c39ca84f118dd011ad9440c934d370e080a82c0a5dfb`.
+Current TEST backend selection follows Joyride MR 73, merged revision
+`6c7c132a5e40080bd20b5b94d42539f54f86b6d9`, successful pipeline 12644,
+build 54280 and managed deployment 54282. The application image is
+`sha256:1802a2bc26cf53da71dca14da2a614fd9189910ec9cdc8598d405dbd89ca7e80`.
+This adds schema-4 bike-network extraction, admission and metadata capability
+while preserving legacy v3 archive support. A new immutable map archive must
+still finish its real regional build and admission before separate explicit
+registration/promotion. Capability deployment alone does not select new tiles.
+Frontend styling and route edits remain outside this data release.
 The on-graph `reanchor_endpoints` refinement operation accepts independent
 precise start/finish edge offsets and retained-middle join anchors. It preserves
 frozen decisions, middle geometry, protections and history through the existing
