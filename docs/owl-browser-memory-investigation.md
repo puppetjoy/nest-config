@@ -143,8 +143,18 @@ restart is authorized by the controller-only decision. No rollout has occurred.
   The published immutable candidate was pulled back and inspected:
   `registry.gitlab.joyfullee.me/nest/tools/firefox@sha256:8b64b477220c6d1121f8fdc45dabb3a4d0ff854bbcb9e4a53b5266807aeaa87c`;
   config/image ID `85d5b3ee5e0e2fa9e17feac3feb8e332a0e433ee8db693e4d2d270435154d064`.
-- Extended candidate TLS-WebSocket/framebuffer checks, source CI/merge,
-  authorized live rollout and measured production savings remain open.
+- Extended candidate check passed 3300 successful HTTPS GETs and 33 real
+  TLS-WebSocket/RFB reconnects carrying 138378240 raw framebuffer bytes, with
+  unchanged 1365x768 geometry. The final 300 GETs were paced one second apart
+  across five minutes. Between requests 1000 and 3000, PSS rose just 70 KiB and
+  anonymous residency 56 KiB; anonymous residency did not grow in the final
+  100 requests. Final PSS fell as shared residency changed; that fall is not
+  claimed as an additional private-memory saving.
+- Candidate installed build/smoke script SHA256 values match the committed
+  source. The standalone extended synthetic verifier is retained as this
+  task's downloadable `reproduce-kasmvnc-tls-framebuffer.py` attachment.
+- Source CI/merge, authorized live rollout and measured production savings
+  remain open. KubeCM pin changes are staged, not deployed.
 - The old RDD decoder cause remains unproven; preserve that distinction from
   the independently reproduced VNC leak.
 
