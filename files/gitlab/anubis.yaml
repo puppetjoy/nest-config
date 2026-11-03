@@ -1,0 +1,63 @@
+---
+# Never import the default UA, network or API allow lists.
+bots:
+  # Git smart HTTP is a specific protocol, not a git/curl user-agent bypass.
+  - name: git-discovery
+    action: ALLOW
+    expression:
+      all:
+        - method == "GET"
+        - path.matches("^/.+\\.git/info/refs$")
+        - '"service" in query'
+        - query["service"] in ["git-upload-pack", "git-receive-pack"]
+  - name: git-rpc
+    action: ALLOW
+    expression:
+      all:
+        - method == "POST"
+        - path.matches("^/.+\\.git/git-(upload|receive)-pack$")
+        - '"Content-Type" in headers'
+        - headers["Content-Type"] in ["application/x-git-upload-pack-request", "application/x-git-receive-pack-request"]
+  - name: git-lfs
+    action: ALLOW
+    expression: 'path.matches("^/.+\\.git/info/lfs/(objects/batch|objects/[a-f0-9]{64}(/verify)?|locks(/verify|/[0-9]+/unlock)?)$")'
+  # GitLab rejects nonempty invalid PAT/Bearer credentials with HTTP 401.
+  # Basic, empty Bearer, cookie names and arbitrary Authorization never qualify.
+  - name: token-api
+    action: ALLOW
+    expression:
+      all:
+        - path == "/api/graphql" || path.startsWith("/api/v4/")
+        - '("Private-Token" in headers && headers["Private-Token"].matches("^[A-Za-z0-9_.-]+$")) || ("Authorization" in headers && headers["Authorization"].matches("^Bearer [A-Za-z0-9_.-]+$"))'
+  - name: runner-protocol
+    action: ALLOW
+    expression:
+      any:
+        - 'method == "POST" && path == "/api/v4/jobs/request"'
+        - 'path.matches("^/api/v4/jobs/[0-9]+(/trace|/artifacts)?$")'
+        - 'path.matches("^/api/v4/runners(/[0-9]+)?/(verify|reset_authentication_token)$")'
+  # The registry's token endpoint performs its own scoped authentication.
+  - name: registry-token
+    action: ALLOW
+    expression:
+      all:
+        - method == "GET"
+        - path == "/jwt/auth"
+        - '"service" in query'
+        - query["service"] == "container_registry"
+  # All other requests, including empty/changed UA and anonymous GraphQL.
+  - name: public-web
+    action: CHALLENGE
+    expression: "true"
+    challenge:
+      algorithm: fast
+      difficulty: 4
+metrics:
+  bind: 127.0.0.1:8924
+  network: tcp
+  debug: false
+store:
+  backend: memory
+  parameters: {}
+honeypot:
+  enabled: false

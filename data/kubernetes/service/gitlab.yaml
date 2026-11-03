@@ -16,7 +16,6 @@ values:
     appConfig:
       actionCableAllowedOrigins:
         - "https://%{lookup('external_name')}"
-        - "https://gitlab.james.tl"
         - "https://%{nest::kubernetes::fqdn}"
       defaultTheme: 1 # Indigo
       defaultColorMode: 3 # Auto
