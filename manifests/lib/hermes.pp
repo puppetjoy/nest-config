@@ -134,10 +134,7 @@ define nest::lib::hermes (
   $hermes_managed_config_path       = "${profile_dir}/managed-config.yaml"
   $hermes_config_manager_path       = "${install_dir}/bin/manage-hermes-config"
   $hermes_honcho_config_path        = "${profile_dir}/honcho.json"
-  $honcho_dependency                = $nest::app::hermes::pm_enabled ? {
-    true    => Exec['install_hermes_agent'],
-    default => Python::Pip['hermes-agent-honcho-deps'],
-  }
+  $honcho_dependency                = Exec['install_hermes_agent']
   $hermes_skins_dir                 = "${profile_dir}/skins"
   $hermes_persona_media_dir         = "${profile_dir}/persona-media"
   $kubeconfig_dir                   = "${profile_dir}/kubeconfigs"
@@ -245,36 +242,39 @@ define nest::lib::hermes (
     require => File[$profiles_dir],
   }
 
-  if $nest::app::hermes::pm_enabled {
-    ensure_resource('file', "${profile_dir}/plugins", {
-      'ensure'  => 'directory',
-      'mode'    => '0700',
-      'owner'   => $user,
-      'group'   => $user,
-      'require' => File[$profile_dir],
-    })
+  ensure_resource('file', "${profile_dir}/plugins", {
+    'ensure'  => 'directory',
+    'mode'    => '0700',
+    'owner'   => $user,
+    'group'   => $user,
+    'require' => File[$profile_dir],
+  })
 
-    $extracted_plugins = $pm_browser_enabled ? {
-      true    => ['honcho', 'github-copilot', 'camofox'],
-      default => ['honcho', 'github-copilot'],
-    }
-    $extracted_plugins.each |String $plugin_name| {
-      file { "${profile_dir}/plugins/${plugin_name}":
-        ensure  => link,
-        target  => "${install_dir}/extracted-plugins/${plugin_name}",
-        owner   => $user,
-        group   => $user,
-        require => [File["${profile_dir}/plugins"], Exec['install_hermes_agent']],
-      }
-    }
-
-    file { "${profile_dir}/plugins/nest-agent-request-broker":
+  $extracted_plugins = $pm_browser_enabled ? {
+    true    => ['honcho', 'github-copilot', 'camofox'],
+    default => ['honcho', 'github-copilot'],
+  }
+  $extracted_plugins.each |String $plugin_name| {
+    file { "${profile_dir}/plugins/${plugin_name}":
       ensure  => link,
-      target  => "${install_dir}/agent-request-broker",
+      target  => "${install_dir}/extracted-plugins/${plugin_name}",
       owner   => $user,
       group   => $user,
-      require => [File["${profile_dir}/plugins"], Exec['install_hermes_agent']],
+      require => [File["${profile_dir}/plugins"], Class['nest::app::hermes::extracted_plugins'], Exec['install_hermes_agent']],
     }
+  }
+
+  $broker_ready = $nest::app::hermes::pm_enabled ? {
+    true    => Exec['install_hermes_agent'],
+    default => Exec['install_hermes_agent_request_broker'],
+  }
+
+  file { "${profile_dir}/plugins/nest-agent-request-broker":
+    ensure  => link,
+    target  => "${install_dir}/agent-request-broker",
+    owner   => $user,
+    group   => $user,
+    require => [File["${profile_dir}/plugins"], $broker_ready],
   }
 
   file { "${profile_dir}/SOUL.md":
@@ -683,10 +683,8 @@ define nest::lib::hermes (
     true    => ['camofox'],
     default => [],
   }
-  $broker_plugins = $nest::app::hermes::pm_enabled ? {
-    true    => ['nest-agent-request-broker'],
-    default => [],
-  }
+  # Broker plugin metadata and runtime are installed for both ownership modes.
+  $broker_plugins = ['nest-agent-request-broker']
   $effective_plugins = ($enabled_plugins + $image_gen_plugins + $browser_plugins + $broker_plugins).unique
   $plugins_config = empty($effective_plugins) ? {
     true    => {},

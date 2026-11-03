@@ -22,6 +22,11 @@ def git_files(root, *paths):
     return {os.fsdecode(name) for name in result.split(b'\0') if name}
 
 
+def npm_version(npm_cli):
+    command = ['node', str(npm_cli), '--version'] if npm_cli.suffix == '.js' else [str(npm_cli), '--version']
+    return subprocess.check_output(command, text=True).strip()
+
+
 def snapshot(root, kind, npm_cli):
     workspace = 'ui-tui' if kind == 'tui' else 'web'
     inputs = git_files(root, workspace, 'apps/shared', 'package.json', 'package-lock.json')
@@ -49,7 +54,7 @@ def snapshot(root, kind, npm_cli):
         'schema': 1,
         'guard': digest(Path(__file__)),
         'node': subprocess.check_output(['node', '--version'], text=True).strip(),
-        'npm': subprocess.check_output(['node', str(npm_cli), '--version'], text=True).strip(),
+        'npm': npm_version(npm_cli),
         'inputs': {name: digest(root / name) for name in sorted(inputs)},
         'outputs': {str(path.relative_to(root)): digest(path) for path in outputs},
     }
