@@ -87,13 +87,35 @@ describe 'nest::app::hermes' do
         expect(catalogue).to contain_file(production_timer_path).with_ensure('file')
         expect(catalogue).to contain_file(development_timer_path).with_ensure('file')
       end
-      it { is_expected.to contain_python__pyvenv('/opt/hermes-agent/venv').with_python_path('/usr/bin/python3.13').that_requires('Package[dev-lang/python:3.13]') }
+      it { is_expected.to contain_python__pyvenv('/opt/hermes-agent/venv').with_python_path('/usr/bin/python3.14').that_requires('Package[dev-lang/python:3.14]') }
       it 'checks a new virtualenv through an existing shell before its interpreter exists' do
         guard = catalogue.resource('Exec', 'python_virtualenv_/opt/hermes-agent/venv')[:unless]
 
-        expect(guard).to eq("/bin/sh -c \"test -x /opt/hermes-agent/venv/bin/python && /opt/hermes-agent/venv/bin/python -c 'import sys; assert sys.version_info[:2] == (3, 13)'\"")
+        expect(guard).to eq("/bin/sh -c \"test -x /opt/hermes-agent/venv/bin/python && /opt/hermes-agent/venv/bin/python -c 'import sys; assert sys.version_info[:2] == (3, 14)'\"")
       end
-      it { is_expected.to contain_exec('build_hermes_tui').that_requires('Exec[install_hermes_npm]') }
+      it { is_expected.to contain_exec('build_hermes_tui').that_requires('Class[nodejs]') }
+      it 'installs and checks the accepted lock with system UV instead of re-resolving plain pip extras' do
+        export = catalogue.resource('Exec', 'export_hermes_external_requirements')[:command]
+        install = catalogue.resource('Exec', 'install_hermes_agent')
+        broker = catalogue.resource('Exec', 'install_hermes_agent_request_broker')[:command]
+
+        expect(export).to include('/usr/bin/uv export', '--locked', '--extra all --extra telegram --extra firecrawl', '--no-emit-project')
+        expect(install[:command]).to include('--requirements /opt/hermes-agent/.external-runtime-requirements.txt', '--overrides /opt/hermes-agent/.external-runtime-requirements.txt')
+        expect(install[:command]).to include('editable_mode=compat', 'honcho-ai==2.8.0')
+        expect(install[:unless]).to include('/usr/bin/uv sync', '--locked', '--inexact --check', '--no-python-downloads --no-managed-python')
+        expect(install[:environment]).to include('UV_PROJECT_ENVIRONMENT=/opt/hermes-agent/venv', 'UV_PYTHON_DOWNLOADS=never')
+        expect(install[:require].map(&:to_s)).to include('Exec[export_hermes_external_requirements]')
+        expect(broker).to include('--requirements /opt/hermes-agent/.external-runtime-requirements.txt', '--overrides /opt/hermes-agent/.external-runtime-requirements.txt')
+        expect(catalogue.resource('Python::Pip', 'hermes-agent-telegram-deps')).to be_nil
+        expect(catalogue.resource('Python::Pip', 'hermes-agent-honcho-deps')).to be_nil
+        expect(catalogue.resource('Exec', 'install_hermes_agent_browser')).to be_nil
+        expect(catalogue.resource('Nest::Lib::Package', 'www-client/google-chrome')[:ensure]).to eq('absent')
+      end
+      it 'enables the broker plugin in the external ownership mode' do
+        config = YAML.safe_load(catalogue.resource('File', '/home/joy/.hermes/profiles/talon/managed-config.yaml')[:content], aliases: true)
+
+        expect(config.fetch('plugins').fetch('enabled')).to include('nest-agent-request-broker')
+      end
       it { is_expected.to contain_exec('sync_hermes_source').that_requires('Vcsrepo[/opt/hermes-agent/src]') }
       it { is_expected.to contain_exec('sync_hermes_source').that_comes_before('File[/opt/hermes-agent/src/tools/secure_browser_tool.py]') }
       it { is_expected.to contain_exec('sync_hermes_source').that_comes_before('File[/opt/hermes-agent/src/tools/agent_request_tool.py]') }

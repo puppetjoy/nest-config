@@ -13,16 +13,19 @@ class nest::app::hermes::install {
     true    => Package['dev-lang/python:3.14'],
     default => Python::Pyvenv[$venv_dir],
   }
-  $runtime_ready     = $pm_enabled ? {
-    true    => Exec['install_hermes_agent'],
-    default => $python_ready,
-  }
+  $runtime_ready     = Exec['install_hermes_agent']
   $python_wrapper_ready = $pm_enabled ? {
     true    => Exec['install_hermes_agent'],
-    default => $python_ready,
+    default => Exec['install_hermes_agent_request_broker'],
   }
-  $venv_pip          = "${venv_dir}/bin/pip"
   $source_dir        = "${install_dir}/src"
+  $external_requirements = "${install_dir}/.external-runtime-requirements.txt"
+  $external_environment = [
+    "UV_PROJECT_ENVIRONMENT=${venv_dir}",
+    'UV_PYTHON_DOWNLOADS=never',
+    'UV_NO_MANAGED_PYTHON=1',
+  ]
+  $external_check = "/usr/bin/uv sync --project ${source_dir} --python ${venv_python} --locked --extra all --extra telegram --extra firecrawl --no-default-groups --inexact --check --no-python-downloads --no-managed-python --config-settings editable_mode=compat"
   $broker_git_url    = $nest::app::hermes::broker_git_url
   $broker_git_ref    = $nest::app::hermes::broker_git_ref
   $broker_source_dir = "${install_dir}/agent-request-broker"
@@ -31,22 +34,25 @@ class nest::app::hermes::install {
   $broker_git_revision_file = "${install_dir}/.installed-agent-request-broker-revision"
   $tui_revision_file        = "${install_dir}/.installed-tui-revision"
   $web_revision_file        = "${install_dir}/.installed-web-revision"
+  include 'nodejs'
+
   $npm_dir                 = "${install_dir}/npm"
-  $npm_command             = "/usr/bin/node ${npm_dir}/node_modules/npm/bin/npm-cli.js"
+  $npm_command             = $pm_enabled ? {
+    true    => "/usr/bin/node ${npm_dir}/node_modules/npm/bin/npm-cli.js",
+    default => $nodejs::npm_path,
+  }
+  $npm_cli                 = $pm_enabled ? {
+    true    => "${npm_dir}/node_modules/npm/bin/npm-cli.js",
+    default => $nodejs::npm_path,
+  }
   $build_state             = "${venv_python} ${install_dir}/bin/hermes-build-state"
-  $npm_cli                 = "${npm_dir}/node_modules/npm/bin/npm-cli.js"
-  $python_world_atom       = $pm_enabled ? {
-    true    => 'dev-lang/python:3.14',
-    default => 'dev-lang/python:3.13',
+  $python_world_atom       = 'dev-lang/python:3.14'
+
+  package { 'dev-lang/python:3.14':
+    ensure => installed,
   }
 
-  if $pm_enabled {
-    package { 'dev-lang/python:3.14':
-      ensure => installed,
-    }
-  }
-
-  # Retain the deployed interpreter until coordinated rollout activates PM.
+  # Retain the deployed interpreter until live replacement validation is accepted.
   package { 'dev-lang/python:3.13':
     ensure => installed,
   }
@@ -89,22 +95,22 @@ class nest::app::hermes::install {
   if !$pm_enabled {
     python::pyvenv { $venv_dir:
       ensure      => present,
-      version     => '3.13',
-      python_path => '/usr/bin/python3.13',
+      version     => '3.14',
+      python_path => '/usr/bin/python3.14',
       owner       => 'root',
       group       => 'root',
       require     => [
         Class['python'],
         File[$install_dir],
         Nest::Lib::Package['dev-python/virtualenv'],
-        Package['dev-lang/python:3.13'],
+        Package['dev-lang/python:3.14'],
       ],
     }
 
     # The module otherwise checks only for activate, not its interpreter.
     Exec <| title == "python_virtualenv_${venv_dir}" |> {
       creates => undef,
-      unless  => "/bin/sh -c \"test -x ${venv_python} && ${venv_python} -c 'import sys; assert sys.version_info[:2] == (3, 13)'\"",
+      unless  => "/bin/sh -c \"test -x ${venv_python} && ${venv_python} -c 'import sys; assert sys.version_info[:2] == (3, 14)'\"",
     }
   }
 
@@ -171,6 +177,16 @@ class nest::app::hermes::install {
     default => Exec['verify_hermes_source_ref_pin'],
   }
 
+  if !$pm_enabled {
+    # Use upstream ownership metadata only after the pinned commit has passed
+    # the source-ref ancestry guard, and before installing or launching it.
+    exec { 'write_hermes_external_install_stamp':
+      command => "/usr/bin/python3.14 ${source_dir}/scripts/write_install_stamp.py --output ${source_dir}/install-stamp.json --commit $(/usr/sbin/git -C ${source_dir} rev-parse HEAD) --branch ${git_ref} --update-mechanism external",
+      unless  => "/usr/bin/python3.14 -c 'import json,pathlib,subprocess; p=pathlib.Path(\"${source_dir}/install-stamp.json\"); d=json.loads(p.read_text()); assert d.get(\"updateMechanism\")==\"external\" and d.get(\"commit\")==subprocess.check_output([\"/usr/sbin/git\",\"-C\",\"${source_dir}\",\"rev-parse\",\"HEAD\"],text=True).strip()'",
+      require => [$python_ready, $source_ready],
+    }
+  }
+
   # Order every managed overlay behind the transaction, even for tagged runs.
   # Keep this explicit list in step with hermes-source-sync.py's allowlist.
   $source_overlays = [
@@ -218,18 +234,47 @@ class nest::app::hermes::install {
     require => [File["${install_dir}/bin"], $python_wrapper_ready],
   }
 
+  contain nest::app::hermes::extracted_plugins
+
+  # Both installation owners register the same broker plugin and hooks
+  file { "${broker_source_dir}/plugin.yaml":
+    ensure  => file,
+    content => "name: nest-agent-request-broker\nversion: '1.0'\ndescription: Nest Agent Request broker runtime package\n",
+    mode    => '0644',
+    require => Vcsrepo[$broker_source_dir],
+  }
+
+  file { "${broker_source_dir}/__init__.py":
+    ensure  => file,
+    content => "from agent_request_broker.blocked_writer_plugin import register\n",
+    mode    => '0644',
+    require => Vcsrepo[$broker_source_dir],
+  }
+
+
   if !$pm_enabled {
+    ensure_resource('nest::lib::package', 'dev-python/uv', {
+      'ensure' => 'present',
+    })
+
+    # Export the accepted lock without resolving a replacement dependency graph
+    exec { 'export_hermes_external_requirements':
+      command     => "/usr/bin/uv export --project ${source_dir} --locked --extra all --extra telegram --extra firecrawl --no-default-groups --no-emit-project --no-hashes --no-python-downloads --output-file ${external_requirements} >/dev/null",
+      environment => $external_environment,
+      require     => [$python_ready, $source_ready, Nest::Lib::Package['dev-python/uv']],
+    }
+
     exec { 'install_hermes_agent':
-      # Setuptools' default editable finder runs after PathFinder. A stale
-      # site-packages/hermes_cli directory can therefore win as a namespace
-      # package and hide the source package. Compat mode adds the checkout to
-      # sys.path directly while retaining the required editable install.
-      command     => "${venv_pip} install --upgrade --force-reinstall --config-settings editable_mode=compat --editable ${source_dir} && git -C ${source_dir} rev-parse HEAD > ${git_revision_file}",
-      unless      => "test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"from pathlib import Path; import hermes_cli, hermes_constants; assert Path(hermes_cli.__file__).resolve() == Path('${source_dir}/hermes_cli/__init__.py').resolve(); assert hermes_cli.__version__; assert Path(hermes_constants.__file__).resolve() == Path('${source_dir}/hermes_constants.py').resolve()\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent')\" && ${venv_python} -c \"import importlib.metadata as m; m.version('python-multipart')\" && ${venv_python} -m pip check",
-      environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
+      # Preserve upstream's deliberate overrides and exact transitive lock pins
+      # Compat editable mode keeps the managed checkout ahead of stale packages
+      command     => "/usr/bin/uv pip install --python ${venv_python} --requirements ${external_requirements} --overrides ${external_requirements} --reinstall-package hermes-agent --config-settings editable_mode=compat --editable '${source_dir}[all,telegram,firecrawl]' 'honcho-ai==2.8.0' && ${external_check} && git -C ${source_dir} rev-parse HEAD > ${git_revision_file}",
+      unless      => "test \"$(git -C ${source_dir} rev-parse HEAD)\" = \"$(cat ${git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"from pathlib import Path; import hermes_cli, hermes_constants; assert Path(hermes_cli.__file__).resolve() == Path('${source_dir}/hermes_cli/__init__.py').resolve(); assert hermes_cli.__version__; assert Path(hermes_constants.__file__).resolve() == Path('${source_dir}/hermes_constants.py').resolve()\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent')\" && ${venv_python} -c \"import importlib.metadata as m; m.version('python-multipart'); assert m.version('honcho-ai') == '2.8.0'; import honcho, telegram, firecrawl, ptyprocess, fastapi, uvicorn, googleapiclient\" && ${external_check}",
+      environment => $external_environment,
       path        => ['/bin', '/usr/bin'],
       require     => [
         $python_ready,
+        Exec['write_hermes_external_install_stamp'],
+        Exec['export_hermes_external_requirements'],
         File["${source_dir}/tools/agent_request_tool.py"],
         File["${source_dir}/tools/google_photos_tool.py"],
         File["${source_dir}/tools/google_workspace_tool.py"],
@@ -254,25 +299,6 @@ class nest::app::hermes::install {
       group   => $nest::user,
       mode    => '0755',
       require => File[$install_dir],
-    }
-
-    contain nest::app::hermes::extracted_plugins
-
-    # PM directory members with a build system install their own package. Make
-    # the existing broker source an enabled dependency plugin so later normal
-    # plugin transactions retain it in the same discovered dependency union.
-    file { "${broker_source_dir}/plugin.yaml":
-      ensure  => file,
-      content => "name: nest-agent-request-broker\nversion: '1.0'\ndescription: Nest Agent Request broker runtime package\n",
-      mode    => '0644',
-      require => Vcsrepo[$broker_source_dir],
-    }
-
-    file { "${broker_source_dir}/__init__.py":
-      ensure  => file,
-      content => "from agent_request_broker.blocked_writer_plugin import register\n",
-      mode    => '0644',
-      require => Vcsrepo[$broker_source_dir],
     }
 
     # Minimum safe ancestry, not permanent production HEAD pins. Run before
@@ -334,12 +360,13 @@ class nest::app::hermes::install {
   if !$pm_enabled {
     exec { 'install_hermes_agent_request_broker':
       tag         => 'hermes_agent_request_broker_runtime',
-      command     => "${venv_pip} install --upgrade --force-reinstall ${broker_source_dir} && git -C ${broker_source_dir} rev-parse HEAD > ${broker_git_revision_file}",
-      unless      => "test \"$(git -C ${broker_source_dir} rev-parse HEAD)\" = \"$(cat ${broker_git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent-request-broker'); import agent_request_broker.kanban_backend; import agent_request_broker.gitlab_mr_note_poller\" && ${venv_python} -m pip check",
-      environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
+      command     => "/usr/bin/uv pip install --python ${venv_python} --requirements ${external_requirements} --overrides ${external_requirements} --reinstall-package hermes-agent-request-broker ${broker_source_dir} && ${external_check} && git -C ${broker_source_dir} rev-parse HEAD > ${broker_git_revision_file}",
+      unless      => "test \"$(git -C ${broker_source_dir} rev-parse HEAD)\" = \"$(cat ${broker_git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent-request-broker'); import agent_request_broker.kanban_backend; import agent_request_broker.gitlab_mr_note_poller\" && ${external_check}",
+      environment => $external_environment,
       path        => ['/bin', '/usr/bin'],
       require     => [
         $python_ready,
+        Exec['install_hermes_agent'],
         Vcsrepo[$broker_source_dir],
       ],
     }
@@ -487,23 +514,28 @@ class nest::app::hermes::install {
     require => Vcsrepo[$source_dir],
   }
 
-  include 'nodejs'
+  if $pm_enabled {
+    file { $npm_dir:
+      ensure  => directory,
+      mode    => '0755',
+      owner   => 'root',
+      group   => 'root',
+      require => File[$install_dir],
+    }
 
-  file { $npm_dir:
-    ensure  => directory,
-    mode    => '0755',
-    owner   => 'root',
-    group   => 'root',
-    require => File[$install_dir],
+    # PM generation uses its supported npm; external installs use Gentoo's npm.
+    exec { 'install_hermes_npm':
+      command     => "${nodejs::npm_path} install --prefix ${npm_dir} --no-save --package-lock=false --no-fund --no-audit npm@11.17.0",
+      unless      => "test \"$(${npm_command} --version)\" = 11.17.0",
+      environment => ['HOME=/root'],
+      path        => ['/bin', '/usr/bin'],
+      require     => [Class['nodejs'], File[$npm_dir]],
+    }
   }
 
-  # Keep Hermes' supported npm separate from Gentoo's packaged npm.
-  exec { 'install_hermes_npm':
-    command     => "${nodejs::npm_path} install --prefix ${npm_dir} --no-save --package-lock=false --no-fund --no-audit npm@11.17.0",
-    unless      => "test \"$(${npm_command} --version)\" = 11.17.0",
-    environment => ['HOME=/root'],
-    path        => ['/bin', '/usr/bin'],
-    require     => [Class['nodejs'], File[$npm_dir]],
+  $npm_ready = $pm_enabled ? {
+    true    => Exec['install_hermes_npm'],
+    default => Class['nodejs'],
   }
 
   file { "${install_dir}/bin/hermes-build-state":
@@ -563,7 +595,7 @@ class nest::app::hermes::install {
     timeout     => 600,
     require     => [
       Vcsrepo[$source_dir],
-      Exec['install_hermes_npm'],
+      $npm_ready,
       File["${install_dir}/bin/hermes-build-state"],
       File["${install_dir}/bin/hermes-frontend-build"],
       $runtime_ready,
@@ -628,49 +660,11 @@ class nest::app::hermes::install {
   }
 
   if !$pm_enabled {
-    python::pip { 'hermes-agent-telegram-deps':
-      ensure      => '22.6',
-      pkgname     => 'python-telegram-bot',
-      extras      => ['webhooks'],
-      virtualenv  => $venv_dir,
-      environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
-      require     => Exec['install_hermes_agent'],
-    }
-
-    python::pip { 'hermes-agent-honcho-deps':
-      ensure      => present,
-      pkgname     => 'honcho-ai',
-      virtualenv  => $venv_dir,
-      environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
-      require     => Exec['install_hermes_agent'],
-    }
-
-    exec { 'install_hermes_web_deps':
-      command     => "${venv_pip} install --config-settings editable_mode=compat --editable '${source_dir}[web]'",
-      unless      => "${venv_python} -c \"import fastapi, uvicorn\"",
-      environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
-      require     => Exec['install_hermes_agent'],
-    }
-
-    exec { 'install_hermes_firecrawl_deps':
-      command     => "${venv_pip} install --config-settings editable_mode=compat --editable '${source_dir}[firecrawl]'",
-      unless      => "${venv_python} -c \"import firecrawl\"",
-      environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
-      require     => Exec['install_hermes_agent'],
-    }
-
+    # The service's existing readiness edge verifies the locked PTY dependency
     exec { 'install_hermes_pty_deps':
-      command     => "${venv_pip} install --config-settings editable_mode=compat --editable '${source_dir}[pty]'",
-      unless      => "${venv_python} -c \"import ptyprocess\"",
-      environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
-      require     => Exec['install_hermes_agent'],
-    }
-
-    exec { 'install_hermes_google_deps':
-      command     => "${venv_pip} install --config-settings editable_mode=compat --editable '${source_dir}[google]'",
-      unless      => "${venv_python} -c \"import googleapiclient, google_auth_oauthlib, google_auth_httplib2\"",
-      environment => ['PIP_DISABLE_PIP_VERSION_CHECK=1'],
-      require     => Exec['install_hermes_agent'],
+      command => "${venv_python} -c 'import ptyprocess'",
+      unless  => "${venv_python} -c 'import ptyprocess'",
+      require => Exec['install_hermes_agent'],
     }
   }
 
@@ -680,26 +674,13 @@ class nest::app::hermes::install {
   }
 
   if $facts['profile']['architecture'] == 'amd64' {
-    nest::lib::package_use { 'media-libs/freetype':
-      use => ['harfbuzz'],
-    }
-
+    # Standard and secure browser workflows use the managed Firefox services
     nest::lib::package { 'www-client/google-chrome':
-      ensure  => present,
-      require => Nest::Lib::Package_use['media-libs/freetype'],
+      ensure => absent,
     }
 
     file { '/usr/local/bin/google-chrome':
-      ensure  => link,
-      target  => '/usr/bin/google-chrome-stable',
-      require => Nest::Lib::Package['www-client/google-chrome'],
-    }
-
-    exec { 'install_hermes_agent_browser':
-      command     => "${nodejs::npm_path} install --global agent-browser@latest",
-      unless      => "${nodejs::npm_path} list --global agent-browser --depth=0 >/dev/null 2>&1 && ${nodejs::npm_path} outdated --global agent-browser --depth=0 >/dev/null 2>&1",
-      environment => ['HOME=/root'],
-      require     => Class['nodejs'],
+      ensure => absent,
     }
 
     file { $gws_dir:
@@ -748,7 +729,7 @@ class nest::app::hermes::install {
       require     => [
         Class['nodejs'],
         Vcsrepo[$source_dir],
-        Exec['install_hermes_npm'],
+        $npm_ready,
         Exec['build_hermes_tui'],
         File["${install_dir}/bin/hermes-build-state"],
         File["${install_dir}/bin/hermes-frontend-build"],

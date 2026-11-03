@@ -67,6 +67,16 @@ class BuildStateTest(unittest.TestCase):
     def snapshot(self, kind='tui'):
         return BUILD.snapshot(self.root, kind, Path('npm-cli.js'))
 
+    def test_system_npm_guard_invokes_system_npm_not_node(self):
+        with patch.object(BUILD.subprocess, 'check_output', return_value='11.17.0\n') as check_output:
+            self.assertEqual(BUILD.npm_version(Path('/usr/bin/npm')), '11.17.0')
+        check_output.assert_called_once_with(['/usr/bin/npm', '--version'], text=True)
+
+    def test_pm_npm_guard_invokes_node_with_private_cli(self):
+        with patch.object(BUILD.subprocess, 'check_output', return_value='11.17.0\n') as check_output:
+            self.assertEqual(BUILD.npm_version(Path('/opt/hermes-agent/npm-cli.js')), '11.17.0')
+        check_output.assert_called_once_with(['node', '/opt/hermes-agent/npm-cli.js', '--version'], text=True)
+
     def test_unchanged_second_run_and_timestamps(self):
         for kind in ('tui', 'web'):
             before = self.snapshot(kind)
