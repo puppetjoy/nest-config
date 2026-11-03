@@ -9,13 +9,13 @@ import sqlite3
 import tempfile
 import urllib.request
 
-BUILD = "metro-20261101-cycleway-tags-v1"
+BUILD = "metro-20261103-bicycle-oneway-v1"
 # Source-tag restoration retains topology identity and historical route bindings.
 GRAPH_BUILD = "metro-20261025-v2"
-SIZE = 1231110144
-SHA256 = "eb49aa2387e28d4c0d93dd2be59c9fe2cdcfd75dd13be13b95cfa7be908d333c"
+SIZE = 1231237120
+SHA256 = "12cec09bd9f11d678f6b90580a1451dcce919a6155e40676d14afdd1fe25ff2f"
 URL = ("https://gitlab.joyfullee.me/api/v4/projects/83/packages/generic/"
-       "joyride-routing-private/metro-20261101-cycleway-tags-v1/" + SHA256 + ".sqlite3")
+       "joyride-routing-private/metro-20261103-bicycle-oneway-v1/" + SHA256 + ".sqlite3")
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
