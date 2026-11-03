@@ -54,6 +54,7 @@ plan nest::build::manifest (
     }
 
     if $mirror {
+      run_plan('nest::eyrie::test::infrastructure', action => 'start')
       $eyrie_registry_password = lookup('nest::service::registry::admin_password')
       ['registry.eyrie', 'registry-test.eyrie'].each |$r| {
         run_command("podman login --username=admin --password-stdin ${r} <<< \$registry_password", 'localhost', "Login to ${r}", '_env_vars' => {

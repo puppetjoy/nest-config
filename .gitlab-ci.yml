@@ -267,7 +267,7 @@ stages:
   script:
     - 'export BOLT_PROJECT="$CI_PROJECT_DIR"'
     - 'bolt module install'
-    - 'bolt plan run nest::puppet::deploy backend=kubernetes environment="$CI_COMMIT_BRANCH"'
+    - 'bolt plan run nest::puppet::deploy backend=prod environment="$CI_COMMIT_BRANCH"'
   rules:
     - if: '$NEST_DAG_FIXTURE =~ /[\s\S]/'
       when: never

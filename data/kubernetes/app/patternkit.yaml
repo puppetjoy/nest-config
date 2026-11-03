@@ -16,8 +16,8 @@ atelier_path: /home/joy/projects/patternkit-atelier
 patternkit_revision: 2717eca2ea84863d2cafb179dcc74e097b9829cd
 atelier_revision: 986befb94bc941fcaeebdd3e35d28b96453888bd
 runtime_image: registry.eyrie/nest/stage1/server@sha256:7b2313387f960d0639783ba76a70c582688ee876f2f6abdf23002f889ac312e6
-firefox_image: registry.gitlab.joyfullee.me/nest/tools/firefox@sha256:6aafb20e25d4b6abb20f2dce383255244e15d2bd3731cb64fce10eeb892f27e5
-firefox_image_revision: 'a47b35eb1a0829c9e79d1c21670398a9c5fd2c18'
+firefox_image: registry.gitlab.joyfullee.me/nest/tools/firefox@sha256:8b64b477220c6d1121f8fdc45dabb3a4d0ff854bbcb9e4a53b5266807aeaa87c
+firefox_image_revision: 'bc61fa52bafc5c2b3f72604c1fbe27c109991844'
 storage_class: owl-crypt
 session_storage_size: 4Gi
 workbench_storage_size: 12Gi

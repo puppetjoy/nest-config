@@ -58,3 +58,5 @@ curl -ksSf "https://127.0.0.1:$smoke_port/" >"$HOME/kasmvnc-smoke.html"
 python3 "$(dirname "$0")/smoke-webdriver.py"
 
 firefox --headless --version
+
+python3 "$(dirname "$0")/smoke-kasmvnc-memory.py"
