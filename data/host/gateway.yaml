@@ -2,6 +2,9 @@
 # Gateway's retained staged identity uses the new Puppet CA.
 puppet::agent_server_hostname: 'puppet.eyrie'
 
+# Preserve active connections while reloading the public ingress configuration.
+apache::service_restart: '/bin/systemctl reload apache2.service'
+
 lookup_options:
   nest::service::gitlab_anubis::signing_key:
     convert_to: 'Sensitive'
