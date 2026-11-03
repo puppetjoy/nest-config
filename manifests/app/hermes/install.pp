@@ -185,10 +185,22 @@ class nest::app::hermes::install {
   if !$pm_enabled {
     # Use upstream ownership metadata only after the pinned commit has passed
     # the source-ref ancestry guard, and before installing or launching it.
+    file { "${install_dir}/bin/hermes-install-stamp":
+      ensure  => file,
+      source  => 'puppet:///modules/nest/app/hermes/hermes-install-stamp.py',
+      mode    => '0755',
+      require => File["${install_dir}/bin"],
+    }
+
     exec { 'write_hermes_external_install_stamp':
-      command => "/usr/bin/python3.14 ${source_dir}/scripts/write_install_stamp.py --output ${source_dir}/install-stamp.json --commit $(/usr/sbin/git -C ${source_dir} rev-parse HEAD) --branch ${git_ref} --update-mechanism external",
-      unless  => "/usr/bin/python3.14 -c 'import json,pathlib,subprocess; p=pathlib.Path(\"${source_dir}/install-stamp.json\"); d=json.loads(p.read_text()); assert d.get(\"updateMechanism\")==\"external\" and d.get(\"commit\")==subprocess.check_output([\"/usr/sbin/git\",\"-C\",\"${source_dir}\",\"rev-parse\",\"HEAD\"],text=True).strip()'",
-      require => [$python_ready, $source_ready],
+      command => "/usr/bin/python3.14 ${install_dir}/bin/hermes-install-stamp ${source_dir} ${git_ref}",
+      unless  => "/usr/bin/python3.14 ${install_dir}/bin/hermes-install-stamp ${source_dir} ${git_ref} --check",
+      require => [
+        $python_ready,
+        $source_ready,
+        File["${install_dir}/bin/hermes-install-stamp"],
+        Exec['fetch_hermes_release_metadata'],
+      ],
     }
   }
 
