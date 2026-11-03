@@ -69,6 +69,12 @@ describe 'nest::app::hermes' do
       let(:development_timer_path) { '/home/joy/.config/systemd/user/hermes-agent-request-gitlab-mr-notes-dev.timer' }
 
       it { is_expected.to compile }
+      it 'keeps interactive entry points on the managed installation' do
+        ['hermes', 'hermes-agent', 'hermes-acp'].each do |entry|
+          expect(catalogue).to contain_file("/home/joy/.local/bin/#{entry}").with_ensure('absent').that_requires('File[/usr/local/bin/hermes]')
+          expect(catalogue).to contain_file("/usr/local/bin/#{entry}").with_ensure('file')
+        end
+      end
       it 'quiesces the retired lifecycle writer before installing replacement runtime code' do
         expect(catalogue).to contain_class('nest::app::hermes::retired_lifecycle').that_comes_before('Class[nest::app::hermes::install]')
         expect(catalogue).to contain_nest__lib__user_service('retire-hermes-agent-request-moving-tickets-timer').with(
