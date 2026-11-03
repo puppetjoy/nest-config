@@ -10,6 +10,13 @@ class nest::service::gitlab_anubis (
     ensure => absent,
   }
 
+  file_line { 'gitlab-retired-renewal-webroot':
+    ensure            => absent,
+    path              => '/etc/letsencrypt/renewal/gitlab.joyfullee.me.conf',
+    match             => '^gitlab[.]james[.]tl = ',
+    match_for_absence => true,
+  }
+
   nest::lib::secret { 'gitlab-anubis-signing-key':
     value => $signing_key,
   }
