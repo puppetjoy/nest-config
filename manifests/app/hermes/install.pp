@@ -93,6 +93,11 @@ class nest::app::hermes::install {
   }
 
   if !$pm_enabled {
+    file { "${install_dir}/bin/hermes-pm":
+      ensure  => absent,
+      require => Exec['install_hermes_agent_request_broker'],
+    }
+
     python::pyvenv { $venv_dir:
       ensure      => present,
       version     => '3.14',
