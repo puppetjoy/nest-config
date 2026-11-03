@@ -2,9 +2,16 @@
 # Gateway's retained staged identity uses the new Puppet CA.
 puppet::agent_server_hostname: 'puppet.eyrie'
 
+lookup_options:
+  nest::service::gitlab_anubis::signing_key:
+    convert_to: 'Sensitive'
+
+nest::service::gitlab_anubis::signing_key: 'ENC[PKCS7,MIIBuQYJKoZIhvcNAQcDoIIBqjCCAaYCAQAxggEhMIIBHQIBADAFMAACAQEwDQYJKoZIhvcNAQEBBQAEggEAGplk07LNTHSuYP/73zfs163eMDj7V7d5zhW3CZGRYRjYxcF5qnH5eJy5Eg8cKsPayBh+HbhvYrHaURiKSBPLYWvMPEOnSgKmjePbIk5ZZuCR3/l+/BJgIPqYoP1JEfoCUoGYEvh50pbAKCCrl0i3WXVsRA3StPd3YPJWfJeul0Hi6lUY7lx8KzKgNoqx9s+xvevbrZqS7GxLxWTFeZ1nq2zomN3IjLwCqD95GhX6Lndoqv6dP3lddJpidabexGcdR05miIxE+Id346uCpiWl3U59ClgpqXAU2JB5cAdogBIUzyMJA8IoYz57swEPGrQJSO7iAZ4d3fxkdhB+f0taQDB8BgkqhkiG9w0BBwEwHQYJYIZIAWUDBAEqBBDqPxDmzhURS4OqveS/IFZAgFBpH/PsPQ/8dFk8NPgZRTfnKG640Z8ls2egzxSwZG65sN22m91/ZX0G/yB0zdc0Dj5h/GTO/sIyly464Z2AajnLXmDNd43I60opWfGJmpYTvA==]'
+
 nest::classes:
   - 'nest::service::gateway'
   - 'nest::service::reverse_proxy'
+  - 'nest::service::gitlab_anubis'
 
 nest::packages:
   - 'app-crypt/certbot'
@@ -37,22 +44,27 @@ nest::service::gateway::port_forwards:
 
 nest::service::reverse_proxy::hosts:
   gitlab.joyfullee.me:
-    destination: 'gitlab.eyrie'
+    destination: '127.0.0.1:8923'
     ip: ['45.77.156.204', '2001:19f0:1000:e1dc::204']
-    serveraliases: ['gitlab.james.tl']
-    blocked_user_agents: ['meta-externalagent', 'Chrome/142\.0\.0\.0']
     encoded_slashes: true
-    proxy_ssl: true
+    preserve_host: true
     timeout: 600
     websockets: true
+    extra_params:
+      proxy_add_headers: false
+      request_headers:
+        - 'unset Forwarded'
+        - 'set X-Real-IP expr=%{CONN_REMOTE_ADDR}'
+        - 'set X-Forwarded-For expr=%{CONN_REMOTE_ADDR}'
+        - 'set X-Forwarded-Proto "https"'
+        - 'set X-Forwarded-Host "gitlab.joyfullee.me"'
+        - 'set X-Http-Version expr=%{SERVER_PROTOCOL}'
+        - 'set X-TLS-SNI-Name "%{SSL_TLS_SNI}s"'
+        - 'unset X-Anubis-Rule'
+        - 'unset X-Anubis-Action'
+        - 'unset X-Anubis-Status'
 
   registry.gitlab.joyfullee.me:
-    destination: 'registry.gitlab.eyrie'
-    ip: ['45.77.156.204', '2001:19f0:1000:e1dc::204']
-    proxy_ssl: true
-    timeout: 3600
-
-  registry.gitlab.james.tl:
     destination: 'registry.gitlab.eyrie'
     ip: ['45.77.156.204', '2001:19f0:1000:e1dc::204']
     proxy_ssl: true

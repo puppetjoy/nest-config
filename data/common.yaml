@@ -152,9 +152,7 @@ nest::cnames:
   llama-util.nest: 'kestrel.nest'
 
   # Local services
-  gitlab.james.tl: 'falcon.nest'
   gitlab.joyfullee.me: 'falcon.nest'
-  registry.gitlab.james.tl: 'falcon.nest'
   registry.gitlab.joyfullee.me: 'falcon.nest'
   smtp.nest: 'falcon.nest'
 
