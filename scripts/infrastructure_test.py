@@ -100,8 +100,8 @@ def clean():
     assert status['fsid'] == 'a0a508d3-cffb-4d5f-aeaf-a10f02f4d79c'
     osds = status['osdmap']
     assert osds['num_osds'] == osds['num_up_osds'] == osds['num_in_osds'] == 6
-    assert all(x['state_name'] == 'active+clean' for x in status['pgmap']['pgs_by_state'])
-    assert status['pgmap'].get('degraded_objects', 0) == status['pgmap'].get('unfound_objects', 0) == 0
+    assert status['pgmap']['pgs_by_state'] and all({'active', 'clean'} <= set(x['state_name'].split('+')) <= {'active', 'clean', 'scrubbing', 'deep'} for x in status['pgmap']['pgs_by_state'])
+    assert not any(status['pgmap'].get(k, 0) for k in ('degraded_objects', 'unfound_objects', 'misplaced_objects'))
 
 
 def inventory():
@@ -121,6 +121,180 @@ def inventory():
             assert not j.get('status', {}).get('active', 0), 'An infrastructure test Job is active'
     assert not get('hpa')['items'], 'Review new HPA ownership before parking'
     assert all(x['spec'].get('suspend', False) for x in get('cronjob')['items'] if not x['metadata']['name'].startswith('joyride-')), 'Suspend infrastructure schedules deliberately before parking'
+
+
+CSI_NS = 'rook-ceph'
+CSI_DRIVERS = ('rook-ceph.cephfs.csi.ceph.com', 'rook-ceph.rbd.csi.ceph.com')
+
+
+def csi_quiet_inventory():
+    """Refuse visible attach, mount, provision, delete and resize transitions."""
+    attachments = json.loads(kubectl('get', 'volumeattachment', '-o', 'json', namespace=CSI_NS))['items']
+    attachments = [x for x in attachments if x['spec']['attacher'] in CSI_DRIVERS]
+    assert all(x.get('status', {}).get('attached') and not x['metadata'].get('deletionTimestamp')
+               and not x.get('status', {}).get('attachError') and not x.get('status', {}).get('detachError')
+               for x in attachments), 'A CSI operation is pending or terminating'
+    classes = json.loads(kubectl('get', 'storageclass', '-o', 'json', namespace=CSI_NS))['items']
+    classes = {x['metadata']['name'] for x in classes if x['provisioner'] in CSI_DRIVERS}
+    claims = json.loads(kubectl('get', 'pvc', '-A', '-o', 'json', namespace=CSI_NS))['items']
+    claims = [x for x in claims if x['spec'].get('storageClassName') in classes]
+    assert all(x['status']['phase'] == 'Bound' and not x['metadata'].get('deletionTimestamp')
+               and not x['status'].get('conditions') and x['spec']['resources']['requests']['storage'] == x['status']['capacity']['storage']
+               for x in claims), 'A CSI operation is provisioning, deleting or resizing a claim'
+    identities = {(x['metadata']['namespace'], x['metadata']['name']) for x in claims}
+    pods = json.loads(kubectl('get', 'pod', '-A', '-o', 'json', namespace=CSI_NS))['items']
+    consumers = []
+    for p in pods:
+        if p['status']['phase'] in ('Succeeded', 'Failed'):
+            continue
+        volumes = [(p['metadata']['namespace'], v['persistentVolumeClaim']['claimName'])
+                   for v in p['spec'].get('volumes', []) if 'persistentVolumeClaim' in v]
+        if identities.intersection(volumes):
+            assert p['status']['phase'] == 'Running' and not p['metadata'].get('deletionTimestamp'), 'A CSI operation is mounting or unmounting a consumer'
+            consumers.append([p['metadata']['uid'], p['spec']['nodeName'], sorted(volumes)])
+    return {'attachments': sorted(x['metadata']['uid'] for x in attachments),
+            'claims': sorted([x['metadata']['uid'], x['spec']['volumeName']] for x in claims),
+            'consumers': sorted(consumers)}
+
+
+def production_clean():
+    status = json.loads(kubectl('exec', 'deploy/rook-ceph-tools', '--', 'ceph', 'status', '-f', 'json', namespace=CSI_NS))
+    assert status['fsid'] == '5db61f8c-b0db-450a-b387-fa8718630ae8', 'Unexpected production cluster'
+    osds = status['osdmap']
+    assert osds['num_osds'] > 0 and osds['num_osds'] == osds['num_up_osds'] == osds['num_in_osds'], 'Production OSD unavailable'
+    assert status['pgmap']['pgs_by_state'] and all({'active', 'clean'} <= set(x['state_name'].split('+')) <= {'active', 'clean', 'scrubbing', 'deep'} for x in status['pgmap']['pgs_by_state']), 'Production PG unavailable or recovering'
+    assert not any(status['pgmap'].get(k, 0) for k in ('degraded_objects', 'unfound_objects', 'misplaced_objects')), 'Production replicas not settled'
+
+
+def test_monitor_ips():
+    services = json.loads(kubectl('get', 'service', '-l', 'app=rook-ceph-mon', '-o', 'json'))['items']
+    ips = sorted(x['spec']['clusterIP'] for x in services)
+    assert ips and all('.' in ip for ip in ips), 'Review non-IPv4 or absent TEST monitors'
+    return ips
+
+
+def csi_pods():
+    pods = json.loads(kubectl('get', 'pod', '-o', 'json', namespace=CSI_NS))['items']
+    selected = [p for p in pods if p['metadata'].get('labels', {}).get('app') in
+                [d + suffix for d in CSI_DRIVERS for suffix in ('-nodeplugin', '-ctrlplugin')]]
+    assert selected, 'Shared CSI drivers not found'
+    for p in selected:
+        assert not p['metadata'].get('deletionTimestamp') and all(x.get('ready') for x in p['status'].get('containerStatuses', [])) and p['status'].get('containerStatuses'), 'CSI rollout or unavailable plugin'
+        assert any(x.get('controller') and x['kind'] in ('DaemonSet', 'ReplicaSet') for x in p['metadata'].get('ownerReferences', [])), 'CSI pod has no managed replacement'
+    return selected
+
+
+# Read only process-owned sockets and mount identities, never Ceph credentials
+# or mount options. Kernel CephFS/krbd mounts survive CSI process replacement;
+# userspace fuse/nbd clients explicitly do not qualify for that safety contract.
+CSI_PROBE = r'''
+import json, os, socket, sys
+from pathlib import Path
+cgroup = Path('/proc/self/cgroup').read_text()
+processes = []
+for entry in Path('/proc').iterdir():
+    if entry.name.isdigit():
+        try:
+            if (entry / 'comm').read_text().strip() == 'cephcsi' and (entry / 'cgroup').read_text() == cgroup:
+                processes.append(entry)
+        except (FileNotFoundError, PermissionError):
+            pass
+assert len(processes) == 1, 'Resolve exactly one cephcsi process in this container cgroup'
+proc = processes[0]
+ips = set(json.loads(sys.argv[1]))
+inodes = set()
+for fd in (proc / 'fd').iterdir():
+    try:
+        target = os.readlink(fd)
+    except FileNotFoundError:
+        continue
+    if target.startswith('socket:['):
+        inodes.add(target[8:-1])
+connections = []
+for line in (proc / 'net/tcp').read_text().splitlines()[1:]:
+    fields = line.split()
+    if fields[9] in inodes:
+        addr, port = fields[2].split(':')
+        ip = socket.inet_ntoa(bytes.fromhex(addr)[::-1])
+        if ip in ips:
+            connections.append([ip, int(port, 16), fields[3]])
+mounts = []
+for line in (proc / 'mountinfo').read_text().splitlines():
+    first, last = line.split(' - ')
+    fstype, source = last.split()[:2]
+    assert fstype not in ('fuse.ceph-fuse', 'fuse.rbd-nbd'), 'Userspace Ceph mount requires separate review'
+    if fstype == 'ceph' or source.startswith('/dev/rbd'):
+        mounts.append([first.split()[4], fstype, source])
+for entry in Path('/proc').iterdir():
+    if entry.name.isdigit():
+        try:
+            assert (entry / 'comm').read_text().strip() not in ('ceph-fuse', 'rbd-nbd'), 'Userspace Ceph client requires separate review'
+        except FileNotFoundError:
+            pass
+print(json.dumps({'test_sockets': sorted(connections), 'mounts': sorted(mounts)}))
+'''
+
+
+def csi_probe(pod, ips):
+    containers = [c for c in pod['spec']['containers'] if c['name'] in ('csi-cephfsplugin', 'csi-rbdplugin')]
+    assert len(containers) == 1, 'Unexpected CSI container identity'
+    container = containers[0]
+    assert any(a in ('--type=cephfs', '--type=rbd') for a in container.get('args', [])), 'Unexpected driver type'
+    return json.loads(kubectl('exec', pod['metadata']['name'], '-c', container['name'], '--', 'python3', '-c', CSI_PROBE, json.dumps(ips), namespace=CSI_NS))
+
+
+def drain_csi_clients():
+    """A cache-release barrier before deliberately removing TEST monitors."""
+    before = csi_quiet_inventory()
+    # Allow the configured 150-second CSI request deadline to drain. This is a
+    # storage transition barrier, not a guarantee against future concurrent work;
+    # operators must retain the documented single lifecycle/deployment lane.
+    print('Waiting for the CSI request deadline before releasing TEST clients', flush=True)
+    time.sleep(150)
+    assert csi_quiet_inventory() == before, 'CSI consumer inventory changed during drain'
+    production_clean()
+    ips = test_monitor_ips()
+    pods = csi_pods()
+    observations = {p['metadata']['uid']: csi_probe(p, ips) for p in pods}
+    for pod in pods:
+        if not observations[pod['metadata']['uid']]['test_sockets']:
+            continue
+        assert csi_quiet_inventory() == before, 'CSI consumer inventory changed before eviction'
+        production_clean()
+        name = pod['metadata']['name']
+        uid = pod['metadata']['uid']
+        owner = next(x['uid'] for x in pod['metadata']['ownerReferences'] if x.get('controller'))
+        print('Releasing retained TEST client in ' + name, flush=True)
+        # Eviction honors PDBs, normal termination and exact UID preconditions.
+        # Do not edit driver templates, scale the shared drivers or unmount data.
+        kubectl('create', '--raw=/api/v1/namespaces/' + CSI_NS + '/pods/' + name + '/eviction', '-f', '-',
+                data={'apiVersion': 'policy/v1', 'kind': 'Eviction',
+                      'metadata': {'name': name, 'namespace': CSI_NS},
+                      'deleteOptions': {'preconditions': {'uid': uid}}}, namespace=CSI_NS)
+        end = time.monotonic() + 600
+        while True:
+            current = json.loads(kubectl('get', 'pod', '-o', 'json', namespace=CSI_NS))['items']
+            replacement = [p for p in current if p['metadata']['uid'] not in observations
+                           and any(x.get('controller') and x['uid'] == owner for x in p['metadata'].get('ownerReferences', []))
+                           and (not pod['metadata']['labels']['app'].endswith('-nodeplugin') or p['spec'].get('nodeName') == pod['spec']['nodeName'])
+                           and not p['metadata'].get('deletionTimestamp')
+                           and p['status'].get('containerStatuses') and all(x.get('ready') for x in p['status']['containerStatuses'])]
+            if not any(p['metadata']['uid'] == uid for p in current) and len(replacement) == 1:
+                new = replacement[0]
+                observed = csi_probe(new, ips)
+                assert not observed['test_sockets'], 'Replacement recreated TEST clients; do not park'
+                assert observed['mounts'] == observations[uid]['mounts'], 'Mounted data paths changed'
+                observations[new['metadata']['uid']] = observed
+                break
+            assert time.monotonic() < end, 'CSI replacement did not become ready; do not park'
+            time.sleep(3)
+    assert csi_quiet_inventory() == before, 'CSI consumer inventory changed after drain'
+    for pod in csi_pods():
+        observed = csi_probe(pod, ips)
+        assert not observed['test_sockets'], 'TEST native clients remain; do not park monitors'
+        assert observed['mounts'] == observations[pod['metadata']['uid']]['mounts'], 'Mounted data paths changed'
+    production_clean()
+    print('TEST native CSI clients released; shared drivers and kernel mounts preserved', flush=True)
 
 
 def capture():
@@ -186,6 +360,10 @@ def stop(state):
     for image in images:
         status = json.loads(kubectl('exec', 'deploy/rook-ceph-tools', '--', 'rbd', 'status', 'ceph-test-blockpool/' + image, '--format', 'json'))
         assert not status.get('watchers'), 'A test RBD client remains connected'
+    # Kernel mounts are gone, but CSI's native control clients can outlive them.
+    # Release those clients while monitors are still reachable, not after the
+    # reconnect loop has already started. Keep production drivers/mappings intact.
+    drain_csi_clients()
     if not state['noout']:
         ceph('osd', 'set', 'noout')
     # Rook checks daemon deployment labels in its independent health loops.
