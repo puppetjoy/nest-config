@@ -5,9 +5,9 @@ service_name: '%{nest::kubernetes::service}'
 fqdn: '%{nest::kubernetes::service}.eyrie'
 runtime_environment: test
 ingress_class: contour-test
-# Retain group corridor fidelity MR 76; main pipeline 12691, build 54609 image.json.
-# Head e41b83870051da2a1d56dfdf1a46d3b527f53362; no automatic draft rerouting.
-joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:bbdb2d9354fb76836350f076ebdd147685a70aae25663c48cd8f1619193f9b68
+# Retain accepted TEST repairs including stop-wander; pipeline 12785, preview 55172.
+# Head a874300e3f27acc08952b7e12694782557ef2420; preserve drafts and selected releases.
+joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:df4f461fd37e880aef480c848465a71f6791d2f71672093063e685afbcbd9ad3
 affinity: {}
 tolerations: []
 resources:
