@@ -69,6 +69,12 @@ describe 'nest::app::hermes' do
       let(:development_timer_path) { '/home/joy/.config/systemd/user/hermes-agent-request-gitlab-mr-notes-dev.timer' }
 
       it { is_expected.to compile }
+      it 'keeps interactive entry points on the managed installation' do
+        ['hermes', 'hermes-agent', 'hermes-acp'].each do |entry|
+          expect(catalogue).to contain_file("/home/joy/.local/bin/#{entry}").with_ensure('absent').that_requires('File[/usr/local/bin/hermes]')
+          expect(catalogue).to contain_file("/usr/local/bin/#{entry}").with_ensure('file')
+        end
+      end
       it 'quiesces the retired lifecycle writer before installing replacement runtime code' do
         expect(catalogue).to contain_class('nest::app::hermes::retired_lifecycle').that_comes_before('Class[nest::app::hermes::install]')
         expect(catalogue).to contain_nest__lib__user_service('retire-hermes-agent-request-moving-tickets-timer').with(
@@ -111,10 +117,12 @@ describe 'nest::app::hermes' do
         expect(catalogue.resource('Exec', 'install_hermes_agent_browser')).to be_nil
         expect(catalogue.resource('Nest::Lib::Package', 'www-client/google-chrome')[:ensure]).to eq('absent')
       end
-      it 'enables the broker plugin in the external ownership mode' do
+      it 'enables the broker and selected Firefox browser plugins in the external ownership mode' do
         config = YAML.safe_load(catalogue.resource('File', '/home/joy/.hermes/profiles/talon/managed-config.yaml')[:content], aliases: true)
 
-        expect(config.fetch('plugins').fetch('enabled')).to include('nest-agent-request-broker')
+        expect(config.fetch('plugins').fetch('enabled')).to include('camofox', 'nest-agent-request-broker')
+        expect(config.fetch('platform_toolsets').fetch('telegram')).to include('browser', 'camofox')
+        expect(catalogue).to contain_file('/home/joy/.hermes/profiles/talon/plugins/camofox').with_target('/opt/hermes-agent/extracted-plugins/camofox')
       end
       it { is_expected.to contain_exec('sync_hermes_source').that_requires('Vcsrepo[/opt/hermes-agent/src]') }
       it { is_expected.to contain_exec('sync_hermes_source').that_comes_before('File[/opt/hermes-agent/src/tools/secure_browser_tool.py]') }

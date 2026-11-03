@@ -616,6 +616,28 @@ class nest::app::hermes::install {
     require => Exec['install_hermes_agent'],
   }
 
+  # Production entry points must not be shadowed by a checkout's editable install.
+  ['hermes', 'hermes-agent', 'hermes-acp'].each |String $entry| {
+    file { "/home/${nest::user}/.local/bin/${entry}":
+      ensure  => absent,
+      require => File['/usr/local/bin/hermes'],
+    }
+  }
+
+  file { '/usr/local/bin/hermes-agent':
+    ensure  => file,
+    mode    => '0755',
+    content => "#!/bin/sh\nexec ${venv_python} -m run_agent \"\$@\"\n",
+    require => File['/usr/local/bin/hermes'],
+  }
+
+  file { '/usr/local/bin/hermes-acp':
+    ensure  => file,
+    mode    => '0755',
+    content => "#!/bin/sh\nexec /usr/local/bin/hermes acp \"\$@\"\n",
+    require => File['/usr/local/bin/hermes'],
+  }
+
   file { '/usr/local/bin/hermes-codex-auth-status':
     ensure => absent,
   }

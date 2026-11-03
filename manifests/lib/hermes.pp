@@ -181,8 +181,8 @@ define nest::lib::hermes (
     'web',
   ]
   $base_effective_toolsets           = pick($toolsets, $telegram_toolsets, $default_toolsets)
-  $pm_browser_enabled               = $nest::app::hermes::pm_enabled and 'browser' in $base_effective_toolsets
-  $external_browser_toolsets        = $pm_browser_enabled ? {
+  $camofox_enabled                  = 'browser' in $base_effective_toolsets
+  $external_browser_toolsets        = $camofox_enabled ? {
     true    => ['camofox'],
     default => [],
   }
@@ -250,7 +250,7 @@ define nest::lib::hermes (
     'require' => File[$profile_dir],
   })
 
-  $extracted_plugins = $pm_browser_enabled ? {
+  $extracted_plugins = $camofox_enabled ? {
     true    => ['honcho', 'github-copilot', 'camofox'],
     default => ['honcho', 'github-copilot'],
   }
@@ -679,7 +679,7 @@ define nest::lib::hermes (
     undef   => [],
     default => ["image_gen/${image_gen_provider}"],
   }
-  $browser_plugins = $pm_browser_enabled ? {
+  $browser_plugins = $camofox_enabled ? {
     true    => ['camofox'],
     default => [],
   }
