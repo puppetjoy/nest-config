@@ -54,12 +54,12 @@ nest::service::reverse_proxy::hosts:
       proxy_add_headers: false
       request_headers:
         - 'unset Forwarded'
-        - 'set X-Real-IP expr=%{CONN_REMOTE_ADDR}'
-        - 'set X-Forwarded-For expr=%{CONN_REMOTE_ADDR}'
+        - "set X-Real-IP expr=%{literal('%')}{CONN_REMOTE_ADDR}"
+        - "set X-Forwarded-For expr=%{literal('%')}{CONN_REMOTE_ADDR}"
         - 'set X-Forwarded-Proto "https"'
         - 'set X-Forwarded-Host "gitlab.joyfullee.me"'
-        - 'set X-Http-Version expr=%{SERVER_PROTOCOL}'
-        - 'set X-TLS-SNI-Name "%{SSL_TLS_SNI}s"'
+        - "set X-Http-Version expr=%{literal('%')}{SERVER_PROTOCOL}"
+        - 'set X-TLS-SNI-Name "%{literal(''%'')}{SSL_TLS_SNI}s"'
         - 'unset X-Anubis-Rule'
         - 'unset X-Anubis-Action'
         - 'unset X-Anubis-Status'
