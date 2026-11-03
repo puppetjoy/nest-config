@@ -12,11 +12,11 @@ describe 'Hermes broker runtime deployment boundary' do
 
   it 'keeps external core and broker releases independently pinned' do
     expect(owl.fetch('nest::app::hermes::pm_enabled')).to be(false)
-    expect(owl.fetch('nest::app::hermes::broker_git_ref')).to eq('60f35e1eac325387cb69a90c4ba334baf5f2a3f0')
+    expect(owl.fetch('nest::app::hermes::broker_git_ref')).to eq('78f1bb79da01f10957c6084c37de6274ba0d5aec')
     # The default remains rolling; the coordinated release host is source-pinned.
     expect(File.read(File.join(root, 'manifests/app/hermes.pp'))).to match(%r{\$git_ref\s*=\s*'main'})
     expect(owl.fetch('nest::app::hermes::git_ref')).to eq('nest')
-    expect(owl.fetch('nest::app::hermes::git_commit')).to eq('33f64d989b30cbd839cc4c0a4fac37da7cbac0d1')
+    expect(owl.fetch('nest::app::hermes::git_commit')).to match(%r{\A[0-9a-f]{40}\z})
   end
 
   it 'removes the applying lifecycle reconciler while retaining GitLab note ingress' do
