@@ -8,6 +8,12 @@ parameters:
     default: true
 
 steps:
+  - description: 'Wake and verify infrastructure test dependencies'
+    plan: nest::eyrie::test::infrastructure
+    parameters:
+      action: start
+      enabled: $deploy and $render_to == ''
+
   - description: 'Deploy test kube-prometheus stack'
     plan: 'nest::kubernetes::deploy'
     parameters:

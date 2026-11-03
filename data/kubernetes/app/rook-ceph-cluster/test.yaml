@@ -32,6 +32,11 @@ resources:
 values:
   cephClusterSpec:
     dataDirHostPath: /var/lib/rook-test
+    cephConfig:
+      osd/class:hdd:
+        osd_memory_target: '4294967296' # 4 GiB per test HDD OSD while awake
+      osd/class:ssd:
+        osd_memory_target: '2147483648' # 2 GiB for the small test SSD OSDs
     dashboard:
       prometheusEndpoint: "http://ceph-monitoring-%{nest::kubernetes::namespace}-prometheus:9090"
     mon:

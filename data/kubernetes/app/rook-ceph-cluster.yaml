@@ -220,6 +220,10 @@ values:
     # Additional Ceph configuration options
     # See: https://rook.io/docs/rook/latest/CRDs/Cluster/ceph-cluster-crd/#ceph-config
     cephConfig:
+      # Explicit soft cache targets override Ceph's node-scale POD_MEMORY_LIMIT
+      # fallback without imposing a cgroup cap or restarting resident OSDs.
+      osd/class:hdd:
+        osd_memory_target: '6442450944' # 6 GiB per production HDD OSD
       global:
         # Reduce slow op false positives
         # See: https://docs.ceph.com/en/latest/rados/operations/health-checks/#bluestore-slow-op-alert
