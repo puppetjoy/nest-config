@@ -50,6 +50,46 @@ The helper labels only the named test Ceph CRs and daemon workloads with Rook's
 It remembers whether `noout` was already set and removes only its own flag on
 wake. Prometheus CRs are paused before their workloads stop.
 
+### Shared CSI native-client barrier
+
+Unmounting the last TEST volume does not close CSI's cached native Ceph control
+clients. Ceph 20.2.1's async messenger can busy-loop on immediate socket errors
+when a monitor Service has no endpoints. The Ceph-CSI 3.17.1 release includes RBD
+connection-leak fixes and a newer base image, but the inspected Ceph 20.2.4
+reconnect implementation still treats `EALREADY` as pending. An image upgrade or
+an invented backoff flag is not a demonstrated correction for this scenario.
+
+Before taking monitors offline, `stop` now releases retained TEST control clients:
+
+- Existing external TEST CephFS sessions and RBD watchers must already be gone.
+- Production identity, up/in OSDs and clean replicas are checked separately.
+  Existing capacity/performance/crash warnings are reported, not erased or
+  mistaken for a requirement for literal `HEALTH_OK`.
+- A 150-second quiet barrier matches the deployed CSI request deadline. Claim
+  binding, requested/capacity size, resize conditions, attachment state and
+  mounted-consumer identities must remain stable. Do not run a competing
+  deployment or lifecycle operation; this does not lock other Kubernetes users.
+- Only a shared node/controller pod with process-owned sockets to TEST monitor
+  Service IPs is evicted, one at a time, with its exact UID precondition. Normal
+  termination and PodDisruptionBudgets apply. Its existing DaemonSet/ReplicaSet
+  creates the replacement; driver definitions and cluster mappings never change.
+- Driver process discovery uses the container cgroup, **not PID 1**: RBD node
+  plugins use the host PID namespace. Userspace CephFS/FUSE or RBD/NBD clients
+  refuse this path; the supported data plane is kernel CephFS/krbd.
+- Replacement readiness, absence of retained TEST sockets, unchanged kernel
+  mount paths/sources, PVC/PV identities and production replicas are verified
+  before advancing. A failure leaves the lifecycle incomplete and does not take
+  the monitors offline.
+
+This is a recurring lifecycle cache-release barrier, not a one-time restart or
+an upstream messenger fix. Idle drivers without TEST sockets are not recycled.
+The driver image currently supplies Python 3 for the read-only process probe;
+a missing interpreter or unknown driver shape fails closed. To roll this change
+back, revert the barrier in source and redeploy through the normal Puppet code
+path. Kernel mounts and stored data require no rollback. The old parking behavior
+can reproduce the reconnect spin, so do not use it as a CPU mitigation.
+
+
 Wake restores monitors/tools, OSDs, managers, MDS/RGW and monitoring; verifies
 clean replicas; resumes PostgreSQL and the other databases; then starts
 applications. It checks GitLab, PuppetDB and Grafana HTTPS endpoints as well as
