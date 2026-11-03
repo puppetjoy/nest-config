@@ -15,8 +15,8 @@ RSpec.describe 'OpenVox management boundaries' do
     expect(bolt_template).not_to match(%r{^  (cert|key):})
   end
 
-  it 'deploys both OpenVox environments and expires compiler caches without a legacy backend' do
-    expect(deploy_plan).to match(%r{\$backend\s+= 'kubernetes'})
+  it 'defaults to production while retaining explicit test deployment and compiler cache expiry' do
+    expect(deploy_plan).to match(%r{\$backend\s+= 'prod'})
     expect(deploy_plan).to include("'both'       => ['test', 'prod']", "'all'        => ['test', 'prod']")
     expect(deploy_plan).to include('puppet-admin-api/v1/environment-cache', '--request DELETE')
     expect(deploy_plan).not_to include('/srv/puppet', "'legacy'", 'puppet-server')
@@ -25,7 +25,7 @@ RSpec.describe 'OpenVox management boundaries' do
   it 'uses the ordinary OpenVox code deployment plan from CI' do
     expect(ci.fetch('Deploy environment').fetch('script')).to include(
       'export BOLT_PROJECT="$CI_PROJECT_DIR"',
-      'bolt plan run nest::puppet::deploy backend=kubernetes environment="$CI_COMMIT_BRANCH"',
+      'bolt plan run nest::puppet::deploy backend=prod environment="$CI_COMMIT_BRANCH"',
     )
     expect(ci.fetch('Deploy environment').fetch('needs')).to eq([{ 'job' => 'Deploy image', 'artifacts' => true }])
     expect(ci.fetch('Deploy environment').fetch('resource_group')).to eq('puppet-code-deployment')

@@ -22,9 +22,14 @@ RSpec.describe 'nest::puppet::deploy' do
     FileUtils.remove_entry(plan_modulepath)
   end
 
-  it 'deploys ordinary code to test and production with no compiler candidate' do
+  before :each do
+    allow_plan('nest::eyrie::test::infrastructure').always_return({})
+  end
+
+  it 'deploys ordinary code to production without waking test mirrors' do
     allow_any_command.always_return('stdout' => '')
-    expect_command(deploy_command('test')).be_called_times(1).always_return('stdout' => '')
+    expect_command(deploy_command('test')).not_be_called
+    expect_plan('nest::eyrie::test::infrastructure').not_be_called
     expect_command(deploy_command('default')).be_called_times(1).always_return('stdout' => '')
     expect(run_plan('nest::puppet::deploy', {}).ok?).to be(true)
   end
@@ -48,6 +53,6 @@ RSpec.describe 'nest::puppet::deploy' do
     allow_any_command.always_return('stdout' => '')
     expect_command(deploy_command('test')).error_with('kind' => 'fixture/r10k', 'msg' => 'Deployment failed')
     expect_command(deploy_command('default')).not_be_called
-    expect(run_plan('nest::puppet::deploy', {}).ok?).to be(false)
+    expect(run_plan('nest::puppet::deploy', 'backend' => 'both').ok?).to be(false)
   end
 end

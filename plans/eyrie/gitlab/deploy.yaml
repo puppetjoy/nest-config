@@ -48,6 +48,12 @@ parameters:
     default: ''
 
 steps:
+  - description: 'Wake and verify infrastructure test dependencies'
+    plan: nest::eyrie::test::infrastructure
+    parameters:
+      action: start
+      enabled: $namespace == 'test' and $deploy and $render_to == '' and !$init
+
   - description: 'Deploy resources'
     plan: nest::kubernetes::deploy
     parameters:

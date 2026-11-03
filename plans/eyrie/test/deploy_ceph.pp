@@ -6,6 +6,10 @@ plan nest::eyrie::test::deploy_ceph ( # lint:ignore:deploy_plan_boundary -- exis
   Boolean $deploy    = true,
   String  $render_to = '',
 ) {
+  if $deploy and $render_to == '' {
+    run_plan('nest::eyrie::test::infrastructure', action => 'start')
+  }
+
   run_plan('nest::kubernetes::deploy', {
     'service'   => 'ceph',
     'app'       => 'rook-ceph-cluster',

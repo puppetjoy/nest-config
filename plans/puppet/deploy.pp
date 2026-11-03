@@ -1,6 +1,6 @@
 # Deploy the Puppet control repo to test and production OpenVox
 plan nest::puppet::deploy ( # lint:ignore:deploy_plan_boundary -- code rollout plan, not Kubernetes stack initialization
-  Enum['test', 'prod', 'kubernetes', 'both', 'all'] $backend          = 'kubernetes',
+  Enum['test', 'prod', 'kubernetes', 'both', 'all'] $backend          = 'prod',
   Optional[String[1]]                               $environment      = 'main',
   Boolean                                           $all_environments = false,
 ) {
@@ -40,6 +40,10 @@ plan nest::puppet::deploy ( # lint:ignore:deploy_plan_boundary -- code rollout p
     $namespace   = $openvox['namespace']
     $description = $openvox['description']
     $deployment  = 'deploy/puppet-puppetserver'
+
+    if $namespace == 'test' {
+      run_plan('nest::eyrie::test::infrastructure', action => 'start')
+    }
 
 
     $wait_cmd = [

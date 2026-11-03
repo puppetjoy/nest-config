@@ -35,7 +35,9 @@ puppet::agent_server_hostname: 'puppet.eyrie'
 nest::kernel_cmdline:
   - 'console=ttyS1,115200n8'
   - 'console=tty0'
-  - 'hugepages=18432'
+  # Caracara: 16 GiB, strictly split into two 8 GiB NUMA cells.
+  - 'hugepagesz=2M'
+  - 'hugepages=0:4096,1:4096'
   - 'intel_iommu=on'
   - 'intel_idle.max_cstate=2'
   - 'pci-stub.ids=10de:2882,10de:22be,1912:0014'
