@@ -68,27 +68,27 @@ nest::package_keywords:
   net-libs/nodejs:
     version: '=26.10.0-r2'
     accept_keywords: '~amd64'
-    before: ['Class[portage]', 'Package[net-libs/nodejs]']
+    before: 'Package[net-libs/nodejs]'
   dev-libs/simdjson:
     version: '=4.6.11'
     accept_keywords: '~amd64'
-    before: ['Class[portage]', 'Package[net-libs/nodejs]']
+    before: 'Package[net-libs/nodejs]'
   dev-cpp/ada:
     version: '=4.0.0'
     accept_keywords: '~amd64'
-    before: ['Class[portage]', 'Package[net-libs/nodejs]']
+    before: 'Package[net-libs/nodejs]'
   net-libs/ngtcp2:
     version: '=1.25.0'
     accept_keywords: '~amd64'
-    before: ['Class[portage]', 'Package[net-libs/nodejs]']
+    before: 'Package[net-libs/nodejs]'
   net-libs/nghttp2:
     version: '=1.70.0'
     accept_keywords: '~amd64'
-    before: ['Class[portage]', 'Package[net-libs/nodejs]']
+    before: 'Package[net-libs/nodejs]'
   net-libs/nghttp3:
     version: '=1.18.0'
     accept_keywords: '~amd64'
-    before: ['Class[portage]', 'Package[net-libs/nodejs]']
+    before: 'Package[net-libs/nodejs]'
   # ROCm/HIP 7.2 stack for owl Strix Halo compute.
   dev-build/rocm-cmake: {}
   dev-libs/rocm-comgr: {}
