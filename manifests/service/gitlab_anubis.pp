@@ -2,6 +2,14 @@
 class nest::service::gitlab_anubis (
   Sensitive[String] $signing_key,
 ) {
+  # Retire only dedicated renewal configuration, not certificate/key archives.
+  file { [
+    '/etc/letsencrypt/renewal/gitlab.james.tl.conf',
+    '/etc/letsencrypt/renewal/registry.gitlab.james.tl.conf',
+  ]:
+    ensure => absent,
+  }
+
   nest::lib::secret { 'gitlab-anubis-signing-key':
     value => $signing_key,
   }
