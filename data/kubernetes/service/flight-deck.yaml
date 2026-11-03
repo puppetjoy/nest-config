@@ -4,4 +4,11 @@ service_name: flight-deck
 flight_deck_board: agent-requests
 flight_deck_environment: Production
 flight_deck_ref_name: main
-flight_deck_source_revision: bc56622824df7afb7dfc5c471a231efd01d254aa
+flight_deck_source_revision: 45163d78b2365d2c52ef7553a93c1e7a5e734837
+flight_deck_resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: 2
+    memory: 1Gi
