@@ -13,6 +13,13 @@ flight_deck_source_revision: ''
 flight_deck_board: agent-requests-dev
 flight_deck_environment: Dev
 flight_deck_port: 4173
+flight_deck_resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
 kanban_home_host_path: /home/joy/.hermes/kanban
 hermes_profile_host_path: /home/joy/.hermes/profiles
 agent_request_artifact_host_path: /home/joy/.hermes/agent-request-artifacts
@@ -169,7 +176,7 @@ resources:
                   containerPort: "%{alias('flight_deck_port')}"
               readinessProbe:
                 httpGet:
-                  path: /api/requests
+                  path: /api/health
                   port: http
                 initialDelaySeconds: 5
                 periodSeconds: 15
@@ -181,13 +188,7 @@ resources:
                 initialDelaySeconds: 20
                 periodSeconds: 30
                 timeoutSeconds: 5
-              resources:
-                requests:
-                  cpu: 50m
-                  memory: 128Mi
-                limits:
-                  cpu: 500m
-                  memory: 512Mi
+              resources: "%{alias('flight_deck_resources')}"
               volumeMounts:
                 - name: app-source
                   mountPath: /app
