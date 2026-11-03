@@ -21,6 +21,19 @@ bots:
   - name: git-lfs
     action: ALLOW
     expression: 'path.matches("^/.+\\.git/info/lfs/(objects/batch|objects/[a-f0-9]{64}(/verify)?|locks(/verify|/[0-9]+/unlock)?)$")'
+  - name: git-lfs-transfer
+    action: ALLOW
+    expression:
+      all:
+        - method in ["GET", "PUT"]
+        - 'path.matches("^/.+\\.git/gitlab-lfs/objects/[a-f0-9]{64}(/[0-9]+)?$")'
+  - name: job-token-artifacts
+    action: ALLOW
+    expression:
+      all:
+        - method == "GET"
+        - '"Job-Token" in headers && headers["Job-Token"].matches("^[A-Za-z0-9_.-]+$")'
+        - 'path.matches("^/api/v4/projects/[0-9]+/jobs/([0-9]+/artifacts(/.*)?|artifacts/.+/(download|raw/.+))$")'
   # GitLab rejects nonempty invalid PAT/Bearer credentials with HTTP 401.
   # Basic, empty Bearer, cookie names and arbitrary Authorization never qualify.
   - name: token-api
