@@ -14,6 +14,17 @@ resources:
     spec:
       generateBucketName: "%{nest::kubernetes::main_service}"
       storageClassName: "%{lookup('bucket_storage_class')}"
+      additionalConfig:
+        # Only abandon incomplete transfers; never expire completed images.
+        bucketLifecycle: |
+          {
+            "Rules": [{
+              "ID": "AbortAbandonedRegistryMultipartUploads",
+              "Status": "Enabled",
+              "Prefix": "docker/registry/v2/",
+              "AbortIncompleteMultipartUpload": {"DaysAfterInitiation": 14}
+            }]
+          }
 
   ui-secret:
     apiVersion: v1
