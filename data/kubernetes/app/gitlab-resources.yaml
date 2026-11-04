@@ -215,6 +215,16 @@ resources:
       storageClassName: "%{lookup('bucket_storage_class')}"
       additionalConfig:
         bucketOwner: "%{nest::kubernetes::main_service}"
+        # Only abandon incomplete transfers; never expire completed images.
+        bucketLifecycle: |
+          {
+            "Rules": [{
+              "ID": "AbortAbandonedRegistryMultipartUploads",
+              "Status": "Enabled",
+              "Prefix": "docker/registry/v2/",
+              "AbortIncompleteMultipartUpload": {"DaysAfterInitiation": 14}
+            }]
+          }
 
   uploads-bucket:
     apiVersion: objectbucket.io/v1alpha1
