@@ -376,6 +376,7 @@ class nest::app::hermes::config {
       environment                => $instance_environment,
       agent_request_kanban_board => $agent_request_kanban_board,
       kanban_dispatch_in_gateway => $instance_kanban_dispatch,
+      kanban_wizard              => { enabled => false, boards => [], model => {}, integrations => [] } + pick($config['kanban_wizard'], {}),
       gateway_enabled            => $instance_gateway_enabled,
       honcho_base_url            => $instance_honcho_base_url,
       honcho_workspace           => $instance_honcho_workspace,

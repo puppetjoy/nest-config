@@ -70,6 +70,28 @@ describe 'nest::app::hermes' do
       let(:development_timer_path) { '/home/joy/.config/systemd/user/hermes-agent-request-gitlab-mr-notes-dev.timer' }
 
       it { is_expected.to compile }
+      it 'keeps the Native Wizard disabled with empty routing by default' do
+        config = YAML.safe_load(catalogue.resource('File', '/home/joy/.hermes/profiles/talon/managed-config.yaml')[:content], aliases: true)
+
+        expect(config.fetch('kanban')).to eq('dispatch_in_gateway' => true, 'wizard' => { 'enabled' => false, 'boards' => [], 'model' => {}, 'integrations' => [] })
+      end
+      context 'with an explicit per-instance Wizard route' do
+        let(:wizard) { { 'enabled' => true, 'boards' => ['agent-requests-dev'], 'model' => { 'provider' => 'openai-codex', 'model' => 'fixture-model' }, 'integrations' => ['fixture'] } }
+        let(:params) { super().merge(instances: super()[:instances].merge('talon' => super()[:instances]['talon'].merge('kanban_wizard' => wizard), 'other' => { 'soul_content' => 'other' })) }
+
+        it 'passes routing only to the selected instance without changing dispatch ownership' do
+          config = YAML.safe_load(catalogue.resource('File', '/home/joy/.hermes/profiles/talon/managed-config.yaml')[:content], aliases: true)
+          other = YAML.safe_load(catalogue.resource('File', '/home/joy/.hermes/profiles/other/managed-config.yaml')[:content], aliases: true)
+
+          expect(config.fetch('kanban')).to eq('dispatch_in_gateway' => true, 'wizard' => wizard)
+          expect(other.fetch('kanban').fetch('wizard')).to eq('enabled' => false, 'boards' => [], 'model' => {}, 'integrations' => [])
+        end
+        context 'with a credential in the model route' do
+          let(:wizard) { super().merge('model' => { 'api_key' => 'forbidden-fixture' }) }
+
+          it { is_expected.to compile.and_raise_error(%r{kanban_wizard}) }
+        end
+      end
       it 'keeps interactive entry points on the managed installation' do
         ['hermes', 'hermes-agent', 'hermes-acp'].each do |entry|
           expect(catalogue).to contain_file("/home/joy/.local/bin/#{entry}").with_ensure('absent').that_requires('File[/usr/local/bin/hermes]')
