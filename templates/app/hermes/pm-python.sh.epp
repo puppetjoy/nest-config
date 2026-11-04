@@ -5,5 +5,8 @@ set -eu
 export HERMES_HOME="${HERMES_HOME:-<%= $home_dir %>}"
 exec /usr/bin/python3.14 -I <%= $install_dir %>/bin/hermes-pm python <%= $install_dir %> "$@"
 <% } else { -%>
+export HERMES_INSTALL_ROOT=<%= $install_dir %>/src
+export UV_PYTHON_DOWNLOADS=never
+export UV_PYTHON_PREFERENCE=only-system
 exec <%= $venv_dir %>/bin/python "$@"
 <% } -%>

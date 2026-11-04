@@ -47,5 +47,8 @@ os.environ['PYTHONPATH'] = '<%= $source_dir %>:<%= $broker_source_dir %>/src'
 <% if $pm_enabled { -%>
 os.execv('<%= $install_dir %>/bin/hermes-python', ['<%= $install_dir %>/bin/hermes-python', '-m', 'hermes_cli.main', '--profile', '<%= $profile %>', *sys.argv[1:]])
 <% } else { -%>
+os.environ['HERMES_INSTALL_ROOT'] = '<%= $source_dir %>'
+os.environ['UV_PYTHON_DOWNLOADS'] = 'never'
+os.environ['UV_PYTHON_PREFERENCE'] = 'only-system'
 os.execv('<%= $venv_dir %>/bin/hermes', ['<%= $venv_dir %>/bin/hermes', '--profile', '<%= $profile %>', *sys.argv[1:]])
 <% } -%>

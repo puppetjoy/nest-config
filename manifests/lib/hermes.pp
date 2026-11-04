@@ -642,6 +642,17 @@ define nest::lib::hermes (
     "CURL_CA_BUNDLE=${ca_bundle_file}",
     'SSL_CERT_DIR=/etc/ssl/certs',
   ]
+  # Non-secret host ownership policy belongs in the managed process environment,
+  # not the credential .env. Workers inherit it; terminal children opt in below.
+  $external_owner_environment = $nest::app::hermes::pm_enabled ? {
+    true    => {},
+    default => {
+      'HERMES_INSTALL_ROOT'  => "${install_dir}/src",
+      'UV_PYTHON_DOWNLOADS'  => 'never',
+      'UV_PYTHON_PREFERENCE' => 'only-system',
+    },
+  }
+  $external_owner_env_lines = $external_owner_environment.map |String $key, String $value| { "${key}=${value}" }
   $systemd_env_lines = [
     "HERMES_DASHBOARD_BIND_HOST=${dashboard_bind_host}",
     "HERMES_DASHBOARD_PORT=${dashboard_port}",
@@ -661,6 +672,7 @@ define nest::lib::hermes (
     $kubeconfig_env_lines,
     $extra_env_lines,
     $tls_trust_env_lines,
+    $external_owner_env_lines,
     '',
   ].flatten
 
@@ -714,9 +726,15 @@ define nest::lib::hermes (
     true    => {},
     default => { 'providers' => $providers },
   }
-  $terminal_config = empty($terminal) ? {
+  $managed_terminal = empty($external_owner_environment) ? {
+    true    => $terminal,
+    default => $terminal + {
+      'env_passthrough' => unique(pick($terminal['env_passthrough'], []) + $external_owner_environment.keys),
+    },
+  }
+  $terminal_config = empty($managed_terminal) ? {
     true    => {},
-    default => { 'terminal' => $terminal },
+    default => { 'terminal' => $managed_terminal },
   }
   $browser_camofox_config = $browser_camofox_url ? {
     undef   => {},
