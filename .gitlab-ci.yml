@@ -212,7 +212,7 @@ stages:
         empty'
     - 'bash files/build/publish-image.sh "$EXECUTOR_IMAGE" > "executor-receipts/${CPU}.ref"'
     - 'python3 bin/ci-executor-receipt record "executor-receipts/${CPU}.ref" "executor-receipts/${CPU}.json"'
-    - 'if [ "$EXECUTOR_BOOTSTRAP" = "true" ]; then RETAIN_IMAGE="${CI_REGISTRY_IMAGE}/${CI_COMMIT_REF_SLUG}:bootstrap-${CI_PIPELINE_ID}-${CI_JOB_ID}-${CPU}"; podman tag "$EXECUTOR_IMAGE" "$RETAIN_IMAGE" && podman push "$RETAIN_IMAGE"; fi'
+    - 'if [ "$EXECUTOR_BOOTSTRAP" = "true" ]; then RETAIN_IMAGE="${CI_REGISTRY_IMAGE}/${CI_COMMIT_REF_SLUG}:bootstrap-${CI_PIPELINE_ID}-${CI_JOB_ID}-${CPU}"; podman tag "$EXECUTOR_IMAGE" "$RETAIN_IMAGE" && RETAIN_REF=$(bash files/build/publish-image.sh "$RETAIN_IMAGE") && test "$RETAIN_REF" = "$(<"executor-receipts/${CPU}.ref")"; fi'
     - 'if [ "$EXECUTOR_BOOTSTRAP" != "true" ]; then podman tag "$EXECUTOR_IMAGE" "${CI_REGISTRY_IMAGE}/${CI_COMMIT_REF_SLUG}:${CPU}" && podman push "${CI_REGISTRY_IMAGE}/${CI_COMMIT_REF_SLUG}:${CPU}"; fi'
   artifacts:
     paths: ['executor-receipts/', 'executor-bootstrap/']
