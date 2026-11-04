@@ -143,6 +143,9 @@ values:
   extraVolumes: *extraVolumes
   extraVolumeMounts: *extraVolumeMounts
   gc:
+    # Keep the native maintenance Job template, but suspend scheduled execution
+    # below: Distribution GC must never race writers. GitLab's separate
+    # DB-backed registry uses online GC instead.
     enabled: true
   ingress:
     enabled: true
@@ -215,13 +218,15 @@ patches:
       kind: Deployment
       name: "%{nest::kubernetes::service}"
 
-  10-garbage-collect-ttl:
+  10-garbage-collect-maintenance:
     patch:
       apiVersion: batch/v1
       kind: CronJob
       metadata:
         name: "%{nest::kubernetes::service}-garbage-collect"
       spec:
+        suspend: true
+        concurrencyPolicy: Forbid
         jobTemplate:
           spec:
             ttlSecondsAfterFinished: 172800  # 2 days
