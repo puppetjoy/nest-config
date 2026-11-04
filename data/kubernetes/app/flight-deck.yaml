@@ -160,7 +160,7 @@ resources:
                 - name: FLIGHT_DECK_BASE_URL
                   value: "https://%{nest::kubernetes::fqdn}"
                 - name: HERMES_KANBAN_HOME
-                  value: /hermes/kanban
+                  value: /home/joy/.hermes/kanban
                 - name: HERMES_STATE_DB
                   value: /hermes/profiles/talon/state.db
                 - name: FLIGHT_DECK_PROFILE_HOST_ROOT
@@ -195,7 +195,10 @@ resources:
                   subPath: flight-deck
                   readOnly: true
                 - name: kanban-home
-                  mountPath: /hermes/kanban
+                  # Preserve Native absolute sink paths and filesystem identity.
+                  # Writable mount is required for SQLite WAL/shm coordination;
+                  # the application API and database connections remain read-only.
+                  mountPath: /home/joy/.hermes/kanban
                 - name: hermes-profile
                   mountPath: /hermes/profiles
                   readOnly: true

@@ -61,6 +61,7 @@ define nest::lib::hermes (
   Hash                 $environment                = {},
   String[1]            $agent_request_kanban_board = 'agent-requests',
   Boolean              $kanban_dispatch_in_gateway = true,
+  Nest::Wizard         $kanban_wizard              = { enabled => false, boards => [], model => {}, integrations => [] },
   Optional[String[1]]  $git_user_name              = undef,
   Optional[String[1]]  $git_user_email             = undef,
   Optional[String[1]]  $git_signing_key            = undef,
@@ -953,6 +954,7 @@ define nest::lib::hermes (
     },
     'kanban'           => {
       'dispatch_in_gateway' => $kanban_dispatch_in_gateway,
+      'wizard'              => $kanban_wizard,
     },
     'dashboard'        => {
       # Only the standalone dashboard answers this external URL

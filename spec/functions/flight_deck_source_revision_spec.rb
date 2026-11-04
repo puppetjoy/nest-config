@@ -56,6 +56,7 @@ describe 'nest::kubernetes::flight_deck_source_revision' do
     before(:each) do
       command('git', 'init', '--initial-branch=main', repo)
       File.write(File.join(repo, 'engineering.py'), 'accepted source')
+      ['wizard_chat.py', 'orchestration.py'].each { |name| File.write(File.join(repo, name), "accepted #{name}") }
       command('git', '-C', repo, 'add', '.')
       command('git', '-C', repo, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-m', 'accepted')
       File.write(File.join(repo, 'engineering.py'), 'newer source')
@@ -71,10 +72,21 @@ describe 'nest::kubernetes::flight_deck_source_revision' do
       expect(fetch.fetch('env')).to include('name' => 'FLIGHT_DECK_SOURCE_REVISION', 'value' => "%{lookup('flight_deck_source_revision')}")
     end
 
+    it 'preserves the canonical Native log identity and SQLite WAL mount contract' do
+      container = deployment.fetch('spec').fetch('template').fetch('spec').fetch('containers').first
+
+      expect(container.fetch('env')).to include('name' => 'HERMES_KANBAN_HOME', 'value' => '/home/joy/.hermes/kanban')
+      expect(container.fetch('volumeMounts')).to include('name' => 'kanban-home', 'mountPath' => '/home/joy/.hermes/kanban')
+      expect(container.fetch('volumeMounts')).to include('name' => 'hermes-profile', 'mountPath' => '/hermes/profiles', 'readOnly' => true)
+    end
+
     it 'checks out and records the exact accepted source even when main has advanced' do
       output, status = checkout(accepted)
       expect(status.success?).to be(true), output
       expect(File.read(File.join(scratch, 'work/flight-deck/engineering.py'))).to eq('accepted source')
+      ['wizard_chat.py', 'orchestration.py'].each do |name|
+        expect(File.read(File.join(scratch, 'work/flight-deck', name))).to eq("accepted #{name}")
+      end
       expect(File.read(File.join(scratch, 'work/flight-deck/.flight-deck-source-revision')).strip).to eq(accepted)
       expect(command('git', '-C', File.join(scratch, 'work/flight-deck'), 'rev-parse', 'HEAD')).to eq(accepted)
     end
