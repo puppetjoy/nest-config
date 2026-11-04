@@ -22,7 +22,9 @@ class nest::app::hermes::install {
   $external_requirements = "${install_dir}/.external-runtime-requirements.txt"
   $external_environment = [
     "UV_PROJECT_ENVIRONMENT=${venv_dir}",
+    "HERMES_INSTALL_ROOT=${source_dir}",
     'UV_PYTHON_DOWNLOADS=never',
+    'UV_PYTHON_PREFERENCE=only-system',
     'UV_NO_MANAGED_PYTHON=1',
   ]
   $external_check = "/usr/bin/uv sync --project ${source_dir} --python ${venv_python} --locked --extra all --extra telegram --extra firecrawl --no-default-groups --inexact --check --no-python-downloads --no-managed-python --config-settings editable_mode=compat"

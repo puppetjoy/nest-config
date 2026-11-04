@@ -58,6 +58,7 @@ describe 'nest::app::hermes' do
               'gitlab_enabled' => true,
               'gitlab_token' => 'fixture-token',
               'dashboard_enabled' => true,
+              'terminal' => { 'backend' => 'local', 'env_passthrough' => ['EXAMPLE_TOOLCHAIN'] },
             },
           },
         }
@@ -116,6 +117,23 @@ describe 'nest::app::hermes' do
         expect(catalogue.resource('Python::Pip', 'hermes-agent-honcho-deps')).to be_nil
         expect(catalogue.resource('Exec', 'install_hermes_agent_browser')).to be_nil
         expect(catalogue.resource('Nest::Lib::Package', 'www-client/google-chrome')[:ensure]).to eq('absent')
+      end
+      it 'carries external ownership from managed entry points to engineering terminal children' do
+        policy = ['HERMES_INSTALL_ROOT=/opt/hermes-agent/src', 'UV_PYTHON_DOWNLOADS=never', 'UV_PYTHON_PREFERENCE=only-system']
+        env = catalogue.resource('File', '/home/joy/.hermes/profiles/talon/systemd.env')[:content]
+        config = YAML.safe_load(catalogue.resource('File', '/home/joy/.hermes/profiles/talon/managed-config.yaml')[:content], aliases: true)
+
+        policy.each do |entry|
+          expect(env.lines.map(&:strip)).to include(entry)
+          ['/usr/local/bin/hermes', '/opt/hermes-agent/bin/hermes-python'].each do |path|
+            expect(catalogue.resource('File', path)[:content]).to include("export #{entry}")
+          end
+        end
+        expect(config.fetch('terminal').fetch('env_passthrough')).to include('EXAMPLE_TOOLCHAIN', *policy.map { |entry| entry.split('=').first })
+        expect(config.fetch('terminal').fetch('backend')).to eq('local')
+        profile_wrapper = catalogue.resource('File', '/usr/local/bin/talon')[:content]
+        expect(profile_wrapper).to include("os.environ['HERMES_INSTALL_ROOT'] = '/opt/hermes-agent/src'", "os.environ['UV_PYTHON_DOWNLOADS'] = 'never'",
+                                           "os.environ['UV_PYTHON_PREFERENCE'] = 'only-system'")
       end
       it 'enables the broker and selected Firefox browser plugins in the external ownership mode' do
         config = YAML.safe_load(catalogue.resource('File', '/home/joy/.hermes/profiles/talon/managed-config.yaml')[:content], aliases: true)
@@ -179,6 +197,7 @@ describe 'nest::app::hermes' do
           expect(wrapper).to include('/opt/hermes-agent/bin/hermes-python')
           expect(wrapper).not_to include('/venv/bin/hermes')
           expect(service['ExecStart']).to include('/opt/hermes-agent/bin/hermes-python -m hermes_cli.main')
+          expect(wrapper).not_to include("os.environ['UV_PYTHON_DOWNLOADS']")
         end
 
         it 'retains external plugin dependencies and migrates the selected browser toolset' do

@@ -13,5 +13,8 @@ export SSL_CERT_DIR=/etc/ssl/certs
 <% if $pm_enabled { -%>
 exec <%= $install_dir %>/bin/hermes-python -m hermes_cli.main "$@"
 <% } else { -%>
+export HERMES_INSTALL_ROOT=<%= $install_dir %>/src
+export UV_PYTHON_DOWNLOADS=never
+export UV_PYTHON_PREFERENCE=only-system
 exec <%= $venv_dir %>/bin/hermes "$@"
 <% } -%>
