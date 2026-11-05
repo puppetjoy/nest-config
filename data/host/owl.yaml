@@ -281,7 +281,7 @@ nest::app::hermes::instances:
     kanban_dispatch_in_gateway: true
     kanban_wizard:
       enabled: true
-      boards: ['agent-requests-dev']
+      boards: ['agent-requests-dev', 'agent-requests']
       integrations: ['agent_requests']
       model:
         provider: 'openai-codex'
