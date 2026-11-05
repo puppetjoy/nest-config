@@ -14,6 +14,24 @@ resources:
     parameters:
       fstype: zfs
       poolname: data/crypt/kubernetes
+      shared: 'no'
+    reclaimPolicy: Retain
+    volumeBindingMode: WaitForFirstConsumer
+    allowVolumeExpansion: true
+    allowedTopologies:
+    - matchLabelExpressions:
+      - key: kubernetes.io/hostname
+        values:
+        - falcon
+  downloads-storage:
+    apiVersion: storage.k8s.io/v1
+    kind: StorageClass
+    metadata:
+      name: media-downloads-crypt
+    provisioner: zfs.csi.openebs.io
+    parameters:
+      fstype: zfs
+      poolname: data/crypt/kubernetes
       shared: 'yes'
     reclaimPolicy: Retain
     volumeBindingMode: WaitForFirstConsumer
@@ -114,7 +132,7 @@ resources:
     spec:
       accessModes:
       - ReadWriteOnce
-      storageClassName: media-crypt
+      storageClassName: media-downloads-crypt
       volumeMode: Filesystem
       resources:
         requests:

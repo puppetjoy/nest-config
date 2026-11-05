@@ -14,9 +14,12 @@ Plex has read-only movie/TV mounts. Readiness init checks require the actual
 expected ZFS media datasets, readable/writable mounts and existing app state.
 Do not remove these checks to bootstrap empty application databases.
 
-The `media-crypt` class uses `data/crypt/kubernetes`, filesystem mode, `shared:
-yes`, WaitForFirstConsumer, expansion and Retain. Claims also carry Helm keep
-annotations. The shared downloads claim is RWO, **not RWOP or cross-node RWX**.
+The `media-crypt` config class uses `data/crypt/kubernetes`, filesystem mode,
+`shared: no`, WaitForFirstConsumer, expansion and Retain. The separate
+`media-downloads-crypt` class enables `shared: yes` only for the download claim;
+config claims retain driver-enforced single-pod mounting in addition to
+Recreate rollouts. Claims also carry Helm keep annotations. The shared
+downloads claim is RWO, **not RWOP or cross-node RWX**.
 Its same-node multi-pod operation must pass a simultaneous three-pod test with
 the deployed OpenEBS 2.10.1 driver before any source writer is stopped.
 
