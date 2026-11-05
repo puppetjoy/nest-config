@@ -279,6 +279,15 @@ nest::app::hermes::instances:
           IdentitiesOnly yes
     gateway_enabled: true
     kanban_dispatch_in_gateway: true
+    kanban_wizard:
+      enabled: true
+      boards: ['agent-requests-dev']
+      integrations: ['agent_requests']
+      model:
+        provider: 'openai-codex'
+        model: 'gpt-6.1-sol-900k'
+        base_url: 'https://chatgpt.com/backend-api/codex'
+        api_mode: 'codex_responses'
     dashboard_enabled: true
     dashboard_port: 9119
     dashboard_public_url: 'https://talon.eyrie'
