@@ -378,8 +378,10 @@ class nest::app::hermes::install {
   if !$pm_enabled {
     exec { 'install_hermes_agent_request_broker':
       tag         => 'hermes_agent_request_broker_runtime',
-      command     => "/usr/bin/uv pip install --python ${venv_python} --requirements ${external_requirements} --overrides ${external_requirements} --reinstall-package hermes-agent-request-broker ${broker_source_dir} && ${external_check} && git -C ${broker_source_dir} rev-parse HEAD > ${broker_git_revision_file}",
-      unless      => "test \"$(git -C ${broker_source_dir} rev-parse HEAD)\" = \"$(cat ${broker_git_revision_file} 2>/dev/null)\" && ${venv_python} -c \"import importlib.metadata as m; m.version('hermes-agent-request-broker'); import agent_request_broker.kanban_backend; import agent_request_broker.gitlab_mr_note_poller\" && ${external_check}",
+      # Isolated Native supervisors discard PYTHONPATH. Keep their callback
+      # origins identical to services importing this canonical managed checkout.
+      command     => "/usr/bin/uv pip install --python ${venv_python} --requirements ${external_requirements} --overrides ${external_requirements} --reinstall-package hermes-agent-request-broker --config-settings editable_mode=compat --editable ${broker_source_dir} && ${external_check} && git -C ${broker_source_dir} rev-parse HEAD > ${broker_git_revision_file}",
+      unless      => "test \"$(git -C ${broker_source_dir} rev-parse HEAD)\" = \"$(cat ${broker_git_revision_file} 2>/dev/null)\" && ${venv_python} -I -c \"import importlib.metadata as m; from pathlib import Path; import agent_request_broker as b; assert Path(b.__file__).resolve() == Path('${broker_source_dir}/src/agent_request_broker/__init__.py'); m.version('hermes-agent-request-broker'); import agent_request_broker.kanban_backend; import agent_request_broker.gitlab_mr_note_poller\" && ${external_check}",
       environment => $external_environment,
       path        => ['/bin', '/usr/bin'],
       require     => [

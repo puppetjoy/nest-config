@@ -78,6 +78,14 @@ describe 'Hermes broker runtime deployment boundary' do
     expect(broker_revision_guard).to match(%r{test .*rev-parse HEAD.* = .*cat.*broker_git_revision_file})
   end
 
+  it 'installs one canonical broker origin for isolated Wizard callback verification' do
+    broker_install = install.match(%r{exec \{ 'install_hermes_agent_request_broker':\n(.*?)^    \}}m)[1]
+    expect(broker_install).to include('--config-settings editable_mode=compat --editable ${broker_source_dir}')
+    expect(broker_install).to include('${venv_python} -I -c')
+    expect(broker_install).to include('Path(b.__file__).resolve() == Path')
+    expect(broker_install).to include('${broker_source_dir}/src/agent_request_broker/__init__.py')
+  end
+
   it 'restricts the runtime tag to the broker checkout and install' do
     tagged = install.scan(%r{(?:vcsrepo|exec|file) \{ ([^\n]+):\n(.*?)^  \}}m).select { |_title, body| body.include?('hermes_agent_request_broker_runtime') }
     expect(tagged.map(&:first)).to contain_exactly('$broker_source_dir', "'install_hermes_agent_request_broker'")
