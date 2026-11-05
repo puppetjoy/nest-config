@@ -7,12 +7,8 @@ nest::classes:
   - 'nest::service::kubernetes'
   - 'nest::service::kvm'
   - 'nest::service::libvirt'
-  - 'nest::service::nzbget'
-  - 'nest::service::ombi'
-  - 'nest::service::plex'
-  - 'nest::service::radarr'
+  - 'nest::service::media'
   - 'nest::service::reverse_proxy'
-  - 'nest::service::sonarr'
   - 'nest::tool::bolt::deploy'
 
 nest::dvorak: true
@@ -90,32 +86,6 @@ nest::service::gitlab_runner::instances:
       - '/etc/ssh/ssh_known_hosts:/etc/ssh/ssh_known_hosts:ro'
 
 nest::service::reverse_proxy::hosts:
-  nzbget.nest:
-    destination: '127.0.0.1:6789'
-    ip: '172.22.4.2'
-    ssl: false
-
-  ombi.nest:
-    destination: '127.0.0.1:3579'
-    ip: '172.22.4.2'
-    ssl: false
-
-  plex.nest:
-    destination: '127.0.0.1:32400'
-    ip: '172.22.4.2'
-    ssl: false
-    websockets: true
-
-  radarr.nest:
-    destination: '127.0.0.1:7878'
-    ip: '172.22.4.2'
-    ssl: false
-
-  sonarr.nest:
-    destination: '127.0.0.1:8989'
-    ip: '172.22.4.2'
-    ssl: false
-
   gitlab.joyfullee.me:
     destination: 'gitlab.eyrie'
     ip: '172.22.4.2'

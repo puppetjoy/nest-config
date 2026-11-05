@@ -1,0 +1,10 @@
+{
+  "description": "Back up the five retained Falcon media configuration PVCs using atomic ZFS snapshots",
+  "input_method": "stdin",
+  "parameters": {
+    "volumes": {
+      "description": "Application name to bound PVC volume handle",
+      "type": "Hash[String, String]"
+    }
+  }
+}

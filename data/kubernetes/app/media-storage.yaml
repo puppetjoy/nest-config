@@ -1,0 +1,121 @@
+# Retained Falcon ZFS claims have a lifecycle independent of application pods.
+---
+service_name: media-storage
+resources:
+  backup: {}
+  restore: {}
+  registry_auths: {}
+  storage:
+    apiVersion: storage.k8s.io/v1
+    kind: StorageClass
+    metadata:
+      name: media-crypt
+    provisioner: zfs.csi.openebs.io
+    parameters:
+      fstype: zfs
+      poolname: data/crypt/kubernetes
+      shared: 'yes'
+    reclaimPolicy: Retain
+    volumeBindingMode: WaitForFirstConsumer
+    allowVolumeExpansion: true
+    allowedTopologies:
+    - matchLabelExpressions:
+      - key: kubernetes.io/hostname
+        values:
+        - falcon
+  nzbget-config:
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: nzbget-config
+      namespace: "%{nest::kubernetes::namespace}"
+      annotations:
+        helm.sh/resource-policy: keep
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      storageClassName: media-crypt
+      volumeMode: Filesystem
+      resources:
+        requests:
+          storage: 1Gi
+  ombi-config:
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: ombi-config
+      namespace: "%{nest::kubernetes::namespace}"
+      annotations:
+        helm.sh/resource-policy: keep
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      storageClassName: media-crypt
+      volumeMode: Filesystem
+      resources:
+        requests:
+          storage: 2Gi
+  radarr-config:
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: radarr-config
+      namespace: "%{nest::kubernetes::namespace}"
+      annotations:
+        helm.sh/resource-policy: keep
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      storageClassName: media-crypt
+      volumeMode: Filesystem
+      resources:
+        requests:
+          storage: 8Gi
+  sonarr-config:
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: sonarr-config
+      namespace: "%{nest::kubernetes::namespace}"
+      annotations:
+        helm.sh/resource-policy: keep
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      storageClassName: media-crypt
+      volumeMode: Filesystem
+      resources:
+        requests:
+          storage: 4Gi
+  plex-config:
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: plex-config
+      namespace: "%{nest::kubernetes::namespace}"
+      annotations:
+        helm.sh/resource-policy: keep
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      storageClassName: media-crypt
+      volumeMode: Filesystem
+      resources:
+        requests:
+          storage: 64Gi
+  downloads:
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: downloads
+      namespace: "%{nest::kubernetes::namespace}"
+      annotations:
+        helm.sh/resource-policy: keep
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      storageClassName: media-crypt
+      volumeMode: Filesystem
+      resources:
+        requests:
+          storage: 100Gi

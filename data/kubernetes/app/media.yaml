@@ -1,0 +1,910 @@
+# Falcon-local media workloads; storage is managed by the media-storage release.
+---
+service_name: media
+resources:
+  backup: {}
+  scheduled-backup:
+    apiVersion: batch/v1
+    kind: CronJob
+    metadata:
+      name: media-backup
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      schedule: 31 5 * * *
+      timeZone: America/New_York
+      concurrencyPolicy: Forbid
+      successfulJobsHistoryLimit: 1
+      failedJobsHistoryLimit: 2
+      jobTemplate:
+        spec:
+          activeDeadlineSeconds: 7200
+          ttlSecondsAfterFinished: 21600
+          template:
+            spec:
+              nodeSelector:
+                kubernetes.io/hostname: falcon
+              tolerations:
+              - key: node-role.kubernetes.io/workstation
+                operator: Exists
+                effect: NoSchedule
+              automountServiceAccountToken: false
+              restartPolicy: Never
+              containers:
+              - name: backup
+                image: "%{lookup('config_image')}"
+                command:
+                - bolt
+                - plan
+                - run
+                - nest::eyrie::media::backup
+                env:
+                - name: KUBECONFIG
+                  value: "/kubeconfig"
+                volumeMounts:
+                - name: kubeconfig
+                  mountPath: "/kubeconfig"
+                  readOnly: true
+                - name: ssh-key
+                  mountPath: "/root/.ssh/id_ed25519"
+                  readOnly: true
+                - name: bolt-config
+                  mountPath: "/etc/puppetlabs/bolt"
+                  readOnly: true
+                - name: eyaml
+                  mountPath: "/etc/eyaml"
+                  readOnly: true
+              imagePullSecrets:
+              - name: media-registry-auths
+              volumes:
+              - name: kubeconfig
+                hostPath:
+                  path: "/nest/home/kubeconfigs/eyrie.conf"
+                  type: File
+              - name: ssh-key
+                hostPath:
+                  path: "/root/.ssh/id_ed25519_eyrie"
+                  type: File
+              - name: bolt-config
+                hostPath:
+                  path: "/etc/puppetlabs/bolt"
+                  type: Directory
+              - name: eyaml
+                hostPath:
+                  path: "/etc/eyaml"
+                  type: Directory
+  restore: {}
+  registry_auths: {}
+  nzbget-deployment:
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: nzbget
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      replicas: 1
+      strategy:
+        type: Recreate
+      selector:
+        matchLabels:
+          app.kubernetes.io/name: nzbget
+          app.kubernetes.io/part-of: media
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: nzbget
+            app.kubernetes.io/part-of: media
+        spec:
+          automountServiceAccountToken: false
+          nodeSelector:
+            kubernetes.io/hostname: falcon
+          tolerations:
+          - key: node-role.kubernetes.io/workstation
+            operator: Exists
+            effect: NoSchedule
+          securityContext:
+            supplementalGroups:
+            - 1000
+            - 1001
+          terminationGracePeriodSeconds: 120
+          initContainers:
+          - name: storage-readiness
+            image: registry.eyrie/nest/stage1/server:latest
+            command:
+            - "/bin/sh"
+            - "-ec"
+            - |-
+              set -eu
+              test -s /config/nzbget.conf
+              test -w /config
+              test "$(findmnt -n -o FSTYPE -T /downloads)" = zfs
+              test -w /downloads
+              mountpoint -q /downloads/nzb
+              test "$(findmnt -n -o SOURCE -T /downloads/nzb | cut -d '[' -f1)" = nest/crypt/downloads
+              test -r /downloads/nzb
+              test -w /downloads/nzb
+            securityContext:
+              runAsUser: 1001
+              runAsGroup: 1001
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                - ALL
+            volumeMounts:
+            - name: config
+              mountPath: "/config"
+            - name: trust
+              mountPath: "/etc/ssl/certs/ca-certificates.crt"
+              readOnly: true
+            - name: downloads
+              mountPath: "/downloads"
+            - name: nzb
+              mountPath: "/downloads/nzb"
+              readOnly: false
+          containers:
+          - name: nzbget
+            image: docker.io/linuxserver/nzbget@sha256:1ecf2cbb7ca98d2893682e01d6c30bd4f912c5e217e329e2fdd73af20a0b67dd
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: PUID
+              value: '1001'
+            - name: PGID
+              value: '1001'
+            - name: TZ
+              value: America/New_York
+            ports:
+            - name: http
+              containerPort: 6789
+            volumeMounts:
+            - name: config
+              mountPath: "/config"
+            - name: trust
+              mountPath: "/etc/ssl/certs/ca-certificates.crt"
+              readOnly: true
+            - name: downloads
+              mountPath: "/downloads"
+            - name: nzb
+              mountPath: "/downloads/nzb"
+              readOnly: false
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                memory: 2Gi
+            startupProbe:
+              tcpSocket:
+                port: http
+              periodSeconds: 5
+              failureThreshold: 120
+            readinessProbe:
+              tcpSocket:
+                port: http
+              periodSeconds: 10
+            securityContext:
+              privileged: false
+          volumes:
+          - name: config
+            persistentVolumeClaim:
+              claimName: nzbget-config
+          - name: trust
+            hostPath:
+              path: "/etc/ssl/certs/ca-certificates.crt"
+              type: File
+          - name: downloads
+            persistentVolumeClaim:
+              claimName: downloads
+          - name: nzb
+            hostPath:
+              path: "/nest/downloads/nzbget/watch"
+              type: Directory
+  nzbget-service:
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: nzbget
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      selector:
+        app.kubernetes.io/name: nzbget
+        app.kubernetes.io/part-of: media
+      ports:
+      - name: http
+        port: 6789
+        targetPort: http
+  nzbget-ingress:
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: nzbget
+      namespace: "%{nest::kubernetes::namespace}"
+      annotations:
+        cert-manager.io/cluster-issuer: eyrie-ca
+        ingress.kubernetes.io/force-ssl-redirect: 'true'
+        projectcontour.io/websocket-routes: "/"
+        projectcontour.io/response-timeout: infinity
+    spec:
+      ingressClassName: contour-workstation
+      tls:
+      - hosts:
+        - nzbget.eyrie
+        secretName: nzbget-certs
+      rules:
+      - host: nzbget.eyrie
+        http:
+          paths:
+          - path: "/"
+            pathType: Prefix
+            backend:
+              service:
+                name: nzbget
+                port:
+                  name: http
+  ombi-deployment:
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: ombi
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      replicas: 1
+      strategy:
+        type: Recreate
+      selector:
+        matchLabels:
+          app.kubernetes.io/name: ombi
+          app.kubernetes.io/part-of: media
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: ombi
+            app.kubernetes.io/part-of: media
+        spec:
+          automountServiceAccountToken: false
+          nodeSelector:
+            kubernetes.io/hostname: falcon
+          tolerations:
+          - key: node-role.kubernetes.io/workstation
+            operator: Exists
+            effect: NoSchedule
+          securityContext:
+            supplementalGroups:
+            - 1000
+            - 1001
+          terminationGracePeriodSeconds: 120
+          initContainers:
+          - name: storage-readiness
+            image: registry.eyrie/nest/stage1/server:latest
+            command:
+            - "/bin/sh"
+            - "-ec"
+            - |-
+              set -eu
+              test -s /config/Ombi.db
+              test -w /config
+            securityContext:
+              runAsUser: 1001
+              runAsGroup: 1001
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                - ALL
+            volumeMounts:
+            - name: config
+              mountPath: "/config"
+            - name: trust
+              mountPath: "/etc/ssl/certs/ca-certificates.crt"
+              readOnly: true
+          containers:
+          - name: ombi
+            image: docker.io/linuxserver/ombi@sha256:acefcbde5f9fa09ea39451fc13fcc95aa6a877010b2d92f688a17361ddc14b3b
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: PUID
+              value: '1001'
+            - name: PGID
+              value: '1001'
+            - name: TZ
+              value: America/New_York
+            ports:
+            - name: http
+              containerPort: 3579
+            volumeMounts:
+            - name: config
+              mountPath: "/config"
+            - name: trust
+              mountPath: "/etc/ssl/certs/ca-certificates.crt"
+              readOnly: true
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                memory: 2Gi
+            startupProbe:
+              tcpSocket:
+                port: http
+              periodSeconds: 5
+              failureThreshold: 120
+            readinessProbe:
+              tcpSocket:
+                port: http
+              periodSeconds: 10
+            securityContext:
+              privileged: false
+          volumes:
+          - name: config
+            persistentVolumeClaim:
+              claimName: ombi-config
+          - name: trust
+            hostPath:
+              path: "/etc/ssl/certs/ca-certificates.crt"
+              type: File
+  ombi-service:
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: ombi
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      selector:
+        app.kubernetes.io/name: ombi
+        app.kubernetes.io/part-of: media
+      ports:
+      - name: http
+        port: 3579
+        targetPort: http
+  ombi-ingress:
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: ombi
+      namespace: "%{nest::kubernetes::namespace}"
+      annotations:
+        cert-manager.io/cluster-issuer: eyrie-ca
+        ingress.kubernetes.io/force-ssl-redirect: 'true'
+        projectcontour.io/websocket-routes: "/"
+        projectcontour.io/response-timeout: infinity
+    spec:
+      ingressClassName: contour-workstation
+      tls:
+      - hosts:
+        - ombi.eyrie
+        secretName: ombi-certs
+      rules:
+      - host: ombi.eyrie
+        http:
+          paths:
+          - path: "/"
+            pathType: Prefix
+            backend:
+              service:
+                name: ombi
+                port:
+                  name: http
+  radarr-deployment:
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: radarr
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      replicas: 1
+      strategy:
+        type: Recreate
+      selector:
+        matchLabels:
+          app.kubernetes.io/name: radarr
+          app.kubernetes.io/part-of: media
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: radarr
+            app.kubernetes.io/part-of: media
+        spec:
+          automountServiceAccountToken: false
+          nodeSelector:
+            kubernetes.io/hostname: falcon
+          tolerations:
+          - key: node-role.kubernetes.io/workstation
+            operator: Exists
+            effect: NoSchedule
+          securityContext:
+            supplementalGroups:
+            - 1000
+            - 1001
+          terminationGracePeriodSeconds: 120
+          initContainers:
+          - name: storage-readiness
+            image: registry.eyrie/nest/stage1/server:latest
+            command:
+            - "/bin/sh"
+            - "-ec"
+            - |-
+              set -eu
+              test -s /config/radarr.db
+              test -w /config
+              test "$(findmnt -n -o FSTYPE -T /downloads)" = zfs
+              test -w /downloads
+              mountpoint -q /movies
+              test "$(findmnt -n -o SOURCE -T /movies | cut -d '[' -f1)" = nest/crypt/movies
+              test -r /movies
+              test -w /movies
+            securityContext:
+              runAsUser: 1001
+              runAsGroup: 1001
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                - ALL
+            volumeMounts:
+            - name: config
+              mountPath: "/config"
+            - name: trust
+              mountPath: "/etc/ssl/certs/ca-certificates.crt"
+              readOnly: true
+            - name: downloads
+              mountPath: "/downloads"
+            - name: movies
+              mountPath: "/movies"
+              readOnly: false
+          containers:
+          - name: radarr
+            image: docker.io/linuxserver/radarr@sha256:06ac318ecb95a34c7b229568dcb4271f02cb5007bb189a0dd67a2032864187ca
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: PUID
+              value: '1001'
+            - name: PGID
+              value: '1001'
+            - name: TZ
+              value: America/New_York
+            ports:
+            - name: http
+              containerPort: 7878
+            volumeMounts:
+            - name: config
+              mountPath: "/config"
+            - name: trust
+              mountPath: "/etc/ssl/certs/ca-certificates.crt"
+              readOnly: true
+            - name: downloads
+              mountPath: "/downloads"
+            - name: movies
+              mountPath: "/movies"
+              readOnly: false
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                memory: 2Gi
+            startupProbe:
+              tcpSocket:
+                port: http
+              periodSeconds: 5
+              failureThreshold: 120
+            readinessProbe:
+              tcpSocket:
+                port: http
+              periodSeconds: 10
+            securityContext:
+              privileged: false
+          volumes:
+          - name: config
+            persistentVolumeClaim:
+              claimName: radarr-config
+          - name: trust
+            hostPath:
+              path: "/etc/ssl/certs/ca-certificates.crt"
+              type: File
+          - name: downloads
+            persistentVolumeClaim:
+              claimName: downloads
+          - name: movies
+            hostPath:
+              path: "/nest/movies"
+              type: Directory
+  radarr-service:
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: radarr
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      selector:
+        app.kubernetes.io/name: radarr
+        app.kubernetes.io/part-of: media
+      ports:
+      - name: http
+        port: 7878
+        targetPort: http
+  radarr-ingress:
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: radarr
+      namespace: "%{nest::kubernetes::namespace}"
+      annotations:
+        cert-manager.io/cluster-issuer: eyrie-ca
+        ingress.kubernetes.io/force-ssl-redirect: 'true'
+        projectcontour.io/websocket-routes: "/"
+        projectcontour.io/response-timeout: infinity
+    spec:
+      ingressClassName: contour-workstation
+      tls:
+      - hosts:
+        - radarr.eyrie
+        secretName: radarr-certs
+      rules:
+      - host: radarr.eyrie
+        http:
+          paths:
+          - path: "/"
+            pathType: Prefix
+            backend:
+              service:
+                name: radarr
+                port:
+                  name: http
+  sonarr-deployment:
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: sonarr
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      replicas: 1
+      strategy:
+        type: Recreate
+      selector:
+        matchLabels:
+          app.kubernetes.io/name: sonarr
+          app.kubernetes.io/part-of: media
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: sonarr
+            app.kubernetes.io/part-of: media
+        spec:
+          automountServiceAccountToken: false
+          nodeSelector:
+            kubernetes.io/hostname: falcon
+          tolerations:
+          - key: node-role.kubernetes.io/workstation
+            operator: Exists
+            effect: NoSchedule
+          securityContext:
+            supplementalGroups:
+            - 1000
+            - 1001
+          terminationGracePeriodSeconds: 120
+          initContainers:
+          - name: storage-readiness
+            image: registry.eyrie/nest/stage1/server:latest
+            command:
+            - "/bin/sh"
+            - "-ec"
+            - |-
+              set -eu
+              test -s /config/sonarr.db
+              test -w /config
+              test "$(findmnt -n -o FSTYPE -T /downloads)" = zfs
+              test -w /downloads
+              mountpoint -q /tv
+              test "$(findmnt -n -o SOURCE -T /tv | cut -d '[' -f1)" = nest/crypt/tv
+              test -r /tv
+              test -w /tv
+            securityContext:
+              runAsUser: 1001
+              runAsGroup: 1001
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                - ALL
+            volumeMounts:
+            - name: config
+              mountPath: "/config"
+            - name: trust
+              mountPath: "/etc/ssl/certs/ca-certificates.crt"
+              readOnly: true
+            - name: downloads
+              mountPath: "/downloads"
+            - name: tv
+              mountPath: "/tv"
+              readOnly: false
+          containers:
+          - name: sonarr
+            image: docker.io/linuxserver/sonarr@sha256:301b599737f073a1e695af15a23a024ae6aed818d5d1f9ced15ab41de91480b2
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: PUID
+              value: '1001'
+            - name: PGID
+              value: '1001'
+            - name: TZ
+              value: America/New_York
+            ports:
+            - name: http
+              containerPort: 8989
+            volumeMounts:
+            - name: config
+              mountPath: "/config"
+            - name: trust
+              mountPath: "/etc/ssl/certs/ca-certificates.crt"
+              readOnly: true
+            - name: downloads
+              mountPath: "/downloads"
+            - name: tv
+              mountPath: "/tv"
+              readOnly: false
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                memory: 2Gi
+            startupProbe:
+              tcpSocket:
+                port: http
+              periodSeconds: 5
+              failureThreshold: 120
+            readinessProbe:
+              tcpSocket:
+                port: http
+              periodSeconds: 10
+            securityContext:
+              privileged: false
+          volumes:
+          - name: config
+            persistentVolumeClaim:
+              claimName: sonarr-config
+          - name: trust
+            hostPath:
+              path: "/etc/ssl/certs/ca-certificates.crt"
+              type: File
+          - name: downloads
+            persistentVolumeClaim:
+              claimName: downloads
+          - name: tv
+            hostPath:
+              path: "/nest/tv"
+              type: Directory
+  sonarr-service:
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: sonarr
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      selector:
+        app.kubernetes.io/name: sonarr
+        app.kubernetes.io/part-of: media
+      ports:
+      - name: http
+        port: 8989
+        targetPort: http
+  sonarr-ingress:
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: sonarr
+      namespace: "%{nest::kubernetes::namespace}"
+      annotations:
+        cert-manager.io/cluster-issuer: eyrie-ca
+        ingress.kubernetes.io/force-ssl-redirect: 'true'
+        projectcontour.io/websocket-routes: "/"
+        projectcontour.io/response-timeout: infinity
+    spec:
+      ingressClassName: contour-workstation
+      tls:
+      - hosts:
+        - sonarr.eyrie
+        secretName: sonarr-certs
+      rules:
+      - host: sonarr.eyrie
+        http:
+          paths:
+          - path: "/"
+            pathType: Prefix
+            backend:
+              service:
+                name: sonarr
+                port:
+                  name: http
+  plex-deployment:
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: plex
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      replicas: 1
+      strategy:
+        type: Recreate
+      selector:
+        matchLabels:
+          app.kubernetes.io/name: plex
+          app.kubernetes.io/part-of: media
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: plex
+            app.kubernetes.io/part-of: media
+        spec:
+          automountServiceAccountToken: false
+          nodeSelector:
+            kubernetes.io/hostname: falcon
+          tolerations:
+          - key: node-role.kubernetes.io/workstation
+            operator: Exists
+            effect: NoSchedule
+          securityContext:
+            supplementalGroups:
+            - 1000
+            - 1001
+          terminationGracePeriodSeconds: 120
+          initContainers:
+          - name: storage-readiness
+            image: registry.eyrie/nest/stage1/server:latest
+            command:
+            - "/bin/sh"
+            - "-ec"
+            - |-
+              set -eu
+              test -s '/config/Library/Application Support/Plex Media Server/Preferences.xml'
+              test -w /config
+              mountpoint -q /movies
+              test "$(findmnt -n -o SOURCE -T /movies | cut -d '[' -f1)" = nest/crypt/movies
+              test -r /movies
+              mountpoint -q /tv
+              test "$(findmnt -n -o SOURCE -T /tv | cut -d '[' -f1)" = nest/crypt/tv
+              test -r /tv
+            securityContext:
+              runAsUser: 1001
+              runAsGroup: 1001
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                - ALL
+            volumeMounts:
+            - name: config
+              mountPath: "/config"
+            - name: trust
+              mountPath: "/etc/ssl/certs/ca-certificates.crt"
+              readOnly: true
+            - name: movies
+              mountPath: "/movies"
+              readOnly: true
+            - name: tv
+              mountPath: "/tv"
+              readOnly: true
+          - name: transcode-permissions
+            image: docker.io/plexinc/pms-docker@sha256:01bdf0ad6d53198da4331540c1e73ab65db7a72e961fff97ecb0847d46055c5f
+            command:
+            - "/bin/sh"
+            - "-ec"
+            - chown 1001:1001 /transcode; chmod 0770 /transcode
+            volumeMounts:
+            - name: transcode
+              mountPath: "/transcode"
+            securityContext:
+              runAsUser: 0
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                - ALL
+                add:
+                - CHOWN
+                - FOWNER
+          containers:
+          - name: plex
+            image: docker.io/plexinc/pms-docker@sha256:01bdf0ad6d53198da4331540c1e73ab65db7a72e961fff97ecb0847d46055c5f
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: PLEX_UID
+              value: '1001'
+            - name: PLEX_GID
+              value: '1001'
+            - name: TZ
+              value: America/New_York
+            - name: ADVERTISE_IP
+              value: https://plex.eyrie:443/,http://172.22.4.2:32400/
+            ports:
+            - name: http
+              containerPort: 32400
+            volumeMounts:
+            - name: config
+              mountPath: "/config"
+            - name: trust
+              mountPath: "/etc/ssl/certs/ca-certificates.crt"
+              readOnly: true
+            - name: movies
+              mountPath: "/movies"
+              readOnly: true
+            - name: tv
+              mountPath: "/tv"
+              readOnly: true
+            - name: transcode
+              mountPath: "/transcode"
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                memory: 12Gi
+                squat.ai/intel-arc: '1'
+            startupProbe:
+              tcpSocket:
+                port: http
+              periodSeconds: 5
+              failureThreshold: 120
+            readinessProbe:
+              tcpSocket:
+                port: http
+              periodSeconds: 10
+            securityContext:
+              privileged: false
+          volumes:
+          - name: config
+            persistentVolumeClaim:
+              claimName: plex-config
+          - name: trust
+            hostPath:
+              path: "/etc/ssl/certs/ca-certificates.crt"
+              type: File
+          - name: movies
+            hostPath:
+              path: "/nest/movies"
+              type: Directory
+          - name: tv
+            hostPath:
+              path: "/nest/tv"
+              type: Directory
+          - name: transcode
+            emptyDir:
+              medium: Memory
+              sizeLimit: 8Gi
+          hostNetwork: true
+          dnsPolicy: ClusterFirstWithHostNet
+  plex-service:
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: plex
+      namespace: "%{nest::kubernetes::namespace}"
+    spec:
+      selector:
+        app.kubernetes.io/name: plex
+        app.kubernetes.io/part-of: media
+      ports:
+      - name: http
+        port: 32400
+        targetPort: http
+  plex-ingress:
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: plex
+      namespace: "%{nest::kubernetes::namespace}"
+      annotations:
+        cert-manager.io/cluster-issuer: eyrie-ca
+        ingress.kubernetes.io/force-ssl-redirect: 'true'
+        projectcontour.io/websocket-routes: "/"
+        projectcontour.io/response-timeout: infinity
+    spec:
+      ingressClassName: contour-workstation
+      tls:
+      - hosts:
+        - plex.eyrie
+        secretName: plex-certs
+      rules:
+      - host: plex.eyrie
+        http:
+          paths:
+          - path: "/"
+            pathType: Prefix
+            backend:
+              service:
+                name: plex
+                port:
+                  name: http

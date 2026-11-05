@@ -149,6 +149,11 @@ nest::cnames:
   patternkit.eyrie: 'ingress-compute.eyrie'
   patternkit-workbench.eyrie: 'ingress-compute.eyrie'
   voice-speech.eyrie: 'ingress-compute.eyrie'
+  nzbget.eyrie: 'ingress-workstations.eyrie'
+  ombi.eyrie: 'ingress-workstations.eyrie'
+  radarr.eyrie: 'ingress-workstations.eyrie'
+  sonarr.eyrie: 'ingress-workstations.eyrie'
+  plex.eyrie: 'ingress-workstations.eyrie'
   llama-util.nest: 'kestrel.nest'
 
   # Local services
