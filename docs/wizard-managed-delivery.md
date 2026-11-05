@@ -20,6 +20,19 @@ mounts and the normal Bolt render/deploy/apply sequence. This release does not
 add a cutover controller, scheduler or lifecycle authority. No environment or
 toolchain store is deleted.
 
+## Maintenance observation source advancement
+
+After the initial DEV negative control, Native MR !126 adds the supported
+exact-owner observation ingress needed for a recoverable maintenance park.
+Advance only Native to `df1b7bbaffb7de71db0d2a51b20bb68af616b205` (tested
+source `4d8d17e3bc7b76675edf50e07990d52394ea52e8`, identical tree
+`d22da2fd3d8d5200a480c2ef351dcfdc2b0a1a6c`). Broker, consumer pins,
+DEV-only enablement and the existing Talon route remain unchanged. The new
+observation is opt-in, atomic with a genuine own-run park and not recovery
+permission. Preserve DEV controls ^309 and ^310 and their immutable receipts.
+No historical park may be retrofitted with an observation. The new source
+still requires ordinary managed apply and genuine installed positive acceptance.
+
 ## Acceptance status
 
 Pending: reviewed publication and exact-head CI; managed host apply and installed
