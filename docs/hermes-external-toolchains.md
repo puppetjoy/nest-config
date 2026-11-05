@@ -33,9 +33,11 @@ these values as process-global, not profile credentials, including multiplexed
 worker launches. The canonical test runner must preserve them in its child
 environments. Policy is not stored in credential `.env` files.
 
-The managed dependency installer also retains `UV_NO_MANAGED_PYTHON=1` and its
-explicit system-backed interpreter. Runtime policy does not require that redundant
-knob; `UV_PYTHON_PREFERENCE=only-system` supplies the discovery restriction.
+The managed dependency installer uses the same policy and an explicit
+system-backed interpreter. Do not combine `UV_PYTHON_PREFERENCE=only-system`
+with `UV_NO_MANAGED_PYTHON` or `--no-managed-python`: uv rejects that redundant
+combination before exporting or checking dependencies. The single preference
+already excludes retained managed interpreters; downloads remain forbidden.
 
 ## Normal apply ordering
 

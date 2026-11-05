@@ -131,8 +131,14 @@ describe 'nest::app::hermes' do
         expect(export).to include('/usr/bin/uv export', '--locked', '--extra all --extra telegram --extra firecrawl', '--no-emit-project')
         expect(install[:command]).to include('--requirements /opt/hermes-agent/.external-runtime-requirements.txt', '--overrides /opt/hermes-agent/.external-runtime-requirements.txt')
         expect(install[:command]).to include('editable_mode=compat', 'honcho-ai==2.8.0')
-        expect(install[:unless]).to include('/usr/bin/uv sync', '--locked', '--inexact --check', '--no-python-downloads --no-managed-python')
-        expect(install[:environment]).to include('UV_PROJECT_ENVIRONMENT=/opt/hermes-agent/venv', 'UV_PYTHON_DOWNLOADS=never')
+        expect(install[:unless]).to include('/usr/bin/uv sync', '--locked', '--inexact --check', '--no-python-downloads')
+        expect(install[:unless]).not_to include('--no-managed-python')
+        ['export_hermes_external_requirements', 'install_hermes_agent', 'install_hermes_agent_request_broker'].each do |name|
+          environment = catalogue.resource('Exec', name)[:environment]
+          expect(environment).to include('UV_PYTHON_DOWNLOADS=never', 'UV_PYTHON_PREFERENCE=only-system')
+          expect(environment).not_to include('UV_NO_MANAGED_PYTHON=1')
+        end
+        expect(install[:environment]).to include('UV_PROJECT_ENVIRONMENT=/opt/hermes-agent/venv')
         expect(install[:require].map(&:to_s)).to include('Exec[export_hermes_external_requirements]')
         expect(broker).to include('--requirements /opt/hermes-agent/.external-runtime-requirements.txt', '--overrides /opt/hermes-agent/.external-runtime-requirements.txt')
         expect(catalogue.resource('Python::Pip', 'hermes-agent-telegram-deps')).to be_nil
