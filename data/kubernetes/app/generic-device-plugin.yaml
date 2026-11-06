@@ -14,6 +14,13 @@ values:
               paths:
                 - path: /dev/dri/renderD128
                 - path: /dev/kfd
+        # A separate, single render-only allocation; no AMD /dev/kfd dependency.
+        # PCI-qualified discovery must not advertise Owl's AMD GPU as Intel Arc.
+        - name: intel-arc
+          groups:
+            - paths:
+                - path: /dev/dri/by-path/pci-0000:05:00.0-render
+                  mountPath: /dev/dri/renderD128
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:

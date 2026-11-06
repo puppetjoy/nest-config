@@ -74,7 +74,20 @@ nest::service::reverse_proxy::hosts:
     timeout: 3600
 
   requests.thesatelliteoflove.net:
-    destination: 'ombi.nest'
+    destination: 'ombi.eyrie'
+    proxy_ssl: true
+    websockets: true
+    extra_params:
+      ssl_proxy_verify: require
+      ssl_proxy_check_peer_name: 'on'
+      ssl_proxy_check_peer_expire: 'on'
+      ssl_proxy_ca_cert: '/etc/ssl/certs/ca-certificates.crt'
+      request_headers:
+        - "set X-Real-IP expr=%{literal('%')}{CONN_REMOTE_ADDR}"
+        - "set X-Forwarded-For expr=%{literal('%')}{CONN_REMOTE_ADDR}"
+        - 'set X-Forwarded-Proto "https"'
+        - 'set X-Forwarded-Host "requests.thesatelliteoflove.net"'
+        - 'set X-Forwarded-Port "443"'
     ip: ['45.77.156.204', '2001:19f0:1000:e1dc::204']
     serveraliases: ['requests.heloandnala.net']
 

@@ -1,0 +1,38 @@
+---
+description: 'Deploy Falcon-local media services'
+parameters:
+  deploy:
+    type: Boolean
+    default: true
+    description: 'Run or skip deployment'
+  storage_only:
+    type: Boolean
+    default: false
+    description: 'Provision retained claims without activating application writers'
+  render_to:
+    type: String
+    default: ''
+    description: 'Render without applying; retained storage is saved with a .storage.yaml suffix'
+steps:
+  - name: storage_render_to
+    description: 'Derive the non-applying storage render target'
+    eval: |-
+      $render_to ? { '' => '', default => "${render_to}.storage.yaml" }
+  - plan: nest::kubernetes::deploy
+    description: 'Provision retained media storage'
+    parameters:
+      namespace: media
+      service: media-storage
+      app: media-storage
+      deploy: $deploy
+      init: false
+      render_to: $storage_render_to
+  - plan: nest::kubernetes::deploy
+    description: 'Deploy the media applications'
+    parameters:
+      namespace: media
+      service: media
+      app: media
+      deploy: $deploy and !$storage_only
+      init: false
+      render_to: $render_to
