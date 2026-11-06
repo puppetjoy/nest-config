@@ -4,19 +4,27 @@
 
 Wellsburg enables the Xe module as a platform capability. It does not force
 experimental probing of every Intel PCI device. Falcon's host kernel command
-line selects its Arc A750 (`8086:56a1`) explicitly:
+line selects the working i915 media path for its Arc A750 (`8086:56a1`):
 
 ```text
-i915.force_probe=!56a1 xe.force_probe=56a1
+i915.force_probe=56a1 xe.force_probe=!56a1
 ```
 
-Both parameters are required: Falcon's i915 driver is built in and can bind the
-Arc before the Xe module loads. Enabling `CONFIG_DRM_XE=m`, or setting its
-force-probe default, does not displace an already-bound i915 device. These
-command-line parameters override the compiled defaults, including the wildcard
-in the currently installed kernel. A future Wellsburg kernel build uses an
+Explicitly excluding this device from Xe also overrides the wildcard compiled
+into the currently installed kernel. A future Wellsburg kernel build uses an
 empty default rather than a platform-wide experimental wildcard. A kernel
 recompile is not required to apply the host's explicit boot selection.
+
+The attempted Xe selection used the inverse pair,
+`i915.force_probe=!56a1 xe.force_probe=56a1`, because built-in i915 otherwise
+claims the Arc before modular Xe. Actual Xe binding succeeded on kernel
+6.18.56, but did not pass media acceptance: identical iHD userspace raised
+SIGBUS during state-heap initialization, Firefox decoded in software, and a
+Plex hardware-transcode attempt crashed its server. Retain i915 until a
+reviewed Xe remedy passes those real workloads. Restricted CPU-visible BAR
+mapping is a supported hypothesis, not a proven root cause or tested fix;
+see upstream intel/media-driver issue #1927. Do not change BIOS/PCI topology
+as an implicit workaround.
 
 Keep the existing IOMMU, CPU isolation and `pci-stub.ids` configuration. The
 NVIDIA GPU, its audio function and the guest USB controller remain assigned to
@@ -68,7 +76,7 @@ stop; never lower `min_size`, disable durability or delete storage to pass a
 gate. A hung flush or unknown write state forbids the reset.
 
 After return, require a changed boot ID, the selected BE/kernel and actual
-`0000:05:00.0/driver -> xe`, matching DRM render-device identity, firmware
+`0000:05:00.0/driver -> i915`, matching DRM render-device identity, firmware
 initialization and real host/browser/Plex accelerated workloads. Check guests,
 Kubernetes volumes, Ceph, GitLab/Runner, media/public Ombi, networking and system
 and user units. Physical audiovisual quality remains unverified unless someone
