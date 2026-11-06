@@ -37,9 +37,9 @@ nest::kernel_cmdline:
   - 'intel_iommu=on'
   - 'intel_idle.max_cstate=2'
   - 'pci-stub.ids=10de:2882,10de:22be,1912:0014'
-  # Arc A750: exclude the built-in i915 driver before the Xe module probes.
-  - 'i915.force_probe=!56a1'
-  - 'xe.force_probe=56a1'
+  # Arc A750: retain the working i915 media path; Xe fails iHD initialization.
+  - 'i915.force_probe=56a1'
+  - 'xe.force_probe=!56a1'
 
 nest::kernel_config:
   CONFIG_CPU_FREQ_DEFAULT_GOV_PERFORMANCE: y
