@@ -89,7 +89,6 @@ nest::service::reverse_proxy::hosts:
         - 'set X-Forwarded-Host "requests.thesatelliteoflove.net"'
         - 'set X-Forwarded-Port "443"'
     ip: ['45.77.156.204', '2001:19f0:1000:e1dc::204']
-    serveraliases: ['requests.heloandnala.net']
 
   vault.thesatelliteoflove.net:
     destination: 'bitwarden.eyrie'
