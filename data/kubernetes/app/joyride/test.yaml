@@ -7,7 +7,7 @@ runtime_environment: test
 ingress_class: contour-test
 # Dedicated sender support; accepted application main pipeline 13119.
 # Head a6b95b7b5c453568ca4fdebaf5c543b6bc62134b; preserve drafts and selected releases.
-joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:449ff1161a548a4eda0bcfa15e8def95d3a6c04dcecc3f3ed440c7602d9209b0
+joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:a54b3ca7c481301dc4a7bd3f925eef50d695a020241f004e7555b16e22b79c6d
 affinity: {}
 tolerations: []
 resources:
