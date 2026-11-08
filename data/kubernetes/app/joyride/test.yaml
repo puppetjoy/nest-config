@@ -363,7 +363,6 @@ resources:
       OPS_TOKEN: '%{nest::service::joyride::ops_token_base64}'
       DELIVERY_TOKEN: '%{nest::service::joyride::delivery_token_base64}'
       WMATA_API_KEY: '%{nest::service::joyride::wmata_api_key_base64}'
-      EMAIL_HOST_USER: '%{nest::service::joyride::email_host_user_base64}'
       EMAIL_HOST_PASSWORD: '%{nest::service::joyride::email_host_password_base64}'
       STRIPE_SECRET_KEY: '%{nest::service::joyride::stripe_secret_key_base64}'
       STRIPE_PUBLISHABLE_KEY: '%{nest::service::joyride::stripe_publishable_key_base64}'
@@ -480,6 +479,12 @@ resources:
               value: https://%{lookup('fqdn')}
             - name: MAIL_ENABLED
               value: '1'
+            - name: EMAIL_HOST
+              value: smtp.gmail.com
+            - name: EMAIL_HOST_USER
+              value: joy@joyridedc.com
+            - name: DEFAULT_FROM_EMAIL
+              value: Friday Night Joyride <hello@joyridedc.com>
             - name: STRIPE_MODE
               value: test
             - name: STRIPE_PRICE_ID

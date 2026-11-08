@@ -5,6 +5,7 @@ class nest::service::joyride (
   Optional[Sensitive[Hash[String, String]]] $runtime_secrets         = undef,
   Optional[Sensitive[String]]               $registry_dockerconfig   = undef,
   Optional[Sensitive[String]]               $artifact_verifier_token = undef,
+  Optional[Sensitive[String]]               $test_smtp_password      = undef,
 ) {
   # Only the verified TEST recipe exists. A distinct production contract and
   # owner-approved rollout must be implemented before this boundary is widened.
@@ -18,12 +19,19 @@ class nest::service::joyride (
     fail('Joyride TEST requires managed runtime, registry and read-only artifact-verifier credentials')
   }
 
+  # Dedicated TEST credential only; never fall back to the shared account map.
+  if $test_smtp_password == undef {
+    fail('Joyride TEST requires its dedicated managed TEST SMTP credential')
+  }
+  if $test_smtp_password.unwrap == '' {
+    fail('Joyride TEST refuses an empty dedicated SMTP credential')
+  }
+
   $django_secret_key_base64      = base64('encode', $runtime_secrets.unwrap['DJANGO_SECRET_KEY']).chomp
   $ops_token_base64              = base64('encode', $runtime_secrets.unwrap['OPS_TOKEN']).chomp
   $delivery_token_base64         = base64('encode', $runtime_secrets.unwrap['DELIVERY_TOKEN']).chomp
   $wmata_api_key_base64          = base64('encode', $runtime_secrets.unwrap['WMATA_API_KEY']).chomp
-  $email_host_user_base64        = base64('encode', $runtime_secrets.unwrap['EMAIL_HOST_USER']).chomp
-  $email_host_password_base64    = base64('encode', $runtime_secrets.unwrap['EMAIL_HOST_PASSWORD']).chomp
+  $email_host_password_base64    = base64('encode', $test_smtp_password.unwrap).chomp
   # Optional while billing is disabled. Never admit live credentials to TEST.
   $stripe_keys = {
     'STRIPE_SECRET_KEY'      => '',
