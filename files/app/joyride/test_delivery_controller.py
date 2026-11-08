@@ -22,6 +22,13 @@ IMAGE = re.compile(re.escape(REPOSITORY) + r"@sha256:[0-9a-f]{64}\Z")
 CONTAINERS = {"web", "internal-web", "ops", "worker", "trusted-test"}
 INITIALIZERS = {"migrate", "provision-owner", "basemap", "curated-fetch", "curated-import", "routing-graph"}
 ANNOTATION = "joyride.nest/delivery-id"
+COMPONENTS = {
+    "joyride-test-worker": "worker",
+    "joyride-test": "web",
+    "joyride-test-internal-web": "internal-web",
+    "joyride-test-ops": "ops",
+    "joyride-test-trusted-test": "trusted-test",
+}
 
 
 class DeliveryError(Exception):
@@ -96,6 +103,11 @@ class Client:
     def get_deployment(self):
         return self.request(self.base, kube=True)
 
+    def get_deployments(self):
+        # Exact named GETs only: no pod discovery or wildcard RBAC.
+        prefix = "/apis/apps/v1/namespaces/test/deployments/"
+        return {name: self.request(prefix + name, kube=True) for name in COMPONENTS}
+
     def read_journal(self):
         row = self.request(self.journal, kube=True)
         value = json.loads(row.get("data", {}).get("active", "null"))
@@ -124,7 +136,11 @@ class Client:
             "Authorization": "Bearer " + self.kube_token,
             "Content-Type": "application/json-patch+json",
         }
-        request = Request("https://kubernetes.default.svc" + self.base, data=json.dumps(operations).encode(), headers=headers, method="PATCH")
+        name = deployment["metadata"].get("name", "joyride-test")
+        if name not in COMPONENTS:
+            raise DeliveryError("unexpected_workload_name")
+        path = "/apis/apps/v1/namespaces/test/deployments/" + name
+        request = Request("https://kubernetes.default.svc" + path, data=json.dumps(operations).encode(), headers=headers, method="PATCH")
         try:
             with open_request(request, context=self.kube_context) as response:
                 return json.load(response)
@@ -169,7 +185,17 @@ def validate_item(item):
 def images(deployment):
     template = deployment["spec"]["template"]["spec"]
     found = {}
-    for group, expected in (("containers", CONTAINERS), ("initContainers", INITIALIZERS)):
+    component = deployment["spec"]["template"].get("metadata", {}).get("labels", {}).get("app.kubernetes.io/component")
+    if component is None:
+        # Historical shared-pod receipts/tests only; fleet admission below never
+        # accepts an unlabeled workload or silently discovers a legacy pod.
+        groups = (("containers", CONTAINERS), ("initContainers", INITIALIZERS))
+    elif component in CONTAINERS:
+        initializers = INITIALIZERS | {"bootstrap-complete"} if component == "worker" else {"wait-bootstrap"}
+        groups = (("containers", {component}), ("initContainers", initializers))
+    else:
+        raise DeliveryError("unexpected_workload_shape")
+    for group, expected in groups:
         rows = template[group]
         if {row["name"] for row in rows} != expected or len(rows) != len(expected):
             raise DeliveryError("unexpected_workload_shape")
@@ -288,11 +314,106 @@ def run(client, clock=time.time, pause=time.sleep):
     return "succeeded"
 
 
+def validate_fleet(rows):
+    if set(rows) != set(COMPONENTS):
+        raise DeliveryError("unexpected_workload_shape")
+    for name, component in COMPONENTS.items():
+        row = rows[name]
+        labels = row["spec"]["template"].get("metadata", {}).get("labels", {})
+        if (row["metadata"].get("name") != name or labels.get("app.kubernetes.io/component") != component
+                or labels.get("app") != name or row["spec"].get("selector") != {"matchLabels": {"app": name}}):
+            raise DeliveryError("unexpected_workload_shape")
+        strategy = row["spec"].get("strategy", {})
+        if (row["spec"].get("replicas") != 1 or row["spec"].get("minReadySeconds") != 10
+                or strategy != {"type": "RollingUpdate", "rollingUpdate": {"maxUnavailable": 0, "maxSurge": 1}}):
+            raise DeliveryError("unexpected_workload_strategy")
+        images(row)
+
+
+def run_components(client, clock=time.time, pause=time.sleep):
+    journal, operation = client.read_journal()
+    if operation is None:
+        queue = client.request("/delivery/queue")["deployments"]
+        item = next((row for row in queue if row.get("environment") == "test"), None)
+        if item is None:
+            return "idle"
+        validate_item(item)
+        rows = client.get_deployments()
+        validate_fleet(rows)
+        operation = {"id": item["id"], "image": item["image"], "environment": "test",
+                     "action": item["action"], "deadline": clock() + 1800, "workloads": {}}
+        for name, row in rows.items():
+            operation["workloads"][name] = {
+                "id": item["id"], "image": item["image"], "uid": row["metadata"]["uid"],
+                "original": images(row), "footprint": footprint(row),
+                "prior_annotation": row["spec"]["template"].get("metadata", {}).get("annotations", {}).get(ANNOTATION),
+            }
+        journal = client.save_journal(journal, operation)
+    validate_item(operation)
+    # A pre-split in-flight operation must settle before managed topology change.
+    # Never reinterpret or overwrite its retained single-workload journal.
+    if set(operation.get("workloads", {})) != set(COMPONENTS):
+        raise DeliveryError("legacy_delivery_requires_idle")
+    claim = client.result(operation, "running")
+    if str(claim.get("id")) == operation["id"] and claim.get("state") in ("succeeded", "failed"):
+        client.save_journal(journal, None)
+        return "recovered_" + claim["state"]
+    if claim.get("state") != "running" or str(claim.get("id")) != operation["id"]:
+        raise DeliveryError("claim_not_confirmed")
+
+    def observe():
+        rows = client.get_deployments()
+        validate_fleet(rows)
+        for name, row in rows.items():
+            assert_unchanged(row, operation["workloads"][name])
+        return rows
+
+    try:
+        # Bootstrap is single-owned. Readers are patched only after the new
+        # worker has completed its real init sequence and ten-second readiness.
+        for names in (("joyride-test-worker",), tuple(n for n in COMPONENTS if n != "joyride-test-worker")):
+            for name in names:
+                rows = observe()
+                if clock() >= operation["deadline"]:
+                    raise DeliveryError("rollout_deadline")
+                child = operation["workloads"][name]
+                if not assert_unchanged(rows[name], child):
+                    client.patch_deployment(rows[name], child)
+            while clock() < operation["deadline"]:
+                rows = observe()
+                if all(complete(rows[n], operation["workloads"][n]) for n in names):
+                    break
+                pause(5)
+            else:
+                raise DeliveryError("rollout_deadline")
+        while clock() < operation["deadline"]:
+            rows = observe()
+            if all(complete(rows[n], operation["workloads"][n]) for n in COMPONENTS) and client.ready():
+                rows = observe()
+                if all(complete(rows[n], operation["workloads"][n]) for n in COMPONENTS):
+                    break
+            pause(5)
+        else:
+            raise DeliveryError("rollout_deadline")
+    except DeliveryError as error:
+        if str(error) in ("request_failed", "patch_failed"):
+            raise
+        result = client.result(operation, "failed")
+        if result.get("state") == "failed":
+            client.save_journal(journal, None)
+        raise
+    result = client.result(operation, "succeeded")
+    if result.get("state") != "succeeded" or str(result.get("id")) != operation["id"]:
+        raise DeliveryError("result_not_confirmed")
+    client.save_journal(journal, None)
+    return "succeeded"
+
+
 if __name__ == "__main__":
     try:
         if os.environ.get("RUNTIME_ENV") != "test":
             raise DeliveryError("TEST_only")
-        print("TEST delivery: " + run(Client()))
+        print("TEST delivery: " + run_components(Client()))
     except Exception:
         print("TEST delivery failed; inspect sanitized job status", file=sys.stderr)
         sys.exit(1)
