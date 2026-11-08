@@ -163,6 +163,10 @@ resources:
       ALLOWED_HOSTS: joyride.eyrie
       PUBLIC_ORIGIN: https://joyridedc.com
       MAIL_ENABLED: '0'
+      # Prepared identity only. SMTP credentials and activation remain separate.
+      EMAIL_HOST: smtp.gmail.com
+      EMAIL_HOST_USER: joy@joyridedc.com
+      DEFAULT_FROM_EMAIL: Friday Night Joyride <hello@joyridedc.com>
       STRIPE_MODE: disabled
       OPS_SCOPES: status,diagnostics,member:read
       PRIVATE_ROOT: /data/private
@@ -217,6 +221,13 @@ resources:
                 secretKeyRef:
                   name: joyride-runtime
                   key: DJANGO_SECRET_KEY
+            # Future approved production provisioning must populate only this
+            # Secret from production_smtp_password, never the shared runtime map.
+            - name: EMAIL_HOST_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: joyride-smtp
+                  key: EMAIL_HOST_PASSWORD
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
@@ -324,6 +335,13 @@ resources:
                 secretKeyRef:
                   name: joyride-runtime
                   key: DJANGO_SECRET_KEY
+            # Future approved production provisioning must populate only this
+            # Secret from production_smtp_password, never the shared runtime map.
+            - name: EMAIL_HOST_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: joyride-smtp
+                  key: EMAIL_HOST_PASSWORD
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:

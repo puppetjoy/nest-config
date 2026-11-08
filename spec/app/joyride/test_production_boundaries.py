@@ -35,6 +35,25 @@ class ProductionBoundaries(unittest.TestCase):
 
         self.assertEqual(self.resources['restore'], {})
 
+    def test_dormant_mail_identity_has_production_only_secret_reference(self):
+        config = self.resources['config']['data']
+        self.assertEqual(config['MAIL_ENABLED'], '0')
+        self.assertEqual(config['EMAIL_HOST'], 'smtp.gmail.com')
+        self.assertEqual(config['EMAIL_HOST_USER'], 'joy@joyridedc.com')
+        self.assertEqual(config['DEFAULT_FROM_EMAIL'], 'Friday Night Joyride <hello@joyridedc.com>')
+        self.assertNotIn('EMAIL_HOST_PASSWORD', config)
+        for resource_name in ('app', 'worker'):
+            pod = self.resources[resource_name]['spec']['template']['spec']
+            for container in pod['containers'] + pod.get('initContainers', []):
+                env = {row['name']: row for row in container['env']}
+                self.assertEqual(env['EMAIL_HOST_PASSWORD'], {
+                    'name': 'EMAIL_HOST_PASSWORD', 'valueFrom': {'secretKeyRef': {
+                        'name': 'joyride-smtp', 'key': 'EMAIL_HOST_PASSWORD'}}})
+                self.assertIn({'configMapRef': {'name': 'joyride-config'}}, container['envFrom'])
+        contract = (ROOT / 'manifests/service/joyride.pp').read_text()
+        self.assertIn('production is not configured', contract)
+        self.assertNotIn('production_smtp_password', contract)
+
     def test_immutable_artifacts_and_inert_deployments(self):
         test = yaml.safe_load((ROOT / 'data/kubernetes/app/joyride/test.yaml').read_text())
         # TEST advances independently; a backend update must not promote production.
@@ -129,9 +148,10 @@ class ProductionBoundaries(unittest.TestCase):
                 actual[container['name']] = {item['name']: item['valueFrom']['secretKeyRef'] for item in container['env']}
         common = {'DJANGO_SECRET_KEY': {'name': 'joyride-runtime', 'key': 'DJANGO_SECRET_KEY'},
                   'DATABASE_URL': {'name': 'joyride-cnpg-app', 'key': 'uri'}}
+        mail = dict(common, EMAIL_HOST_PASSWORD={'name': 'joyride-smtp', 'key': 'EMAIL_HOST_PASSWORD'})
         self.assertEqual(actual, {
-            'web': common,
-            'worker': dict(common, WMATA_API_KEY={'name': 'joyride-upstream', 'key': 'WMATA_API_KEY'}),
+            'web': mail,
+            'worker': dict(mail, WMATA_API_KEY={'name': 'joyride-upstream', 'key': 'WMATA_API_KEY'}),
             'ops': dict(common, OPS_TOKEN={'name': 'joyride-ops-auth', 'key': 'OPS_TOKEN'})})
         config = self.resources['config']['data']
         self.assertEqual(config['MAIL_ENABLED'], '0')
