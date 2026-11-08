@@ -42,12 +42,42 @@ do not widen private routes, frontend/content publication or deployment authorit
 
 ## Production remains undeployed
 
-Production credential persistence and source advancement wait for all TEST
-recipient checks above. Production must use its own independently revocable
-credential and managed key; never copy the TEST password or add a shared fallback.
-The dormant production recipe, zero replicas and TEST-only compile guard remain
-unchanged in this phase. Staged source is not launch authorization. Any later
-live production activation or production email requires exact new approval.
+Joy supplied actual Gmail recipient screenshots for the single TEST message.
+The visible From remained `Friday Night Joyride <hello@joyridedc.com>`, the
+seasonal yellow/orange Joyride avatar appeared, and Gmail's Show original
+summary reported SPF PASS, DKIM PASS with domain `joyridedc.com` and DMARC PASS.
+This recipient evidence, recorded by trusted steering on request ^2331, is
+separate from the SMTP acceptance receipt. No resend is needed.
+
+After that acceptance, private Hiera MR !18 stages the independently encrypted
+`nest::service::joyride::production_smtp_password`, converted to
+`Sensitive[String]`, only in service `joyride` / namespace `joyride` scope:
+`data/kubernetes/service/joyride/joyride.yaml`. Private verification established
+that production and TEST plaintext credentials differ; distinct ciphertext
+alone would not establish this. Both exact temporary credential handoff files
+were removed after published persistence and identity checks. No plaintext
+copies or raw rendered Secret attachments are retained.
+
+The dormant public production ConfigMap now stages the same SMTP host,
+username and explicit sender as TEST. Web/worker runtime and web initializers
+reference only `joyride-smtp` / `EMAIL_HOST_PASSWORD` in namespace `joyride`.
+There is no optional reference or shared-account fallback. The ops container
+receives no SMTP password. This is a future provisioning contract, not an
+existing Kubernetes Secret: production Secret rendering/provisioning remains
+behind the closed TEST-only compile boundary, as do all other production
+runtime secrets. Its eventual approved implementation must populate that exact
+Secret exclusively from `production_smtp_password` using managed secret
+handling, reject missing/empty values, retain smtp.gmail.com port 587 STARTTLS
+and normal certificate verification, and validate the then-current application
+artifact's sender support. Do not reuse the stale dormant image pin for launch.
+No production password is unwrapped or rendered by the current TEST class.
+
+The existing production image pin, zero replicas, suspended jobs,
+`MAIL_ENABLED=0` and TEST-only compile guard remain unchanged. Staged source is
+not a launch-ready production recipe or launch authorization. Normal source
+approval is required for staging merges. Any later production provisioning,
+activation or production email requires exact new approval; this task performs
+none of them.
 
 Account/send-as policy, Workspace administration, DKIM regeneration, unrelated
 personal credentials and private-route writes are outside this cutover.
