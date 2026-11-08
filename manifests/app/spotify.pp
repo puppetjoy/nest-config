@@ -1,6 +1,7 @@
 # Explicit host opt-in; personal workspace and media-key policy lives in dotfiles.
 class nest::app::spotify (
-  Enum['native', 'web'] $backend = 'native',
+  Enum['native', 'web'] $backend               = 'native',
+  Boolean              $hardware_video_decode = true,
 ) {
   case $facts['os']['family'] {
     'Gentoo': {

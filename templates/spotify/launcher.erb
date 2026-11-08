@@ -42,5 +42,10 @@ exec /usr/bin/google-chrome-stable \
   --app=https://open.spotify.com/
 <% else -%>
 
+<% if @hardware_video_decode -%>
 exec /usr/bin/spotify
+<% else -%>
+# Keep GPU compositing; bypass only CEF's hardware video decoder.
+exec /usr/bin/spotify --disable-accelerated-video-decode
+<% end -%>
 <% end -%>
