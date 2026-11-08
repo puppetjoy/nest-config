@@ -5,9 +5,9 @@ service_name: '%{nest::kubernetes::service}'
 fqdn: '%{nest::kubernetes::service}.eyrie'
 runtime_environment: test
 ingress_class: contour-test
-# Retain accepted TEST repairs including stop-wander; pipeline 12785, preview 55172.
-# Head a874300e3f27acc08952b7e12694782557ef2420; preserve drafts and selected releases.
-joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:df4f461fd37e880aef480c848465a71f6791d2f71672093063e685afbcbd9ad3
+# Dedicated sender support; accepted application main pipeline 13119.
+# Head a6b95b7b5c453568ca4fdebaf5c543b6bc62134b; preserve drafts and selected releases.
+joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:449ff1161a548a4eda0bcfa15e8def95d3a6c04dcecc3f3ed440c7602d9209b0
 affinity: {}
 tolerations: []
 resources:
