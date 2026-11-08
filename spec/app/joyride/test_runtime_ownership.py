@@ -7,6 +7,32 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 class RuntimeOwnership(unittest.TestCase):
+    def test_test_mail_identity_and_environment_credential_boundary(self):
+        data = yaml.safe_load((ROOT / 'data/kubernetes/app/joyride/test.yaml').read_text())
+        resources = data['resources']
+        secret = resources['runtime']
+        self.assertNotIn('EMAIL_HOST_USER', secret['data'])
+        self.assertEqual(secret['data']['EMAIL_HOST_PASSWORD'],
+                         '%{nest::service::joyride::email_host_password_base64}')
+        pod = resources['app']['spec']['template']['spec']
+        for container in pod['containers'] + [c for c in pod['initContainers'] if 'envFrom' in c]:
+            with self.subTest(container=container['name']):
+                env = {row['name']: row.get('value') for row in container['env']}
+                self.assertEqual(env['EMAIL_HOST'], 'smtp.gmail.com')
+                self.assertEqual(env['EMAIL_HOST_USER'], 'joy@joyridedc.com')
+                self.assertEqual(env['DEFAULT_FROM_EMAIL'], 'Friday Night Joyride <hello@joyridedc.com>')
+                self.assertEqual(env['MAIL_ENABLED'], '1')
+                self.assertEqual(env['TEST_MAIL_ALLOWLIST'], 'joy@joyfullee.me,joyfulskater@gmail.com')
+                self.assertIn({'secretRef': {'name': '%{nest::kubernetes::service}-runtime'}}, container['envFrom'])
+        contract = (ROOT / 'manifests/service/joyride.pp').read_text()
+        self.assertIn('$test_smtp_password == undef', contract)
+        self.assertIn("$test_smtp_password.unwrap == ''", contract)
+        self.assertIn("base64('encode', $test_smtp_password.unwrap).chomp", contract)
+        self.assertNotIn("$runtime_secrets.unwrap['EMAIL_HOST_PASSWORD']", contract)
+        self.assertNotIn("$runtime_secrets.unwrap['EMAIL_HOST_USER']", contract)
+        self.assertNotIn('prod_smtp_password', contract)
+        self.assertIn('production is not configured', contract)
+
     def test_routing_propose_response_window_is_exact_and_private(self):
         data = yaml.safe_load((ROOT / 'data/kubernetes/app/joyride/test.yaml').read_text())
         resources = data['resources']
