@@ -31,12 +31,12 @@ class SpotifyLauncherTest(unittest.TestCase):
                         DISPLAY=":99", XDG_RUNTIME_DIR=str(self.base),
                         XDG_CONFIG_HOME=str(self.base / "config with spaces"))
 
-    def render(self, backend):
+    def render(self, backend, hardware_video_decode=True):
         rendered = subprocess.check_output(
             ["ruby", "-rerb", "-e",
-             "@backend=ARGV[1]; scope={'nest::gui_scaling_factor'=>2.0}; "
+             "@backend=ARGV[1]; @hardware_video_decode=ARGV[2]=='true'; scope={'nest::gui_scaling_factor'=>2.0}; "
              "print ERB.new(File.read(ARGV[0]), trim_mode: '-').result(binding)",
-             str(ROOT / "templates/spotify/launcher.erb"), backend], text=True)
+             str(ROOT / "templates/spotify/launcher.erb"), backend, str(hardware_video_decode).lower()], text=True)
         subprocess.run(["bash", "-n"], input=rendered, text=True, check=True)
         for command in ("spotify", "google-chrome-stable", "xdotool"):
             rendered = rendered.replace("/usr/bin/" + command, str(self.stub) + " " + command)
@@ -54,6 +54,12 @@ class SpotifyLauncherTest(unittest.TestCase):
     def test_native_launch_has_no_playback_arguments(self):
         self.assertEqual(self.run_launcher("native").returncode, 0)
         self.assertEqual(self.calls(), [["spotify"]])
+
+    def test_native_software_video_decode_preserves_normal_session(self):
+        result = subprocess.run(["bash", str(self.render("native", hardware_video_decode=False))],
+                                env=self.env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(self.calls(), [["spotify", "--disable-accelerated-video-decode"]])
 
     def test_web_isolated_profile_and_exact_identity(self):
         self.assertEqual(self.run_launcher("web").returncode, 0)

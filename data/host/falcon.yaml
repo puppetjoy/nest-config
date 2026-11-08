@@ -11,6 +11,11 @@ nest::classes:
   - 'nest::service::reverse_proxy'
   - 'nest::tool::bolt::deploy'
 
+# Spotify CEF VP9 faults in iHD's i915 command-buffer mapping. Keep the host
+# media stack accelerated; use software video decode only in native Spotify.
+# Re-enable after a maintained provider/client fix passes real VP9 playback.
+nest::app::spotify::hardware_video_decode: false
+
 nest::dvorak: true
 nest::monitor_layout: ['DP-4@0', 'DP-2@2560']
 nest::primary_monitor: 'DP-2'
