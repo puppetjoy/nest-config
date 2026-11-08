@@ -46,6 +46,19 @@ class ComponentReadiness(unittest.TestCase):
         self.assertEqual(len(set(selected.values())), 4)
 
 
+    def test_routing_listeners_reserve_measured_health_capacity(self):
+        # Paired with application one-expensive-dispatch-per-process admission.
+        # Thread count alone does not certify HTTP latency or live availability.
+        data = load_resources()
+        for key in KEYS[1:]:
+            container, = data[key]['spec']['template']['spec']['containers']
+            command = container['command']
+            self.assertEqual(command[command.index('--workers') + 1], '2')
+            if container['name'] in ('internal-web', 'trusted-test'):
+                self.assertEqual(command[command.index('--threads') + 1] if '--threads' in command else None, '3')
+            else:
+                self.assertNotIn('--threads', command)
+
     def test_readiness_failure_only_withdraws_its_own_service_endpoints(self):
         # Render-level EndpointSlice predicate: exact selector AND Pod Ready.
         # No cluster controller is emulated or claimed to have been exercised.

@@ -38,6 +38,34 @@ because it lacks a newly introduced common label. Stripe still targets only the
 public web app selector and its unchanged Service. No Service, RBAC or listener
 is added for the worker.
 
+## Measured routing health execution capacity
+
+Component-specific readiness prevents one listener from withdrawing sibling
+endpoints; it does not reserve execution capacity within a synchronous listener.
+Parent integration measured liveness queuing for 1.997625 seconds behind a
+synthetically held two-second detail request, exceeding the unchanged one-second
+probe deadline. The isolated three-thread candidate responded in 0.001866 seconds
+for liveness and 0.001281 seconds for actual database readiness; a competing detail
+received HTTP 503 while the noncommitting profile helper returned HTTP 200.
+These short synthetic-hold receipts establish execution-capacity isolation, not
+historical storage latency, installed availability or arbitrary-load guarantees.
+
+Only TEST internal-web and trusted-test add `--threads 3` to their existing two
+Gunicorn workers. Gunicorn selects gthread for this setting. This must ship with
+the parent application's one-expensive-dispatch-per-process admission, shared
+between review and API dispatchers; threads alone do not bound expensive work.
+Authentication and listener authorization precede admission; cheap health and
+metadata stay outside it. Public web and ops serving commands are unchanged.
+Existing resources, probe handlers, worker counts and timeout argument values
+remain unchanged, as do all image/mail, mount, secret and network boundaries.
+
+The guard is process-local, not a global queue. Threads cannot guarantee progress
+against a native call holding the interpreter lock or arbitrary connection floods.
+Gthread's worker heartbeat is not an operation-level request cancellation deadline;
+unchanged `--timeout` values must not be represented as identical synchronous
+request-kill behavior. Parent owns application exact-head CI, admission/thread
+integration, live endpoint/health/geometry verification and eventual delivery.
+
 ## Single bootstrap owner and reader ordering
 
 Only the worker/bootstrap Deployment retains, in order:

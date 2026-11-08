@@ -878,7 +878,7 @@ resources:
           containers:
           - name: internal-web
             image: '%{lookup(''joyride_image'')}'
-            command: [gunicorn, 'joyride.internal_wsgi:application', --bind, '0.0.0.0:8003', --workers, '2', --timeout, '60', --graceful-timeout, '125']
+            command: [gunicorn, 'joyride.internal_wsgi:application', --bind, '0.0.0.0:8003', --workers, '2', --threads, '3', --timeout, '60', --graceful-timeout, '125']
             lifecycle: *http_drain
             securityContext: *id001
             env: *id002
@@ -1129,6 +1129,8 @@ resources:
             command:
             - gunicorn
             - joyride.trusted_test_wsgi:application
+            - --threads
+            - '3'
             - --timeout
             - '120'
             - --graceful-timeout
