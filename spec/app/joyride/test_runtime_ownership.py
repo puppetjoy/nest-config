@@ -4,9 +4,36 @@ import unittest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[3]
+APP_KEYS = ('worker', 'app', 'internal_web_app', 'ops_app', 'trusted_test_app')
+
+
+def app_containers(resources):
+    return [c for key in APP_KEYS for c in resources[key]['spec']['template']['spec']['containers']]
 
 
 class RuntimeOwnership(unittest.TestCase):
+    def test_private_proxy_egress_tracks_isolated_listener_services(self):
+        data = yaml.safe_load((ROOT / 'data/kubernetes/app/joyride/test.yaml').read_text())
+        resources = data['resources']
+        policy = resources['test_access_policy']['spec']
+        expected = []
+        for key in ('internal_web', 'trusted_test'):
+            service = resources[key]['spec']
+            expected.append({
+                'to': [{'podSelector': {'matchLabels': service['selector']}}],
+                'ports': [{'protocol': 'TCP', 'port': service['ports'][0]['targetPort']}],
+            })
+        self.assertEqual(policy['egress'][:-1], expected)
+        self.assertEqual(policy['egress'][-1], {
+            'to': [{'namespaceSelector': {'matchLabels': {'kubernetes.io/metadata.name': 'kube-system'}},
+                    'podSelector': {'matchLabels': {'k8s-app': 'kube-dns'}}}],
+            'ports': [{'protocol': 'UDP', 'port': 53}, {'protocol': 'TCP', 'port': 53}],
+        })
+        self.assertEqual(policy['ingress'], [{
+            'from': [{'ipBlock': {'cidr': '172.22.4.3/32'}}],
+            'ports': [{'protocol': 'TCP', 'port': 8443}],
+        }])
+
     def test_test_mail_identity_and_environment_credential_boundary(self):
         data = yaml.safe_load((ROOT / 'data/kubernetes/app/joyride/test.yaml').read_text())
         resources = data['resources']
@@ -14,8 +41,8 @@ class RuntimeOwnership(unittest.TestCase):
         self.assertNotIn('EMAIL_HOST_USER', secret['data'])
         self.assertEqual(secret['data']['EMAIL_HOST_PASSWORD'],
                          '%{nest::service::joyride::email_host_password_base64}')
-        pod = resources['app']['spec']['template']['spec']
-        for container in pod['containers'] + [c for c in pod['initContainers'] if 'envFrom' in c]:
+        pod = resources['worker']['spec']['template']['spec']
+        for container in app_containers(resources) + [c for c in pod['initContainers'] if 'envFrom' in c]:
             with self.subTest(container=container['name']):
                 env = {row['name']: row.get('value') for row in container['env']}
                 self.assertEqual(env['EMAIL_HOST'], 'smtp.gmail.com')
@@ -72,7 +99,7 @@ class RuntimeOwnership(unittest.TestCase):
         self.assertEqual(deployment['minReadySeconds'], 10)
         pod = deployment['template']['spec']
         self.assertEqual(pod['terminationGracePeriodSeconds'], 150)
-        containers = {row['name']: row for row in pod['containers']}
+        containers = {row['name']: row for row in app_containers(data['resources'])}
         for name in ('web', 'internal-web'):
             self.assertEqual(containers[name]['readinessProbe']['httpGet']['path'], '/sign-in')
         for name in ('web', 'internal-web', 'ops', 'trusted-test'):
@@ -102,7 +129,8 @@ class RuntimeOwnership(unittest.TestCase):
         resources = data['resources']
         self.assertEqual(resources['delivery_role']['rules'], [
             {'apiGroups': ['apps'], 'resources': ['deployments'],
-             'resourceNames': ['joyride-test'], 'verbs': ['get', 'patch']},
+             'resourceNames': ['joyride-test-worker', 'joyride-test', 'joyride-test-internal-web',
+                               'joyride-test-ops', 'joyride-test-trusted-test'], 'verbs': ['get', 'patch']},
             {'apiGroups': [''], 'resources': ['configmaps'],
              'resourceNames': ['joyride-test-delivery-journal'], 'verbs': ['get', 'update']},
         ])
@@ -116,13 +144,13 @@ class RuntimeOwnership(unittest.TestCase):
         self.assertFalse(resources['artifact_import']['spec']['jobTemplate']['spec']
                          ['template']['spec']['automountServiceAccountToken'])
         self.assertEqual(set(resources['scripts']['binaryData']),
-                         {'import_artifacts.py', 'test_delivery_controller.py', 'install_routing_graph.py'})
+                         {'import_artifacts.py', 'test_delivery_controller.py', 'install_routing_graph.py', 'bootstrap_gate.py'})
         self.assertRegex(data['joyride_image'], r'@sha256:[0-9a-f]{64}$')
         self.assertFalse(resources['app']['spec']['template']['spec']['automountServiceAccountToken'])
 
     def test_ordinary_ci_deploy_scope_is_test_only(self):
         data = yaml.safe_load((ROOT / 'data/kubernetes/app/joyride/test.yaml').read_text())
-        containers = data['resources']['app']['spec']['template']['spec']['containers']
+        containers = app_containers(data['resources'])
         for container in containers:
             scopes = next(env['value'] for env in container['env'] if env['name'] == 'OPS_SCOPES').split(',')
             self.assertIn('deploy:test', scopes)
@@ -143,7 +171,10 @@ class RuntimeOwnership(unittest.TestCase):
                 self.assertIs(pod['automountServiceAccountToken'], False)
                 self.assertIs(initializer['securityContext']['runAsNonRoot'], True)
                 self.assertEqual(initializer['command'][:4], ['python', '-I', '-B', '-c'])
-                self.assertIn('0bd5c397f068b7e9eed784ce48afcd0abf4eeb4ae3b5a11c53aaa04939415f5c', initializer['command'][-1])
+                expected_hash = ('f801bc10a744056ae618b766b9633673985cdaa827ff913d9479b4a33866ae99'
+                                 if path.endswith('joyride-test.yaml') else
+                                 '0bd5c397f068b7e9eed784ce48afcd0abf4eeb4ae3b5a11c53aaa04939415f5c')
+                self.assertIn(expected_hash, initializer['command'][-1])
                 self.assertIn('os.O_EXCL', initializer['command'][-1])
                 backup, = pod['containers']
                 self.assertEqual(backup['command'][2], '/trusted/backup.py')

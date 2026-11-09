@@ -112,7 +112,18 @@ credentials are not report attachments.
 3. Copy it to restricted local staging. Check the outer tar has exactly the three
    named regular files, no links or traversal; verify the inner payload hashes
    against metadata. Validate inner tar members as regular files/directories
-   within `private`, `public` and `maps`; never extract with unrestricted paths.
+   within `private`, `public` and `maps`, with only these two optional symlink
+   exceptions: `private/routing/current.sqlite3` and
+   `private/routing/previous.sqlite3`. Each literal target must be a non-hidden,
+   ASCII alphanumeric-leading `.sqlite3` basename using only ASCII letters,
+   digits, dot, underscore and hyphen; neither selector may target a selector.
+   Require the target to be a separately captured same-directory regular file
+   with matching metadata/hash. Reject all other links, chains, dangling targets,
+   traversal, duplicate names and parent type conflicts before extraction.
+   Use the admitted backup implementation's archive validator and a safe data
+   extraction filter into a NEW restricted empty root; never follow archive
+   links or extract over existing state. Verify exact targets with `lstat` and
+   `readlink`, plus both graph payload hashes, before running restored code.
 4. Create a NEW disposable PostgreSQL database, rejecting preexisting names.
    Restore with `pg_restore --exit-on-error --no-owner --role=joyride`, then run
    installed application migrations/checks with only that process's DATABASE_URL

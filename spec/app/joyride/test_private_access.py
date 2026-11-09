@@ -17,6 +17,8 @@ import unittest
 import uuid
 import xml.etree.ElementTree as ET
 
+import yaml
+
 from fixture_resources import FixtureResources
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -114,7 +116,11 @@ class PrivateAccess(unittest.TestCase):
             upstream_info = json.loads(run("podman", "inspect", cls.upstream).stdout)[0]
             upstream_ip = upstream_info["NetworkSettings"]["Networks"][cls.network]["IPAddress"]
             (cls.path / "nginx.conf").write_text(config.replace(cls.upstream + ":8000", upstream_ip + ":8000"))
-            run("podman", "create", *cls.resources.labels, "--name", cls.container, "--network", cls.network, "--read-only", "--cap-drop=ALL", "--security-opt", "no-new-privileges", "--user", "101:101", "--tmpfs", "/tmp:rw,noexec,nosuid,size=64m,mode=1777", "--entrypoint", "nginx", IMAGE, "-g", "daemon off;")
+            workload = yaml.safe_load((ROOT / 'data/kubernetes/app/joyride/test.yaml').read_text())
+            volumes = workload['resources']['test_access']['spec']['template']['spec']['volumes']
+            quota = next(volume['emptyDir']['sizeLimit'] for volume in volumes if volume['name'] == 'tmp')
+            tmp_bytes = int(quota[:-2]) * {'Mi': 1024 ** 2, 'Gi': 1024 ** 3}[quota[-2:]]
+            run("podman", "create", *cls.resources.labels, "--name", cls.container, "--network", cls.network, "--read-only", "--cap-drop=ALL", "--security-opt", "no-new-privileges", "--user", "101:101", "--tmpfs", f"/tmp:rw,noexec,nosuid,size={tmp_bytes},mode=1777", "--entrypoint", "nginx", IMAGE, "-g", "daemon off;")
             run("podman", "cp", str(cls.path), cls.container + ":/tls")
             run("podman", "cp", str(cls.path / "nginx.conf"), cls.container + ":/etc/nginx/nginx.conf")
             run("podman", "start", cls.container)
@@ -333,8 +339,37 @@ class PrivateAccess(unittest.TestCase):
             self.assertNotIn(b"forged", data)
             for suffix in ("?x=1", "/", "/extra"):
                 self.assertEqual(self.request(path=path + suffix, method="POST")[0], 404)
-            limit = 64 * 1024 * 1024 if kind == "content" else 32 * 1024 * 1024
+            limit = 192 * 1024 * 1024 if kind == "content" else 32 * 1024 * 1024
             self.assertEqual(self.request(path=path, method="POST", extra=f"Content-Length: {limit + 1}\r\n")[0], 413)
+
+    def test_content_capacity_full_body_crosses_real_proxy(self):
+        # Header admission alone misses a too-small nginx temporary volume.
+        size = 192 * 1024 * 1024
+        status, data = self.request(path="/ops/releases/content", method="POST", size=size)
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(data)["body_bytes"], size)
+        self.assertEqual(json.loads(data)["path"], "/ops/releases/content")
+
+    def test_content_capacity_admission_boundary(self):
+        # Exercise exact header admission and refusal independently of transfer.
+        probe = '''
+import socket, ssl, sys
+context = ssl.create_default_context(cafile='/tls/tls.crt')
+with socket.create_connection((sys.argv[1], 8443), timeout=10) as raw:
+    with context.wrap_socket(raw, server_hostname='joyride-test.eyrie') as sock:
+        sock.sendall(('POST /ops/releases/content HTTP/1.1\\r\\n'
+                      'Host: joyride-test.eyrie\\r\\n'
+                      'Content-Length: ' + sys.argv[2] + '\\r\\n'
+                      'Expect: 100-continue\\r\\nConnection: close\\r\\n\\r\\n').encode())
+        print(sock.recv(4096).split(b'\\r\\n', 1)[0].decode())
+'''
+        for size, expected in ((64 * 1024 * 1024 + 1, 100),
+                               (192 * 1024 * 1024, 100),
+                               (192 * 1024 * 1024 + 1, 413)):
+            with self.subTest(size=size):
+                line = run('podman', 'exec', self.upstream, 'python', '-c',
+                           probe, self.address, str(size)).stdout.strip()
+                self.assertEqual(int(line.split()[1]), expected)
 
     def test_member_routes_are_token_free_and_preserve_only_content_and_idempotency(self):
         pairs = [("GET", ""), ("GET", "/audit")]
