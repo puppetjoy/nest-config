@@ -257,8 +257,12 @@ class ProductionBoundaries(unittest.TestCase):
         self.assertFalse((ROOT / 'plans/eyrie/deploy_joyride.yaml').exists())
         gateway = (ROOT / 'data/host/gateway.yaml').read_text()
         self.assertNotIn('joyridedc.com', gateway)
-        # The one-time informational site is retired, not a production gateway.
-        self.assertNotIn('nest::service::joyride_gateway', gateway)
+        # ACME-only bootstrap is not the retired informational publication path
+        gateway_data = yaml.safe_load(gateway)
+        self.assertIn('nest::service::joyride_gateway', gateway_data['nest::classes'])
+        self.assertIs(gateway_data['nest::service::joyride_gateway::https_enabled'], False)
+        gateway_class = (ROOT / 'manifests/service/joyride_gateway.pp').read_text()
+        self.assertIn('if $https_enabled {', gateway_class)
         activation = (ROOT / 'manifests/service/gateway.pp').read_text()
         self.assertNotIn('joyride_gateway', activation)
 
