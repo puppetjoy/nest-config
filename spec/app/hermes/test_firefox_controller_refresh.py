@@ -94,12 +94,18 @@ def test_generation_grant_requires_current_typed_owner_instruction(monkeypatch, 
             refresh.owner_instruction_grant('ar-fixture', grant)
 
 
-@pytest.mark.parametrize('fault', ['none', 'legacy', 'pending', 'hash', 'occupied', 'live', 'consumed', 'archive', 'fsync'])
+@pytest.mark.parametrize('fault', ['none', 'closed', 'legacy', 'pending', 'hash', 'occupied', 'live', 'consumed', 'archive', 'fsync'])
 def test_final_consumer_preflight_has_no_live_writes_or_native_mutations(engine, monkeypatch, fault):
     import json
     controller, native = lost(engine, monkeypatch)
     grant = grant_for(controller)
-    if fault == 'legacy':
+    if fault == 'closed':
+        # Genuine release before reconstructing the lost generation.
+        active, native = engine
+        active.dispatch('tabs', {'scope': 'kanban:agent-requests:t_alpha', 'action': 'release'})
+        controller = windows.Windows(active.path, connect=lambda: native)
+        grant = grant_for(controller)
+    elif fault == 'legacy':
         grant, _ = historical_grant(controller)
     elif fault == 'pending':
         controller.state['actions']['old-key']['state'] = 'uncertain'
@@ -127,7 +133,7 @@ def test_final_consumer_preflight_has_no_live_writes_or_native_mutations(engine,
     before = {str(p.relative_to(controller.path.parent)): p.read_bytes()
               for p in controller.path.parent.rglob('*') if p.is_file()}
     calls = native.calls.copy()
-    if fault in {'none', 'legacy'}:
+    if fault in {'none', 'closed', 'legacy'}:
         refresh.preflight_generation(windows, controller.path.parent, grant)
     else:
         with pytest.raises((ValueError, RuntimeError, OSError)):

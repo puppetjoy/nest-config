@@ -34,7 +34,10 @@ def main():
             '-httpd', str(root), '-geometry', '1365x768', '-RectThreads', '0', '-noreset',
             '-Log', '*:stderr:0'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         try:
-            time.sleep(5)
+            # Xvnc allocates a 4 MiB startup buffer after roughly six seconds,
+            # even with no HTTP requests. Keep that request-free startup step
+            # outside the TLS-retention sample, without relaxing its threshold.
+            time.sleep(10)
             if process.poll() is not None:
                 raise RuntimeError('disposable Xvnc did not start; test not exercised')
             context = ssl._create_unverified_context()  # Synthetic loopback cert only.
