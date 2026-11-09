@@ -1491,10 +1491,15 @@ resources:
       - to:
         - podSelector:
             matchLabels:
-              app: '%{nest::kubernetes::service}'
+              app: '%{nest::kubernetes::service}-internal-web'
         ports:
         - protocol: TCP
           port: 8003
+      - to:
+        - podSelector:
+            matchLabels:
+              app: '%{nest::kubernetes::service}-trusted-test'
+        ports:
         - protocol: TCP
           port: 8002
       - to:

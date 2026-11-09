@@ -12,6 +12,28 @@ def app_containers(resources):
 
 
 class RuntimeOwnership(unittest.TestCase):
+    def test_private_proxy_egress_tracks_isolated_listener_services(self):
+        data = yaml.safe_load((ROOT / 'data/kubernetes/app/joyride/test.yaml').read_text())
+        resources = data['resources']
+        policy = resources['test_access_policy']['spec']
+        expected = []
+        for key in ('internal_web', 'trusted_test'):
+            service = resources[key]['spec']
+            expected.append({
+                'to': [{'podSelector': {'matchLabels': service['selector']}}],
+                'ports': [{'protocol': 'TCP', 'port': service['ports'][0]['targetPort']}],
+            })
+        self.assertEqual(policy['egress'][:-1], expected)
+        self.assertEqual(policy['egress'][-1], {
+            'to': [{'namespaceSelector': {'matchLabels': {'kubernetes.io/metadata.name': 'kube-system'}},
+                    'podSelector': {'matchLabels': {'k8s-app': 'kube-dns'}}}],
+            'ports': [{'protocol': 'UDP', 'port': 53}, {'protocol': 'TCP', 'port': 53}],
+        })
+        self.assertEqual(policy['ingress'], [{
+            'from': [{'ipBlock': {'cidr': '172.22.4.3/32'}}],
+            'ports': [{'protocol': 'TCP', 'port': 8443}],
+        }])
+
     def test_test_mail_identity_and_environment_credential_boundary(self):
         data = yaml.safe_load((ROOT / 'data/kubernetes/app/joyride/test.yaml').read_text())
         resources = data['resources']
