@@ -5,9 +5,9 @@ service_name: '%{nest::kubernetes::service}'
 fqdn: '%{nest::kubernetes::service}.eyrie'
 runtime_environment: test
 ingress_class: contour-test
-# Delivered multi-route and route-load support; accepted application main pipeline 13177.
-# Head 8f087daef3dd9126d976a72083f7113544f6ba92; preserve drafts and selected releases.
-joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:30155a78c4d5652e6499cbe2f3598daf7246c3256bb7755a19d0a705f663166d
+# Delivered multi-route, route-load and backup compatibility; main pipeline 13188.
+# Head 298080853502b9dc15d678bd5b6bfdf89138511d; preserve drafts and selected releases.
+joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:abc4e1dd11ca1f1cce23c1e4b1c9ed2d08fe2c31140eb70509d66c99ec62a4c3
 affinity: {}
 tolerations: []
 resources:

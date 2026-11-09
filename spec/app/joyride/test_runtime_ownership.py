@@ -143,7 +143,10 @@ class RuntimeOwnership(unittest.TestCase):
                 self.assertIs(pod['automountServiceAccountToken'], False)
                 self.assertIs(initializer['securityContext']['runAsNonRoot'], True)
                 self.assertEqual(initializer['command'][:4], ['python', '-I', '-B', '-c'])
-                self.assertIn('0bd5c397f068b7e9eed784ce48afcd0abf4eeb4ae3b5a11c53aaa04939415f5c', initializer['command'][-1])
+                expected_hash = ('de299e586f016202cf2aaaf4181249fa2f2ac969d59af3d0926fd3a5bb4b72a1'
+                                 if path.endswith('joyride-test.yaml') else
+                                 '0bd5c397f068b7e9eed784ce48afcd0abf4eeb4ae3b5a11c53aaa04939415f5c')
+                self.assertIn(expected_hash, initializer['command'][-1])
                 self.assertIn('os.O_EXCL', initializer['command'][-1])
                 backup, = pod['containers']
                 self.assertEqual(backup['command'][2], '/trusted/backup.py')

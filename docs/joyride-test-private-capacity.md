@@ -81,29 +81,33 @@ restore-path proof before private publication.
 
 ### Prepared application backup integration
 
-Application MR !104 at `f213cb26b9677d432520d52cea18de6742168118`
-now has successful exact-head pipeline 13184. Its narrowly scoped backup
-correction retains only the two managed routing selectors and independently
-captured immutable graph targets; unrelated symlinks remain refused. This is
-reviewed application source, not an installed backup or fresh restore receipt.
+Application MR !104 merged as `298080853502b9dc15d678bd5b6bfdf89138511d`.
+Exact-main pipeline 13188 and managed preview job 57712 succeeded; operation
+`e106a715-4a7b-4e6e-95b1-5976b7400432` installed immutable image
+`registry.gitlab.joyfullee.me/joy/joyride/app@sha256:abc4e1dd11ca1f1cce23c1e4b1c9ed2d08fe2c31140eb70509d66c99ec62a4c3`.
+Fresh authenticated receipt and read-only installed-source checks confirm this
+source and backup script SHA256
+`de299e586f016202cf2aaaf4181249fa2f2ac969d59af3d0926fd3a5bb4b72a1`.
+The narrow correction retains only the two managed routing selectors and
+independently captured immutable graph targets; unrelated links remain refused.
 
-Before the separately approved configuration delivery, obtain its actual
-successful main build and managed delivery receipt and immutable image. In
-`data/kubernetes/service/joyride-test.yaml`, advance the independently admitted
-`joyride_operations_image` and the `admit-backup` script hash together to that
-verified image and `de299e586f016202cf2aaaf4181249fa2f2ac969d59af3d0926fd3a5bb4b72a1`.
-Changing the serving `joyride_image` alone does not update the backup CronJob.
-Do not pin an unbuilt image, replace the admission with a permissive check or
-borrow application merge approval. Preserve the trusted operational container,
-existing backup destination, completed generations and private-volume identity.
+This source candidate advances serving `joyride_image` and independently pins
+TEST `joyride_operations_image` in `data/kubernetes/service/joyride-test.yaml`.
+It advances the TEST `admit-backup` hash with that operational image. The TEST
+monitor also consumes the TEST operational pin; its command and authority stay
+unchanged. Shared/production operational pins, production admission, trusted
+Nest execution container, backup destination and all completed generations are
+unchanged. The service-scoped override does not track future serving-image
+updates. Changing the serving image alone cannot repair the backup CronJob.
 
-Update the restore checklist only for the exact two managed selector links,
-with contained immutable graph targets, before a fresh isolated restore proof.
-Require successful capture, complete-marker/hash verification and restoration
-of graph bytes and selector identity without following arbitrary archive links.
-Keep private publication held until these fresh recovery checks pass. The
-current proposal deliberately leaves the live backup image/hash unchanged;
-application !104 is still open and has no delivered immutable image receipt.
+The recurring-protection restore checklist now admits only the exact two
+contained selectors, with independently verified regular graph targets. The
+installed application's synthetic filesystem scan/archive/verify/restore probe
+passed, but no fresh real capture or database recovery is established. The live
+backup CronJob still admits the old image/hash. Require separately approved
+configuration installation, a successful real capture, complete-marker/hash
+verification and authorized isolated database/files recovery before private
+publication. Do not borrow application delivery approval for these operations.
 
 ## Exact integration and delivery gates
 
@@ -117,9 +121,12 @@ The verified installed multi-route delivery was application main
 A newer approved route-load delivery superseded it during preparation: main
 `8f087daef3dd9126d976a72083f7113544f6ba92`, pipeline 13177, preview job 57634,
 image `registry.gitlab.joyfullee.me/joy/joyride/app@sha256:30155a78c4d5652e6499cbe2f3598daf7246c3256bb7755a19d0a705f663166d`.
-The prepared pin follows that newer installed source, retaining multi-route
-support rather than rolling route-load code back. Refresh again before
-publication and do not regress a later delivery.
+That route-load image is now superseded by the verified MR !104 backup
+compatibility delivery above. This candidate follows the latest installed
+source, retaining multi-route and route-load support and the separately selected
+r140 frontend; it does not publish or roll back any frontend/content selection.
+Refresh installed source again before publication and do not regress a later
+delivery.
 
 Readiness's bootstrap recipe hashes its import init configuration. Changing the
 curated-import memory limit changes that recipe: recompute the shared
