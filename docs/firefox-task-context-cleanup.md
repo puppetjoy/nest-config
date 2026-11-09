@@ -263,3 +263,79 @@ controlled-clock disposable lease fixture. Preserve login/session state,
 working active scopes, unknown windows and all journals. No production
 controller refresh, browser restart, source merge or managed host apply has
 occurred in this preparation phase.
+
+## Native decision authority adapter (source-only continuation)
+
+The actual failure was an authority-schema mismatch, not missing consent.
+`owner_instruction_grant` inspected only the current changed-instruction
+reference. Native typed Telegram approval instead records an immutable
+`native_owner_decision_approved` event, the exact original hold and digest,
+consumed human-blocker generation, trusted provenance and a typed operation
+scope grant. Resolving that human gate does not mean Firefox recovery ran.
+
+The helper now accepts `--native-owner-decision` with exactly these fields:
+
+- `approval_event_id`: immutable Native approval event ID;
+- `hold_event_id`: the original typed Native hold event ID;
+- `blocker_generation`: the canonical generation recorded by the producer;
+- `digest`: the producer's complete decision snapshot digest;
+- `scope`: the complete original `owner_operation_scope` and, if present,
+  `decision_scope`, structurally equal to the approved snapshot.
+
+Use the managed `/opt/hermes-agent/bin/hermes-python` interpreter so Native
+and Broker are imported from their installed canonical source roots. Keep the
+existing generation request and grant arguments. There is no keyword matching,
+URL/title inference, proposal fabrication or conversion of an instruction into
+external-operation consent. The older instruction reader remains compatible
+for context verification, but main refuses to use changed-instruction context
+alone as generation-recovery authority. Proposal-approved retired-binding and
+explicit administrator creation-recovery routes remain separate and cannot be
+combined with generation recovery.
+
+The new reader uses one canonical read snapshot and Native's query-only guard.
+It cross-checks request/task, hold, full decision digest/scope, trusted owner
+identity, canonical blocker generation, actual consumption receipt, independent
+trusted origin provenance and the exact operation grant's approval ID. Missing,
+foreign, altered or retired records refuse. Runtime admission additionally
+refuses terminal tasks, unresolved decisions/proposals/reviews, newer approved
+decisions, scheduling/review gates and newer execution instructions. Historical
+consent remains inspectable but cannot bypass a later source-only instruction.
+
+`--check-authority-only` verifies that historical receipt and exits before
+reading assets or invoking kubectl. Its output explicitly says
+`execution_authorized: false`. This is the supported read-only preflight for
+retained approval evidence, not a deployment dry run or release grant. The
+caller must still separately bind exact accepted executable source, artifact
+hashes, CI, rendered pod-template equality and ordinary maintenance admission.
+The opaque human-readable operation fields are compared exactly, not parsed
+into commands or treated as machine-verifiable source acceptance.
+
+Before signaling the resident controller, generation recovery now exercises
+the actual final `Windows.reconcile_generation` consumer on private disposable
+copies of the complete journals and matching existing archive. Only its driver
+readiness GET touches the native service. Journal/archive writes remain in the
+private copy; cleanup runs on success and refusal. It detects stale digest,
+live generation, occupied driver, pending input, malformed legacy exemptions,
+archive conflicts and filesystem failures before stopping the controller.
+An already consumed reconciliation approval refuses another controller refresh;
+inspect installed state instead. Existing endpoint exclusion, native/process
+identity, no-replay and exclusive controller-lease gates remain in place.
+
+Local containing tests use every logical CPU. The separate paired CI job pins
+Native `df1b7bbaffb7de71db0d2a51b20bb68af616b205` and Broker
+`62fc1532648e6e93429a2f67e661957a20cef92e`. It uses the real Native hold,
+trusted synthetic Telegram callback and operation-grant producers, then calls
+public helper `main`; only kubectl transport is doubled. Whole-database
+refusal checks are distinct from native-journal preflight fixtures. None of
+these tests grants release authority or proves installed browser acceptance.
+
+Retained receipt `apr-20261109-102018-e4b8f4` names Nest source
+`166a7e355797e8113c4a28de84d16b3081ecf950`. The adapter changes executable
+helper bytes, not the approved operation's target or the seven browser assets.
+That old receipt is preserved; it does not silently accept this additive source
+revision. The supervising owner coordinates the exact changed-source release
+and current installed Broker pin. Do not roll back an intervening healthy
+Broker rollout by applying this historical branch's host pin. No merge, host
+apply, controller/browser refresh or journal mutation is part of this source
+continuation. Lifecycle remains not deployed/installed-verified; GPU remains
+unqualified and undeployed.

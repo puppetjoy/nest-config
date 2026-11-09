@@ -7,6 +7,9 @@ from types import ModuleType, SimpleNamespace
 
 import pytest
 
+from test_firefox_windows import engine, windows
+from test_firefox_generation_reconciliation import lost, grant_for, historical_grant
+
 ROOT = Path(__file__).resolve().parents[3]
 loader = importlib.machinery.SourceFileLoader('controller_refresh', str(ROOT / 'bin/firefox-controller-refresh'))
 spec = importlib.util.spec_from_loader(loader.name, loader)
@@ -89,3 +92,47 @@ def test_generation_grant_requires_current_typed_owner_instruction(monkeypatch, 
     else:
         with pytest.raises(ValueError, match='fresh exact scoped owner instruction'):
             refresh.owner_instruction_grant('ar-fixture', grant)
+
+
+@pytest.mark.parametrize('fault', ['none', 'legacy', 'pending', 'hash', 'occupied', 'live', 'consumed', 'archive', 'fsync'])
+def test_final_consumer_preflight_has_no_live_writes_or_native_mutations(engine, monkeypatch, fault):
+    import json
+    controller, native = lost(engine, monkeypatch)
+    grant = grant_for(controller)
+    if fault == 'legacy':
+        grant, _ = historical_grant(controller)
+    elif fault == 'pending':
+        controller.state['actions']['old-key']['state'] = 'uncertain'
+        controller._save()
+        grant = grant_for(controller)
+    elif fault == 'hash':
+        grant['journal_sha256'] = 'a' * 64
+    elif fault == 'occupied':
+        monkeypatch.setattr(windows, 'driver_request', lambda *a: {'ready': False})
+    elif fault == 'live':
+        controller.state['controller'] = {'state': 'ready', 'epoch': controller.epoch,
+                                          'pid': 123, 'generation': 'live-generation'}
+        controller._save()
+        grant = grant_for(controller)
+        monkeypatch.setattr(windows, 'process_generation', lambda pid: 'live-generation')
+    elif fault == 'consumed':
+        controller.state['reconciliation'] = grant
+        controller._save()
+    elif fault == 'archive':
+        history = controller.path.parent / 'generation-history'
+        history.mkdir()
+        (history / (grant['journal_sha256'] + '.json')).write_bytes(b'conflicting immutable archive')
+    elif fault == 'fsync':
+        monkeypatch.setattr(windows.os, 'fsync', lambda fd: (_ for _ in ()).throw(OSError('fixture disk failure')))
+    before = {str(p.relative_to(controller.path.parent)): p.read_bytes()
+              for p in controller.path.parent.rglob('*') if p.is_file()}
+    calls = native.calls.copy()
+    if fault in {'none', 'legacy'}:
+        refresh.preflight_generation(windows, controller.path.parent, grant)
+    else:
+        with pytest.raises((ValueError, RuntimeError, OSError)):
+            refresh.preflight_generation(windows, controller.path.parent, grant)
+    assert native.calls == calls
+    assert {str(p.relative_to(controller.path.parent)): p.read_bytes()
+            for p in controller.path.parent.rglob('*') if p.is_file()} == before
+    assert not list(controller.path.parent.parent.glob('controller-preflight-*'))
