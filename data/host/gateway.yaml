@@ -14,7 +14,10 @@ nest::service::gitlab_anubis::signing_key: 'ENC[PKCS7,MIIBuQYJKoZIhvcNAQcDoIIBqj
 nest::classes:
   - 'nest::service::gateway'
   - 'nest::service::reverse_proxy'
+  - 'nest::service::joyride_gateway'
   - 'nest::service::gitlab_anubis'
+
+nest::service::joyride_gateway::https_enabled: false
 
 nest::packages:
   - 'app-crypt/certbot'
