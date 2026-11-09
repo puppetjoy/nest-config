@@ -709,7 +709,7 @@ resources:
               claimName: '%{nest::kubernetes::service}-data'
           - name: tmp
             emptyDir:
-              sizeLimit: 1Gi
+              sizeLimit: 2Gi
   app:
     apiVersion: apps/v1
     kind: Deployment
@@ -1054,7 +1054,7 @@ resources:
               claimName: '%{nest::kubernetes::service}-data'
           - name: tmp
             emptyDir:
-              sizeLimit: 1Gi
+              sizeLimit: 2Gi
   trusted_test_app:
     apiVersion: apps/v1
     kind: Deployment
