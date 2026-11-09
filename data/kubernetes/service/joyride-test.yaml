@@ -1,9 +1,9 @@
 ---
 # TEST-only operational protection; no production backup or restore is enabled.
-# Independently admitted backup producer with regular-inode materialization
-# 8f9191e50677f7402006375e59286f3a39cc5957, successful main pipeline 13234.
+# Independently admitted backup producer with framed binary transport
+# d11f32b103d9151cd19dda2fecb7f66731b6010c, successful main pipeline 13248.
 # Keep serving and shared production operational pins unchanged.
-joyride_operations_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:e17e0e746f4b39e1efe1fe21f811aafb8d4ff2243542e8d15fb903bd01856424
+joyride_operations_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:0cbfab37f42580c89697ffac31eecd0e908aa28933408e7fc0d4870b018158f4
 resources:
   backup_registry_auths:
     apiVersion: v1
@@ -55,7 +55,7 @@ resources:
                 - |
                   import hashlib, os
                   data = open('/app/platform_runtime/backup.py', 'rb').read()
-                  if hashlib.sha256(data).hexdigest() != '900da3bf5e52535bebb27fc11fef67dbd3e7fbd86fe52aeef83cc31484813fc9':
+                  if hashlib.sha256(data).hexdigest() != 'f801bc10a744056ae618b766b9633673985cdaa827ff913d9479b4a33866ae99':
                       raise SystemExit('Operational source hash mismatch')
                   fd = os.open('/trusted/backup.py', os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o444)
                   with os.fdopen(fd, 'wb') as stream:
