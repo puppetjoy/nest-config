@@ -200,15 +200,60 @@ profile/browser restart or silently manufactured approval.
 
 ## Remaining release and installed acceptance gates
 
-The first Nest source head above passed exact-head pipeline 13199. The additive
-KubeCM image pin and this report require their own final exact-head CI.
-Ordinary source release approval and explicit lost-generation operator recovery
-remain required. Install the accepted Broker source through normal managed Owl
-apply; verify the actual periodic service's installed source and enablement.
-The durable KubeCM pin prepares the next authorized browser baseline; use the
-supported image-extracted controller-only recovery where it avoids an
-unnecessary singleton Firefox/profile restart. Do not turn source evidence
-into consent.
+The first Nest source head above passed exact-head pipeline 13199. Superseded
+head `dfb4c86e57620b22b71894300a5e4a7ce2d1968c` passed pipeline 13201 but changed
+both KubeCM image inputs. That candidate did not satisfy the promised
+controller-only release: ordinary reconciliation would recreate the singleton
+browser. The successful pipeline and baked-image evidence remain historical
+receipts, not approval of that deployment contract.
+
+The corrected candidate restores the complete `data/kubernetes/app/firefox.yaml`
+to its original baseline. Read-only installed Deployment inspection confirmed
+image `sha256:8b64b477220c6d1121f8fdc45dabb3a4d0ff854bbcb9e4a53b5266807aeaa87c`
+and `NEST_FIREFOX_IMAGE_REVISION=bc61fa52bafc5c2b3f72604c1fbe27c109991844`.
+Both remain unchanged. No image digest, revision environment variable or other
+pod-template input in this application is advanced by this release. The new
+image above is a separately retained, tested artifact, not an active KubeCM pin.
+This correction requires independent delta review and new exact-head CI.
+
+After exact reviewed source acceptance and the appropriate owner authorization,
+the managed sequence is:
+
+1. Recheck Nest and Broker exact heads, successful CI, installed image/revision,
+   and complete rendered Firefox pod-template equality against the installed
+   Deployment. Refuse unrelated source drift; preserving just the image is not
+   enough. Keep secret-bearing render output private. Do not apply a different
+   template or use an unmanaged deployment exclusion to claim restart freedom.
+2. Release the accepted Nest/Broker source through ordinary Bolt/Puppet gates,
+   preserving the accepted Native core pin. Managed Owl apply may interrupt
+   agent gateways and controller clients briefly; admit the normal maintenance
+   boundary first, retain work and do not replay unknown-outcome operations.
+   Verify installed Broker source, boot/periodic service and enablement.
+3. Revalidate image-extracted controller assets against the reviewed hashes.
+   At the supported local operator recovery boundary, require an idle endpoint,
+   exclusive controller lease, ready driver, exact old journal digest and exact
+   current native process identity. Retain original journals, all non-replayable
+   keys and the exact approved legacy exceptions. Retire obsolete task/viewer
+   bindings without claiming their old native IDs or closing current/unknown
+   windows. Refuse fingerprint drift, new uncertainty or unsupported authority;
+   no raw journal edits or alternate recovery path.
+4. Use `bin/firefox-controller-refresh` through the inventory-backed Bolt path
+   with the exact supported recovery grant and image-extracted assets. Only the
+   observer/controller is replaced. Firefox, geckodriver, KasmVNC, profile and
+   user windows stay running. Controller/client access is briefly unavailable;
+   failed or uncertain activation requires readback, not blind refresh replay.
+5. Verify installed source and native generation, authentic task-tool cleanup,
+   terminal delivery and unchanged unrelated contexts before claiming success.
+
+The `/tmp/nest-firefox/controller-overlays` activation is pod-local, not durable
+across pod replacement. This controller-only phase cannot claim a durable baked
+image rollout. A separately authorized future normal managed image-pin change
+and singleton browser restart are required to make the tested image the next
+pod baseline. Profile storage remains retained, but live browser connections
+would be interrupted by that future rollout. It is explicitly excluded here.
+No GPU or motion changes are part of either controller-only recovery or its
+acceptance. Source correction is not new release consent; the earlier exact
+owner receipt must not be stretched to a different source head or operation.
 
 Before claiming delivery, verify installed controller/image identities, actual
 task-tool acquisition/release and canonical terminal delivery, bounded cleanup
