@@ -59,6 +59,13 @@ class ComponentReadiness(unittest.TestCase):
             else:
                 self.assertNotIn('--threads', command)
 
+    def test_private_content_staging_follows_each_split_writer(self):
+        data = load_resources()
+        for key in KEYS:
+            tmp, = [v for v in data[key]['spec']['template']['spec']['volumes'] if v['name'] == 'tmp']
+            expected = '2Gi' if key in ('worker', 'ops_app', 'trusted_test_app') else '1Gi'
+            self.assertEqual(tmp['emptyDir']['sizeLimit'], expected, key)
+
     def test_readiness_failure_only_withdraws_its_own_service_endpoints(self):
         # Render-level EndpointSlice predicate: exact selector AND Pod Ready.
         # No cluster controller is emulated or claimed to have been exercised.
