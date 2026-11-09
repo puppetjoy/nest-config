@@ -382,7 +382,20 @@ native session. It must never be run against the production profile.
 
 This additive executable correction is not contained in the immutable artifact
 named by approval `apr-20261109-195822-55fd5f`. That approval is retained, not
-stretched: successor source/artifact acceptance must explicitly include this
-correction before publication/release of a changed candidate and managed
-production rollout. No browser restart, production journal rewrite, action
-replay, GPU change or new request is part of source preparation.
+stretched. Subsequent trusted approval `apr-20261109-202539-8e170d` explicitly
+accepts correction `64b4c92093896efa488b29e104b9add003fdeb7e`, its rebuilt
+artifact and one successor MR in the same original request, retaining ordinary
+review, exact-head CI, artifact and managed rollout/recovery gates. GPU and
+model changes remain excluded. Source acceptance is not installed acceptance.
+
+The first new image refresh reached the exact corrected controller, but its
+ordinary memory smoke failed twice at 4097 KiB of last-100-request PSS growth.
+The Xvnc binary was byte-identical to the inherited accepted image. A separate
+request-free control showed a 4096 KiB anonymous startup allocation at second
+six, before any HTTP request; the original 300 requests after startup measured
+30 KiB last-100 growth. A separate 600-request diagnostic ended with zero
+last-100 growth. The smoke now waits ten rather than five seconds before its
+first sample; the original 300 successful requests and strict 2048 KiB growth
+threshold remain unchanged. Both original failures are retained. Independent
+semantic review found the measured request-free warm-up correction justified;
+a fresh ordinary smoke and artifact check remain required.
