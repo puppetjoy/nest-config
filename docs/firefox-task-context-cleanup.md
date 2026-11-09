@@ -142,15 +142,73 @@ DRI3 hardware acceleration. GPU rendering is not qualified or deployed; no
 GPU preferences, model resources or reduced-motion settings were changed.
 That complementary work is not a lifecycle release dependency.
 
+## Managed image and installed recovery boundary
+
+The existing `nest::build::firefox` Bolt plan built from source head
+`af82bbf95693e77afacb0998f537e7e4dfa6d0b0`, using the previous exact image as
+its refresh base. Its ordinary smoke passed, including the existing KasmVNC
+memory check. A second ordinary build-plan invocation published the checked
+container under `cleanup-t_679195ea`. Authenticated GitLab registry metadata and
+an actual registry digest pull-back verified:
+
+- Image: `registry.gitlab.joyfullee.me/nest/tools/firefox@sha256:772fde6c6253200d1ce68cd8b8f897459109a8ab980482221841c48a0af39898`
+- Image config: `77e8f0c2aaca6493383daf646c3349da69b03fe42d83208ed48e2ca9ca2a08db`
+- Baked controller: `d7f0277d88df507555c6acd2630691c36236bb9b719568ce1e251f6b8e9fc78e`
+- Baked endpoint: `8ec7f3eb0fd2c195ef7d1abb4b245535d5909eead47f87fc2200f8ed9de71951`
+
+Both baked hashes equal independently reviewed source. With no controller
+overlays, the pulled-back image passed the native canary again: real frames
+223, 211, 198 and 184; synthetic container CPU 4.0 percent before, 287.45 percent
+rendering and 1.0 percent after cleanup; periodic expiry in 0.603 seconds;
+retained owner/renewed scope; final context count one. This is the managed
+artifact, still disposable acceptance rather than installed production proof.
+The existing full native window canary also passed shared synthetic login,
+input/screenshot isolation, multiline no-send, protected-input refusal, owner
+viewer input, observer reconnect and exact terminal wire acknowledgement. Its
+old nonterminal loop depended on ignored `release`; it was migrated to the
+explicit bounded `keep_open` producer, leaving the original continuity,
+isolation and terminal assertions intact. The initial old-contract run remains
+a failure; the corrected canary passed against unchanged baked runtime.
+
+Registry verification did not assume a local Podman digest alias. Host skopeo
+was absent, and a host-root publication-helper invocation lacked the wrapper's
+registry auth and was denied. Authenticated GitLab registry tag metadata then
+identified the actual remotely served digest above, which pulled successfully.
+No credential bytes were read or emitted and the denied path was not retried.
+
+A fresh real `secure_browser_status` call returned `FIREFOX_IDENTITY_LOST`.
+Read-only installed diagnostics prove a native generation change: the journal's
+browser PID is 62 with generation
+`aaa61ea1074c9a7cac6f37908e982843f8a3e0d46d53138febf8e4350b0fc246`, whereas
+current PID 62 has generation
+`b469bb92d27111d5787d1d6c8a2734d7c00bc2734d26645bf29779ea10a66a15`.
+The repeated PID is not continuity. Geckodriver reports ready for a session;
+no new session was created during diagnostics. The live endpoint remains baked
+source, controller hash
+`7e333fa0c36ba9c09d2858aa8421e2aa54a0ea674f47e3795a2156daa20bc34a`.
+All 413 current window action records are delivered. The legacy journal retains
+one uncertain and one started action; their exact fingerprints, not raw inputs,
+were retained for the existing supported operator reconciliation contract.
+
+Current aggregate journal SHA256 is
+`319ccc2eb419ed30e6cda5d63457b206df463388965884bc4b3c37d61ee2f41b`.
+Any reconciliation must freshly recheck it and the native generation, archive
+the old journals, retain all non-replayable action keys and preserve every
+unknown/current native context. No task can infer fresh ownership from old IDs.
+This requires an explicit scoped operator decision, not a blind refresh,
+profile/browser restart or silently manufactured approval.
+
 ## Remaining release and installed acceptance gates
 
-Exact-head Nest CI, ordinary source release approval, managed Firefox image
-build/publication and verified registry pull-back remain required. Install the
-accepted Broker source through normal managed Owl apply; verify the actual
-periodic service's installed source and enablement. Update the durable KubeCM
-image baseline and use the supported image-extracted controller-only refresh
-where it avoids an unnecessary singleton Firefox/profile restart. Normal
-explicit rollout gates remain in force. Do not turn source evidence into consent.
+The first Nest source head above passed exact-head pipeline 13199. The additive
+KubeCM image pin and this report require their own final exact-head CI.
+Ordinary source release approval and explicit lost-generation operator recovery
+remain required. Install the accepted Broker source through normal managed Owl
+apply; verify the actual periodic service's installed source and enablement.
+The durable KubeCM pin prepares the next authorized browser baseline; use the
+supported image-extracted controller-only recovery where it avoids an
+unnecessary singleton Firefox/profile restart. Do not turn source evidence
+into consent.
 
 Before claiming delivery, verify installed controller/image identities, actual
 task-tool acquisition/release and canonical terminal delivery, bounded cleanup
@@ -158,5 +216,5 @@ without a finally/readback trigger, exact native baseline and unchanged owner
 contexts. Keep authentic installed task/run acceptance distinct from the
 controlled-clock disposable lease fixture. Preserve login/session state,
 working active scopes, unknown windows and all journals. No production
-controller refresh, browser restart, source merge or managed apply has occurred
-in this source preparation phase.
+controller refresh, browser restart, source merge or managed host apply has
+occurred in this preparation phase.
