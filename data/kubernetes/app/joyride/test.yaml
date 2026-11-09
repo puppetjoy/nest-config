@@ -5,9 +5,9 @@ service_name: '%{nest::kubernetes::service}'
 fqdn: '%{nest::kubernetes::service}.eyrie'
 runtime_environment: test
 ingress_class: contour-test
-# Fixed membership tax backend; main pipeline 13271, check/build/smoke passed.
-# Head eeb7f93401a0720ded5a3d859536c4bcf4579dd1; preserve drafts and selected releases.
-joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:760d7c8dc09e32466219e36d152c2f90015182c2ffba3974e936e6082f9bc6e2
+# WMATA render-context display timestamps; main pipeline 13278 passed.
+# Head a95f2ef80fcbdcc09b861e26d95c40f3355fb073; preserve drafts and selected releases.
+joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:5dbd52ee0fdaeccde9fc745e3ce89ba7750d989fb2bdf96a249d2df24520c343
 affinity: {}
 tolerations: []
 resources:
