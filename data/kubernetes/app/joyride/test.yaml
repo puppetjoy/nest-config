@@ -5,9 +5,9 @@ service_name: '%{nest::kubernetes::service}'
 fqdn: '%{nest::kubernetes::service}.eyrie'
 runtime_environment: test
 ingress_class: contour-test
-# Dedicated sender support; accepted application main pipeline 13119.
-# Head a6b95b7b5c453568ca4fdebaf5c543b6bc62134b; preserve drafts and selected releases.
-joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:449ff1161a548a4eda0bcfa15e8def95d3a6c04dcecc3f3ed440c7602d9209b0
+# Delivered multi-route support; accepted application main pipeline 13169.
+# Head dd33ad9d448b59ddabc156fb1f61c66be953a8a2; preserve drafts and selected releases.
+joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:88b17d3c089dd76bb09409aa264d067cbd42a23c39999c59b4841957a2eeb211
 affinity: {}
 tolerations: []
 resources:
