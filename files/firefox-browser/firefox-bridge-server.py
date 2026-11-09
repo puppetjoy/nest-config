@@ -226,6 +226,29 @@ class Server(ThreadingHTTPServer):
     daemon_threads = True
     request_queue_size = 8
 
+    def service_actions(self):
+        # HTTPServer's existing loop also runs with no clients and after a
+        # controller restart. Worker finally blocks are not a cleanup owner.
+        windows = getattr(self, "windows", None)
+        if windows is None or time.monotonic() < getattr(self, "cleanup_due", 0):
+            return
+        self.cleanup_due = time.monotonic() + 5
+        try:
+            if not windows.cleanup_pending():
+                return
+            LOCK_PATH.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            with LOCK_PATH.open("a+") as lock:
+                os.fchmod(lock.fileno(), 0o600)
+                try:
+                    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError:
+                    return
+                windows.sweep()
+        except Exception:
+            # Journal/read/native uncertainty must not stop serving or trigger
+            # unscoped cleanup. Exact failures remain retained by the controller.
+            pass
+
 
 def main():
     parser = argparse.ArgumentParser()

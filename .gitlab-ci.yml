@@ -184,8 +184,8 @@ stages:
     SECURE_BROWSER_CONTROL_MODE: 'firefox-ui-v1'
   script:
     - 'python3 -m venv .window-fixture-venv'
-    - '.window-fixture-venv/bin/python -m pip install --disable-pip-version-check --only-binary=:all: pytest==9.1.1'
-    - '.window-fixture-venv/bin/python -m pytest -q spec/app/hermes/test_firefox_windows.py spec/app/hermes/test_firefox_window_endpoint.py spec/app/hermes/test_firefox_creation_recovery.py spec/app/hermes/test_firefox_generation_reconciliation.py spec/app/hermes/test_firefox_scoped_recovery.py spec/app/hermes/test_firefox_controller_refresh.py'
+    - '.window-fixture-venv/bin/python -m pip install --disable-pip-version-check --only-binary=:all: pytest==9.1.1 pytest-xdist==3.8.0'
+    - '.window-fixture-venv/bin/python -m pytest -n "$(nproc)" -q spec/app/hermes/test_firefox_windows.py spec/app/hermes/test_firefox_window_endpoint.py spec/app/hermes/test_firefox_creation_recovery.py spec/app/hermes/test_firefox_generation_reconciliation.py spec/app/hermes/test_firefox_scoped_recovery.py spec/app/hermes/test_firefox_controller_refresh.py spec/app/hermes/test_firefox_task_cleanup.py'
 
 .template:
   stage: 'Build'

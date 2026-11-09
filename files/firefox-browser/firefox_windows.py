@@ -487,6 +487,8 @@ class Windows:
                     raise RuntimeError("pending or uncertain input prevents binding recovery")
                 old = None  # New reservation below, not a retry of the archived create.
             if old:
+                if old.get("terminal") or old.get("close_reason"):
+                    raise RuntimeError("task cleanup intent fences new input and allocation")
                 if old.get("state") == "creating":
                     return self._finish_creation(old)
                 if old.get("state") == "create_failed":
@@ -513,6 +515,7 @@ class Windows:
                         or len({c["clientWindow"] for c in tree if c.get("clientWindow")}) >= 12):
                     raise ControlError("FIREFOX_WINDOW_BUDGET", "native window budget reached; preserve existing windows; no operation started")
                 record = {"state": "creating", "epoch": self.epoch, "creation_id": secrets.token_hex(24),
+                          "lease_expires_at": time.time() + 1800,
                           "prior_windows": sorted({c["clientWindow"] for c in tree if c.get("clientWindow")})}
                 self.state["windows"][scope] = record
                 self._save()
@@ -659,6 +662,9 @@ class Windows:
                 self._save()
                 return {**receipt, "already_closed": True}
             if record["state"] == "closed":
+                if not record.get("terminal") and record.get("close_reason") in {"release", "lease_expired"}:
+                    record["terminal"] = terminal
+                    self._save()
                 if record.get("terminal") != terminal:
                     raise RuntimeError("closed scope lacks the exact terminal receipt")
                 return {**receipt, "already_closed": True}
@@ -668,29 +674,139 @@ class Windows:
                 record.update(state="retired", terminal=terminal)
                 self._save()
                 raise RuntimeError("retired native window preserved; terminal scope fenced")
-            # An interrupted close is reconciled only in the retained native
-            # session, including an observer restored to that exact session.
-            if record["state"] == "closing" and record.get("epoch") == self.epoch:
-                if not any(c.get("clientWindow") == record["window"] for c in self._tree()):
-                    record["state"] = "closed"
-                    self._save()
-                    return {**receipt, "already_closed": True}
-                raise RuntimeError("window close uncertain; preserved without replay")
-            if record.get("state") == "create_failed":
-                record.update(state="closed", terminal=terminal)
-                self._save()
-                return {**receipt, "already_closed": True}
-            if record.get("state") == "creating":
-                self._finish_creation(record)
-            self._resolve(record)
-            record.update(state="closing", terminal=terminal)
+            record["terminal"] = terminal
             self._save()
-            self._call("browsingContext.close", {"context": record["context"], "promptUnload": False})
-            if any(c.get("clientWindow") == record["window"] for c in self._tree()):
-                raise RuntimeError("window remains after close; no closure acknowledgement")
+            return {**receipt, **self._close_owned(record)}
+
+    def _close_owned(self, record):
+        """Close is idempotent, unlike UI input. Re-prove identity before retry.
+
+        No retries of creation, navigation or input are admitted here. A native
+        generation change, moved context or foreign tab still fences cleanup.
+        """
+        if record.get("owner") or record.get("epoch") != self.epoch or self.orphaned:
+            raise RuntimeError("exact current task generation required for cleanup")
+        if record.get("state") == "create_failed":
             record["state"] = "closed"
             self._save()
-            return {**receipt, "closed": True}
+            return {"already_closed": True}
+        if record.get("state") == "creating":
+            self._finish_creation(record)
+        if record.get("state") not in {"open", "closing"}:
+            raise RuntimeError("exact task binding required for cleanup")
+        tree = self._tree()
+        owned = self._owned_contexts(record, tree)
+        present = [c for c in tree if c.get("context") in owned]
+        if not present:
+            record["state"] = "closed"
+            self._save()
+            return {"already_closed": True}
+        attempts = record.setdefault("close_attempts_by_context", {})
+        record["state"] = "closing"
+        self._save()
+        # Children first. Re-read before each exact idempotent close; never
+        # replay input. A raced new popup prevents the final acknowledgement.
+        for context in reversed(present):
+            current = self._tree()
+            owned = self._owned_contexts(record, current)
+            cid = context["context"]
+            if not any(c.get("context") == cid for c in current):
+                continue
+            if attempts.get(cid, 0) >= 3:
+                raise RuntimeError("bounded exact close attempts exhausted; operator recovery required")
+            attempts[cid] = attempts.get(cid, 0) + 1
+            self._save()
+            self._call("browsingContext.close", {"context": cid, "promptUnload": False})
+        remaining = self._tree()
+        owned = self._owned_contexts(record, remaining)
+        if any(c.get("context") in owned for c in remaining):
+            raise RuntimeError("owned contexts remain; no closure acknowledgement")
+        record["state"] = "closed"
+        self._save()
+        return {"closed": True}
+
+    def _owned_contexts(self, record, tree):
+        """Native originalOpener lineage only, never window/tree subtraction.
+
+        getTree carries immutable originalOpener even after navigation or an
+        observer restart. Persist observed descendants before closing ancestors.
+        Foreign tabs and moved known contexts still refuse the entire close.
+        """
+        owned = dict(record.get("owned_contexts", {record["context"]: record["window"]}))
+        other = {cid for r in self.state["windows"].values() if r is not record
+                 for cid in ({r.get("context")} | set(r.get("owned_contexts", {}))) if cid}
+        other_windows = {window for r in self.state["windows"].values() if r is not record
+                         for window in ({r.get("window")} | set(r.get("owned_contexts", {}).values())) if window}
+        changed = True
+        while changed:
+            changed = False
+            for context in tree:
+                cid, window = context.get("context"), context.get("clientWindow")
+                if cid not in owned and context.get("originalOpener") in owned:
+                    if not isinstance(cid, str) or not window or cid in other or window in other_windows or len(owned) >= 24:
+                        raise RuntimeError("ambiguous or excessive native descendant ownership")
+                    owned[cid] = window
+                    changed = True
+        windows = set(owned.values())
+        for context in tree:
+            cid, window = context.get("context"), context.get("clientWindow")
+            if ((cid in owned and owned[cid] != window)
+                    or (window in windows and cid not in owned) or cid in other and cid in owned):
+                raise RuntimeError("unproven or moved contexts preserved during cleanup")
+        if record.get("owned_contexts") != owned:
+            record["owned_contexts"] = owned
+            self._save()
+        return owned
+
+    @staticmethod
+    def _lease_seconds(value):
+        if type(value) is not int or not 60 <= value <= 86400:
+            raise ValueError("explicit lease must be an integer between 60 and 86400 seconds")
+        return value
+
+    def cleanup_pending(self):
+        with self.operation():
+            now = time.time()
+            return any(scope != "owner" and r.get("state") not in {"closed", "retired", "recovery_ready"}
+                       and r.get("cleanup_failures", 0) < 3 and r.get("cleanup_next_at", 0) <= now
+                       and (r.get("terminal") or r.get("close_reason")
+                            or type(r.get("lease_expires_at")) in {int, float} and r["lease_expires_at"] <= now)
+                       for scope, r in self.state["windows"].items())
+
+    def sweep(self):
+        """Existing controller owns periodic cleanup, independently of workers.
+
+        Only explicit ephemeral leases and retained close intents are eligible.
+        Legacy active bindings have no inferred deadline. Owner never expires.
+        The journal preserves exhausted/unknown failures for operator recovery.
+        """
+        with self.operation():
+            now = time.time()
+            results = []
+            for scope, record in self.state["windows"].items():
+                if scope == "owner" or record.get("state") in {"closed", "retired", "recovery_ready"}:
+                    continue
+                expiry = record.get("lease_expires_at")
+                if not (record.get("terminal") or record.get("close_reason")
+                        or type(expiry) in {int, float} and expiry <= now):
+                    continue
+                if record.get("cleanup_next_at", 0) > now or record.get("cleanup_failures", 0) >= 3:
+                    continue
+                record.setdefault("close_reason", "terminal" if record.get("terminal") else "lease_expired")
+                record["cleanup_next_at"] = now + 10
+                self._save()
+                try:
+                    self._close_owned(record)
+                    results.append({"scope": scope, "closed": True})
+                except Exception:
+                    # No page data/native exception strings in diagnostics.
+                    record["cleanup_error"] = "exact_cleanup_unverified"
+                    record["cleanup_failures"] = record.get("cleanup_failures", 0) + 1
+                    self._save()
+                    results.append({"scope": scope, "closed": False})
+                if len(results) >= 4:
+                    break
+            return results
 
     def _evaluate(self, context, expression, *, read_only=False):
         import secure_browser_bidi as observation
@@ -737,6 +853,15 @@ class Windows:
     def dispatch(self, command, payload):
         scope = valid_scope(payload.get("scope"))
         with self.lock:
+            if command == "tabs" and payload.get("action") == "release":
+                if scope == "owner":
+                    raise ValueError("owner window cannot be released by a task")
+                record = self.state["windows"].get(scope)
+                if not record or record.get("state") == "closed":
+                    return {"status": "ok", "action": "release", "scope": scope, "already_closed": True}
+                record["close_reason"] = "release"
+                self._save()
+                return {"status": "ok", "action": "release", "scope": scope, **self._close_owned(record)}
             if command in {"status", "diagnostics"} or (command == "tabs" and payload.get("action", "status") in {"status", "recover"}):
                 # Observation must not create a window (or orphan a scope).
                 recovery = self.recovery(scope, reconcile=command == "tabs" and payload.get("action") == "recover")
@@ -752,19 +877,28 @@ class Windows:
                         "scope_state": self.state["windows"].get(scope, {}).get("state", "unallocated"),
                         "session_contract": "one bridge-owned classic session; serialized commands; reconnect observer only",
                         "recovery": recovery}
+            action = payload.get("action", "status") if command == "tabs" else None
+            if command == "tabs" and action not in {"status", "acquire", "keep_open", "release", "recover"}:
+                raise ValueError("unsupported task window lifecycle action")
+            lease = payload.get("lease_seconds")
+            if lease is not None:
+                self._lease_seconds(lease)
+            if action == "keep_open" and lease is None:
+                raise ValueError("keep_open requires an explicit bounded lease_seconds")
             record = self.acquire(scope)
             context = self._resolve(record)
+            if scope != "owner":
+                deadline = time.time() + (lease if lease is not None else 1800)
+                record["lease_expires_at"] = deadline if lease is not None else max(deadline, record.get("lease_expires_at", 0))
+                self._save()
             cid = context["context"]
             common = {"status": "ok", "scope": scope, "protocol": "firefox-windows-v3", "browser_generation": self.epoch,
                       "window_source_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                       "owner_window_url": "/_nest/bridge/window/#" + record["viewer"], "tab_count": 1,
                       "observation_boundary": "bound native Firefox window viewport; no global desktop capture or focus"}
             if command == "tabs":
-                if payload.get("action", "status") not in {"status", "acquire", "keep_open", "release"}:
-                    raise ValueError("window recovery never creates replacements; terminal broker hook owns closure")
-                # release is intentionally NOT terminal. Blocked/waiting scopes
-                # and their owner URL survive worker exit and lease expiration.
-                return {**common, "retained": True, "lifecycle": "canonical terminal hook only"}
+                return {**common, "retained": True, "lease_expires_at": record.get("lease_expires_at"),
+                        "lifecycle": "bounded ephemeral task lease; exact terminal cleanup"}
             if command == "navigate":
                 url = payload.get("url", "")
                 parsed = urlsplit(url)
