@@ -79,6 +79,32 @@ link identity and all old complete generations. Source preparation does not
 repair the running backup. Require a fresh complete capture and appropriate
 restore-path proof before private publication.
 
+### Prepared application backup integration
+
+Application MR !104 at `f213cb26b9677d432520d52cea18de6742168118`
+now has successful exact-head pipeline 13184. Its narrowly scoped backup
+correction retains only the two managed routing selectors and independently
+captured immutable graph targets; unrelated symlinks remain refused. This is
+reviewed application source, not an installed backup or fresh restore receipt.
+
+Before the separately approved configuration delivery, obtain its actual
+successful main build and managed delivery receipt and immutable image. In
+`data/kubernetes/service/joyride-test.yaml`, advance the independently admitted
+`joyride_operations_image` and the `admit-backup` script hash together to that
+verified image and `de299e586f016202cf2aaaf4181249fa2f2ac969d59af3d0926fd3a5bb4b72a1`.
+Changing the serving `joyride_image` alone does not update the backup CronJob.
+Do not pin an unbuilt image, replace the admission with a permissive check or
+borrow application merge approval. Preserve the trusted operational container,
+existing backup destination, completed generations and private-volume identity.
+
+Update the restore checklist only for the exact two managed selector links,
+with contained immutable graph targets, before a fresh isolated restore proof.
+Require successful capture, complete-marker/hash verification and restoration
+of graph bytes and selector identity without following arbitrary archive links.
+Keep private publication held until these fresh recovery checks pass. The
+current proposal deliberately leaves the live backup image/hash unchanged;
+application !104 is still open and has no delivered immutable image receipt.
+
 ## Exact integration and delivery gates
 
 Prepare and review the exact combined readiness, capacity and latest delivered
