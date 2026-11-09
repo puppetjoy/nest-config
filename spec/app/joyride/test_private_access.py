@@ -333,8 +333,30 @@ class PrivateAccess(unittest.TestCase):
             self.assertNotIn(b"forged", data)
             for suffix in ("?x=1", "/", "/extra"):
                 self.assertEqual(self.request(path=path + suffix, method="POST")[0], 404)
-            limit = 64 * 1024 * 1024 if kind == "content" else 32 * 1024 * 1024
+            limit = 192 * 1024 * 1024 if kind == "content" else 32 * 1024 * 1024
             self.assertEqual(self.request(path=path, method="POST", extra=f"Content-Length: {limit + 1}\r\n")[0], 413)
+
+    def test_content_capacity_admission_boundary(self):
+        # Exercise nginx's real header admission without buffering a synthetic
+        # 192 MiB archive in the fixture's deliberately small temporary disk.
+        probe = '''
+import socket, ssl, sys
+context = ssl.create_default_context(cafile='/tls/tls.crt')
+with socket.create_connection((sys.argv[1], 8443), timeout=10) as raw:
+    with context.wrap_socket(raw, server_hostname='joyride-test.eyrie') as sock:
+        sock.sendall(('POST /ops/releases/content HTTP/1.1\\r\\n'
+                      'Host: joyride-test.eyrie\\r\\n'
+                      'Content-Length: ' + sys.argv[2] + '\\r\\n'
+                      'Expect: 100-continue\\r\\nConnection: close\\r\\n\\r\\n').encode())
+        print(sock.recv(4096).split(b'\\r\\n', 1)[0].decode())
+'''
+        for size, expected in ((64 * 1024 * 1024 + 1, 100),
+                               (192 * 1024 * 1024, 100),
+                               (192 * 1024 * 1024 + 1, 413)):
+            with self.subTest(size=size):
+                line = run('podman', 'exec', self.upstream, 'python', '-c',
+                           probe, self.address, str(size)).stdout.strip()
+                self.assertEqual(int(line.split()[1]), expected)
 
     def test_member_routes_are_token_free_and_preserve_only_content_and_idempotency(self):
         pairs = [("GET", ""), ("GET", "/audit")]
