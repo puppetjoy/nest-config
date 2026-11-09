@@ -160,7 +160,9 @@ class Windows:
             if not self.orphaned or self._resumable() or self.browser is not None:
                 raise RuntimeError("only an unconnected lost generation may be retired")
             scoped = self.state["windows"].get(scope, {})
-            if scoped.get("state") == "closed" or scoped.get("terminal"):
+            # Generation authority does not authorize reopening a closed task.
+            # Preserve its exact tombstone below, including late terminal identity.
+            if scoped.get("terminal") and scoped.get("state") != "closed":
                 raise RuntimeError("terminal acceptance scope cannot be reopened")
             journals = {p.name: p.read_bytes() for p in sorted(self.path.parent.glob("*.json"))}
             digest = hashlib.sha256(json.dumps({name: hashlib.sha256(raw).hexdigest()
@@ -224,7 +226,7 @@ class Windows:
                     os.close(directory)
             retired = {key: record if record.get("state") in {"closed", "retired"} else {"state": "retired", "archive": archive.name}
                        for key, record in self.state["windows"].items()
-                       if key not in {"owner", scope}}
+                       if key != "owner" and (key != scope or record.get("state") == "closed")}
             # Keep every action key non-replayable; full original bindings and
             # all journals are immutable history, not claimed as closed windows.
             replacement = {**self.state, "windows": retired, "retired_action_keys": sorted(retired_keys),

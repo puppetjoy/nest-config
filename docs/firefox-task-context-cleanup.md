@@ -339,3 +339,50 @@ Broker rollout by applying this historical branch's host pin. No merge, host
 apply, controller/browser refresh or journal mutation is part of this source
 continuation. Lifecycle remains not deployed/installed-verified; GPU remains
 unqualified and undeployed.
+
+## Closed acceptance scope correction
+
+The preceding sections are historical source-phase checkpoints. The approved
+controller-only phase and managed Broker/tool apply subsequently completed;
+installed real lease expiry and low idle CPU were verified. The controller
+remains pod-local. The baked serving image has not been advanced, and GPU
+rendering is still unqualified and undeployed.
+
+The required preflight for the later approved pin-only image rollout exposed a
+real recovery defect: a legitimate lease-expired requesting scope was rejected
+by generation reconciliation as if reconciliation must reopen that scope. The
+corrected generation consumer preserves a closed acceptance binding exactly,
+including its close reason, native absence evidence and terminal identity. It
+continues to refuse a terminal binding that is not proven closed. Generation
+recovery is not permission to acquire the closed task again; no substitute task
+or guessed native identity is introduced. Unclosed unrelated bindings are
+retired to immutable history rather than claimed closed, and every old action
+key stays non-replayable. Existing digest, driver readiness, lost-generation,
+uncertain-input, immutable archive and exclusive administrator gates remain.
+
+Three real-producer regression variants (expiry, explicit release and terminal
+close) failed at the original refusal before the runtime correction, then
+passed. They verify exact tombstone/archive preservation, crash reconstruction,
+idempotence, acquire/input refusal and late terminal receipt attachment without
+native mutation. Additional closed-scope refusal controls cover pending input,
+stale digest, occupied driver, active generation and unclosed terminal intent.
+The public refresh helper's private-copy final-consumer preflight also covers
+an already released scope and preserves every original journal/archive byte.
+
+`spec/app/hermes/firefox_closed_scope_restart_canary.py` is a two-phase,
+disposable-only native fixture. Run setup in a fresh network-disabled managed
+image with a dedicated synthetic home volume, stop that container, then run
+verify in a new container using only the same synthetic home volume. This
+models pod replacement with persistent profile/journals and fresh `/tmp`, not
+restarting a container with stale X-server locks. A real native generation
+change is mandatory. The fixture checks exact tombstone/archive preservation,
+status-only native recovery, no reopen, old active-binding retirement, fresh
+native acquisition/release and unchanged unrelated identities within the new
+native session. It must never be run against the production profile.
+
+This additive executable correction is not contained in the immutable artifact
+named by approval `apr-20261109-195822-55fd5f`. That approval is retained, not
+stretched: successor source/artifact acceptance must explicitly include this
+correction before publication/release of a changed candidate and managed
+production rollout. No browser restart, production journal rewrite, action
+replay, GPU change or new request is part of source preparation.

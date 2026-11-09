@@ -267,6 +267,82 @@ def test_old_grant_cannot_unfence_a_second_lost_generation(engine, monkeypatch):
     assert native.calls == calls
 
 
+@pytest.mark.parametrize('closure', ['lease_expired', 'release', 'terminal'])
+def test_generation_recovery_preserves_closed_acceptance_scope(engine, monkeypatch, closure):
+    controller, native = engine
+    now = [1000.0]
+    monkeypatch.setattr(windows.time, 'time', lambda: now[0])
+    controller.dispatch('tabs', {'scope': A, 'action': 'acquire', 'lease_seconds': 60})
+    controller.acquire(B)
+    if closure == 'lease_expired':
+        now[0] += 61
+        controller.sweep()
+    elif closure == 'release':
+        controller.dispatch('tabs', {'scope': A, 'action': 'release'})
+    else:
+        controller.lifecycle(close())
+    tombstone = json.loads(json.dumps(controller.state['windows'][A]))
+    assert tombstone['state'] == 'closed'
+    controller.state['actions']['old-key'] = {'state': 'delivered', 'scope': A, 'digest': 'old'}
+    controller._save()
+    controller = windows.Windows(controller.path, connect=lambda: native)
+    assert controller.orphaned is True
+    monkeypatch.setattr(windows, 'driver_request', lambda *args: {'ready': True})
+    original = controller.path.read_bytes()
+    calls = native.calls.copy()
+    grant = grant_for(controller)
+    controller.reconcile_generation(grant)
+    assert native.calls == calls
+    assert controller.state['windows'][A] == tombstone
+    assert controller.state['windows'][B]['state'] == 'retired'
+    assert 'old-key' in controller.legacy_keys
+    archive = controller.path.parent / 'generation-history' / (grant['journal_sha256'] + '.json')
+    assert json.loads(archive.read_text())['journals']['windows.json'].encode() == original
+    resumed = windows.Windows(controller.path, connect=lambda: native)
+    assert not resumed.orphaned
+    assert resumed.state['windows'][A] == tombstone
+    before = controller.path.read_bytes()
+    resumed.reconcile_generation(grant)
+    assert controller.path.read_bytes() == before
+    with pytest.raises(RuntimeError):
+        resumed.acquire(A)
+    with pytest.raises(RuntimeError, match='no replay'):
+        resumed._input('type', {'action_key': 'old-key'}, {}, {})
+    assert native.calls == calls
+    # Real late terminal delivery may attach to expiry/release, never reopen.
+    result = resumed.lifecycle(close())
+    assert result['already_closed'] is True
+    assert resumed.state['windows'][A]['state'] == 'closed'
+    assert native.calls == calls
+
+
+@pytest.mark.parametrize('fault', ['pending', 'stale', 'occupied', 'active', 'terminal_pending'])
+def test_closed_acceptance_does_not_bypass_generation_safety(engine, monkeypatch, fault):
+    active, native = engine
+    active.acquire(A)
+    active.acquire(B)
+    active.dispatch('tabs', {'scope': A, 'action': 'release'})
+    controller = windows.Windows(active.path, connect=lambda: native)
+    monkeypatch.setattr(windows, 'driver_request', lambda *args: {'ready': fault != 'occupied'})
+    if fault == 'pending':
+        controller.state['actions']['pending-input'] = {'state': 'uncertain', 'scope': A}
+    elif fault == 'terminal_pending':
+        controller.state['windows'][A] = {'state': 'closing', 'terminal': {'event_id': 42, 'status': 'completed'}}
+    controller._save()
+    grant = grant_for(controller)
+    if fault == 'stale':
+        grant['journal_sha256'] = 'a' * 64
+    elif fault == 'active':
+        monkeypatch.setattr(controller, '_resumable', lambda: True)
+    before = controller.path.read_bytes()
+    calls = native.calls.copy()
+    with pytest.raises(RuntimeError):
+        controller.reconcile_generation(grant)
+    assert controller.path.read_bytes() == before
+    assert native.calls == calls
+    assert not (controller.path.parent / 'generation-history').exists()
+
+
 def test_new_grant_cannot_retire_an_active_generation(engine, monkeypatch):
     controller, native, first = second_loss(engine, monkeypatch)
     monkeypatch.setattr(controller, '_resumable', lambda: True)
