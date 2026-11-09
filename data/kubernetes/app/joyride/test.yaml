@@ -5,9 +5,9 @@ service_name: '%{nest::kubernetes::service}'
 fqdn: '%{nest::kubernetes::service}.eyrie'
 runtime_environment: test
 ingress_class: contour-test
-# Delivered multi-route support; accepted application main pipeline 13169.
-# Head dd33ad9d448b59ddabc156fb1f61c66be953a8a2; preserve drafts and selected releases.
-joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:88b17d3c089dd76bb09409aa264d067cbd42a23c39999c59b4841957a2eeb211
+# Delivered multi-route and route-load support; accepted application main pipeline 13177.
+# Head 8f087daef3dd9126d976a72083f7113544f6ba92; preserve drafts and selected releases.
+joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:30155a78c4d5652e6499cbe2f3598daf7246c3256bb7755a19d0a705f663166d
 affinity: {}
 tolerations: []
 resources:
@@ -388,7 +388,8 @@ resources:
       storageClassName: ceph-filesystem
       resources:
         requests:
-          storage: 8Gi
+          # Existing CephFS claim: retain all history plus 2 GiB staging headroom.
+          storage: 10Gi
   database:
     apiVersion: postgresql.cnpg.io/v1
     kind: Cluster
@@ -894,7 +895,8 @@ resources:
               claimName: '%{nest::kubernetes::service}-data'
           - name: tmp
             emptyDir:
-              sizeLimit: 1Gi
+              # Full v3 compressed snapshot and tar spool; not host df capacity.
+              sizeLimit: 2Gi
   web:
     apiVersion: v1
     kind: Service
@@ -1163,7 +1165,9 @@ resources:
               secretName: '%{nest::kubernetes::service}-tls'
           - name: tmp
             emptyDir:
-              sizeLimit: 64Mi
+              # Buffering precedes backend upload admission: 16 clients x 192 MiB
+              # is 3 GiB, plus frontend bodies and bounded proxy response spool.
+              sizeLimit: 4Gi
   test_access_service:
     apiVersion: v1
     kind: Service

@@ -17,6 +17,8 @@ import unittest
 import uuid
 import xml.etree.ElementTree as ET
 
+import yaml
+
 from fixture_resources import FixtureResources
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -114,7 +116,11 @@ class PrivateAccess(unittest.TestCase):
             upstream_info = json.loads(run("podman", "inspect", cls.upstream).stdout)[0]
             upstream_ip = upstream_info["NetworkSettings"]["Networks"][cls.network]["IPAddress"]
             (cls.path / "nginx.conf").write_text(config.replace(cls.upstream + ":8000", upstream_ip + ":8000"))
-            run("podman", "create", *cls.resources.labels, "--name", cls.container, "--network", cls.network, "--read-only", "--cap-drop=ALL", "--security-opt", "no-new-privileges", "--user", "101:101", "--tmpfs", "/tmp:rw,noexec,nosuid,size=64m,mode=1777", "--entrypoint", "nginx", IMAGE, "-g", "daemon off;")
+            workload = yaml.safe_load((ROOT / 'data/kubernetes/app/joyride/test.yaml').read_text())
+            volumes = workload['resources']['test_access']['spec']['template']['spec']['volumes']
+            quota = next(volume['emptyDir']['sizeLimit'] for volume in volumes if volume['name'] == 'tmp')
+            tmp_bytes = int(quota[:-2]) * {'Mi': 1024 ** 2, 'Gi': 1024 ** 3}[quota[-2:]]
+            run("podman", "create", *cls.resources.labels, "--name", cls.container, "--network", cls.network, "--read-only", "--cap-drop=ALL", "--security-opt", "no-new-privileges", "--user", "101:101", "--tmpfs", f"/tmp:rw,noexec,nosuid,size={tmp_bytes},mode=1777", "--entrypoint", "nginx", IMAGE, "-g", "daemon off;")
             run("podman", "cp", str(cls.path), cls.container + ":/tls")
             run("podman", "cp", str(cls.path / "nginx.conf"), cls.container + ":/etc/nginx/nginx.conf")
             run("podman", "start", cls.container)
@@ -336,9 +342,16 @@ class PrivateAccess(unittest.TestCase):
             limit = 192 * 1024 * 1024 if kind == "content" else 32 * 1024 * 1024
             self.assertEqual(self.request(path=path, method="POST", extra=f"Content-Length: {limit + 1}\r\n")[0], 413)
 
+    def test_content_capacity_full_body_crosses_real_proxy(self):
+        # Header admission alone misses a too-small nginx temporary volume.
+        size = 192 * 1024 * 1024
+        status, data = self.request(path="/ops/releases/content", method="POST", size=size)
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(data)["body_bytes"], size)
+        self.assertEqual(json.loads(data)["path"], "/ops/releases/content")
+
     def test_content_capacity_admission_boundary(self):
-        # Exercise nginx's real header admission without buffering a synthetic
-        # 192 MiB archive in the fixture's deliberately small temporary disk.
+        # Exercise exact header admission and refusal independently of transfer.
         probe = '''
 import socket, ssl, sys
 context = ssl.create_default_context(cafile='/tls/tls.crt')
