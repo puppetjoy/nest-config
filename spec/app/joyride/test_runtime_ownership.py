@@ -12,6 +12,34 @@ def app_containers(resources):
 
 
 class RuntimeOwnership(unittest.TestCase):
+    def test_local_backup_data_is_readonly_and_test_only(self):
+        data = yaml.safe_load((ROOT / 'data/kubernetes/service/joyride-test.yaml').read_text())
+        pod = data['resources']['backup']['spec']['jobTemplate']['spec']['template']['spec']
+        backup, = pod['containers']
+        self.assertEqual(backup['command'][-2:], ['--file-source', 'local-readonly'])
+        mount, = [m for m in backup['volumeMounts'] if m['mountPath'] == '/data']
+        self.assertEqual(mount, {'name': 'source', 'mountPath': '/data', 'readOnly': True})
+        volume, = [v for v in pod['volumes'] if v['name'] == mount['name']]
+        self.assertEqual(volume, {'name': 'source', 'persistentVolumeClaim': {
+            'claimName': 'joyride-test-data', 'readOnly': True,
+        }})
+        self.assertEqual(pod['securityContext'], {
+            'fsGroup': 10001, 'fsGroupChangePolicy': 'OnRootMismatch',
+        })
+        security = backup['securityContext']
+        self.assertEqual(security['runAsUser'], 0)
+        self.assertIs(security['allowPrivilegeEscalation'], False)
+        self.assertIs(security['readOnlyRootFilesystem'], True)
+        self.assertEqual(security['capabilities'], {'add': ['DAC_OVERRIDE'], 'drop': ['ALL']})
+        prod = yaml.safe_load((ROOT / 'data/kubernetes/app/joyride/joyride.yaml').read_text())
+        other_pods = [data['resources']['monitor']['spec']['jobTemplate']['spec']['template']['spec'],
+                      prod['resources']['backup']['spec']['jobTemplate']['spec']['template']['spec']]
+        for other in other_pods:
+            for container in other['containers']:
+                self.assertNotIn('/data', [m['mountPath'] for m in container.get('volumeMounts', [])])
+                self.assertNotIn('DAC_OVERRIDE', container.get('securityContext', {})
+                                 .get('capabilities', {}).get('add', []))
+
     def test_private_proxy_egress_tracks_isolated_listener_services(self):
         data = yaml.safe_load((ROOT / 'data/kubernetes/app/joyride/test.yaml').read_text())
         resources = data['resources']

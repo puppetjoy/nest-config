@@ -41,6 +41,7 @@ resources:
               restartPolicy: Never
               securityContext:
                 fsGroup: 10001
+                fsGroupChangePolicy: OnRootMismatch
               imagePullSecrets:
               - name: joyride-test-backup-pull
               - name: joyride-test-pull
@@ -76,14 +77,17 @@ resources:
                 # Trusted Nest operational image, not a frontend release.
                 image: '%{lookup(''config_image'')}'
                 imagePullPolicy: Always
-                command: [python3, -B, /trusted/backup.py, --stage-root, /scratch]
+                command: [python3, -B, /trusted/backup.py, --stage-root, /scratch, --file-source, local-readonly]
                 env:
                 - name: KUBECONFIG
                   value: /kubeconfig/eyrie.conf
                 securityContext:
+                  runAsUser: 0
                   allowPrivilegeEscalation: false
                   readOnlyRootFilesystem: true
                   capabilities:
+                    # Read owner-only application files on the verified read-only PVC
+                    add: [DAC_OVERRIDE]
                     drop: [ALL]
                 resources:
                   requests:
@@ -101,6 +105,9 @@ resources:
                   mountPath: /scratch
                 - name: backup
                   mountPath: /nest/backup/joyride-test
+                - name: source
+                  mountPath: /data
+                  readOnly: true
                 - name: kubeconfig
                   mountPath: /kubeconfig/eyrie.conf
                   readOnly: true
@@ -111,6 +118,10 @@ resources:
               - name: scratch
                 emptyDir:
                   sizeLimit: 24Gi
+              - name: source
+                persistentVolumeClaim:
+                  claimName: joyride-test-data
+                  readOnly: true
               - name: backup
                 hostPath:
                   path: /nest/backup/joyride-test
