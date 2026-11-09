@@ -199,7 +199,7 @@ class RuntimeOwnership(unittest.TestCase):
                 self.assertIs(pod['automountServiceAccountToken'], False)
                 self.assertIs(initializer['securityContext']['runAsNonRoot'], True)
                 self.assertEqual(initializer['command'][:4], ['python', '-I', '-B', '-c'])
-                expected_hash = ('f801bc10a744056ae618b766b9633673985cdaa827ff913d9479b4a33866ae99'
+                expected_hash = ('2e2cc839fe20e67bd262a91c8f0011649f2354b16ced07e56aa7b6457f30ff98'
                                  if path.endswith('joyride-test.yaml') else
                                  '0bd5c397f068b7e9eed784ce48afcd0abf4eeb4ae3b5a11c53aaa04939415f5c')
                 self.assertIn(expected_hash, initializer['command'][-1])
