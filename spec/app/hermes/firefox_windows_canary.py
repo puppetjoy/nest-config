@@ -163,7 +163,9 @@ try:
         assert pixel == expected
     for scope in scopes:
         for _ in range(5):
-            engine.dispatch("tabs", {"scope": scope, "action": "release"})
+            # Release now proves native closure. Repeated nonterminal retention
+            # must use the explicit bounded renewal producer, not ignored release.
+            engine.dispatch("tabs", {"scope": scope, "action": "keep_open", "lease_seconds": 3600})
             engine.acquire(scope)
     assert len(engine._tree()) == 4
     for _ in range(3):

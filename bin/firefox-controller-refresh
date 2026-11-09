@@ -59,6 +59,151 @@ def owner_instruction_grant(request_id, grant):
     return grant
 
 
+def native_decision_grant(request_id, grant, decision, *, evidence_only=False):
+    """Query canonical immutable consent, not proposal or instruction authority.
+
+    The operator supplies the complete reviewed typed scope, never keywords.
+    This verifies a receipt; release source/CI/maintenance remain separate gates.
+    Evidence-only inspection cannot reach kubectl or the resident consumer.
+    """
+    from agent_request_broker import kanban_backend as b
+    from hermes_cli.kanban_db_authorization import owner_decision_payload, owner_operation_scope_key
+    from hermes_cli.kanban_acceptance_policy import _query_only
+    fields = {'approval_event_id', 'hold_event_id', 'blocker_generation', 'digest', 'scope'}
+    if (not isinstance(decision, dict) or set(decision) != fields
+            or any(type(decision[k]) is not int or decision[k] <= 0
+                   for k in ('approval_event_id', 'hold_event_id'))):
+        raise ValueError('exact Native owner decision selectors required')
+    conn = b.connect_read_snapshot()
+    try:
+        with _query_only(conn):
+            item = b.resolve_request_handle(conn, request_id)
+            task = b.require_kanban().get_task(conn, item.task_id) if item else None
+            if (not item or not task or item.status in b.TERMINAL_REQUEST_STATUSES
+                    or task.status in {'done', 'archived'} or b.latest_disposition(conn, item.request_id)
+                    or grant.get('scope') != f'kanban:{b.board_name()}:{item.task_id}'):
+                raise ValueError('exact nonterminal Native request required')
+            approval = conn.execute('SELECT * FROM task_events WHERE task_id=? AND id=? '
+                "AND kind='native_owner_decision_approved'", (item.task_id, decision['approval_event_id'])).fetchone()
+            hold = conn.execute("SELECT * FROM task_events WHERE task_id=? AND id=? AND kind='blocked'",
+                (item.task_id, decision['hold_event_id'])).fetchone()
+            if not approval or not hold or approval['run_id'] is not None or hold['id'] >= approval['id']:
+                raise ValueError('exact immutable Native approval and hold required')
+            source_run = conn.execute('SELECT * FROM task_runs WHERE task_id=? AND id=?',
+                (item.task_id, hold['run_id'])).fetchone()
+            if (not source_run or type(hold['run_id']) is not int or source_run['profile'] != item.target
+                    or source_run['ended_at'] is None or source_run['outcome'] != 'blocked'):
+                raise ValueError('exact ended owner hold run required')
+            receipt, payload = json.loads(approval['payload']), json.loads(hold['payload'])
+            typed = owner_decision_payload(kind=payload.get('kind'), blocker_intent=payload.get('blocker_intent'),
+                owner_operation_scope=payload.get('owner_operation_scope'), decision_scope=payload.get('decision_scope'),
+                owner_decision=payload.get('owner_decision'))
+            scope = {k: payload[k] for k in ('decision_scope', 'owner_operation_scope') if k in payload}
+            operation = scope.get('owner_operation_scope')
+            scope_key = owner_operation_scope_key(operation)
+            value = dict(request_id=item.request_id, task_id=item.task_id, event_id=hold['id'],
+                         blocker_generation=decision['blocker_generation'], scope=scope,
+                         owner_decision=typed.get('owner_decision'))
+            digest = hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+            expected = {**value, 'digest': digest}
+            if (not typed or payload.get('native_owner_hold') is not True
+                    or payload.get('native_owner_hold_run_id') != hold['run_id']
+                    or payload.get('source_status') == 'review' or payload.get('proposal_comment_id') is not None
+                    or decision['scope'] != scope or decision['digest'] != digest
+                    or any(receipt.get(k) != v for k, v in expected.items())
+                    or receipt.get('approval_id') != grant.get('approval')
+                    or receipt.get('source') != 'telegram_trusted'
+                    or b._gitlab_profile_from_user_identity(label=receipt.get('actor')) != 'joy'
+                    or not receipt.get('chat_id') or not receipt.get('user_id')):
+                raise ValueError('intact exact trusted Native operation approval required')
+            blocker = conn.execute('SELECT * FROM agent_request_human_blockers WHERE task_id=? '
+                'AND blocker_generation=?', (item.task_id, decision['blocker_generation'])).fetchone()
+            event = {'id': hold['id'], 'event_kind': hold['kind'], 'payload': payload,
+                     'reason': payload.get('reason', '')}
+            if not blocker:
+                raise ValueError('canonical approved blocker required')
+            # Reuse the producer generation algorithm rather than inventing one.
+            generation, payload_hash, event_id, reason = b._blocker_generation_payload(
+                item=item, task_id=item.task_id, event=event, action=blocker['action'])
+            operation_grant = conn.execute('SELECT approval_id FROM kanban_owner_operation_grants '
+                'WHERE task_id=? AND scope_json=?', (item.task_id, scope_key)).fetchone()
+            consumed = [json.loads(r['payload']) for r in conn.execute('SELECT payload FROM task_events '
+                "WHERE task_id=? AND kind='blocker_generation_consumed' AND id>?", (item.task_id, approval['id']))]
+            if (generation != decision['blocker_generation'] or blocker['request_id'] != item.request_id
+                    or blocker['blocking_event_id'] != event_id or blocker['payload_hash'] != payload_hash
+                    or blocker['reason'] != reason or blocker['state'] != 'consumed'
+                    or blocker['consumed_by'] != receipt['actor'] or not blocker['provenance_id']
+                    or not operation_grant or operation_grant['approval_id'] != receipt['approval_id']
+                    or not any(r.get('blocker_generation') == generation and r.get('blocking_event_id') == hold['id']
+                               and r.get('provenance_id') == blocker['provenance_id']
+                               and r.get('actor') == receipt['actor'] for r in consumed)):
+                raise ValueError('canonical approved generation and operation grant required')
+            provenance = conn.execute('SELECT * FROM agent_request_steering_provenance WHERE steering_id=?',
+                (blocker['provenance_id'],)).fetchone() if blocker else None
+            origin = json.loads(provenance['provenance_json']) if provenance else {}
+            if (not provenance or provenance['request_id'] != item.request_id
+                    or provenance['task_id'] != item.task_id or provenance['blocker_generation'] != generation
+                    or provenance['trusted'] != 1 or provenance['decision'] != 'consumed'
+                    or provenance['relay_actor'] != receipt['actor']
+                    or origin.get('source_platform') != 'telegram'
+                    or origin.get('origin_user_identity') != receipt['actor']
+                    or origin.get('origin_user_id') != receipt['user_id'] or origin.get('chat_id') != receipt['chat_id']):
+                raise ValueError('matching trusted owner provenance required')
+            # Consumed here means the human gate was resolved, NOT that Firefox
+            # recovery ran. Its one-use receipt lives in the native journal.
+            if not evidence_only:
+                proposal = b.latest_proposal(conn, item.request_id)
+                if (task.status not in {'ready', 'running'}
+                        or (proposal and not b.current_approval(conn, item.request_id))
+                        or (b.latest_review(conn, item.request_id) and not b.current_review_acceptance(conn, item.request_id))
+                        or conn.execute("SELECT 1 FROM agent_request_human_blockers WHERE task_id=? AND state='current'",
+                                        (item.task_id,)).fetchone()
+                        or conn.execute("SELECT 1 FROM task_events WHERE task_id=? AND id>? AND kind IN "
+                            "('native_owner_decision_approved','agent_request_owner_instruction','scheduled','review_requested')",
+                            (item.task_id, approval['id'])).fetchone()):
+                    raise ValueError('newer or unresolved execution gate; retained consent is evidence only')
+                # Ordinary steering comments are also current execution gates.
+                for row in conn.execute('SELECT body FROM task_comments WHERE task_id=? AND created_at>=?',
+                                        (item.task_id, approval['created_at'])):
+                    envelope = b.parse_event_comment(row['body'])
+                    if envelope and envelope.get('action') == 'steered':
+                        raise ValueError('newer execution instruction; retained consent is evidence only')
+            return grant
+    finally:
+        conn.close()
+
+
+def preflight_generation(module, state_dir, grant):
+    """Run the final consumer on private journal copies before stopping anything.
+
+    Windows initialization and reconciliation do not connect a native session;
+    their only native call is the driver's read-only readiness GET. Archive and
+    journal writes land exclusively in the private disposable directory.
+    """
+    import tempfile
+    journals = {p.name: p.read_bytes() for p in sorted(state_dir.glob('*.json'))}
+    state = json.loads(journals['windows.json'])
+    if state.get('reconciliation', {}).get('approval') == grant.get('approval'):
+        raise ValueError('generation operation already consumed; read back, never refresh twice')
+    with tempfile.TemporaryDirectory(prefix='controller-preflight-', dir=state_dir.parent) as scratch:
+        root = Path(scratch)
+        for name, raw in journals.items():
+            path = root / name
+            path.write_bytes(raw)
+            path.chmod(0o600)
+        digest = hashlib.sha256(json.dumps({name: hashlib.sha256(raw).hexdigest()
+                                           for name, raw in journals.items()}, sort_keys=True).encode()).hexdigest()
+        archive = state_dir / 'generation-history' / (digest + '.json')
+        if archive.exists():
+            history = root / 'generation-history'
+            history.mkdir(mode=0o700)
+            (history / archive.name).write_bytes(archive.read_bytes())
+        check = module.Windows(root / 'windows.json')
+        check.reconcile_generation(grant)
+    if {p.name: p.read_bytes() for p in sorted(state_dir.glob('*.json'))} != journals:
+        raise ValueError('journal changed during recovery preflight; no refresh')
+
+
 def resident(data):
     """Private administrator exec, not an authenticated public bridge command."""
     import fcntl
@@ -163,6 +308,7 @@ def resident(data):
         check.authorize_creation_recovery(grant)
         args += ['--recover-creation', json.dumps(grant)]
     if generation_grant:
+        preflight_generation(module, state_dir, generation_grant)
         args += ['--reconcile-generation', json.dumps(generation_grant)]
     os.kill(pid, signal.SIGTERM)  # Observer/server only; driver and Firefox stay alive.
     deadline = time.monotonic() + 5
@@ -231,16 +377,32 @@ def main():
     parser.add_argument('--proposal-hash')
     parser.add_argument('--creation-recovery-scope', help='explicit administrator operation: preserve unknown creation, admit one new binding')
     parser.add_argument('--creation-recovery-authorization', help='existing authorization request identifier, provenance only')
-    parser.add_argument('--generation-recovery-request', help='nonterminal request with current typed owner repair instruction')
+    parser.add_argument('--generation-recovery-request', help='nonterminal request with exact typed operation approval')
     parser.add_argument('--generation-recovery-grant', type=json.loads, help='exact fresh local generation reconciliation grant')
+    parser.add_argument('--native-owner-decision', type=json.loads, help='exact approval_event_id, hold_event_id, blocker_generation, digest and complete scope')
+    parser.add_argument('--check-authority-only', action='store_true', help='query historical receipt only; never authorize release or invoke kubectl')
     args = parser.parse_args()
     if bool(args.generation_recovery_request) != bool(args.generation_recovery_grant):
         raise ValueError('exact generation request and grant required')
     if args.generation_recovery_grant and any((args.request_id, args.approval_id, args.proposal_hash,
                                               args.creation_recovery_scope, args.creation_recovery_authorization)):
         raise ValueError('do not combine distinct recovery operations')
-    generation_grant = (owner_instruction_grant(args.generation_recovery_request, args.generation_recovery_grant)
-                        if args.generation_recovery_grant else None)
+    if (args.native_owner_decision or args.check_authority_only) and not args.generation_recovery_grant:
+        raise ValueError('Native decision requires the exact generation request and grant')
+    generation_grant = None
+    if args.generation_recovery_grant:
+        if args.native_owner_decision:
+            generation_grant = native_decision_grant(args.generation_recovery_request, args.generation_recovery_grant,
+                args.native_owner_decision, evidence_only=args.check_authority_only)
+        else:
+            # Legacy changed instructions remain useful context, but are not
+            # blanket permission for a lost-generation external operation.
+            owner_instruction_grant(args.generation_recovery_request, args.generation_recovery_grant)
+            raise ValueError('typed operation approval required; changed instruction is context only')
+    if args.check_authority_only:
+        print(json.dumps({'receipt_verified': True, 'execution_authorized': False,
+                          'approval': generation_grant['approval'], 'scope': generation_grant['scope']}))
+        return
     if bool(args.creation_recovery_scope) != bool(args.creation_recovery_authorization):
         raise ValueError('exact creation scope and existing authorization provenance required')
     if args.creation_recovery_scope and any((args.request_id, args.approval_id, args.proposal_hash)):
