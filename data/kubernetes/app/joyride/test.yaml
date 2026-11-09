@@ -494,6 +494,8 @@ resources:
               value: test
             - name: STRIPE_PRICE_ID
               value: price_1USr7ARxm5b9CJTLAsfCS7RO
+            - name: STRIPE_TAX_RATE_ID
+              value: txr_1Ua0aZRxm5b9CJTLDSqfkYjo
             - name: OPS_SCOPES
               value: status,diagnostics,deploy:test,member:read,member:admin,release
             - name: TEST_MAIL_ALLOWLIST
