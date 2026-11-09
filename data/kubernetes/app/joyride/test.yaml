@@ -647,7 +647,7 @@ resources:
             command: [python, -B, /bootstrap/bootstrap_gate.py, publish]
             env: &bootstrap_identity
             - name: BOOTSTRAP_CONTRACT
-              value: 'fb76811e44ec25708130c6941dea277b044be6b8c901f9f57b3a5bb080dca0c3'
+              value: 'c6803dcdd6ea4567041b5a4b81b9bc285c486896c5a16412d4c6b36901c2047e'
             - name: ROUTING_INSTALLER_SHA256
               value: '%{nest::service::joyride::routing_installer_sha256}'
             volumeMounts:
