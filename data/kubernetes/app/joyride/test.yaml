@@ -5,9 +5,9 @@ service_name: '%{nest::kubernetes::service}'
 fqdn: '%{nest::kubernetes::service}.eyrie'
 runtime_environment: test
 ingress_class: contour-test
-# Dedicated sender support; accepted application main pipeline 13119.
-# Head a6b95b7b5c453568ca4fdebaf5c543b6bc62134b; preserve drafts and selected releases.
-joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:449ff1161a548a4eda0bcfa15e8def95d3a6c04dcecc3f3ed440c7602d9209b0
+# Delivered multi-route, route-load and backup compatibility; main pipeline 13188.
+# Head 298080853502b9dc15d678bd5b6bfdf89138511d; preserve drafts and selected releases.
+joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:abc4e1dd11ca1f1cce23c1e4b1c9ed2d08fe2c31140eb70509d66c99ec62a4c3
 affinity: {}
 tolerations: []
 resources:
@@ -144,6 +144,7 @@ resources:
       import_artifacts.py: '%{nest::service::joyride::artifact_import_base64}'
       test_delivery_controller.py: '%{nest::service::joyride::test_delivery_base64}'
       install_routing_graph.py: '%{nest::service::joyride::routing_installer_base64}'
+      bootstrap_gate.py: '%{nest::service::joyride::bootstrap_gate_base64}'
   delivery_journal:
     apiVersion: v1
     kind: ConfigMap
@@ -167,7 +168,7 @@ resources:
     rules:
     - apiGroups: [apps]
       resources: [deployments]
-      resourceNames: [joyride-test]
+      resourceNames: [joyride-test-worker, joyride-test, joyride-test-internal-web, joyride-test-ops, joyride-test-trusted-test]
       verbs: [get, patch]
     - apiGroups: ['']
       resources: [configmaps]
@@ -388,7 +389,8 @@ resources:
       storageClassName: ceph-filesystem
       resources:
         requests:
-          storage: 8Gi
+          # Existing CephFS claim: retain all history plus 2 GiB staging headroom.
+          storage: 10Gi
   database:
     apiVersion: postgresql.cnpg.io/v1
     kind: Cluster
@@ -407,11 +409,11 @@ resources:
           owner: joyride
       monitoring:
         enablePodMonitor: true
-  app:
+  worker:
     apiVersion: apps/v1
     kind: Deployment
     metadata:
-      name: '%{nest::kubernetes::service}'
+      name: '%{nest::kubernetes::service}-worker'
       namespace: '%{nest::kubernetes::namespace}'
     spec:
       replicas: 1
@@ -422,15 +424,18 @@ resources:
           maxSurge: 1
       selector:
         matchLabels:
-          app: '%{nest::kubernetes::service}'
+          app: '%{nest::kubernetes::service}-worker'
       minReadySeconds: 10
       progressDeadlineSeconds: 1800
       template:
         metadata:
           labels:
-            app: '%{nest::kubernetes::service}'
+            app: '%{nest::kubernetes::service}-worker'
+            joyride.nest/application: joyride-test
+            app.kubernetes.io/component: worker
           annotations:
             nest/routing-installer-sha256: '%{nest::service::joyride::routing_installer_sha256}'
+            nest/bootstrap-gate-sha256: '%{nest::service::joyride::bootstrap_gate_sha256}'
         spec:
           # Endpoint withdrawal precedes TERM; retain time for 120-second uploads.
           terminationGracePeriodSeconds: 150
@@ -596,7 +601,7 @@ resources:
                 cpu: 100m
                 memory: 192Mi
               limits:
-                memory: 1536Mi
+                memory: 2048Mi
             command: [python, -B, -c]
             args:
             - |
@@ -635,6 +640,123 @@ resources:
               readOnly: true
             - name: package-reader
               mountPath: /package-reader
+              readOnly: true
+          - name: bootstrap-complete
+            image: '%{lookup(''joyride_image'')}'
+            securityContext: *id001
+            command: [python, -B, /bootstrap/bootstrap_gate.py, publish]
+            env: &bootstrap_identity
+            - name: BOOTSTRAP_CONTRACT
+              value: 'c6803dcdd6ea4567041b5a4b81b9bc285c486896c5a16412d4c6b36901c2047e'
+            - name: ROUTING_INSTALLER_SHA256
+              value: '%{nest::service::joyride::routing_installer_sha256}'
+            volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: bootstrap-gate
+              mountPath: /bootstrap
+              readOnly: true
+          containers:
+          - name: worker
+            image: '%{lookup(''joyride_image'')}'
+            securityContext: *id001
+            env: *id002
+            envFrom:
+            - secretRef:
+                name: '%{nest::kubernetes::service}-runtime'
+            volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /data/tmp
+            resources:
+              requests:
+                cpu: 100m
+                memory: 192Mi
+              limits:
+                memory: 768Mi
+            command:
+            - python
+            - manage.py
+            - worker
+          volumes:
+          - name: bootstrap-gate
+            configMap:
+              name: '%{nest::kubernetes::service}-scripts'
+              items:
+              - key: bootstrap_gate.py
+                path: bootstrap_gate.py
+          - name: routing-installer
+            configMap:
+              name: '%{nest::kubernetes::service}-scripts'
+              items:
+              - key: install_routing_graph.py
+                path: install_routing_graph.py
+          - name: curated-input
+            emptyDir:
+              sizeLimit: 16Mi
+          - name: package-reader
+            secret:
+              secretName: '%{nest::kubernetes::service}-artifact-verifier'
+              items:
+              - key: GITLAB_READ_API_TOKEN
+                path: GITLAB_READ_API_TOKEN
+          - name: pull
+            secret:
+              secretName: '%{nest::kubernetes::service}-pull'
+          - name: data
+            persistentVolumeClaim:
+              claimName: '%{nest::kubernetes::service}-data'
+          - name: tmp
+            emptyDir:
+              sizeLimit: 1Gi
+  app:
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: '%{nest::kubernetes::service}'
+      namespace: '%{nest::kubernetes::namespace}'
+    spec:
+      replicas: 1
+      strategy:
+        type: RollingUpdate
+        rollingUpdate:
+          maxUnavailable: 0
+          maxSurge: 1
+      selector:
+        matchLabels:
+          app: '%{nest::kubernetes::service}'
+      minReadySeconds: 10
+      progressDeadlineSeconds: 1800
+      template:
+        metadata:
+          labels:
+            app: '%{nest::kubernetes::service}'
+            joyride.nest/application: joyride-test
+            app.kubernetes.io/component: web
+          annotations:
+            nest/bootstrap-gate-sha256: '%{nest::service::joyride::bootstrap_gate_sha256}'
+        spec:
+          terminationGracePeriodSeconds: 150
+          automountServiceAccountToken: false
+          securityContext:
+            fsGroup: 10001
+            seccompProfile:
+              type: RuntimeDefault
+          imagePullSecrets:
+          - name: '%{nest::kubernetes::service}-pull'
+          initContainers:
+          - name: wait-bootstrap
+            image: '%{lookup(''joyride_image'')}'
+            securityContext: *id001
+            command: [python, -B, /bootstrap/bootstrap_gate.py, wait]
+            env: *bootstrap_identity
+            volumeMounts:
+            - name: data
+              mountPath: /data
+              readOnly: true
+            - name: bootstrap-gate
+              mountPath: /bootstrap
               readOnly: true
           containers:
           - name: web
@@ -693,9 +815,71 @@ resources:
               initialDelaySeconds: 10
               periodSeconds: 15
           # Only internal ingress/private backchannel can reach this listener.
+          volumes:
+          - name: bootstrap-gate
+            configMap:
+              name: '%{nest::kubernetes::service}-scripts'
+              items:
+              - key: bootstrap_gate.py
+                path: bootstrap_gate.py
+          - name: data
+            persistentVolumeClaim:
+              claimName: '%{nest::kubernetes::service}-data'
+          - name: tmp
+            emptyDir:
+              sizeLimit: 1Gi
+  internal_web_app:
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: '%{nest::kubernetes::service}-internal-web'
+      namespace: '%{nest::kubernetes::namespace}'
+    spec:
+      replicas: 1
+      strategy:
+        type: RollingUpdate
+        rollingUpdate:
+          maxUnavailable: 0
+          maxSurge: 1
+      selector:
+        matchLabels:
+          app: '%{nest::kubernetes::service}-internal-web'
+      minReadySeconds: 10
+      progressDeadlineSeconds: 1800
+      template:
+        metadata:
+          labels:
+            app: '%{nest::kubernetes::service}-internal-web'
+            joyride.nest/application: joyride-test
+            app.kubernetes.io/component: internal-web
+          annotations:
+            nest/bootstrap-gate-sha256: '%{nest::service::joyride::bootstrap_gate_sha256}'
+        spec:
+          terminationGracePeriodSeconds: 150
+          automountServiceAccountToken: false
+          securityContext:
+            fsGroup: 10001
+            seccompProfile:
+              type: RuntimeDefault
+          imagePullSecrets:
+          - name: '%{nest::kubernetes::service}-pull'
+          initContainers:
+          - name: wait-bootstrap
+            image: '%{lookup(''joyride_image'')}'
+            securityContext: *id001
+            command: [python, -B, /bootstrap/bootstrap_gate.py, wait]
+            env: *bootstrap_identity
+            volumeMounts:
+            - name: data
+              mountPath: /data
+              readOnly: true
+            - name: bootstrap-gate
+              mountPath: /bootstrap
+              readOnly: true
+          containers:
           - name: internal-web
             image: '%{lookup(''joyride_image'')}'
-            command: [gunicorn, 'joyride.internal_wsgi:application', --bind, '0.0.0.0:8003', --workers, '2', --timeout, '60', --graceful-timeout, '125']
+            command: [gunicorn, 'joyride.internal_wsgi:application', --bind, '0.0.0.0:8003', --workers, '2', --threads, '3', --timeout, '60', --graceful-timeout, '125']
             lifecycle: *http_drain
             securityContext: *id001
             env: *id002
@@ -744,6 +928,68 @@ resources:
                   value: '%{lookup(''fqdn'')}'
               initialDelaySeconds: 10
               periodSeconds: 15
+          volumes:
+          - name: bootstrap-gate
+            configMap:
+              name: '%{nest::kubernetes::service}-scripts'
+              items:
+              - key: bootstrap_gate.py
+                path: bootstrap_gate.py
+          - name: data
+            persistentVolumeClaim:
+              claimName: '%{nest::kubernetes::service}-data'
+          - name: tmp
+            emptyDir:
+              sizeLimit: 1Gi
+  ops_app:
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: '%{nest::kubernetes::service}-ops'
+      namespace: '%{nest::kubernetes::namespace}'
+    spec:
+      replicas: 1
+      strategy:
+        type: RollingUpdate
+        rollingUpdate:
+          maxUnavailable: 0
+          maxSurge: 1
+      selector:
+        matchLabels:
+          app: '%{nest::kubernetes::service}-ops'
+      minReadySeconds: 10
+      progressDeadlineSeconds: 1800
+      template:
+        metadata:
+          labels:
+            app: '%{nest::kubernetes::service}-ops'
+            joyride.nest/application: joyride-test
+            app.kubernetes.io/component: ops
+          annotations:
+            nest/bootstrap-gate-sha256: '%{nest::service::joyride::bootstrap_gate_sha256}'
+        spec:
+          terminationGracePeriodSeconds: 150
+          automountServiceAccountToken: false
+          securityContext:
+            fsGroup: 10001
+            seccompProfile:
+              type: RuntimeDefault
+          imagePullSecrets:
+          - name: '%{nest::kubernetes::service}-pull'
+          initContainers:
+          - name: wait-bootstrap
+            image: '%{lookup(''joyride_image'')}'
+            securityContext: *id001
+            command: [python, -B, /bootstrap/bootstrap_gate.py, wait]
+            env: *bootstrap_identity
+            volumeMounts:
+            - name: data
+              mountPath: /data
+              readOnly: true
+            - name: bootstrap-gate
+              mountPath: /bootstrap
+              readOnly: true
+          containers:
           - name: ops
             image: '%{lookup(''joyride_image'')}'
             lifecycle: *http_drain
@@ -766,7 +1012,7 @@ resources:
                 cpu: 100m
                 memory: 192Mi
               limits:
-                memory: 1536Mi
+                memory: 2048Mi
             command:
             - gunicorn
             - joyride.ops_wsgi:application
@@ -796,6 +1042,68 @@ resources:
                 port: 8001
               initialDelaySeconds: 10
               periodSeconds: 15
+          volumes:
+          - name: bootstrap-gate
+            configMap:
+              name: '%{nest::kubernetes::service}-scripts'
+              items:
+              - key: bootstrap_gate.py
+                path: bootstrap_gate.py
+          - name: data
+            persistentVolumeClaim:
+              claimName: '%{nest::kubernetes::service}-data'
+          - name: tmp
+            emptyDir:
+              sizeLimit: 1Gi
+  trusted_test_app:
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: '%{nest::kubernetes::service}-trusted-test'
+      namespace: '%{nest::kubernetes::namespace}'
+    spec:
+      replicas: 1
+      strategy:
+        type: RollingUpdate
+        rollingUpdate:
+          maxUnavailable: 0
+          maxSurge: 1
+      selector:
+        matchLabels:
+          app: '%{nest::kubernetes::service}-trusted-test'
+      minReadySeconds: 10
+      progressDeadlineSeconds: 1800
+      template:
+        metadata:
+          labels:
+            app: '%{nest::kubernetes::service}-trusted-test'
+            joyride.nest/application: joyride-test
+            app.kubernetes.io/component: trusted-test
+          annotations:
+            nest/bootstrap-gate-sha256: '%{nest::service::joyride::bootstrap_gate_sha256}'
+        spec:
+          terminationGracePeriodSeconds: 150
+          automountServiceAccountToken: false
+          securityContext:
+            fsGroup: 10001
+            seccompProfile:
+              type: RuntimeDefault
+          imagePullSecrets:
+          - name: '%{nest::kubernetes::service}-pull'
+          initContainers:
+          - name: wait-bootstrap
+            image: '%{lookup(''joyride_image'')}'
+            securityContext: *id001
+            command: [python, -B, /bootstrap/bootstrap_gate.py, wait]
+            env: *bootstrap_identity
+            volumeMounts:
+            - name: data
+              mountPath: /data
+              readOnly: true
+            - name: bootstrap-gate
+              mountPath: /bootstrap
+              readOnly: true
+          containers:
           - name: trusted-test
             image: '%{lookup(''joyride_image'')}'
             lifecycle: *http_drain
@@ -818,10 +1126,12 @@ resources:
                 cpu: 50m
                 memory: 128Mi
               limits:
-                memory: 1536Mi
+                memory: 2048Mi
             command:
             - gunicorn
             - joyride.trusted_test_wsgi:application
+            - --threads
+            - '3'
             - --timeout
             - '120'
             - --graceful-timeout
@@ -848,53 +1158,20 @@ resources:
                 port: 8002
               initialDelaySeconds: 10
               periodSeconds: 15
-          - name: worker
-            image: '%{lookup(''joyride_image'')}'
-            securityContext: *id001
-            env: *id002
-            envFrom:
-            - secretRef:
-                name: '%{nest::kubernetes::service}-runtime'
-            volumeMounts:
-            - name: data
-              mountPath: /data
-            - name: tmp
-              mountPath: /data/tmp
-            resources:
-              requests:
-                cpu: 100m
-                memory: 192Mi
-              limits:
-                memory: 768Mi
-            command:
-            - python
-            - manage.py
-            - worker
           volumes:
-          - name: routing-installer
+          - name: bootstrap-gate
             configMap:
               name: '%{nest::kubernetes::service}-scripts'
               items:
-              - key: install_routing_graph.py
-                path: install_routing_graph.py
-          - name: curated-input
-            emptyDir:
-              sizeLimit: 16Mi
-          - name: package-reader
-            secret:
-              secretName: '%{nest::kubernetes::service}-artifact-verifier'
-              items:
-              - key: GITLAB_READ_API_TOKEN
-                path: GITLAB_READ_API_TOKEN
-          - name: pull
-            secret:
-              secretName: '%{nest::kubernetes::service}-pull'
+              - key: bootstrap_gate.py
+                path: bootstrap_gate.py
           - name: data
             persistentVolumeClaim:
               claimName: '%{nest::kubernetes::service}-data'
           - name: tmp
             emptyDir:
-              sizeLimit: 1Gi
+              # Full v3 compressed snapshot and tar spool; not host df capacity.
+              sizeLimit: 2Gi
   web:
     apiVersion: v1
     kind: Service
@@ -916,7 +1193,7 @@ resources:
       namespace: '%{nest::kubernetes::namespace}'
     spec:
       selector:
-        app: '%{nest::kubernetes::service}'
+        app: '%{nest::kubernetes::service}-ops'
       ports:
       - name: http
         port: 8001
@@ -929,7 +1206,7 @@ resources:
       namespace: '%{nest::kubernetes::namespace}'
     spec:
       selector:
-        app: '%{nest::kubernetes::service}'
+        app: '%{nest::kubernetes::service}-internal-web'
       ports:
       - name: http
         port: 8003
@@ -942,7 +1219,7 @@ resources:
       namespace: '%{nest::kubernetes::namespace}'
     spec:
       selector:
-        app: '%{nest::kubernetes::service}'
+        app: '%{nest::kubernetes::service}-trusted-test'
       ports:
       - name: http
         port: 8002
@@ -1027,8 +1304,17 @@ resources:
       namespace: '%{nest::kubernetes::namespace}'
     spec:
       podSelector:
-        matchLabels:
-          app: '%{nest::kubernetes::service}'
+        # Include the original shared pod during the first managed transition.
+        # Distinct app selectors avoid immutable Deployment-selector overlap.
+        matchExpressions:
+        - key: app
+          operator: In
+          values:
+          - '%{nest::kubernetes::service}'
+          - '%{nest::kubernetes::service}-worker'
+          - '%{nest::kubernetes::service}-internal-web'
+          - '%{nest::kubernetes::service}-ops'
+          - '%{nest::kubernetes::service}-trusted-test'
       policyTypes:
       - Ingress
       ingress:
@@ -1163,7 +1449,9 @@ resources:
               secretName: '%{nest::kubernetes::service}-tls'
           - name: tmp
             emptyDir:
-              sizeLimit: 64Mi
+              # Buffering precedes backend upload admission: 16 clients x 192 MiB
+              # is 3 GiB, plus frontend bodies and bounded proxy response spool.
+              sizeLimit: 4Gi
   test_access_service:
     apiVersion: v1
     kind: Service

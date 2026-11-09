@@ -141,14 +141,15 @@ stages:
   variables:
     PYTHONDONTWRITEBYTECODE: '1'
   script:
-    - 'python3 spec/app/joyride/test_private_access.py'
-    - 'python3 spec/app/joyride/test_install_routing_graph.py'
-    - 'python3 spec/app/joyride/test_fixture_resources.py'
-    - 'python3 spec/app/joyride/test_production_ops.py'
     - 'python3 -m venv .production-boundary-venv'
     - '.production-boundary-venv/bin/python -m pip install --disable-pip-version-check --only-binary=:all: PyYAML==6.0.3'
+    - '.production-boundary-venv/bin/python spec/app/joyride/test_private_access.py'
+    - '.production-boundary-venv/bin/python spec/app/joyride/test_install_routing_graph.py'
+    - '.production-boundary-venv/bin/python spec/app/joyride/test_fixture_resources.py'
+    - '.production-boundary-venv/bin/python spec/app/joyride/test_production_ops.py'
     - '.production-boundary-venv/bin/python spec/app/joyride/test_production_boundaries.py'
     - '.production-boundary-venv/bin/python spec/app/joyride/test_runtime_ownership.py'
+    - '.production-boundary-venv/bin/python -m unittest discover -s spec/app/joyride -p "test_component*.py" -v'
   # Separate runner phase survives termination/SIGKILL of the test process.
   after_script:
     - 'python3 spec/app/joyride/fixture_resources.py cleanup-ci'
