@@ -5,9 +5,9 @@ service_name: '%{nest::kubernetes::service}'
 fqdn: '%{nest::kubernetes::service}.eyrie'
 runtime_environment: test
 ingress_class: contour-test
-# Delivered multi-route, route-load and backup compatibility; main pipeline 13188.
-# Head 298080853502b9dc15d678bd5b6bfdf89138511d; preserve drafts and selected releases.
-joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:abc4e1dd11ca1f1cce23c1e4b1c9ed2d08fe2c31140eb70509d66c99ec62a4c3
+# Fixed membership tax backend; main pipeline 13271, check/build/smoke passed.
+# Head eeb7f93401a0720ded5a3d859536c4bcf4579dd1; preserve drafts and selected releases.
+joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:760d7c8dc09e32466219e36d152c2f90015182c2ffba3974e936e6082f9bc6e2
 affinity: {}
 tolerations: []
 resources:
@@ -494,6 +494,8 @@ resources:
               value: test
             - name: STRIPE_PRICE_ID
               value: price_1USr7ARxm5b9CJTLAsfCS7RO
+            - name: STRIPE_TAX_RATE_ID
+              value: txr_1Ua0aZRxm5b9CJTLDSqfkYjo
             - name: OPS_SCOPES
               value: status,diagnostics,deploy:test,member:read,member:admin,release
             - name: TEST_MAIL_ALLOWLIST
@@ -647,7 +649,7 @@ resources:
             command: [python, -B, /bootstrap/bootstrap_gate.py, publish]
             env: &bootstrap_identity
             - name: BOOTSTRAP_CONTRACT
-              value: 'c6803dcdd6ea4567041b5a4b81b9bc285c486896c5a16412d4c6b36901c2047e'
+              value: 'b1dc767b57227ab5609afb3dae296a8d0b428617db1b9268b6eb1a0c33afc6cf'
             - name: ROUTING_INSTALLER_SHA256
               value: '%{nest::service::joyride::routing_installer_sha256}'
             volumeMounts:
