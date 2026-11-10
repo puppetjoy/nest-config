@@ -299,7 +299,7 @@ class ProductionBoundaries(unittest.TestCase):
         self.assertNotIn('env', initializer)
         self.assertNotIn('envFrom', initializer)
         self.assertEqual(initializer['volumeMounts'], [{'name': 'scripts', 'mountPath': '/trusted'}])
-        self.assertIn('2e2cc839fe20e67bd262a91c8f0011649f2354b16ced07e56aa7b6457f30ff98', initializer['command'][-1])
+        self.assertIn('7bd63f2e009ef78e4d09f7c42b49450744bd26711e31abe140a582f33f2bc61f', initializer['command'][-1])
         rule = self.resources['alert_rules']['spec']['groups'][0]['rules'][1]
         self.assertIn('kube_cronjob_spec_suspend{namespace="joyride",cronjob="joyride-backup"} == 0', rule['expr'])
         self.assertIn('unless on(namespace,cronjob)', rule['expr'])

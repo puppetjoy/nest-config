@@ -1,6 +1,6 @@
 # Production launch configuration; TEST remains independently scoped
 joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:72ce29949102ef2e9f098d4c2d6e19dfb423c598178b14b51723f43a81b6547e
-joyride_operations_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:868ad62916fb875eaf69ddeb9c968c2b5d93cd69082b1d7c63b186a2aa807ead
+joyride_operations_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:3d4cf5418137163c6bf1da07bc0013387f968d9572928965881ab1f1da35d3b2
 resources:
   config:
     apiVersion: v1
@@ -476,7 +476,7 @@ resources:
                 - -B
                 - -c
                 - "import hashlib, os\ndata = open('/app/platform_runtime/backup.py',\
-                  \ 'rb').read()\nif hashlib.sha256(data).hexdigest() != '2e2cc839fe20e67bd262a91c8f0011649f2354b16ced07e56aa7b6457f30ff98':\n\
+                  \ 'rb').read()\nif hashlib.sha256(data).hexdigest() != '7bd63f2e009ef78e4d09f7c42b49450744bd26711e31abe140a582f33f2bc61f':\n\
                   \    raise SystemExit('Operational source hash mismatch')\nfd =\
                   \ os.open('/trusted/backup.py', os.O_WRONLY | os.O_CREAT | os.O_EXCL,\
                   \ 0o444)\nwith os.fdopen(fd, 'wb') as stream:\n    stream.write(data)\n"
