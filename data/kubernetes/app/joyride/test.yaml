@@ -390,7 +390,7 @@ resources:
       resources:
         requests:
           # Existing CephFS claim: retain all history plus 2 GiB staging headroom.
-          storage: 10Gi
+          storage: 12Gi
   database:
     apiVersion: postgresql.cnpg.io/v1
     kind: Cluster
