@@ -465,6 +465,7 @@ class RouterBoundary(unittest.TestCase):
         self.assertEqual(policy["grants"], [
             {"src": ["tag:luna-gitlab"], "dst": ["172.21.2.1/32"], "ip": ["tcp:22"]},
             {"src": ["tag:luna-gitlab"], "dst": ["172.21.1.3/32"], "ip": ["tcp:443"]},
+            {"src": ["tag:luna-gitlab"], "dst": ["172.21.0.3/32"], "ip": ["tcp:443"]},
         ])
 
     def test_firewalld_matches_tailnet_without_broad_accept(self):
@@ -487,8 +488,8 @@ class RouterBoundary(unittest.TestCase):
                 masqueraded.add(destination)
             else:
                 self.fail("Unexpected firewall rule")
-        self.assertEqual(accepted, {("172.21.2.1/32", "22"), ("172.21.1.3/32", "443")})
-        self.assertEqual(masqueraded, {"172.21.2.1/32", "172.21.1.3/32"})
+        self.assertEqual(accepted, {("172.21.2.1/32", "22"), ("172.21.1.3/32", "443"), ("172.21.0.3/32", "443")})
+        self.assertEqual(masqueraded, {"172.21.2.1/32", "172.21.1.3/32", "172.21.0.3/32"})
 
 
 if __name__ == "__main__":
