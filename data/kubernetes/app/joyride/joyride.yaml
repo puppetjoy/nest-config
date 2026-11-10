@@ -420,6 +420,92 @@ resources:
           - name: tmp
             emptyDir:
               sizeLimit: 1Gi
+  internal_web_app:
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: joyride-internal-web
+      namespace: joyride
+    spec:
+      replicas: 1
+      strategy:
+        type: RollingUpdate
+        rollingUpdate:
+          maxUnavailable: 0
+          maxSurge: 1
+      selector:
+        matchLabels:
+          app: joyride-internal-web
+      template:
+        metadata:
+          labels:
+            app: joyride-internal-web
+            app.kubernetes.io/component: internal-web
+        spec:
+          automountServiceAccountToken: false
+          securityContext:
+            fsGroup: 10001
+            fsGroupChangePolicy: OnRootMismatch
+            seccompProfile:
+              type: RuntimeDefault
+          imagePullSecrets:
+          - name: joyride-pull
+          containers:
+          - name: internal-web
+            image: '%{lookup(''joyride_image'')}'
+            command: [gunicorn, 'joyride.internal_wsgi:application', --bind, '0.0.0.0:8003', --workers, '2', --threads, '3', --timeout, '60', --graceful-timeout, '125']
+            securityContext: *container_security
+            envFrom: *environment
+            env:
+            - name: DJANGO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: joyride-runtime
+                  key: DJANGO_SECRET_KEY
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: joyride-cnpg-app
+                  key: uri
+            - name: STRIPE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: joyride-stripe
+                  key: STRIPE_SECRET_KEY
+            - name: STRIPE_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: joyride-stripe
+                  key: STRIPE_WEBHOOK_SECRET
+            ports:
+            - name: internal-web
+              containerPort: 8003
+            resources:
+              requests:
+                cpu: 100m
+                memory: 192Mi
+              limits:
+                memory: 2048Mi
+            readinessProbe:
+              httpGet:
+                path: /sign-in
+                port: 8003
+                httpHeaders:
+                - name: Host
+                  value: joyride.eyrie
+              initialDelaySeconds: 10
+              periodSeconds: 15
+            livenessProbe:
+              httpGet:
+                path: /health/live
+                port: 8003
+                httpHeaders:
+                - name: Host
+                  value: joyride.eyrie
+              initialDelaySeconds: 10
+              periodSeconds: 15
+            volumeMounts: *read_mounts
+          volumes: *runtime_volumes
   ops_app:
     apiVersion: apps/v1
     kind: Deployment
@@ -529,6 +615,19 @@ resources:
       - name: http
         port: 8000
         targetPort: 8000
+  internal_web:
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: joyride-internal-web
+      namespace: joyride
+    spec:
+      selector:
+        app: joyride-internal-web
+      ports:
+      - name: http
+        port: 8003
+        targetPort: 8003
   ops:
     apiVersion: v1
     kind: Service
@@ -602,6 +701,57 @@ resources:
                 name: joyride-web
                 port:
                   number: 8000
+  internal_web_ingress:
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: joyride-internal-web
+      namespace: joyride
+    spec:
+      ingressClassName: contour
+      tls:
+      - hosts: [joyride.eyrie]
+        secretName: joyride-tls
+      rules:
+      - host: joyride.eyrie
+        http:
+          paths:
+          - path: /admin
+            pathType: Prefix
+            backend:
+              service:
+                name: joyride-internal-web
+                port:
+                  number: 8003
+          - path: /routing
+            pathType: Prefix
+            backend:
+              service:
+                name: joyride-internal-web
+                port:
+                  number: 8003
+  internal_web_policy:
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: joyride-internal-web
+      namespace: joyride
+    spec:
+      podSelector:
+        matchLabels:
+          app: joyride-internal-web
+      policyTypes: [Ingress]
+      ingress:
+      - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: projectcontour
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: envoy
+        ports:
+        - protocol: TCP
+          port: 8003
   web_policy:
     apiVersion: networking.k8s.io/v1
     kind: NetworkPolicy

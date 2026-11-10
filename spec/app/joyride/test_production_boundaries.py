@@ -75,7 +75,7 @@ class ProductionBoundaries(unittest.TestCase):
         # TEST advances independently; a backend update must not promote production.
         self.assertRegex(test['joyride_image'], r'@sha256:[0-9a-f]{64}$')
         self.assertRegex(self.candidate['joyride_image'], r'@sha256:[0-9a-f]{64}$')
-        self.assertEqual(len(self.deployments), 3)
+        self.assertEqual(len(self.deployments), 4)
         for deployment in self.deployments:
             self.assertEqual(deployment['spec']['replicas'], 1)
             pod = deployment['spec']['template']['spec']
@@ -100,6 +100,10 @@ class ProductionBoundaries(unittest.TestCase):
                     'name': 'joyride-web', 'port': {'number': 8000}}}}]}}])
         self.assertEqual(self.resources['web']['spec']['selector'], {'app': 'joyride'})
         self.assertEqual(self.resources['ops']['spec']['selector'], {'app': 'joyride-ops'})
+        private = self.resources['internal_web_ingress']['spec']['rules'][0]['http']['paths']
+        self.assertEqual([(p['path'], p['pathType'], p['backend']['service']['name'], p['backend']['service']['port']['number']) for p in private], [('/admin', 'Prefix', 'joyride-internal-web', 8003), ('/routing', 'Prefix', 'joyride-internal-web', 8003)])
+        self.assertEqual(self.resources['internal_web']['spec'], {'selector': {'app': 'joyride-internal-web'}, 'ports': [{'name': 'http', 'port': 8003, 'targetPort': 8003}]})
+        self.assertEqual(self.resources['internal_web_app']['spec']['template']['spec']['containers'][0]['command'][1], 'joyride.internal_wsgi:application')
         web = self.resources['app']['spec']['template']['spec']['containers']
         self.assertEqual([c['name'] for c in web], ['web'])
         self.assertIn('joyride.wsgi:application', web[0]['command'])
@@ -150,6 +154,10 @@ class ProductionBoundaries(unittest.TestCase):
                 'from': [{'ipBlock': {'cidr': '172.22.0.0/24'}}],
                 'ports': [{'protocol': 'TCP', 'port': 8443}]}]})
         self.assertEqual(self.resources['worker_policy']['spec']['ingress'], [])
+        self.assertEqual(self.resources['internal_web_policy']['spec']['ingress'], [{
+            'from': [{'namespaceSelector': {'matchLabels': {'kubernetes.io/metadata.name': 'projectcontour'}},
+                     'podSelector': {'matchLabels': {'app.kubernetes.io/component': 'envoy'}}}],
+            'ports': [{'protocol': 'TCP', 'port': 8003}]}])
         self.assertEqual(self.resources['web_policy']['spec']['ingress'], [{
             'from': [{'namespaceSelector': {'matchLabels': {
                 'kubernetes.io/metadata.name': 'projectcontour'}},
@@ -175,7 +183,8 @@ class ProductionBoundaries(unittest.TestCase):
         self.assertEqual(actual, {
             'web': mail,
             'worker': dict(mail, WMATA_API_KEY={'name': 'joyride-upstream', 'key': 'WMATA_API_KEY'}),
-            'ops': dict(common, OPS_TOKEN={'name': 'joyride-ops-auth', 'key': 'OPS_TOKEN'}, **stripe)})
+            'ops': dict(common, OPS_TOKEN={'name': 'joyride-ops-auth', 'key': 'OPS_TOKEN'}, **stripe),
+            'internal-web': dict(common, **stripe)})
         config = self.resources['config']['data']
         self.assertEqual(config['MAIL_ENABLED'], '1')
         self.assertEqual(config['STRIPE_MODE'], 'live')
@@ -183,6 +192,35 @@ class ProductionBoundaries(unittest.TestCase):
         self.assertEqual(config['STRIPE_TAX_RATE_ID'], 'txr_1Ua0ZgRreaX3Pn1aVV1r9tS2')
         self.assertEqual(config['OPS_SCOPES'], 'status,diagnostics,member:read')
         self.assertEqual(config['ALLOWED_HOSTS'], 'joyride.eyrie')
+
+    def test_internal_web_preserves_owner_authentication_and_read_only_production_data(self):
+        deployment = self.resources['internal_web_app']['spec']
+        pod = deployment['template']['spec']
+        container, = pod['containers']
+        self.assertEqual(deployment['replicas'], 1)
+        self.assertEqual(pod['securityContext']['fsGroupChangePolicy'], 'OnRootMismatch')
+        self.assertEqual(container['resources']['limits']['memory'], '2048Mi')
+        self.assertEqual(self.resources['app']['spec']['strategy'], {
+            'type': 'RollingUpdate', 'rollingUpdate': {'maxUnavailable': 0, 'maxSurge': 1},
+        })
+        self.assertEqual(self.resources['app']['spec']['minReadySeconds'], 10)
+        self.assertEqual(container['command'][1], 'joyride.internal_wsgi:application')
+        self.assertIn('0.0.0.0:8003', container['command'])
+        self.assertEqual(container['envFrom'], [{'configMapRef': {'name': 'joyride-config'}}])
+        refs = {row['name']: row['valueFrom']['secretKeyRef'] for row in container['env']}
+        self.assertEqual(refs, {
+            'DJANGO_SECRET_KEY': {'name': 'joyride-runtime', 'key': 'DJANGO_SECRET_KEY'},
+            'DATABASE_URL': {'name': 'joyride-cnpg-app', 'key': 'uri'},
+            'STRIPE_SECRET_KEY': {'name': 'joyride-stripe', 'key': 'STRIPE_SECRET_KEY'},
+            'STRIPE_WEBHOOK_SECRET': {'name': 'joyride-stripe', 'key': 'STRIPE_WEBHOOK_SECRET'},
+        })
+        self.assertNotIn('EMAIL_HOST_PASSWORD', refs)
+        self.assertNotIn('OPS_TOKEN', refs)
+        mounts = {m['mountPath']: m for m in container['volumeMounts']}
+        self.assertIs(mounts['/data']['readOnly'], True)
+        self.assertNotIn('/data/private', mounts)
+        self.assertEqual(mounts['/data/tmp']['name'], 'tmp')
+        self.assertEqual(self.resources['ingress']['spec']['rules'][0]['http']['paths'][0]['backend']['service']['name'], 'joyride-web')
 
     def test_private_ops_has_dedicated_tls_vpn_service_and_loopback_auth(self):
         service = self.resources['ops']['spec']
