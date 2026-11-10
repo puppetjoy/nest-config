@@ -1,5 +1,5 @@
 # Production launch configuration; TEST remains independently scoped
-joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:c4461f03cc4b1e1863fd7e87a717197d57d4dc908550e138cec573d33d0a52fb
+joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:72ce29949102ef2e9f098d4c2d6e19dfb423c598178b14b51723f43a81b6547e
 joyride_operations_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:868ad62916fb875eaf69ddeb9c968c2b5d93cd69082b1d7c63b186a2aa807ead
 resources:
   config:
@@ -35,7 +35,11 @@ resources:
     spec:
       replicas: 1
       strategy:
-        type: Recreate
+        type: RollingUpdate
+        rollingUpdate:
+          maxUnavailable: 0
+          maxSurge: 1
+      minReadySeconds: 10
       selector:
         matchLabels:
           app: joyride
