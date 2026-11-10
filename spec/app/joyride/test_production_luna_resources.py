@@ -63,6 +63,9 @@ class LunaProductionResources(unittest.TestCase):
     def test_production_graph_bootstrap_is_init_only_and_read_only_to_pull(self):
         pod = self.resources['trusted_production_app']['spec']['template']['spec']
         self.assertEqual(pod['nodeSelector'], {'node-role.kubernetes.io/compute': ''})
+        self.assertEqual(pod.get('tolerations'), [{
+            'key': 'node-role.kubernetes.io/compute', 'operator': 'Exists', 'effect': 'NoSchedule'
+        }])
         init, = pod['initContainers']
         runtime, = pod['containers']
         self.assertEqual(init['name'], 'routing-graph')
