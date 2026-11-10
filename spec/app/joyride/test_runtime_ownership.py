@@ -16,7 +16,13 @@ class RuntimeOwnership(unittest.TestCase):
         data = yaml.safe_load((ROOT / 'data/kubernetes/service/joyride-test.yaml').read_text())
         pod = data['resources']['backup']['spec']['jobTemplate']['spec']['template']['spec']
         backup, = pod['containers']
-        self.assertEqual(backup['command'][-2:], ['--file-source', 'local-readonly'])
+        self.assertEqual(backup['command'], [
+            'python3', '-B', '/trusted/backup.py', '--stage-root', '/scratch',
+            '--file-source', 'local-readonly', '--format', 'objects-v2',
+        ])
+        self.assertEqual(data['joyride_operations_image'],
+                         'registry.gitlab.joyfullee.me/joy/joyride/app@sha256:'
+                         '84ee376636921e0125bb3da608a21a0da9771d053109478c07d1290a5a67ed7b')
         mount, = [m for m in backup['volumeMounts'] if m['mountPath'] == '/data']
         self.assertEqual(mount, {'name': 'source', 'mountPath': '/data', 'readOnly': True})
         volume, = [v for v in pod['volumes'] if v['name'] == mount['name']]
@@ -204,7 +210,7 @@ class RuntimeOwnership(unittest.TestCase):
                 self.assertIs(pod['automountServiceAccountToken'], False)
                 self.assertIs(initializer['securityContext']['runAsNonRoot'], True)
                 self.assertEqual(initializer['command'][:4], ['python', '-I', '-B', '-c'])
-                expected_hash = ('352f5de3ca10ccb1f61c1ffaaec887d491c6a6347a234a0ebdc5195ae30d95b3'
+                expected_hash = ('b7016a68f34f305d17937c3e2fdff5df0f1a19d1c3da30c9943e91c354514c80'
                                  if path.endswith('joyride-test.yaml') else
                                  '0bd5c397f068b7e9eed784ce48afcd0abf4eeb4ae3b5a11c53aaa04939415f5c')
                 self.assertIn(expected_hash, initializer['command'][-1])

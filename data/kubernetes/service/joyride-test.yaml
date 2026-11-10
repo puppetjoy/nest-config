@@ -1,9 +1,9 @@
 ---
 # TEST-only operational protection; no production backup or restore is enabled.
 # Independently admitted backup producer with direct read-only PVC file capture
-# Joyride abfd01ee31fd5457c22d68180804fc0ba8bfb10a, main pipeline 13328/build 58764.
+# Joyride 89d332fc559472751a3eab3a627858137785b019, main pipeline 13343/build 58913.
 # Keep serving and shared production operational pins unchanged.
-joyride_operations_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:de6190b0f3c81c1133a0f25ac9119d2f3e8124788b4e9e14c579bf452312f263
+joyride_operations_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:84ee376636921e0125bb3da608a21a0da9771d053109478c07d1290a5a67ed7b
 resources:
   backup_registry_auths:
     apiVersion: v1
@@ -56,7 +56,7 @@ resources:
                 - |
                   import hashlib, os
                   data = open('/app/platform_runtime/backup.py', 'rb').read()
-                  if hashlib.sha256(data).hexdigest() != '352f5de3ca10ccb1f61c1ffaaec887d491c6a6347a234a0ebdc5195ae30d95b3':
+                  if hashlib.sha256(data).hexdigest() != 'b7016a68f34f305d17937c3e2fdff5df0f1a19d1c3da30c9943e91c354514c80':
                       raise SystemExit('Operational source hash mismatch')
                   fd = os.open('/trusted/backup.py', os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o444)
                   with os.fdopen(fd, 'wb') as stream:
@@ -77,7 +77,7 @@ resources:
                 # Trusted Nest operational image, not a frontend release.
                 image: '%{lookup(''config_image'')}'
                 imagePullPolicy: Always
-                command: [python3, -B, /trusted/backup.py, --stage-root, /scratch, --file-source, local-readonly]
+                command: [python3, -B, /trusted/backup.py, --stage-root, /scratch, --file-source, local-readonly, --format, objects-v2]
                 env:
                 - name: KUBECONFIG
                   value: /kubeconfig/eyrie.conf
