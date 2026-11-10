@@ -17,7 +17,7 @@ nest::classes:
   - 'nest::service::joyride_gateway'
   - 'nest::service::gitlab_anubis'
 
-nest::service::joyride_gateway::https_enabled: false
+nest::service::joyride_gateway::https_enabled: true
 
 nest::packages:
   - 'app-crypt/certbot'

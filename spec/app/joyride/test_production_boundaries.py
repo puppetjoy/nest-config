@@ -288,7 +288,7 @@ class ProductionBoundaries(unittest.TestCase):
         self.assertTrue((ROOT / 'plans/eyrie/deploy_joyride.yaml').exists())
         gateway = yaml.safe_load((ROOT / 'data/host/gateway.yaml').read_text())
         self.assertIn('nest::service::joyride_gateway', gateway['nest::classes'])
-        self.assertIs(gateway['nest::service::joyride_gateway::https_enabled'], False)
+        self.assertIs(gateway['nest::service::joyride_gateway::https_enabled'], True)
         gateway_class = (ROOT / 'manifests/service/joyride_gateway.pp').read_text()
         self.assertIn('if $https_enabled {', gateway_class)
         activation = (ROOT / 'manifests/service/gateway.pp').read_text()
