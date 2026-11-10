@@ -1,7 +1,7 @@
 # Production service resources; TEST has independent service and namespace scope
 # Private proxy budget covers 16 buffered 192 MiB uploads plus process overhead
 joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:a5034a3a875af292b44c3383ce116cd089f6b08f4d6dc8ab2d0601d83ff2e8ea
-joyride_operations_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:3d4cf5418137163c6bf1da07bc0013387f968d9572928965881ab1f1da35d3b2
+joyride_operations_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:de6190b0f3c81c1133a0f25ac9119d2f3e8124788b4e9e14c579bf452312f263
 resources:
   config:
     apiVersion: v1
@@ -477,7 +477,7 @@ resources:
                 - -B
                 - -c
                 - "import hashlib, os\ndata = open('/app/platform_runtime/backup.py',\
-                  \ 'rb').read()\nif hashlib.sha256(data).hexdigest() != '7bd63f2e009ef78e4d09f7c42b49450744bd26711e31abe140a582f33f2bc61f':\n\
+                  \ 'rb').read()\nif hashlib.sha256(data).hexdigest() != '352f5de3ca10ccb1f61c1ffaaec887d491c6a6347a234a0ebdc5195ae30d95b3':\n\
                   \    raise SystemExit('Operational source hash mismatch')\nfd =\
                   \ os.open('/trusted/backup.py', os.O_WRONLY | os.O_CREAT | os.O_EXCL,\
                   \ 0o444)\nwith os.fdopen(fd, 'wb') as stream:\n    stream.write(data)\n"
@@ -807,6 +807,10 @@ resources:
           automountServiceAccountToken: false
           nodeSelector:
             node-role.kubernetes.io/compute: ''
+          tolerations:
+          - key: node-role.kubernetes.io/compute
+            operator: Exists
+            effect: NoSchedule
           terminationGracePeriodSeconds: 150
           securityContext:
             fsGroup: 10001
