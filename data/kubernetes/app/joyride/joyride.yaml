@@ -1,7 +1,7 @@
 ---
-# Dormant production source preparation, NOT a deployment/launch authorization.
-# The common service class deliberately rejects this namespace. Keep that guard
-# closed until private access, promotion and protection are reviewed together.
+# Production resource defaults; the service-scoped joyride overlay selects the
+# owner-authorized launch image, replicas, billing and protection configuration.
+# TEST remains in its separate namespace and credential scope.
 include:
 - nest::service::joyride
 service_name: joyride
@@ -121,6 +121,61 @@ resources:
                   path: /nest/home/kubeconfigs/eyrie.conf
                   type: File
   restore: {}
+  runtime_secret:
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: joyride-runtime
+      namespace: joyride
+    type: Opaque
+    data:
+      DJANGO_SECRET_KEY: '%{nest::service::joyride::production_django_secret_key_base64}'
+  ops_auth_secret:
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: joyride-ops-auth
+      namespace: joyride
+    type: Opaque
+    data:
+      OPS_TOKEN: '%{nest::service::joyride::production_ops_token_base64}'
+  upstream_secret:
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: joyride-upstream
+      namespace: joyride
+    type: Opaque
+    data:
+      WMATA_API_KEY: '%{nest::service::joyride::production_wmata_api_key_base64}'
+  smtp_secret:
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: joyride-smtp
+      namespace: joyride
+    type: Opaque
+    data:
+      EMAIL_HOST_PASSWORD: '%{nest::service::joyride::production_smtp_password_base64}'
+  stripe_secret:
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: joyride-stripe
+      namespace: joyride
+    type: Opaque
+    data:
+      STRIPE_SECRET_KEY: '%{nest::service::joyride::production_stripe_secret_key_base64}'
+      STRIPE_WEBHOOK_SECRET: '%{nest::service::joyride::production_stripe_webhook_secret_base64}'
+  pull:
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: joyride-pull
+      namespace: joyride
+    type: kubernetes.io/dockerconfigjson
+    data:
+      .dockerconfigjson: '%{nest::service::joyride::production_registry_dockerconfig_base64}'
   nest_registry_auths: {}
   storage:
     apiVersion: v1

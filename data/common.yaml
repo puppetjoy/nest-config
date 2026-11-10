@@ -209,6 +209,7 @@ nest::host_records:
   # Prod services
   ingress.eyrie: '172.21.0.0'
   jump.eyrie: '172.21.0.1'
+  joyride-ops.eyrie: '172.21.0.2'
 
   # Test services
   ingress-test.eyrie: '172.21.1.0'

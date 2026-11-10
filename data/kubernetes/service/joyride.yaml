@@ -1,0 +1,610 @@
+# Production launch configuration; TEST remains independently scoped
+joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:c4461f03cc4b1e1863fd7e87a717197d57d4dc908550e138cec573d33d0a52fb
+joyride_operations_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:868ad62916fb875eaf69ddeb9c968c2b5d93cd69082b1d7c63b186a2aa807ead
+resources:
+  config:
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: joyride-config
+      namespace: joyride
+    data:
+      RUNTIME_ENV: production
+      ALLOWED_HOSTS: joyride.eyrie
+      PUBLIC_ORIGIN: https://joyridedc.com
+      MAIL_ENABLED: '1'
+      EMAIL_HOST: smtp.gmail.com
+      EMAIL_HOST_USER: joy@joyridedc.com
+      DEFAULT_FROM_EMAIL: Friday Night Joyride <hello@joyridedc.com>
+      STRIPE_MODE: live
+      OPS_SCOPES: status,diagnostics,member:read
+      PRIVATE_ROOT: /data/private
+      PUBLIC_ROOT: /data/public
+      MAP_ROOT: /data/maps
+      TMPDIR: /data/tmp
+      STRIPE_PRICE_ID: price_1USr46RreaX3Pn1aj9WYMMj4
+      STRIPE_TAX_RATE_ID: txr_1Ua0ZgRreaX3Pn1aVV1r9tS2
+      OWNER_EMAIL: joy@joyfullee.me
+      RELEASE_ROOT: /data/private/releases
+  app:
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: joyride
+      namespace: joyride
+    spec:
+      replicas: 1
+      strategy:
+        type: Recreate
+      selector:
+        matchLabels:
+          app: joyride
+      template:
+        metadata:
+          labels:
+            app: joyride
+            joyride.nest/application: joyride
+        spec:
+          automountServiceAccountToken: false
+          securityContext: &id006
+            fsGroup: 10001
+            seccompProfile:
+              type: RuntimeDefault
+            fsGroupChangePolicy: OnRootMismatch
+          imagePullSecrets:
+          - name: joyride-pull
+          containers:
+          - name: web
+            image: '%{lookup(''joyride_image'')}'
+            command:
+            - gunicorn
+            - joyride.wsgi:application
+            - --bind
+            - 0.0.0.0:8000
+            - --workers
+            - '2'
+            - --timeout
+            - '60'
+            - --graceful-timeout
+            - '125'
+            securityContext: &id002
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              runAsNonRoot: true
+              runAsUser: 10001
+              runAsGroup: 10001
+              capabilities:
+                drop:
+                - ALL
+            envFrom: &id003
+            - configMapRef:
+                name: joyride-config
+            env: &id004
+            - name: DJANGO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: joyride-runtime
+                  key: DJANGO_SECRET_KEY
+            - name: EMAIL_HOST_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: joyride-smtp
+                  key: EMAIL_HOST_PASSWORD
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: joyride-cnpg-app
+                  key: uri
+            - name: STRIPE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: joyride-stripe
+                  key: STRIPE_SECRET_KEY
+            - name: STRIPE_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: joyride-stripe
+                  key: STRIPE_WEBHOOK_SECRET
+            ports:
+            - name: web
+              containerPort: 8000
+            resources: &id005
+              requests:
+                cpu: 100m
+                memory: 192Mi
+              limits:
+                memory: 768Mi
+            readinessProbe:
+              httpGet:
+                path: /health/ready
+                port: 8000
+                httpHeaders: &id001
+                - name: Host
+                  value: joyride.eyrie
+              initialDelaySeconds: 10
+              periodSeconds: 15
+            livenessProbe:
+              httpGet:
+                path: /health/live
+                port: 8000
+                httpHeaders: *id001
+              initialDelaySeconds: 10
+              periodSeconds: 15
+            volumeMounts: &id007
+            - name: data
+              mountPath: /data
+              readOnly: true
+            - name: tmp
+              mountPath: /data/tmp
+          initContainers:
+          - name: migrate
+            image: '%{lookup(''joyride_image'')}'
+            command:
+            - python
+            - manage.py
+            - migrate
+            - --noinput
+            securityContext: *id002
+            envFrom: *id003
+            env: *id004
+            resources: *id005
+            volumeMounts:
+            - name: tmp
+              mountPath: /data/tmp
+          - name: provision-owner
+            image: '%{lookup(''joyride_image'')}'
+            command:
+            - python
+            - manage.py
+            - provision_owner
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              runAsNonRoot: true
+              runAsUser: 10001
+              runAsGroup: 10001
+              capabilities:
+                drop:
+                - ALL
+            envFrom:
+            - configMapRef:
+                name: joyride-config
+            env:
+            - name: DJANGO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: joyride-runtime
+                  key: DJANGO_SECRET_KEY
+            - name: EMAIL_HOST_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: joyride-smtp
+                  key: EMAIL_HOST_PASSWORD
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: joyride-cnpg-app
+                  key: uri
+            - name: STRIPE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: joyride-stripe
+                  key: STRIPE_SECRET_KEY
+            - name: STRIPE_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: joyride-stripe
+                  key: STRIPE_WEBHOOK_SECRET
+            resources:
+              requests:
+                cpu: 100m
+                memory: 192Mi
+              limits:
+                memory: 768Mi
+            volumeMounts:
+            - name: tmp
+              mountPath: /data/tmp
+          - name: basemap
+            image: '%{lookup(''joyride_image'')}'
+            command:
+            - python
+            - /app/platform_runtime/bootstrap.py
+            securityContext: *id002
+            envFrom: *id003
+            env: *id004
+            resources: *id005
+            volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /data/tmp
+            - name: pull
+              mountPath: /pull
+              readOnly: true
+          volumes:
+          - name: data
+            persistentVolumeClaim:
+              claimName: joyride-data
+          - name: tmp
+            emptyDir:
+              sizeLimit: 1Gi
+          - name: pull
+            secret:
+              secretName: joyride-pull
+      progressDeadlineSeconds: 1800
+  worker:
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: joyride-worker
+      namespace: joyride
+    spec:
+      replicas: 1
+      strategy:
+        type: Recreate
+      selector:
+        matchLabels:
+          app: joyride-worker
+      template:
+        metadata:
+          labels:
+            app: joyride-worker
+            joyride.nest/application: joyride
+        spec:
+          automountServiceAccountToken: false
+          securityContext: *id006
+          imagePullSecrets:
+          - name: joyride-pull
+          containers:
+          - name: worker
+            image: '%{lookup(''joyride_image'')}'
+            command:
+            - python
+            - manage.py
+            - worker
+            securityContext: *id002
+            envFrom: *id003
+            env:
+            - name: DJANGO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: joyride-runtime
+                  key: DJANGO_SECRET_KEY
+            - name: EMAIL_HOST_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: joyride-smtp
+                  key: EMAIL_HOST_PASSWORD
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: joyride-cnpg-app
+                  key: uri
+            - name: WMATA_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: joyride-upstream
+                  key: WMATA_API_KEY
+            - name: STRIPE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: joyride-stripe
+                  key: STRIPE_SECRET_KEY
+            - name: STRIPE_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: joyride-stripe
+                  key: STRIPE_WEBHOOK_SECRET
+            resources: *id005
+            volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /data/tmp
+          volumes:
+          - name: data
+            persistentVolumeClaim:
+              claimName: joyride-data
+          - name: tmp
+            emptyDir:
+              sizeLimit: 1Gi
+      progressDeadlineSeconds: 1800
+  ops_app:
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: joyride-ops
+      namespace: joyride
+    spec:
+      replicas: 1
+      strategy:
+        type: Recreate
+      selector:
+        matchLabels:
+          app: joyride-ops
+      template:
+        metadata:
+          labels:
+            app: joyride-ops
+            joyride.nest/application: joyride
+          annotations:
+            checksum/ops-config: '%{nest::service::joyride::production_ops_config_sha256}'
+        spec:
+          automountServiceAccountToken: false
+          nodeSelector:
+            node-role.kubernetes.io/worker: ''
+          securityContext: *id006
+          imagePullSecrets:
+          - name: joyride-pull
+          containers:
+          - name: ops
+            image: '%{lookup(''joyride_image'')}'
+            command:
+            - gunicorn
+            - joyride.ops_wsgi:application
+            - --bind
+            - 127.0.0.1:8001
+            - --workers
+            - '2'
+            - --timeout
+            - '60'
+            - --graceful-timeout
+            - '125'
+            securityContext: *id002
+            envFrom: *id003
+            env:
+            - name: DJANGO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: joyride-runtime
+                  key: DJANGO_SECRET_KEY
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: joyride-cnpg-app
+                  key: uri
+            - name: OPS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: joyride-ops-auth
+                  key: OPS_TOKEN
+            - name: STRIPE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: joyride-stripe
+                  key: STRIPE_SECRET_KEY
+            - name: STRIPE_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: joyride-stripe
+                  key: STRIPE_WEBHOOK_SECRET
+            resources: *id005
+            readinessProbe:
+              exec:
+                command:
+                - python
+                - -c
+                - import socket; socket.create_connection(("127.0.0.1", 8001), timeout=2).close()
+            volumeMounts: *id007
+          - name: tls-ops
+            image: docker.io/nginxinc/nginx-unprivileged@sha256:f5116ed4606f3eb015dd4a8e28cb9b351476dc0ad4bc6e9f93b19cec130cdf03
+            command:
+            - nginx
+            - -g
+            - daemon off;
+            securityContext: *id002
+            ports:
+            - name: tls-ops
+              containerPort: 8443
+            readinessProbe:
+              tcpSocket:
+                port: 8443
+            resources:
+              requests:
+                cpu: 25m
+                memory: 32Mi
+              limits:
+                memory: 128Mi
+            volumeMounts:
+            - name: ops-config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+              readOnly: true
+            - name: ops-tls
+              mountPath: /tls
+              readOnly: true
+            - name: nginx-tmp
+              mountPath: /tmp
+          volumes:
+          - name: data
+            persistentVolumeClaim:
+              claimName: joyride-data
+          - name: tmp
+            emptyDir:
+              sizeLimit: 1Gi
+          - name: ops-config
+            configMap:
+              name: joyride-ops-config
+          - name: ops-tls
+            secret:
+              secretName: joyride-ops-tls
+          - name: nginx-tmp
+            emptyDir:
+              medium: Memory
+              sizeLimit: 64Mi
+      progressDeadlineSeconds: 1800
+  backup:
+    apiVersion: batch/v1
+    kind: CronJob
+    metadata:
+      name: joyride-backup
+      namespace: joyride
+    spec:
+      suspend: false
+      schedule: 37 */3 * * *
+      timeZone: UTC
+      concurrencyPolicy: Forbid
+      successfulJobsHistoryLimit: 2
+      failedJobsHistoryLimit: 2
+      startingDeadlineSeconds: 600
+      jobTemplate:
+        spec:
+          backoffLimit: 0
+          activeDeadlineSeconds: 3600
+          template:
+            metadata:
+              labels:
+                app: joyride-backup
+            spec:
+              automountServiceAccountToken: false
+              restartPolicy: Never
+              securityContext:
+                fsGroup: 10001
+              imagePullSecrets:
+              - name: joyride-backup-pull
+              - name: joyride-pull
+              initContainers:
+              - name: admit-backup
+                image: '%{lookup(''joyride_operations_image'')}'
+                command:
+                - python
+                - -I
+                - -B
+                - -c
+                - "import hashlib, os\ndata = open('/app/platform_runtime/backup.py',\
+                  \ 'rb').read()\nif hashlib.sha256(data).hexdigest() != '2e2cc839fe20e67bd262a91c8f0011649f2354b16ced07e56aa7b6457f30ff98':\n\
+                  \    raise SystemExit('Operational source hash mismatch')\nfd =\
+                  \ os.open('/trusted/backup.py', os.O_WRONLY | os.O_CREAT | os.O_EXCL,\
+                  \ 0o444)\nwith os.fdopen(fd, 'wb') as stream:\n    stream.write(data)\n"
+                securityContext:
+                  runAsNonRoot: true
+                  runAsUser: 10001
+                  runAsGroup: 10001
+                  allowPrivilegeEscalation: false
+                  readOnlyRootFilesystem: true
+                  capabilities:
+                    drop:
+                    - ALL
+                volumeMounts:
+                - name: scripts
+                  mountPath: /trusted
+              containers:
+              - name: backup
+                image: '%{lookup(''config_image'')}'
+                imagePullPolicy: Always
+                command:
+                - python3
+                - -B
+                - /trusted/backup.py
+                - --stage-root
+                - /scratch
+                - --environment
+                - production
+                env:
+                - name: KUBECONFIG
+                  value: /kubeconfig/eyrie.conf
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  readOnlyRootFilesystem: true
+                  capabilities:
+                    drop:
+                    - ALL
+                resources:
+                  requests:
+                    cpu: 100m
+                    memory: 128Mi
+                    ephemeral-storage: 2Gi
+                  limits:
+                    memory: 512Mi
+                    ephemeral-storage: 24Gi
+                volumeMounts:
+                - name: scripts
+                  mountPath: /trusted
+                  readOnly: true
+                - name: scratch
+                  mountPath: /scratch
+                - name: backup
+                  mountPath: /nest/backup/joyride
+                - name: kubeconfig
+                  mountPath: /kubeconfig/eyrie.conf
+                  readOnly: true
+              volumes:
+              - name: scripts
+                emptyDir:
+                  sizeLimit: 1Mi
+              - name: scratch
+                emptyDir:
+                  sizeLimit: 24Gi
+              - name: backup
+                hostPath:
+                  path: /nest/backup/joyride
+                  type: DirectoryOrCreate
+              - name: kubeconfig
+                hostPath:
+                  path: /nest/home/kubeconfigs/eyrie.conf
+                  type: File
+  backup_registry_auths:
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: joyride-backup-pull
+      namespace: joyride
+    type: kubernetes.io/dockerconfigjson
+    data:
+      .dockerconfigjson: '%{nest::kubernetes::registry_auths_base64}'
+  monitor:
+    apiVersion: batch/v1
+    kind: CronJob
+    metadata:
+      name: joyride-monitor
+      namespace: joyride
+    spec:
+      suspend: false
+      schedule: '*/2 * * * *'
+      concurrencyPolicy: Forbid
+      successfulJobsHistoryLimit: 1
+      failedJobsHistoryLimit: 2
+      startingDeadlineSeconds: 60
+      jobTemplate:
+        spec:
+          backoffLimit: 0
+          activeDeadlineSeconds: 90
+          template:
+            metadata:
+              labels:
+                app: joyride-monitor
+            spec:
+              automountServiceAccountToken: false
+              restartPolicy: Never
+              securityContext: *id006
+              imagePullSecrets:
+              - name: joyride-pull
+              containers:
+              - name: monitor
+                image: '%{lookup(''joyride_operations_image'')}'
+                command:
+                - python
+                - -B
+                - /app/platform_runtime/monitor.py
+                - --environment
+                - production
+                securityContext: *id002
+                resources:
+                  requests:
+                    cpu: 10m
+                    memory: 32Mi
+                  limits:
+                    memory: 64Mi
+  storage:
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: joyride-data
+      namespace: joyride
+    spec:
+      accessModes:
+      - ReadWriteMany
+      storageClassName: ceph-filesystem
+      resources:
+        requests:
+          storage: 10Gi

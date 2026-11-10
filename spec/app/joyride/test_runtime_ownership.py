@@ -86,7 +86,12 @@ class RuntimeOwnership(unittest.TestCase):
         self.assertNotIn("$runtime_secrets.unwrap['EMAIL_HOST_PASSWORD']", contract)
         self.assertNotIn("$runtime_secrets.unwrap['EMAIL_HOST_USER']", contract)
         self.assertNotIn('prod_smtp_password', contract)
-        self.assertIn('production is not configured', contract)
+        self.assertIn('if !$is_test and !$is_production', contract)
+        test_branch, production_branch = contract.split('  if $is_test {', 1)[1].split('  } else {', 1)
+        self.assertIn('$test_smtp_password.unwrap', test_branch)
+        self.assertNotIn('$production_smtp_password', test_branch)
+        self.assertIn('$production_smtp_password.unwrap', production_branch)
+        self.assertNotIn('$test_smtp_password', production_branch)
 
     def test_routing_propose_response_window_is_exact_and_private(self):
         data = yaml.safe_load((ROOT / 'data/kubernetes/app/joyride/test.yaml').read_text())
