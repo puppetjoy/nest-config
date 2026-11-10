@@ -806,11 +806,7 @@ resources:
         spec:
           automountServiceAccountToken: false
           nodeSelector:
-            node-role.kubernetes.io/compute: ''
-          tolerations:
-          - key: node-role.kubernetes.io/compute
-            operator: Exists
-            effect: NoSchedule
+            node-role.kubernetes.io/worker: ''
           terminationGracePeriodSeconds: 150
           securityContext:
             fsGroup: 10001
