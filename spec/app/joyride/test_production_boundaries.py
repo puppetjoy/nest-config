@@ -75,16 +75,19 @@ class ProductionBoundaries(unittest.TestCase):
         # TEST advances independently; a backend update must not promote production.
         self.assertRegex(test['joyride_image'], r'@sha256:[0-9a-f]{64}$')
         self.assertRegex(self.candidate['joyride_image'], r'@sha256:[0-9a-f]{64}$')
-        self.assertEqual(len(self.deployments), 4)
+        self.assertEqual({d['metadata']['name'] for d in self.deployments}, {'joyride', 'joyride-ops', 'joyride-internal-web', 'joyride-production-access', 'joyride-trusted-production', 'joyride-worker'})
         for deployment in self.deployments:
             self.assertEqual(deployment['spec']['replicas'], 1)
             pod = deployment['spec']['template']['spec']
             self.assertIs(pod['automountServiceAccountToken'], False)
-            if deployment['metadata']['name'] != 'joyride':
+            if deployment['metadata']['name'] in ('joyride-ops', 'joyride-internal-web', 'joyride-worker'):
                 self.assertNotIn('initContainers', pod)
-            self.assertEqual(pod['imagePullSecrets'], [{'name': 'joyride-pull'}])
+            if deployment['metadata']['name'] in ('joyride', 'joyride-worker', 'joyride-trusted-production', 'joyride-internal-web', 'joyride-ops'):
+                self.assertEqual(pod['imagePullSecrets'], [{'name': 'joyride-pull'}])
+            else:
+                self.assertNotIn('imagePullSecrets', pod)
             for container in pod['containers']:
-                if container['name'] == 'tls-ops':
+                if container['name'] in ('tls-ops', 'nginx'):
                     self.assertRegex(container['image'], r'^docker.io/nginxinc/nginx-unprivileged@sha256:[0-9a-f]{64}$')
                 else:
                     self.assertEqual(container['image'], "%{lookup('joyride_image')}")
@@ -109,7 +112,7 @@ class ProductionBoundaries(unittest.TestCase):
         self.assertIn('joyride.wsgi:application', web[0]['command'])
         for resource in self.resources.values():
             if resource.get('kind') == 'Service':
-                if resource['metadata']['name'] != 'joyride-ops':
+                if resource['metadata']['name'] not in ('joyride-ops', 'joyride-production-access'):
                     self.assertNotIn(resource['spec'].get('type'), ('NodePort', 'LoadBalancer'))
 
     def test_serial_initialization_is_scoped_to_production_storage(self):
@@ -145,7 +148,10 @@ class ProductionBoundaries(unittest.TestCase):
             for container in runtime_pod['containers']:
                 self.assertTrue({'pull', 'scripts'}.isdisjoint(m['name'] for m in container['volumeMounts']))
             if deployment['metadata']['name'] != 'joyride':
-                self.assertTrue({'pull', 'scripts'}.isdisjoint(v['name'] for v in runtime_pod['volumes']))
+                if deployment['metadata']['name'] == 'joyride-trusted-production':
+                    self.assertIn('pull', {v['name'] for v in runtime_pod['volumes']})
+                else:
+                    self.assertTrue({'pull', 'scripts'}.isdisjoint(v['name'] for v in runtime_pod['volumes']))
 
     def test_network_boundary_separates_ops_from_shared_ingress(self):
         self.assertEqual(self.resources['ops_policy']['spec'], {
@@ -157,6 +163,8 @@ class ProductionBoundaries(unittest.TestCase):
         self.assertEqual(self.resources['internal_web_policy']['spec']['ingress'], [{
             'from': [{'namespaceSelector': {'matchLabels': {'kubernetes.io/metadata.name': 'projectcontour'}},
                      'podSelector': {'matchLabels': {'app.kubernetes.io/component': 'envoy'}}}],
+            'ports': [{'protocol': 'TCP', 'port': 8003}]}, {
+            'from': [{'podSelector': {'matchLabels': {'app': 'joyride-production-access'}}}],
             'ports': [{'protocol': 'TCP', 'port': 8003}]}])
         self.assertEqual(self.resources['web_policy']['spec']['ingress'], [{
             'from': [{'namespaceSelector': {'matchLabels': {
@@ -168,10 +176,15 @@ class ProductionBoundaries(unittest.TestCase):
         actual = {}
         for deployment in self.deployments:
             for container in deployment['spec']['template']['spec']['containers']:
-                if container['name'] == 'tls-ops':
+                if container['name'] in ('tls-ops', 'nginx'):
                     self.assertNotIn('env', container)
                     self.assertNotIn('envFrom', container)
-                    self.assertEqual({m['name'] for m in container['volumeMounts']}, {'ops-config', 'ops-tls', 'nginx-tmp'})
+                    expected = {'ops-config', 'ops-tls', 'nginx-tmp'} if container['name'] == 'tls-ops' else {'config', 'tls', 'tmp'}
+                    self.assertEqual({m['name'] for m in container['volumeMounts']}, expected)
+                    continue
+                if deployment['metadata']['name'] == 'joyride-trusted-production':
+                    self.assertIn({'configMapRef': {'name': 'joyride-config'}}, container['envFrom'])
+                    actual[container['name']] = {item['name']: item['valueFrom']['secretKeyRef'] for item in container['env']}
                     continue
                 self.assertEqual(container['envFrom'], [{'configMapRef': {'name': 'joyride-config'}}])
                 actual[container['name']] = {item['name']: item['valueFrom']['secretKeyRef'] for item in container['env']}
@@ -184,7 +197,8 @@ class ProductionBoundaries(unittest.TestCase):
             'web': mail,
             'worker': dict(mail, WMATA_API_KEY={'name': 'joyride-upstream', 'key': 'WMATA_API_KEY'}),
             'ops': dict(common, OPS_TOKEN={'name': 'joyride-ops-auth', 'key': 'OPS_TOKEN'}, **stripe),
-            'internal-web': dict(common, **stripe)})
+            'internal-web': dict(common, **stripe),
+            'trusted-production': dict(common, **stripe)})
         config = self.resources['config']['data']
         self.assertEqual(config['MAIL_ENABLED'], '1')
         self.assertEqual(config['STRIPE_MODE'], 'live')
@@ -310,7 +324,10 @@ class ProductionBoundaries(unittest.TestCase):
         self.assertEqual(self.resources['storage']['metadata']['name'], 'joyride-data')
         for deployment in self.deployments:
             volumes = deployment['spec']['template']['spec']['volumes']
-            self.assertEqual(volumes[0]['persistentVolumeClaim'], {'claimName': 'joyride-data'})
+            if deployment['metadata']['name'] == 'joyride-production-access':
+                self.assertNotIn('persistentVolumeClaim', yaml.safe_dump(volumes))
+            else:
+                self.assertIn({'name': 'data', 'persistentVolumeClaim': {'claimName': 'joyride-data'}}, volumes)
 
     def test_production_is_explicitly_scoped_without_test_authority(self):
         guard = (ROOT / 'manifests/service/joyride.pp').read_text()

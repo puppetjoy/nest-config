@@ -11,7 +11,7 @@ EXPECTED = {
     "RunWebClient": False,
     "NoSNAT": False,
     "NetfilterMode": 0,
-    "AdvertiseRoutes": ["172.21.1.3/32", "172.21.2.1/32"],
+    "AdvertiseRoutes": ["172.21.0.3/32", "172.21.1.3/32", "172.21.2.1/32"],
 
     "ExitNodeID": "",
     "ExitNodeIP": "",
@@ -39,7 +39,7 @@ def main():
         "--webclient=false",
         "--advertise-exit-node=false", "--exit-node=",
         "--exit-node-allow-lan-access=false", "--snat-subnet-routes=true",
-        "--netfilter-mode=off", "--advertise-routes=172.21.1.3/32,172.21.2.1/32",
+        "--netfilter-mode=off", "--advertise-routes=172.21.0.3/32,172.21.1.3/32,172.21.2.1/32",
 
     ], check=True, capture_output=True, text=True)
     return 0 if converged() else 1

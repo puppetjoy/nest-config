@@ -1,5 +1,6 @@
 """Synthetic installer checks; never load or publish private graph contents."""
 import hashlib
+import base64
 from contextlib import closing
 import importlib.util
 import io
@@ -89,8 +90,34 @@ class GraphInstall(unittest.TestCase):
 
     def test_production_refused(self):
         with patch.dict(os.environ, {"RUNTIME_ENV": "production"}):
-            with self.assertRaisesRegex(ValueError, "test_only"):
+            with self.assertRaisesRegex(ValueError, "production_bootstrap_not_authorized"):
                 installer.install(self.root)
+
+    def test_production_opt_in_uses_docker_config_basic_auth_only(self):
+        config = {"auths": {"registry.gitlab.joyfullee.me": {"auth": base64.b64encode(b"deploy:readonly").decode()}}}
+        with patch.dict(os.environ, {"RUNTIME_ENV": "production", "JOYRIDE_PRODUCTION_ROUTING_BOOTSTRAP": "1"}), \
+                patch.object(Path, "read_text", return_value=json.dumps(config)) as read_text:
+            opener = Mock()
+            opener.open.return_value = io.BytesIO(self.raw)
+            with patch.object(installer.urllib.request, "build_opener", return_value=opener):
+                installer.install(self.root)
+        self.assertEqual(opener.open.call_args.args[0].get_header("Authorization"), "Basic " + base64.b64encode(b"deploy:readonly").decode())
+        read_text.assert_called_once_with()
+
+    def test_production_without_opt_in_is_refused(self):
+        with patch.dict(os.environ, {"RUNTIME_ENV": "production", "JOYRIDE_PRODUCTION_ROUTING_BOOTSTRAP": ""}):
+            with self.assertRaisesRegex(ValueError, "production_bootstrap_not_authorized"):
+                installer.install(self.root)
+
+    def test_production_malformed_or_missing_auth_fails_without_test_fallback(self):
+        configs = ("not-json", "{}", json.dumps({"auths": {"registry.gitlab.joyfullee.me": {}}}))
+        with patch.dict(os.environ, {"RUNTIME_ENV": "production", "JOYRIDE_PRODUCTION_ROUTING_BOOTSTRAP": "1"}):
+            for config in configs:
+                with self.subTest(config=config), patch.object(Path, "read_text", return_value=config), \
+                        patch.object(installer.urllib.request, "build_opener") as opener:
+                    with self.assertRaises(ValueError):
+                        installer.install(self.root)
+                    opener.assert_not_called()
 
     def test_package_version_does_not_replace_topology_identity(self):
         self.assertNotEqual(installer.BUILD, installer.GRAPH_BUILD)

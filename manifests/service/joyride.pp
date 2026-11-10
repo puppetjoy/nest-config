@@ -95,5 +95,9 @@ class nest::service::joyride (
     $production_registry_dockerconfig_base64 = base64('encode', $production_registry_dockerconfig.unwrap).chomp
     $production_ops_config_base64 = base64('encode', file('nest/app/joyride/production-ops-nginx.conf'))
     $production_ops_config_sha256 = sha256(file('nest/app/joyride/production-ops-nginx.conf'))
+    $production_access_config_base64 = base64('encode', file('nest/app/joyride/production-access-nginx.conf'))
+    $production_access_config_sha256 = sha256(file('nest/app/joyride/production-access-nginx.conf'))
+    $production_routing_installer_base64 = base64('encode', file('nest/app/joyride/install_routing_graph.py'))
+    $production_routing_installer_sha256 = sha256(file('nest/app/joyride/install_routing_graph.py'))
   }
 }

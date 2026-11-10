@@ -10,16 +10,20 @@ table inet nest_luna {
     type filter hook output priority -10; policy accept;
     # Router-local processes must not inherit the authenticated subnet path.
     ip daddr 172.21.1.3 counter drop
+    ip daddr 172.21.0.3 counter drop
   }
   chain forward {
     type filter hook forward priority -10; policy accept;
     iifname "tailscale0" ip saddr 100.127.2.74 ip daddr 172.21.2.1 tcp dport 22 counter return
+    iifname "tailscale0" ip saddr 100.127.2.74 ip daddr 172.21.0.3 tcp dport 443 counter return
     iifname "tailscale0" ip saddr 100.127.2.74 ip daddr 172.21.1.3 tcp dport 443 counter return
     # Before SNAT: only the exact decrypted Luna flow may reach this VIP.
     ip daddr 172.21.1.3 counter drop
+    ip daddr 172.21.0.3 counter drop
     iifname "tailscale0" counter drop
     oifname "tailscale0" ip saddr 172.21.2.1 ip daddr 100.127.2.74 tcp sport 22 ct state established counter return
     oifname "tailscale0" ip saddr 172.21.1.3 ip daddr 100.127.2.74 tcp sport 443 ct state established counter return
+    oifname "tailscale0" ip saddr 172.21.0.3 ip daddr 100.127.2.74 tcp sport 443 ct state established counter return
     oifname "tailscale0" counter drop
   }
 }

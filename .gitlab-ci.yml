@@ -148,6 +148,8 @@ stages:
     - '.production-boundary-venv/bin/python spec/app/joyride/test_fixture_resources.py'
     - '.production-boundary-venv/bin/python spec/app/joyride/test_production_ops.py'
     - '.production-boundary-venv/bin/python spec/app/joyride/test_production_boundaries.py'
+    - '.production-boundary-venv/bin/python spec/app/joyride/test_production_access.py'
+    - '.production-boundary-venv/bin/python spec/app/joyride/test_production_luna_resources.py'
     - '.production-boundary-venv/bin/python spec/app/joyride/test_runtime_ownership.py'
     - '.production-boundary-venv/bin/python -m unittest discover -s spec/app/joyride -p "test_component*.py" -v'
   # Separate runner phase survives termination/SIGKILL of the test process.
