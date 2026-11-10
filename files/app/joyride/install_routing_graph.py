@@ -1,5 +1,6 @@
 """Install the reviewed private TEST graph; retain immutable files for rollback."""
 import hashlib
+import base64
 from contextlib import closing
 import json
 import os
@@ -32,7 +33,7 @@ def verify(path):
             digest.update(chunk)
     if digest.hexdigest() != SHA256:
         raise ValueError("graph_checksum_mismatch")
-    with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)) as db:
+    with closing(sqlite3.connect(path.as_uri() + "?mode=ro&immutable=1", uri=True)) as db:
         # Share the hash-warmed file cache rather than duplicating the complete
         # graph in SQLite's heap while checking indexes in several key orders.
         db.execute("PRAGMA mmap_size=1342177280")
@@ -52,8 +53,12 @@ def select(root, name, target):
 
 
 def install(root=Path("/data/private/routing")):
-    if os.environ.get("RUNTIME_ENV") != "test":
+    runtime = os.environ.get("RUNTIME_ENV")
+    production = runtime == "production"
+    if runtime != "test" and not production:
         raise ValueError("test_only")
+    if production and os.environ.get("JOYRIDE_PRODUCTION_ROUTING_BOOTSTRAP") != "1":
+        raise ValueError("production_bootstrap_not_authorized")
     os.umask(0o077)
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
     current = root / "current.sqlite3"
@@ -65,8 +70,19 @@ def install(root=Path("/data/private/routing")):
         # second graph copy; leave 256 MiB headroom and never remove old data.
         if shutil.disk_usage(root).free < SIZE + 256 * 1024 * 1024:
             raise ValueError("insufficient_graph_staging_space")
-        token = Path("/package-reader/GITLAB_READ_API_TOKEN").read_text().strip()
-        request = urllib.request.Request(URL, headers={"PRIVATE-TOKEN": token})
+        if production:
+            try:
+                config = json.loads(Path("/pull/.dockerconfigjson").read_text())
+                encoded = config["auths"]["registry.gitlab.joyfullee.me"]["auth"]
+                credentials = base64.b64decode(encoded, validate=True).decode("utf-8")
+                if ":" not in credentials or not all(credentials.split(":", 1)):
+                    raise ValueError("invalid")
+            except (KeyError, TypeError, ValueError, UnicodeDecodeError):
+                raise ValueError("production_registry_auth_invalid") from None
+            request = urllib.request.Request(URL, headers={"Authorization": "Basic " + encoded})
+        else:
+            token = Path("/package-reader/GITLAB_READ_API_TOKEN").read_text().strip()
+            request = urllib.request.Request(URL, headers={"PRIVATE-TOKEN": token})
         temporary = None
         try:
             with tempfile.NamedTemporaryFile(dir=root, prefix=".download-", delete=False) as output:

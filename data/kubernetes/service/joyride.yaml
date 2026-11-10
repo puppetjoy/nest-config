@@ -1,6 +1,7 @@
-# Production launch configuration; TEST remains independently scoped
-joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:72ce29949102ef2e9f098d4c2d6e19dfb423c598178b14b51723f43a81b6547e
-joyride_operations_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:868ad62916fb875eaf69ddeb9c968c2b5d93cd69082b1d7c63b186a2aa807ead
+# Production service resources; TEST has independent service and namespace scope
+# Private proxy budget covers 16 buffered 192 MiB uploads plus process overhead
+joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:a5034a3a875af292b44c3383ce116cd089f6b08f4d6dc8ab2d0601d83ff2e8ea
+joyride_operations_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:3d4cf5418137163c6bf1da07bc0013387f968d9572928965881ab1f1da35d3b2
 resources:
   config:
     apiVersion: v1
@@ -476,7 +477,7 @@ resources:
                 - -B
                 - -c
                 - "import hashlib, os\ndata = open('/app/platform_runtime/backup.py',\
-                  \ 'rb').read()\nif hashlib.sha256(data).hexdigest() != '2e2cc839fe20e67bd262a91c8f0011649f2354b16ced07e56aa7b6457f30ff98':\n\
+                  \ 'rb').read()\nif hashlib.sha256(data).hexdigest() != '7bd63f2e009ef78e4d09f7c42b49450744bd26711e31abe140a582f33f2bc61f':\n\
                   \    raise SystemExit('Operational source hash mismatch')\nfd =\
                   \ os.open('/trusted/backup.py', os.O_WRONLY | os.O_CREAT | os.O_EXCL,\
                   \ 0o444)\nwith os.fdopen(fd, 'wb') as stream:\n    stream.write(data)\n"
@@ -612,3 +613,401 @@ resources:
       resources:
         requests:
           storage: 10Gi
+  production_access_config:
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: joyride-production-access
+      namespace: joyride
+    binaryData:
+      nginx.conf: '%{nest::service::joyride::production_access_config_base64}'
+  production_access:
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: joyride-production-access
+      namespace: joyride
+    spec:
+      replicas: 1
+      strategy:
+        type: RollingUpdate
+        rollingUpdate:
+          maxUnavailable: 0
+          maxSurge: 1
+      selector:
+        matchLabels:
+          app: joyride-production-access
+      template:
+        metadata:
+          labels:
+            app: joyride-production-access
+            app.kubernetes.io/component: private-access
+          annotations:
+            checksum/production-access-config: '%{nest::service::joyride::production_access_config_sha256}'
+        spec:
+          automountServiceAccountToken: false
+          nodeSelector:
+            node-role.kubernetes.io/worker: ''
+          securityContext:
+            fsGroup: 10001
+            fsGroupChangePolicy: OnRootMismatch
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+          - name: nginx
+            image: docker.io/nginxinc/nginx-unprivileged@sha256:f5116ed4606f3eb015dd4a8e28cb9b351476dc0ad4bc6e9f93b19cec130cdf03
+            command:
+            - nginx
+            - -g
+            - daemon off;
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              runAsNonRoot: true
+              runAsUser: 10001
+              runAsGroup: 10001
+              capabilities:
+                drop:
+                - ALL
+            ports:
+            - name: https
+              containerPort: 8443
+            readinessProbe:
+              tcpSocket:
+                port: 8443
+            resources:
+              requests:
+                cpu: 25m
+                memory: 32Mi
+                ephemeral-storage: 64Mi
+              limits:
+                memory: 4096Mi
+                ephemeral-storage: 5Gi
+            volumeMounts:
+            - name: config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+              readOnly: true
+            - name: tls
+              mountPath: /tls
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          volumes:
+          - name: config
+            configMap:
+              name: joyride-production-access
+          - name: tls
+            secret:
+              secretName: joyride-tls
+          - name: tmp
+            emptyDir:
+              sizeLimit: 4Gi
+  production_access_service:
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: joyride-production-access
+      namespace: joyride
+    spec:
+      type: LoadBalancer
+      loadBalancerIP: 172.21.0.3
+      allocateLoadBalancerNodePorts: false
+      externalTrafficPolicy: Local
+      loadBalancerSourceRanges:
+      - 172.22.4.3/32
+      selector:
+        app: joyride-production-access
+      ports:
+      - name: https
+        port: 443
+        targetPort: 8443
+  production_access_policy:
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: joyride-production-access
+      namespace: joyride
+    spec:
+      podSelector:
+        matchLabels:
+          app: joyride-production-access
+      policyTypes:
+      - Ingress
+      - Egress
+      ingress:
+      - from:
+        - ipBlock:
+            cidr: 172.22.4.3/32
+        ports:
+        - protocol: TCP
+          port: 8443
+      egress:
+      - to:
+        - podSelector:
+            matchLabels:
+              app: joyride-trusted-production
+        ports:
+        - protocol: TCP
+          port: 8004
+      - to:
+        - podSelector:
+            matchLabels:
+              app: joyride-internal-web
+        ports:
+        - protocol: TCP
+          port: 8003
+      - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+        ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+  production_operations_scripts:
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: joyride-production-operations-scripts
+      namespace: joyride
+    binaryData:
+      install_routing_graph.py: '%{nest::service::joyride::production_routing_installer_base64}'
+  trusted_production_app:
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: joyride-trusted-production
+      namespace: joyride
+    spec:
+      replicas: 1
+      strategy:
+        type: RollingUpdate
+        rollingUpdate:
+          maxUnavailable: 0
+          maxSurge: 1
+      minReadySeconds: 10
+      progressDeadlineSeconds: 1800
+      selector:
+        matchLabels:
+          app: joyride-trusted-production
+      template:
+        metadata:
+          labels:
+            app: joyride-trusted-production
+            joyride.nest/application: joyride
+            app.kubernetes.io/component: trusted-production
+          annotations:
+            checksum/routing-installer: '%{nest::service::joyride::production_routing_installer_sha256}'
+        spec:
+          automountServiceAccountToken: false
+          nodeSelector:
+            node-role.kubernetes.io/compute: ''
+          terminationGracePeriodSeconds: 150
+          securityContext:
+            fsGroup: 10001
+            fsGroupChangePolicy: OnRootMismatch
+            seccompProfile:
+              type: RuntimeDefault
+          imagePullSecrets:
+          - name: joyride-pull
+          initContainers:
+          - name: routing-graph
+            image: '%{lookup(''joyride_image'')}'
+            command:
+            - python
+            - -B
+            - /platform/install_routing_graph.py
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              runAsNonRoot: true
+              runAsUser: 10001
+              runAsGroup: 10001
+              capabilities:
+                drop:
+                - ALL
+            env:
+            - name: RUNTIME_ENV
+              value: production
+            - name: JOYRIDE_PRODUCTION_ROUTING_BOOTSTRAP
+              value: '1'
+            resources:
+              requests:
+                cpu: 250m
+                memory: 64Mi
+              limits:
+                memory: 1536Mi
+            volumeMounts:
+            - name: data
+              mountPath: /data/private
+              subPath: private
+            - name: scripts
+              mountPath: /platform
+              readOnly: true
+            - name: pull
+              mountPath: /pull
+              readOnly: true
+          containers:
+          - name: trusted-production
+            image: '%{lookup(''joyride_image'')}'
+            command:
+            - gunicorn
+            - joyride.trusted_production_wsgi:application
+            - --bind
+            - 0.0.0.0:8004
+            - --workers
+            - '2'
+            - --threads
+            - '3'
+            - --timeout
+            - '120'
+            - --graceful-timeout
+            - '125'
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              runAsNonRoot: true
+              runAsUser: 10001
+              runAsGroup: 10001
+              capabilities:
+                drop:
+                - ALL
+            envFrom:
+            - configMapRef:
+                name: joyride-config
+            env:
+            - name: DJANGO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: joyride-runtime
+                  key: DJANGO_SECRET_KEY
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: joyride-cnpg-app
+                  key: uri
+            - name: STRIPE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: joyride-stripe
+                  key: STRIPE_SECRET_KEY
+            - name: STRIPE_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: joyride-stripe
+                  key: STRIPE_WEBHOOK_SECRET
+            ports:
+            - name: trusted
+              containerPort: 8004
+            resources:
+              requests:
+                cpu: 100m
+                memory: 192Mi
+              limits:
+                memory: 2048Mi
+            startupProbe:
+              tcpSocket:
+                port: 8004
+              periodSeconds: 2
+              failureThreshold: 60
+            readinessProbe:
+              tcpSocket:
+                port: 8004
+              periodSeconds: 15
+            lifecycle:
+              preStop:
+                exec:
+                  command:
+                  - python
+                  - -c
+                  - import time; time.sleep(15)
+            volumeMounts:
+            - name: data
+              mountPath: /data
+              readOnly: true
+            - name: data
+              mountPath: /data/private
+              subPath: private
+            - name: tmp
+              mountPath: /data/tmp
+          volumes:
+          - name: data
+            persistentVolumeClaim:
+              claimName: joyride-data
+          - name: tmp
+            emptyDir:
+              sizeLimit: 2Gi
+          - name: scripts
+            configMap:
+              name: joyride-production-operations-scripts
+          - name: pull
+            secret:
+              secretName: joyride-pull
+  trusted_production:
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: joyride-trusted-production
+      namespace: joyride
+    spec:
+      selector:
+        app: joyride-trusted-production
+      ports:
+      - name: trusted
+        port: 8004
+        targetPort: 8004
+  trusted_production_policy:
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: joyride-trusted-production
+      namespace: joyride
+    spec:
+      podSelector:
+        matchLabels:
+          app: joyride-trusted-production
+      policyTypes:
+      - Ingress
+      ingress:
+      - from:
+        - podSelector:
+            matchLabels:
+              app: joyride-production-access
+        ports:
+        - protocol: TCP
+          port: 8004
+  internal_web_policy:
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: joyride-internal-web
+      namespace: joyride
+    spec:
+      podSelector:
+        matchLabels:
+          app: joyride-internal-web
+      policyTypes:
+      - Ingress
+      ingress:
+      - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: projectcontour
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: envoy
+        ports:
+        - protocol: TCP
+          port: 8003
+      - from:
+        - podSelector:
+            matchLabels:
+              app: joyride-production-access
+        ports:
+        - protocol: TCP
+          port: 8003
