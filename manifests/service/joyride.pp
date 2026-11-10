@@ -20,7 +20,6 @@ class nest::service::joyride (
   }
 
   if $is_test {
-
     # Reject an unsupported environment before asking for credentials. Optional
     # parameters permit that ordering, not a credential-free TEST deployment.
     if $runtime_secrets == undef or $registry_dockerconfig == undef or $artifact_verifier_token == undef {
