@@ -1,0 +1,15 @@
+---
+description: 'Deploy the owner-authorized Joyride production service independently of TEST'
+parameters:
+  render_to:
+    type: String
+    default: ''
+steps:
+  - plan: nest::kubernetes::deploy
+    parameters:
+      service: joyride
+      app: joyride
+      namespace: joyride
+      init: false
+      wait: true
+      render_to: $render_to

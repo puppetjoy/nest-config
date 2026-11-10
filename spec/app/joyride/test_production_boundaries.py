@@ -14,9 +14,16 @@ ROOT = Path(__file__).resolve().parents[3]
 class ProductionBoundaries(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.source = (ROOT / 'data/kubernetes/app/joyride/joyride.yaml').read_text()
-        cls.candidate = yaml.safe_load(cls.source)
-        cls.resources = cls.candidate['resources']
+        base_source = (ROOT / 'data/kubernetes/app/joyride/joyride.yaml').read_text()
+        overlay_source = (ROOT / 'data/kubernetes/service/joyride.yaml').read_text()
+        cls.source = base_source + '\n' + overlay_source
+        cls.candidate = yaml.safe_load(base_source)
+        overlay = yaml.safe_load(overlay_source)
+        cls.candidate.update({key: value for key, value in overlay.items() if key != 'resources'})
+        # Hiera merges resources as a hash with whole-resource precedence.
+        cls.resources = dict(cls.candidate['resources'])
+        cls.resources.update(overlay['resources'])
+        cls.candidate['resources'] = cls.resources
         cls.deployments = [r for r in cls.resources.values() if r.get('kind') == 'Deployment']
 
     def test_namespace_and_no_test_operational_authority(self):
@@ -25,19 +32,27 @@ class ProductionBoundaries(unittest.TestCase):
         for resource in self.resources.values():
             if resource:
                 self.assertEqual(resource['metadata']['namespace'], 'joyride')
-                self.assertNotIn(resource['kind'], ('Secret', 'Role', 'RoleBinding', 'ServiceAccount', 'Job'))
+                self.assertNotIn(resource['kind'], ('Role', 'RoleBinding', 'ServiceAccount', 'Job'))
+                if resource['kind'] == 'Secret':
+                    self.assertIn(resource['metadata']['name'], (
+                        'joyride-runtime', 'joyride-smtp', 'joyride-upstream',
+                        'joyride-stripe', 'joyride-ops-auth', 'joyride-pull',
+                        'joyride-backup-pull'))
                 if resource['kind'] == 'CronJob':
                     self.assertIn(resource['metadata']['name'], ('joyride-monitor', 'joyride-backup'))
-                    self.assertIs(resource['spec']['suspend'], True)
+                    self.assertIs(resource['spec']['suspend'], False)
         self.assertNotIn('joyride-test', self.source)
         self.assertNotIn('8002', self.source)
         self.assertNotIn('172.21.1.3', self.source)
 
         self.assertEqual(self.resources['restore'], {})
 
-    def test_dormant_mail_identity_has_production_only_secret_reference(self):
+    def test_production_mail_and_billing_have_explicit_secret_consumers(self):
         config = self.resources['config']['data']
-        self.assertEqual(config['MAIL_ENABLED'], '0')
+        self.assertEqual(config['MAIL_ENABLED'], '1')
+        self.assertEqual(config['STRIPE_MODE'], 'live')
+        self.assertEqual(config['STRIPE_PRICE_ID'], 'price_1USr46RreaX3Pn1aj9WYMMj4')
+        self.assertEqual(config['STRIPE_TAX_RATE_ID'], 'txr_1Ua0ZgRreaX3Pn1aVV1r9tS2')
         self.assertEqual(config['EMAIL_HOST'], 'smtp.gmail.com')
         self.assertEqual(config['EMAIL_HOST_USER'], 'joy@joyridedc.com')
         self.assertEqual(config['DEFAULT_FROM_EMAIL'], 'Friday Night Joyride <hello@joyridedc.com>')
@@ -51,8 +66,9 @@ class ProductionBoundaries(unittest.TestCase):
                         'name': 'joyride-smtp', 'key': 'EMAIL_HOST_PASSWORD'}}})
                 self.assertIn({'configMapRef': {'name': 'joyride-config'}}, container['envFrom'])
         contract = (ROOT / 'manifests/service/joyride.pp').read_text()
-        self.assertIn('production is not configured', contract)
-        self.assertNotIn('production_smtp_password', contract)
+        self.assertIn('$is_production', contract)
+        self.assertIn('$production_smtp_password', contract)
+        self.assertIn("$production_runtime_secrets", contract)
 
     def test_immutable_artifacts_and_inert_deployments(self):
         test = yaml.safe_load((ROOT / 'data/kubernetes/app/joyride/test.yaml').read_text())
@@ -61,7 +77,7 @@ class ProductionBoundaries(unittest.TestCase):
         self.assertRegex(self.candidate['joyride_image'], r'@sha256:[0-9a-f]{64}$')
         self.assertEqual(len(self.deployments), 3)
         for deployment in self.deployments:
-            self.assertEqual(deployment['spec']['replicas'], 0)
+            self.assertEqual(deployment['spec']['replicas'], 1)
             pod = deployment['spec']['template']['spec']
             self.assertIs(pod['automountServiceAccountToken'], False)
             if deployment['metadata']['name'] != 'joyride':
@@ -94,11 +110,16 @@ class ProductionBoundaries(unittest.TestCase):
 
     def test_serial_initialization_is_scoped_to_production_storage(self):
         pod = self.resources['app']['spec']['template']['spec']
-        migrate, basemap = pod['initContainers']
-        self.assertEqual([c['name'] for c in pod['initContainers']], ['migrate', 'basemap'])
+        web = pod['containers'][0]
+        migrate, provision_owner, basemap = pod['initContainers']
+        self.assertEqual([c['name'] for c in pod['initContainers']], ['migrate', 'provision-owner', 'basemap'])
+        self.assertEqual(provision_owner['command'], ['python', 'manage.py', 'provision_owner'])
+        self.assertEqual(provision_owner['image'], web['image'])
+        self.assertEqual(provision_owner['env'], web['env'])
+        self.assertEqual(provision_owner['envFrom'], web['envFrom'])
+        self.assertEqual(provision_owner['resources'], web['resources'])
         self.assertEqual(migrate['command'], ['python', 'manage.py', 'migrate', '--noinput'])
         self.assertEqual(basemap['command'], ['python', '/app/platform_runtime/bootstrap.py'])
-        web = pod['containers'][0]
         for initializer in (migrate, basemap):
             self.assertEqual(initializer['image'], web['image'])
             self.assertEqual(initializer['securityContext'], web['securityContext'])
@@ -148,14 +169,18 @@ class ProductionBoundaries(unittest.TestCase):
                 actual[container['name']] = {item['name']: item['valueFrom']['secretKeyRef'] for item in container['env']}
         common = {'DJANGO_SECRET_KEY': {'name': 'joyride-runtime', 'key': 'DJANGO_SECRET_KEY'},
                   'DATABASE_URL': {'name': 'joyride-cnpg-app', 'key': 'uri'}}
-        mail = dict(common, EMAIL_HOST_PASSWORD={'name': 'joyride-smtp', 'key': 'EMAIL_HOST_PASSWORD'})
+        stripe = {'STRIPE_SECRET_KEY': {'name': 'joyride-stripe', 'key': 'STRIPE_SECRET_KEY'},
+                  'STRIPE_WEBHOOK_SECRET': {'name': 'joyride-stripe', 'key': 'STRIPE_WEBHOOK_SECRET'}}
+        mail = dict(common, EMAIL_HOST_PASSWORD={'name': 'joyride-smtp', 'key': 'EMAIL_HOST_PASSWORD'}, **stripe)
         self.assertEqual(actual, {
             'web': mail,
             'worker': dict(mail, WMATA_API_KEY={'name': 'joyride-upstream', 'key': 'WMATA_API_KEY'}),
-            'ops': dict(common, OPS_TOKEN={'name': 'joyride-ops-auth', 'key': 'OPS_TOKEN'})})
+            'ops': dict(common, OPS_TOKEN={'name': 'joyride-ops-auth', 'key': 'OPS_TOKEN'}, **stripe)})
         config = self.resources['config']['data']
-        self.assertEqual(config['MAIL_ENABLED'], '0')
-        self.assertEqual(config['STRIPE_MODE'], 'disabled')
+        self.assertEqual(config['MAIL_ENABLED'], '1')
+        self.assertEqual(config['STRIPE_MODE'], 'live')
+        self.assertEqual(config['STRIPE_PRICE_ID'], 'price_1USr46RreaX3Pn1aj9WYMMj4')
+        self.assertEqual(config['STRIPE_TAX_RATE_ID'], 'txr_1Ua0ZgRreaX3Pn1aVV1r9tS2')
         self.assertEqual(config['OPS_SCOPES'], 'status,diagnostics,member:read')
         self.assertEqual(config['ALLOWED_HOSTS'], 'joyride.eyrie')
 
@@ -187,7 +212,7 @@ class ProductionBoundaries(unittest.TestCase):
 
     def test_monitor_has_no_runtime_credentials_or_privileged_network_path(self):
         job = self.resources['monitor']['spec']
-        self.assertIs(job['suspend'], True)
+        self.assertIs(job['suspend'], False)
         self.assertEqual(job['concurrencyPolicy'], 'Forbid')
         pod = job['jobTemplate']['spec']['template']['spec']
         self.assertIs(pod['automountServiceAccountToken'], False)
@@ -209,7 +234,7 @@ class ProductionBoundaries(unittest.TestCase):
 
     def test_backup_is_suspended_administrative_capture_not_restore(self):
         job = self.resources['backup']['spec']
-        self.assertIs(job['suspend'], True)
+        self.assertIs(job['suspend'], False)
         self.assertEqual(job['concurrencyPolicy'], 'Forbid')
         pod = job['jobTemplate']['spec']['template']['spec']
         self.assertIs(pod['automountServiceAccountToken'], False)
@@ -236,7 +261,7 @@ class ProductionBoundaries(unittest.TestCase):
         self.assertNotIn('env', initializer)
         self.assertNotIn('envFrom', initializer)
         self.assertEqual(initializer['volumeMounts'], [{'name': 'scripts', 'mountPath': '/trusted'}])
-        self.assertIn('0bd5c397f068b7e9eed784ce48afcd0abf4eeb4ae3b5a11c53aaa04939415f5c', initializer['command'][-1])
+        self.assertIn('2e2cc839fe20e67bd262a91c8f0011649f2354b16ced07e56aa7b6457f30ff98', initializer['command'][-1])
         rule = self.resources['alert_rules']['spec']['groups'][0]['rules'][1]
         self.assertIn('kube_cronjob_spec_suspend{namespace="joyride",cronjob="joyride-backup"} == 0', rule['expr'])
         self.assertIn('unless on(namespace,cronjob)', rule['expr'])
@@ -249,18 +274,17 @@ class ProductionBoundaries(unittest.TestCase):
             volumes = deployment['spec']['template']['spec']['volumes']
             self.assertEqual(volumes[0]['persistentVolumeClaim'], {'claimName': 'joyride-data'})
 
-    def test_activation_still_refused_by_common_class(self):
+    def test_production_is_explicitly_scoped_without_test_authority(self):
         guard = (ROOT / 'manifests/service/joyride.pp').read_text()
-        self.assertIn("$nest::kubernetes::namespace != 'test'", guard)
-        self.assertIn("$nest::kubernetes::service != 'joyride-test'", guard)
-        self.assertIn("fail('Joyride currently supports only service joyride-test", guard)
-        self.assertFalse((ROOT / 'plans/eyrie/deploy_joyride.yaml').exists())
-        gateway = (ROOT / 'data/host/gateway.yaml').read_text()
-        self.assertNotIn('joyridedc.com', gateway)
-        # The one-time informational site is retired, not a production gateway.
-        self.assertNotIn('nest::service::joyride_gateway', gateway)
-        activation = (ROOT / 'manifests/service/gateway.pp').read_text()
-        self.assertNotIn('joyride_gateway', activation)
+        self.assertIn("$nest::kubernetes::namespace == 'test'", guard)
+        self.assertIn("$nest::kubernetes::service == 'joyride-test'", guard)
+        self.assertIn("$nest::kubernetes::namespace == 'joyride'", guard)
+        self.assertIn("$nest::kubernetes::service == 'joyride'", guard)
+        self.assertIn("$runtime_environment == 'production'", guard)
+        self.assertIn("if !$is_test and !$is_production", guard)
+        self.assertNotIn('joyride-test', yaml.safe_dump(self.resources, sort_keys=True))
+        self.assertNotIn('8002', self.source)
+        self.assertNotIn('172.21.1.3', self.source)
 
 
 if __name__ == '__main__':
