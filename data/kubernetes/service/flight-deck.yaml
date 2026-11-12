@@ -4,7 +4,7 @@ service_name: flight-deck
 flight_deck_board: agent-requests
 flight_deck_environment: Production
 flight_deck_ref_name: main
-flight_deck_source_revision: 366df1a36da31a23341dee6e5fe98fe39335e82d
+flight_deck_source_revision: 3c9ce250d5ab1678eb55d45d0a84d89b41deb39f
 flight_deck_resources:
   requests:
     cpu: 250m
