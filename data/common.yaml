@@ -196,6 +196,9 @@ nest::fixed_ips:
   storage4: '172.22.4.20'
 
 nest::host_records:
+  # Work GitLab uses Hawk's stable Nest VPN address, not the lab bridge
+  gitlab.puppet: '172.22.0.2'
+
   # Non-DHCP hosts
   falcon.nest: '172.22.4.2'
   kestrel.nest: '172.22.4.3'

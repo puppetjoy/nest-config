@@ -30,7 +30,7 @@ nest::reset_filter_rules:
 
 nest::hosts:
   gitlab.puppet:
-    ip: '10.81.40.1'
+    ip: '127.0.0.1'
   pe.puppet:
     ip: '10.81.40.10'
   cd.puppet:
