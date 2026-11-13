@@ -83,6 +83,26 @@ ops, worker/bootstrap, production and independently selected releases are outsid
 this change. Regress the actual rendered owner listener's request and limit so
 component isolation cannot silently retain the old capacity.
 
+## Node-local owner graph reads
+
+The memory correction released the blocked readers, but a fresh-pod route read
+still took 75 seconds on the CephFS-backed graph. Warm reads were approximately
+1.4–1.8 seconds, so successful recovery alone did not meet cold-load acceptance.
+
+After the existing bootstrap gate succeeds, the owner listener stages the exact
+pinned graph in a disk-backed 2 GiB `emptyDir`. The staging helper reuses the
+installer's fixed byte count, SHA256 and full SQLite/index/metadata verification.
+It only reads the authoritative PVC and atomically publishes a read-only local
+copy. Gunicorn's native `--env` setting selects that local graph; no request-time
+fallback to CephFS is introduced. Failed verification keeps the new pod in init,
+while the old ready replica remains available under the existing surge strategy.
+
+This cache is disposable and rebuilt on pod replacement, not a new graph source
+or backup. It preserves graph bytes, build identity, doctrine, review revisions,
+and validation. It applies only to TEST internal-web; other listeners and
+production keep their existing selection. There is no new credential, writable
+source mount, listener, service or network-policy permission.
+
 ## Single bootstrap owner and reader ordering
 
 Only the worker/bootstrap Deployment retains, in order:
