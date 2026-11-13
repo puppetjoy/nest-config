@@ -65,6 +65,8 @@ class nest::service::joyride (
     $bootstrap_gate_sha256         = sha256(file('nest/app/joyride/bootstrap_gate.py'))
     $routing_installer_base64      = base64('encode', file('nest/app/joyride/install_routing_graph.py'))
     $routing_installer_sha256      = sha256(file('nest/app/joyride/install_routing_graph.py'))
+    $routing_cache_base64          = base64('encode', file('nest/app/joyride/cache_routing_graph.py'))
+    $routing_cache_sha256          = sha256(file('nest/app/joyride/cache_routing_graph.py'))
     $test_access_config_base64     = base64('encode', file('nest/app/joyride/test-access-nginx.conf'))
     $test_access_config_sha256     = sha256(file('nest/app/joyride/test-access-nginx.conf'))
     $production_ops_config_base64  = base64('encode', file('nest/app/joyride/production-ops-nginx.conf'))

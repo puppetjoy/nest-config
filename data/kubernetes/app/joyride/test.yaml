@@ -144,6 +144,7 @@ resources:
       import_artifacts.py: '%{nest::service::joyride::artifact_import_base64}'
       test_delivery_controller.py: '%{nest::service::joyride::test_delivery_base64}'
       install_routing_graph.py: '%{nest::service::joyride::routing_installer_base64}'
+      cache_routing_graph.py: '%{nest::service::joyride::routing_cache_base64}'
       bootstrap_gate.py: '%{nest::service::joyride::bootstrap_gate_base64}'
   delivery_journal:
     apiVersion: v1
@@ -856,6 +857,7 @@ resources:
             app.kubernetes.io/component: internal-web
           annotations:
             nest/bootstrap-gate-sha256: '%{nest::service::joyride::bootstrap_gate_sha256}'
+            nest/routing-cache-sha256: '%{nest::service::joyride::routing_cache_sha256}'
         spec:
           terminationGracePeriodSeconds: 150
           automountServiceAccountToken: false
@@ -878,10 +880,32 @@ resources:
             - name: bootstrap-gate
               mountPath: /bootstrap
               readOnly: true
+          - name: cache-routing-graph
+            image: '%{lookup(''joyride_image'')}'
+            securityContext: *id001
+            command: [python, -B, /graph-cache-tools/cache_routing_graph.py]
+            env:
+            - name: RUNTIME_ENV
+              value: test
+            resources:
+              requests:
+                cpu: 100m
+                memory: 128Mi
+              limits:
+                memory: 2Gi
+            volumeMounts:
+            - name: data
+              mountPath: /data
+              readOnly: true
+            - name: routing-cache
+              mountPath: /routing-cache
+            - name: routing-cache-tools
+              mountPath: /graph-cache-tools
+              readOnly: true
           containers:
           - name: internal-web
             image: '%{lookup(''joyride_image'')}'
-            command: [gunicorn, 'joyride.internal_wsgi:application', --bind, '0.0.0.0:8003', --workers, '2', --threads, '3', --timeout, '60', --graceful-timeout, '125']
+            command: [gunicorn, 'joyride.internal_wsgi:application', --env, 'ROUTING_GRAPH_PATH=/routing-cache/graph.sqlite3', --bind, '0.0.0.0:8003', --workers, '2', --threads, '3', --timeout, '60', --graceful-timeout, '125']
             lifecycle: *http_drain
             securityContext: *id001
             env: *id002
@@ -894,6 +918,9 @@ resources:
               readOnly: true
             - name: tmp
               mountPath: /data/tmp
+            - name: routing-cache
+              mountPath: /routing-cache
+              readOnly: true
             resources:
               requests:
                 cpu: 100m
@@ -932,6 +959,17 @@ resources:
               initialDelaySeconds: 10
               periodSeconds: 15
           volumes:
+          - name: routing-cache
+            emptyDir:
+              sizeLimit: 2Gi
+          - name: routing-cache-tools
+            configMap:
+              name: '%{nest::kubernetes::service}-scripts'
+              items:
+              - key: cache_routing_graph.py
+                path: cache_routing_graph.py
+              - key: install_routing_graph.py
+                path: install_routing_graph.py
           - name: bootstrap-gate
             configMap:
               name: '%{nest::kubernetes::service}-scripts'
