@@ -59,6 +59,15 @@ class ComponentReadiness(unittest.TestCase):
             else:
                 self.assertNotIn('--threads', command)
 
+    def test_owner_route_loading_has_regional_graph_memory_headroom(self):
+        # The fixed graph is 1.23 GB before two worker runtimes and file cache.
+        # A 768 MiB cap stalled both readers in CephFS faults while admission
+        # stayed occupied; reserve capacity as well as lifting the hard limit.
+        data = load_resources()
+        container, = data['internal_web_app']['spec']['template']['spec']['containers']
+        self.assertEqual(container['resources']['limits']['memory'], '2Gi')
+        self.assertEqual(container['resources']['requests']['memory'], '1Gi')
+
     def test_private_content_staging_follows_each_split_writer(self):
         data = load_resources()
         for key in KEYS:

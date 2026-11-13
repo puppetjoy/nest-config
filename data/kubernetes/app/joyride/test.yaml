@@ -897,9 +897,10 @@ resources:
             resources:
               requests:
                 cpu: 100m
-                memory: 192Mi
+                memory: 1Gi
               limits:
-                memory: 768Mi
+                # Regional immutable graph pages plus both routing workers
+                memory: 2Gi
             ports:
             - name: internal-web
               containerPort: 8003

@@ -66,6 +66,23 @@ unchanged `--timeout` values must not be represented as identical synchronous
 request-kill behavior. Parent owns application exact-head CI, admission/thread
 integration, live endpoint/health/geometry verification and eventual delivery.
 
+## Saved-route graph memory capacity
+
+The owner internal-web listener reserves 1 GiB and permits 2 GiB. The fixed
+regional SQLite graph is 1,231,237,120 bytes, before Python/SQLite runtimes,
+decoded route objects and page cache. Its former 768 MiB cap left both admitted
+requests blocked in CephFS memory-mapped page faults; an in-place increase to
+2 GiB released those requests without restarting the pod. This is a measured
+capacity correction, not a claim that every storage wait is caused by memory.
+
+The hard limit includes charged filesystem cache. A small process RSS alone is
+not proof of headroom. Check `memory.current`, `memory.stat`, limit events and
+actual request progress together. Preserve admission, integrity validation and
+existing timeouts. The trusted TEST listener already permits 2 GiB; public web,
+ops, worker/bootstrap, production and independently selected releases are outside
+this change. Regress the actual rendered owner listener's request and limit so
+component isolation cannot silently retain the old capacity.
+
 ## Single bootstrap owner and reader ordering
 
 Only the worker/bootstrap Deployment retains, in order:
