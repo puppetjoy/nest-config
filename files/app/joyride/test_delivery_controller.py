@@ -192,6 +192,8 @@ def images(deployment):
         groups = (("containers", CONTAINERS), ("initContainers", INITIALIZERS))
     elif component in CONTAINERS:
         initializers = INITIALIZERS | {"bootstrap-complete"} if component == "worker" else {"wait-bootstrap"}
+        if component == "internal-web":
+            initializers |= {"cache-routing-graph"}
         groups = (("containers", {component}), ("initContainers", initializers))
     else:
         raise DeliveryError("unexpected_workload_shape")

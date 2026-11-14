@@ -30,6 +30,8 @@ class FleetClient(FixtureClient):
             pod['containers'] = [{'name': component, 'image': OLD}]
             initializers = ['migrate', 'provision-owner', 'basemap', 'curated-fetch', 'curated-import',
                             'routing-graph', 'bootstrap-complete'] if component == 'worker' else ['wait-bootstrap']
+            if component == 'internal-web':
+                initializers.append('cache-routing-graph')
             pod['initContainers'] = [{'name': n, 'image': OLD} for n in initializers]
             self.fleet[name] = row
 
@@ -101,6 +103,45 @@ class ComponentDelivery(unittest.TestCase):
         self.assertEqual(client.journal, before)
         self.assertEqual(client.state, 'queued')
         self.assertEqual(client.patches, 0)
+
+    def test_cache_initializer_shape_and_image_refused_before_claim(self):
+        for mutation in ('missing', 'extra', 'duplicate', 'foreign-image', 'wrong-component'):
+            with self.subTest(mutation=mutation):
+                client = FleetClient()
+                pod = client.fleet['joyride-test-internal-web']['spec']['template']['spec']
+                cache = pod['initContainers'][1]
+                if mutation == 'missing':
+                    pod['initContainers'].pop()
+                elif mutation == 'extra':
+                    pod['initContainers'].append({'name': 'extra', 'image': OLD})
+                elif mutation == 'duplicate':
+                    pod['initContainers'].append(copy.deepcopy(cache))
+                elif mutation == 'foreign-image':
+                    cache['image'] = 'registry.example/other@sha256:' + 'a' * 64
+                else:
+                    client.fleet['joyride-test-ops']['spec']['template']['spec']['initContainers'].append(copy.deepcopy(cache))
+                before = copy.deepcopy(client.fleet)
+                error = 'unexpected_existing_image' if mutation == 'foreign-image' else 'unexpected_workload_shape'
+                with self.assertRaisesRegex(controller.DeliveryError, error):
+                    controller.run_components(client, clock=lambda: 0)
+                self.assertEqual(client.state, 'queued')
+                self.assertEqual(client.patches, 0)
+                self.assertIsNone(client.journal)
+                self.assertEqual(client.fleet, before)
+
+    def test_cache_configuration_drift_on_resume_refused_without_rollback(self):
+        client = FleetClient()
+        client.crash_after_patch = True
+        with self.assertRaises(RuntimeError):
+            controller.run_components(client, clock=lambda: 0)
+        pod = client.fleet['joyride-test-internal-web']['spec']['template']['spec']
+        pod['initContainers'][1]['command'] = ['unexpected-cache-command']
+        before = copy.deepcopy(client.fleet)
+        with self.assertRaisesRegex(controller.DeliveryError, 'concurrent_workload_change'):
+            controller.run_components(client, clock=lambda: 1)
+        self.assertEqual(client.patches, 1)
+        self.assertEqual(client.fleet, before)
+        self.assertEqual(client.state, 'failed')
 
     def test_reader_drift_refused_before_any_claim(self):
         client = FleetClient()
