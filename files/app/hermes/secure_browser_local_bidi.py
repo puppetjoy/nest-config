@@ -57,21 +57,30 @@ class CdpSession:
         self.ws.send(json.dumps({"id": self.next_id, "method": method, "params": params or {}}))
         return self._receive(self.next_id, on_reply)
 
-    def drain_pending(self):
+    def drain_pending(self, *, timeout=None):
         with self.lock:
             if self.pending is not None:
-                return self._receive(self.pending["id"], self.pending["receipt"])
+                budget = (0 if self.pending.get("wait_exhausted") else 10) if timeout is None else timeout
+                try:
+                    return self._receive(self.pending["id"], self.pending["receipt"], timeout=budget)
+                except TimeoutError:
+                    self.pending["wait_exhausted"] = True
+                    raise
 
-    def _receive(self, command_id, on_reply):
+    def _receive(self, command_id, on_reply, *, timeout=10):
         if self.ws is None:
             raise RuntimeError("private Firefox pending observer is closed")
-        deadline = time.monotonic() + 10
+        deadline = time.monotonic() + timeout
+        received = 0
         while True:
             remaining = deadline - time.monotonic()
             try:
-                if remaining <= 0:
+                # After finite recovery exhaustion, inspect queued frames only.
+                # Bound unrelated event drainage as well as wall-clock waiting.
+                if remaining <= 0 and (timeout != 0 or received >= 64):
                     raise TimeoutError("private Firefox observation timed out")
-                reply = json.loads(self.ws.recv(timeout=remaining))
+                reply = json.loads(self.ws.recv(timeout=max(0, remaining)))
+                received += 1
             except TimeoutError:
                 if on_reply is not None:
                     raise NativeReplyPending(command_id) from None

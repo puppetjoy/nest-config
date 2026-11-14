@@ -10,8 +10,8 @@ cert_issuer: eyrie-ca
 cert_issuer_kind: ClusterIssuer
 ingress_class: contour-compute
 node_role: compute
-image: registry.gitlab.joyfullee.me/nest/tools/firefox@sha256:b7953e9cd6268f8ccb7b16433804fc864fccfffa69246f20c5c04375680ce8bf
-image_revision: 'f5c990d69f4c2e61ced4dfcd0886180454b4b2dd'
+image: registry.gitlab.joyfullee.me/nest/tools/firefox@sha256:1ae6d01507ed8dd85a67f86fb9bf0f81b77fe2ad416e5f11675487dd7374ff12
+image_revision: '06bafb4afbe24b8eca87c57433ab3cc0510695de'
 launch_url: ''
 app_args: ''
 control_protocol: firefox-windows-v3
@@ -36,6 +36,9 @@ bitwarden_extension_install_url: file:///opt/nest/firefox/extensions/bitwarden.x
     operator: Exists
     effect: NoSchedule
 
+# Keep Canvas2D local: a stalled accelerated-canvas peer can block the content
+# main thread's checkpoint wait and all native page observation indefinitely.
+# This leaves WebGL and browser/compositor acceleration independently managed.
 .firefox_policy: &firefox_policy |-
   {
     "policies": {
@@ -44,7 +47,8 @@ bitwarden_extension_install_url: file:///opt/nest/firefox/extensions/bitwarden.x
       "DontCheckDefaultBrowser": true,
       "Preferences": {
         "browser.startup.page": {"Value": 3, "Status": "locked"},
-        "browser.sessionstore.resume_from_crash": {"Value": true, "Status": "locked"}
+        "browser.sessionstore.resume_from_crash": {"Value": true, "Status": "locked"},
+        "gfx.canvas.accelerated": {"Value": false, "Status": "locked"}
       },
       "ExtensionSettings": {
         "%{lookup('bitwarden_extension_id')}": {

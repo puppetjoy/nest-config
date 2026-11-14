@@ -1,12 +1,15 @@
 ---
 name: star-firefox-ui
 summary: Use when Joy directs a browser workflow in persistent browser.eyrie Firefox.
-description: Operate Joy's persistent Firefox through accessibility locators, visual readback, and one canonical workflow tab without browser-internal automation or redundant approval gates.
+description: Use when Joy directs Firefox work. Preserve scoped windows.
 ---
 
 # Star persistent Firefox UI workflow
 
-This is the current browser.eyrie contract and supersedes older shopping-assistant references that describe CDP/DOM selectors, mandatory per-operation effect approvals, owner-checkout-review approval gates, trusted final-purchase approval requests, Firefox Sync, or full-page DOM capture.
+This managed skill describes `firefox-windows-v3`: one persistent Firefox
+profile and login session, with a separate native window bound to each request.
+It supersedes legacy AX-only, global-tab and no-instrumentation descriptions;
+it does not add purchase approval gates.
 
 ## Authority and secrets
 
@@ -17,15 +20,22 @@ This is the current browser.eyrie contract and supersedes older shopping-assista
 
 ## Canonical flow
 
-1. Call `secure_browser_status`; require `protocol=firefox-ui-v1` and all instrumentation flags false.
-2. Call `secure_browser_tab_lifecycle(action='acquire', workflow_id=<stable id>)` once. Reuse that same workflow id throughout.
-3. Navigate with `secure_browser_navigate`. It reuses the canonical handoff tab and never creates a tab implicitly.
-4. Read ordinary page content with `secure_browser_page_snapshot` or `secure_browser_current_page_summary`. These include visible accessible prose, interactive values and states across sites; checkout readback is supplemental, not the only way to see a cart. Locators are ephemeral: refresh immediately before every interaction.
-5. Click with a fresh `ax:...` accessibility locator or a grounded visible coordinate. Styled radio/check-box inputs may have overlapping bounds: use the accessible action when exposed, or a screenshot-grounded visible label coordinate after an overlap error, then inspect checked-state readback. CSS selectors are deliberately unsupported. Every mutation returns visual/accessibility readback; inspect it before continuing.
-6. Type only non-secret text with a fresh accessibility locator. The result reports only character count and redacted readback.
-7. For destructive or financial controls, set a stable `action_key` derived from the directed workflow step. Reusing it returns `already_delivered`; if delivery was interrupted after the durable intent record, it returns `delivery_uncertain` and blocks a second input. This fail-closed exactly-once behavior is not a user-approval gate.
-8. Use `secure_browser_visual_evidence` for the visible window. There is no fabricated full-document capture or script-derived crop.
-9. Keep a handoff open with `secure_browser_tab_lifecycle(action='keep_open', lease_seconds=...)`; release it when done. Cleanup closes only confidently agent-created tabs. Ambiguous or Joy-owned tabs are preserved.
+1. Inspect `secure_browser_status`; it is nonallocating and not proof that an action succeeded.
+2. V3 keeps one Firefox process/profile/login session and separates each authoritative Kanban task into its own immutable window binding. The pre-existing owner window is preserved. Dispatcher task scope selects the window; `workflow_id` and tool `task_id` do not override scope.
+3. `secure_browser_page_snapshot` may allocate before observing. Lifecycle `status` and `recover` are nonallocating. Acquire or inspect the binding using `secure_browser_tab_lifecycle`, then navigate with `secure_browser_navigate`.
+4. V3 click/type use CSS selectors or viewport coordinates in the bound window. Legacy accessibility locators are refused. Ground interactions in fresh visible page evidence. The query surface is bounded and does not allow arbitrary JavaScript, profile/session access, global screenshots, or global input.
+5. Keep Joy-directed workflow authority intact; do not insert redundant purchase approval gates. Never pass secrets as tool text.
+6. Preserve the stable action key. If native navigation/input is uncertain, do not replay or mint a new key. Status/readback use the same native transport and are not independent transport confirmations.
+7. Reconcile only with bounded read-only status/recovery. Preserve windows, journals, and unknown creation provenance. Do not treat status as success, close/replace ambiguous windows, or tell Star to restart; unresolved state routes to engineering repair.
+8. Keep a needed task handoff open with `secure_browser_tab_lifecycle(action='keep_open', lease_seconds=...)`, using an explicit bounded lease. Release only the confidently owned task window when finished; never close the owner window or an unknown creation. A closed task scope cannot be reopened by changing `workflow_id`.
+
+## Supported observation and interaction
+
+- Read current content through `secure_browser_page_snapshot` and `secure_browser_current_page_summary`. Both use the same native snapshot path; a summary is not an independent transport. Snapshot-derived node descriptions are observations, not legacy AX input locators.
+- Use a fresh, unique rendered CSS selector or a screenshot-grounded viewport coordinate for click/type. V3 refuses legacy AX locators. The viewport, occlusion, protected-field, generation and ownership guards still apply. All native input needs a stable `action_key`; the key prevents replay, not a purchase approval ceremony. `mode='insert'` preserves existing text; request `mode='replace'` explicitly for replacing an ordinary field.
+- `secure_browser_query` accepts only documented read expressions, for example `document.title`, `location.origin`, `document.domSnapshot` and `document.readText("pre",0)`. It is not arbitrary JavaScript. For text, pass `nextCursor` unchanged with the same expression until `complete=true`; changed-page cursors fail closed. Never read profile, cookie, storage or secret values.
+- V3 screenshots and visual evidence capture the bound rendered page viewport, not native chrome, a full document or the global desktop. Do not work around this boundary with another browser/session.
+- On `FIREFOX_NATIVE_OUTCOME_UNCERTAIN` or `FIREFOX_CREATION_UNCERTAIN`, retain the original outcome and action key. The adapter can include one finite recovery read; inspect its result instead of automatically repeating navigation, input or recovery. A verified binding alone does not prove page or purchase completion. If bounded readback remains unavailable, preserve the binding and route the sanitized error to Talon; do not allocate a replacement request/window or clear history.
 
 ## Checkout verification and owner review
 
@@ -37,8 +47,8 @@ This is the current browser.eyrie contract and supersedes older shopping-assista
 
 ## Compatibility changes
 
-- `secure_browser_query`: returns `FIREFOX_UI_V1_NO_DOM_QUERY`; replace it with accessibility snapshots, page summaries, and visual evidence.
-- `selector=` on click/type: returns `FIREFOX_UI_V1_NO_CSS_SELECTORS`; refresh and use the supplied accessibility locator.
+- V3 query is a bounded allowlist, not arbitrary JavaScript or profile/secret access.
+- V3 uses CSS selectors and viewport coordinates; legacy AX locators are refused.
 - `approved_effect`: accepted only as a legacy audit label; it does not create an approval gate.
 - `secure_browser_owner_checkout_review`, `secure_browser_request_final_purchase_approval`, and `secure_browser_execute_final_purchase`: retired compatibility endpoints. Use ordinary evidence and direct `secure_browser_click` with a stable `action_key` after Joy directs the workflow.
 - Older `shopping_browser_*` names and retailer-specific helper APIs are historical. Use the `secure_browser_*` Firefox UI surface.
