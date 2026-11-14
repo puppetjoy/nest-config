@@ -116,6 +116,44 @@ context after ordinary Puppet installation. This phase does not edit Star's
 runtime profile directly or make the parent's original retailer continuation a
 prerequisite of source completion.
 
+## Executed source and image qualification
+
+- Controller/adapter source: `06bafb4afbe24b8eca87c57433ab3cc0510695de`.
+- Its exact-head MR pipeline 13415 passed all nine required jobs, including
+  Validate, Unit Test, both browser fixture lanes and Native authority fixtures.
+  The later immutable image-pin/configuration commit requires its own pipeline;
+  the task thread carries that final exact-head receipt.
+- Containing local window/recovery/consumer selection: 175 tests and 25 subtests
+  passed. All ten existing compatibility scripts and the Node viewer passed.
+- The inventory-backed Owl smoke succeeded as `joy`; there is no SSH transport
+  blocker. `bolt module install` kept project dependencies inside this worktree.
+- The managed `nest::build::firefox` plan built from the exact installed baseline
+  with frozen Gentoo, Nest overlay and Haskell revisions, then passed smoke.
+  Initial publication lacked the wrapper's registry credentials and was denied.
+  Publication-only retry used Talon's existing profile credential privately with
+  an ephemeral auth file and the standard `files/build/publish-image.sh` helper;
+  no source, package or browser operation was repeated to repair that failure.
+- Candidate remote digest, independently retrieved and pulled back:
+  `registry.gitlab.joyfullee.me/nest/tools/firefox@sha256:1ae6d01507ed8dd85a67f86fb9bf0f81b77fe2ad416e5f11675487dd7374ff12`.
+- Candidate image config:
+  `0433eedccca7682422ef9d6ef19fba71af71fe14d2721dd9c80a25cd31bb0fac`.
+- Baked controller SHA256:
+  `589411fc2c3efc83e3836506a55ea33e5d76e65e6718c01a3e6f3c985e20046b`.
+- Baked private transport SHA256:
+  `1614b6ebc3d0784591dd86e7078fe30f97124dcec8479a913dbcbfdc5b46088f`.
+- The pulled-back baked candidate passed the disposable stopped-GPU canvas and
+  uncertain-navigation/both-public-readbacks canary with no runtime source overlay.
+
+Fresh allowlisted journal inspection found all 438 current native actions
+marked delivered, but also two unresolved **historical** legacy action records:
+one `delivery_started` and one `delivery_uncertain`. They must never be silently
+replayed or omitted from generation safety. The supported generation consumer
+was exercised on private journal copies with an explicitly synthetic future
+process/readiness provider and synthetic grant, not live authority. It preserved
+closed tombstones and all no-replay keys, archived rather than adopted the
+unknown creation, and left live journal hashes unchanged. Real execution still
+requires the exact trusted typed decision and fresh journal fingerprints.
+
 ## Activation boundary
 
 A controller-only overlay cannot repair the already blocked content main thread
