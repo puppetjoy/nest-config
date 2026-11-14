@@ -36,6 +36,9 @@ bitwarden_extension_install_url: file:///opt/nest/firefox/extensions/bitwarden.x
     operator: Exists
     effect: NoSchedule
 
+# Keep Canvas2D local: a stalled accelerated-canvas peer can block the content
+# main thread's checkpoint wait and all native page observation indefinitely.
+# This leaves WebGL and browser/compositor acceleration independently managed.
 .firefox_policy: &firefox_policy |-
   {
     "policies": {
@@ -44,7 +47,8 @@ bitwarden_extension_install_url: file:///opt/nest/firefox/extensions/bitwarden.x
       "DontCheckDefaultBrowser": true,
       "Preferences": {
         "browser.startup.page": {"Value": 3, "Status": "locked"},
-        "browser.sessionstore.resume_from_crash": {"Value": true, "Status": "locked"}
+        "browser.sessionstore.resume_from_crash": {"Value": true, "Status": "locked"},
+        "gfx.canvas.accelerated": {"Value": false, "Status": "locked"}
       },
       "ExtensionSettings": {
         "%{lookup('bitwarden_extension_id')}": {

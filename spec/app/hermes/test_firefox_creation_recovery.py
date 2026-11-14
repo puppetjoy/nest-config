@@ -106,7 +106,8 @@ def test_actual_protocol_receipt_wait_is_bounded_and_input_is_not_replayed(tmp_p
     result = controller.dispatch("tabs", {"scope": A, "action": "recover"})
     assert result["recovery"]["automatic_recovery_exhausted"] is True
     assert result["recovery"]["input_replay_allowed"] is False
-    assert socket.closed
+    assert not socket.closed
+    assert controller.state["windows"][A]["receipt_wait_exhausted"] is True
     assert native.created == 1
     assert all(not c["method"].startswith("input.") for c in socket.sent)
 

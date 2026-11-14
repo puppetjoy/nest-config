@@ -617,11 +617,16 @@ class Windows:
             if (reconcile and not record.get("context") and self.browser is not None
                     and getattr(self.browser, "pending", None) is not None):
                 try:
-                    self.browser.drain_pending()
+                    if record.get("receipt_wait_exhausted"):
+                        self.browser.drain_pending(timeout=0)
+                    else:
+                        self.browser.drain_pending()
                 except TimeoutError:
-                    # One extra bounded receipt wait, not an indefinite loop.
-                    self.browser.close()
-                    self.broken = True
+                    # Stop waiting, not custody: this socket owns the only
+                    # correlated receipt. Later explicit recovery may inspect
+                    # already-queued frames but never restart the wait or create.
+                    record["receipt_wait_exhausted"] = True
+                    self._save()
                     return {**result, "recovery_state": "engineering_repair_required", "next_action": "route_to_existing_browser_repair",
                             "reason": "correlated_reply_wait_exhausted", "outcome": "uncertain", "automatic_recovery_exhausted": True}
                 except Exception:
