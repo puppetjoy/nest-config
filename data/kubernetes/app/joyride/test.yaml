@@ -5,9 +5,9 @@ service_name: '%{nest::kubernetes::service}'
 fqdn: '%{nest::kubernetes::service}.eyrie'
 runtime_environment: test
 ingress_class: contour-test
-# WMATA render-context display timestamps; main pipeline 13278 passed.
-# Head a95f2ef80fcbdcc09b861e26d95c40f3355fb073; preserve drafts and selected releases.
-joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:5dbd52ee0fdaeccde9fc745e3ce89ba7750d989fb2bdf96a249d2df24520c343
+# Managed RIDDEN backend delivery; main pipeline 13413 passed check/build/smoke.
+# Head 80f6dc5f0a5c387c12a2b8c0607b70d7462cd4d7; preserve drafts and selected releases.
+joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:0291f9ae62d1917b32f9fe4abdeec68d033bc04d443858e7d0f9455c8eff2636
 affinity: {}
 tolerations: []
 resources:
