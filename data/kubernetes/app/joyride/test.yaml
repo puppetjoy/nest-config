@@ -5,9 +5,9 @@ service_name: '%{nest::kubernetes::service}'
 fqdn: '%{nest::kubernetes::service}.eyrie'
 runtime_environment: test
 ingress_class: contour-test
-# Managed RIDDEN backend delivery; main pipeline 13413 passed check/build/smoke.
-# Head 80f6dc5f0a5c387c12a2b8c0607b70d7462cd4d7; preserve drafts and selected releases.
-joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:0291f9ae62d1917b32f9fe4abdeec68d033bc04d443858e7d0f9455c8eff2636
+# Cached member display repair; main pipeline 13456 passed check/build/smoke.
+# Head fb1057105b1c0ff9bcf3ef2d808a097c4d6eeb8b; preserve drafts and selected releases.
+joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:f7a6332d5e8539c6b97e5741c433c743ea9fe0f57efafc8d1993faca819dc563
 affinity: {}
 tolerations: []
 resources:
@@ -493,6 +493,9 @@ resources:
               value: Friday Night Joyride <hello@joyridedc.com>
             - name: STRIPE_MODE
               value: test
+            # Explicit cache display, independent of the existing TEST credential.
+            - name: WMATA_DISPLAY_ENABLED
+              value: '1'
             - name: STRIPE_PRICE_ID
               value: price_1USr7ARxm5b9CJTLAsfCS7RO
             - name: STRIPE_TAX_RATE_ID
@@ -650,7 +653,7 @@ resources:
             command: [python, -B, /bootstrap/bootstrap_gate.py, publish]
             env: &bootstrap_identity
             - name: BOOTSTRAP_CONTRACT
-              value: 'b1dc767b57227ab5609afb3dae296a8d0b428617db1b9268b6eb1a0c33afc6cf'
+              value: '1b63eb731627496b473272a491cfbeccc52f32d869849c2022218745a330d5fa'
             - name: ROUTING_INSTALLER_SHA256
               value: '%{nest::service::joyride::routing_installer_sha256}'
             volumeMounts:
