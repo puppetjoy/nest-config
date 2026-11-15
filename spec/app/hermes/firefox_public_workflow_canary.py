@@ -3,6 +3,7 @@
 Run only in a network-disabled disposable image without owner mounts. All page
 content, credentials, cookies and windows here are synthetic engineering data.
 """
+import hashlib
 import importlib.util
 import json
 import os
@@ -76,8 +77,12 @@ os.environ['SECURE_BROWSER_CONTROL_MODE'] = 'firefox-windows-v3'
 # No dispatcher/session imports in this standalone image; the authoritative
 # synthetic worker environment above is consumed by the actual public adapter.
 tool = load('public_adapter', ROOT / 'files/app/hermes/secure_browser_tool.py')
-engine_module = load('canary_windows', ROOT / 'files/firefox-browser/firefox_windows.py')
-endpoint = load('canary_endpoint', ROOT / 'files/firefox-browser/firefox-bridge-server.py')
+controller_root = Path('/opt/nest/firefox/bin') if os.environ.get('FIREFOX_CANARY_BAKED_SOURCE') == '1' else ROOT / 'files/firefox-browser'
+engine_module = load('canary_windows', controller_root / 'firefox_windows.py')
+source_hash = hashlib.sha256((controller_root / 'firefox_windows.py').read_bytes()).hexdigest()
+assert source_hash == hashlib.sha256((ROOT / 'files/firefox-browser/firefox_windows.py').read_bytes()).hexdigest()
+emit('source', controller_sha256=source_hash, baked=os.environ.get('FIREFOX_CANARY_BAKED_SOURCE') == '1')
+endpoint = load('canary_endpoint', controller_root / 'firefox-bridge-server.py')
 launcher = subprocess.Popen(['/opt/nest/firefox/bin/nest-firefox-browser.sh'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 http = ThreadingHTTPServer(('127.0.0.1', 0), Fixture)
 threading.Thread(target=http.serve_forever, daemon=True).start()
