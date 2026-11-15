@@ -38,8 +38,8 @@ ELEMENT = """(selector, inputX, inputY) => {
  if(found.length!==1 || !found[0])throw Error('target is not unique');
  const e=found[0], r=e.getBoundingClientRect(), s=getComputedStyle(e);
  if(!r.width||!r.height||s.visibility==='hidden'||s.display==='none'||e.disabled)throw Error('target unavailable');
- const x=Math.max(0,r.left)+Math.min(r.width,innerWidth-Math.max(0,r.left))/2;
- const y=Math.max(0,r.top)+Math.min(r.height,innerHeight-Math.max(0,r.top))/2;
+ const x=selector ? Math.max(0,r.left)+Math.min(r.width,innerWidth-Math.max(0,r.left))/2 : inputX;
+ const y=selector ? Math.max(0,r.top)+Math.min(r.height,innerHeight-Math.max(0,r.top))/2 : inputY;
  const hit=document.elementFromPoint(x,y);
  if(x<0||y<0||x>=innerWidth||y>=innerHeight||!hit||!(hit===e||e.contains(hit)))throw Error('target outside viewport or intercepted');
  const hint=[e.name,e.id,e.getAttribute('aria-label'),e.getAttribute('autocomplete'),
@@ -1036,8 +1036,15 @@ class Windows:
                     "dom_value_confirmed": verified if operation == "type" else None, "visible_value_confirmed": None}}
         selector = payload.get("selector")
         coordinate = payload.get("coordinate")
+        # Public schemas publish [x, y]. Keep the original payload/digest and
+        # historical object form for existing callers; normalize only locally.
+        if isinstance(coordinate, list) and len(coordinate) == 2:
+            coordinate = dict(zip(("x", "y"), coordinate))
         if payload.get("locator") or (not selector and not isinstance(coordinate, dict)):
-            raise ValueError("use a CSS selector or viewport coordinate in the bound window; legacy AX locators cannot cross the boundary")
+            raise ControlError("FIREFOX_TARGET_UNAVAILABLE", "use a CSS selector or viewport coordinate in the bound window; no input started")
+        if coordinate is not None and (not isinstance(coordinate, dict) or set(coordinate) != {"x", "y"} or any(
+                type(coordinate[k]) not in {int, float} or not 0 <= coordinate[k] <= 16384 for k in ("x", "y"))):
+            raise ControlError("FIREFOX_TARGET_UNAVAILABLE", "invalid viewport coordinate; no input started")
         if selector and (not isinstance(selector, str) or len(selector) > 512):
             raise ValueError("bounded CSS selector required")
         from secure_browser_local_bidi import CdpSession
