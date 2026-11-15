@@ -458,6 +458,46 @@ def test_legacy_clients_cannot_acquire_resident_protocol(monkeypatch):
         namespace["CdpSession"]("bidi+ws://127.0.0.1:9222/session")
 
 
+@pytest.mark.parametrize("coordinate", [[110, 95], {"x": 110, "y": 95}])
+def test_public_coordinate_shape_reaches_preflight_and_journal_without_payload_rewrite(engine, monkeypatch, coordinate):
+    controller, _ = engine
+    record = controller.acquire(A)
+    monkeypatch.setitem(sys.modules, "secure_browser_local_bidi", SimpleNamespace(
+        CdpSession=SimpleNamespace(_bidi_value=lambda value: {"protected": False, "x": 110, "y": 95})))
+    observed = []
+    def target(cid, declaration, args, **kwargs):
+        observed.append(args)
+        return {"value": [("node", {"sharedId": "element"})]}
+    monkeypatch.setattr(controller, "_function", target)
+    monkeypatch.setattr(controller, "_summary", lambda cid: {"url": "https://same.example/"})
+    sent = []
+    monkeypatch.setattr(controller, "_pointer", lambda *args: sent.append(args))
+    payload = {"scope": A, "coordinate": coordinate, "action_key": "public-coordinate"}
+    before = json.dumps(payload, sort_keys=True)
+    result = controller._input("click", payload, record, {})
+    assert result["status"] == "delivered"
+    assert observed == [[{"type": "null"}, {"type": "number", "value": 110}, {"type": "number", "value": 95}]]
+    assert sent == [(record["context"], 110, 95)]
+    assert json.dumps(payload, sort_keys=True) == before
+    again = controller._input("click", payload, record, {})
+    assert again["status"] == "already_delivered"
+    assert again["delivery"]["input_sent"] is False
+    assert len(sent) == 1
+
+
+@pytest.mark.parametrize("coordinate", [[], [1], [1, 2, 3], [True, 2], [-1, 2], [float('nan'), 2],
+    {"x": 1}, {"x": 1, "y": 2, "extra": 3}, "1,2", 2])
+def test_invalid_coordinate_refused_before_preflight_or_input(engine, monkeypatch, coordinate):
+    controller, native = engine
+    record = controller.acquire(A)
+    monkeypatch.setattr(controller, "_summary", lambda cid: {"url": "https://same.example/"})
+    with pytest.raises(windows.ControlError) as refused:
+        controller._input("click", {"scope": A, "coordinate": coordinate, "action_key": "bad-coordinate"}, record, {})
+    assert refused.value.outcome == "not_started"
+    assert not controller.state["actions"]
+    assert not any(method == "input.performActions" for method, _ in native.calls)
+
+
 def test_delivered_input_with_lost_response_is_not_replayed(engine, monkeypatch):
     controller, _ = engine
     record = controller.acquire(A)
