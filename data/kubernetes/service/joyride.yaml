@@ -1,6 +1,7 @@
 # Production service resources; TEST has independent service and namespace scope
 # Private proxy budget covers 16 buffered 192 MiB uploads plus process overhead
-joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:0291f9ae62d1917b32f9fe4abdeec68d033bc04d443858e7d0f9455c8eff2636
+# Cached member display repair; TEST-qualified main pipeline 13456.
+joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:f7a6332d5e8539c6b97e5741c433c743ea9fe0f57efafc8d1993faca819dc563
 joyride_operations_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:de6190b0f3c81c1133a0f25ac9119d2f3e8124788b4e9e14c579bf452312f263
 resources:
   config:
@@ -18,6 +19,8 @@ resources:
       EMAIL_HOST_USER: joy@joyridedc.com
       DEFAULT_FROM_EMAIL: Friday Night Joyride <hello@joyridedc.com>
       STRIPE_MODE: live
+      # Read the populated cache without granting the worker's upstream key.
+      WMATA_DISPLAY_ENABLED: '1'
       OPS_SCOPES: status,diagnostics,member:read
       PRIVATE_ROOT: /data/private
       PUBLIC_ROOT: /data/public
