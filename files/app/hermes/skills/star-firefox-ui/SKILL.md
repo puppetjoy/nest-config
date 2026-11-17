@@ -33,9 +33,27 @@ it does not add purchase approval gates.
 
 - Read current content through `secure_browser_page_snapshot` and `secure_browser_current_page_summary`. Both use the same native snapshot path; a summary is not an independent transport. Snapshot-derived node descriptions are observations, not legacy AX input locators.
 - Use a fresh, unique rendered CSS selector or a screenshot-grounded viewport coordinate for click/type. V3 refuses legacy AX locators. The viewport, occlusion, protected-field, generation and ownership guards still apply. All native input needs a stable `action_key`; the key prevents replay, not a purchase approval ceremony. `mode='insert'` preserves existing text; request `mode='replace'` explicitly for replacing an ordinary field.
-- `secure_browser_query` accepts only documented read expressions, for example `document.title`, `location.origin`, `document.domSnapshot` and `document.readText("pre",0)`. It is not arbitrary JavaScript. For text, pass `nextCursor` unchanged with the same expression until `complete=true`; changed-page cursors fail closed. Never read profile, cookie, storage or secret values.
+- `secure_browser_query` accepts only documented read expressions, for example `document.title`, `location.origin`, `document.domSnapshot` and `document.readText("pre",0)`. It is not arbitrary JavaScript. For text, pass `nextCursor` unchanged with the same expression until `complete=true`. `FIREFOX_TEXT_CURSOR_STALE` means the observation changed or its cursor is invalid: discard accumulated pages and observe again with the same expression and no cursor, starting from the first page. Do not concatenate pages from different revisions. This is read-only invalidation, not unknown click or purchase execution. Never read profile, cookie, storage or secret values.
+- Inspect `secure_browser_scroll`'s `scroll.outcome`: `moved` is observed container geometry, `at_boundary` means no further movement in that direction, and `no_movement` is not scrolling success. Never infer movement from `status=ok`, a title/URL, or an input acknowledgement alone; observe the viewport before proceeding.
 - V3 screenshots and visual evidence capture the bound rendered page viewport, not native chrome, a full document or the global desktop. Do not work around this boundary with another browser/session.
 - On `FIREFOX_NATIVE_OUTCOME_UNCERTAIN` or `FIREFOX_CREATION_UNCERTAIN`, retain the original outcome and action key. The adapter can include one finite recovery read; inspect its result instead of automatically repeating navigation, input or recovery. A verified binding alone does not prove page or purchase completion. If bounded readback remains unavailable, preserve the binding and route the sanitized error to Talon; do not allocate a replacement request/window or clear history.
+
+## Engineering failure handback
+
+A fresh reliability failure or recurrence requires an actionable first-class
+`agent_request_submit(target='talon', ...)`, with a stable incident-specific
+idempotency key. Reference the original request and exact sanitized failure,
+current generation, operation/action key, binding recovery result and observed
+versus unknown effects. A comment on a closed repair request is historical
+provenance, not a notification or an engineering work queue. Do not reopen a
+closed task window, substitute a workflow ID, or replay an uncertain action to
+collect evidence. Preserve owner windows and journals. Send no retailer private
+text, account/cart/payment screenshots, credentials or viewer capabilities.
+If supported submission itself refuses, retain the concrete public refusal and
+report it to Talon through an available first-class request path; do not invent
+routing infrastructure or claim that a comment delivered engineering ownership.
+Engineering owns diagnostics, CI, rollout and installed verification. Star and
+Joy resume actual use after delivery; they are not mandatory engineering testers.
 
 ## Checkout verification and owner review
 
