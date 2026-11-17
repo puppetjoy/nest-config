@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import re
+import secrets
 import socket
 import socketserver
 import struct
@@ -130,11 +131,17 @@ class _Handler(socketserver.StreamRequestHandler):
             request = json.loads(raw)
             if not isinstance(request, dict) or request.get("command") not in {"list", "select"}:
                 raise ValueError("invalid")
-            if request["command"] == "list" and set(request) != {"command"}:
+            if request["command"] == "list" and set(request) != {"command", "owner_capability"}:
                 raise ValueError("invalid")
-            if request["command"] == "select" and set(request) != {"command", "scope", "epoch"}:
+            if request["command"] == "select" and set(request) != {"command", "scope", "epoch", "owner_capability"}:
                 raise ValueError("invalid")
             with self.server.windows.operation():
+                owner = self.server.windows.state.get('windows', {}).get('owner', {})
+                capability = request.get('owner_capability')
+                if (not isinstance(capability, str) or not 20 <= len(capability) <= 200
+                        or owner.get('state') != 'open' or owner.get('epoch') != self.server.windows.epoch
+                        or not secrets.compare_digest(owner.get('viewer', ''), capability)):
+                    raise ValueError('owner authentication required')
                 if request["command"] == "list":
                     result = {"status": "ok", "epoch": self.server.windows.epoch, "windows": visible_windows(self.server.windows)}
                 else:
@@ -192,7 +199,7 @@ def gtk_main(path=SOCKET_PATH):
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
             client.settimeout(8)
             client.connect(path)
-            client.sendall(json.dumps({"command": command, **kwargs}).encode() + b"\n")
+            client.sendall(json.dumps({"command": command, 'owner_capability': cache['capability'], **kwargs}).encode() + b"\n")
             with client.makefile("rb") as stream:
                 raw = stream.readline(MAX_LINE + 1)
         if len(raw) > MAX_LINE:
@@ -205,10 +212,16 @@ def gtk_main(path=SOCKET_PATH):
     box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
     box.pack_start(Gtk.Label(label="Firefox windows"), False, False, 4)
     combo = Gtk.ComboBoxText()
-    status = Gtk.Label(label="Choose a window, then View")
-    cache = {"entries": [], "epoch": None}
+    status = Gtk.Label(label="Unlock with the owner window link from Star")
+    cache = {"entries": [], "epoch": None, 'capability': None}
+    credential = Gtk.Entry()
+    credential.set_visibility(False)
+    credential.set_placeholder_text('Owner window link')
+    credential.set_max_length(512)
 
     def refresh(*_args):
+        if cache['capability'] is None:
+            return True
         selected = combo.get_active_id()
         try:
             response = request("list")
@@ -241,8 +254,60 @@ def gtk_main(path=SOCKET_PATH):
     reload_button.connect("clicked", refresh)
     owner = Gtk.Button(label="Return to owner")
     owner.connect("clicked", lambda *_: choose_scope("owner"))
-    box.pack_start(combo, False, False, 0)
-    for widget in (view, reload_button, owner, status):
+    controls = (combo, view, reload_button, owner)
+    unlock_button = Gtk.Button(label='Unlock')
+    lock_button = Gtk.Button(label='Lock')
+
+    def lock(*_args):
+        cache.update(capability=None, entries=[], epoch=None)
+        combo.remove_all()
+        credential.set_text('')
+        unlock_button.show()
+        lock_button.hide()
+        for widget in controls:
+            widget.hide()
+        status.set_text('Unlock with the owner window link from Star')
+
+    def unlock(*_args):
+        # The existing owner-only fragment capability, never a service token or
+        # task capability. Keep it only in this process's memory, not a file,
+        # browser storage, command line, log, or clipboard helper.
+        cache['capability'] = credential.get_text().rsplit('#', 1)[-1]
+        credential.set_text('')
+        try:
+            request('list')
+        except Exception:
+            cache['capability'] = None
+            status.set_text('Owner authentication unavailable; task links cannot unlock the directory')
+            return
+        credential.hide()
+        unlock_button.hide()
+        lock_button.show()
+        for widget in controls:
+            widget.show()
+        status.set_text('Choose a window, then View')
+        refresh()
+
+    def prompt_unlock(*_args):
+        dialog = Gtk.Dialog(title='Unlock Firefox windows', transient_for=window, modal=True)
+        dialog.add_button('Cancel', Gtk.ResponseType.CANCEL)
+        dialog.add_button('Unlock', Gtk.ResponseType.OK)
+        dialog.get_content_area().add(credential)
+        entry_handler = credential.connect('activate', lambda *_: dialog.response(Gtk.ResponseType.OK))
+        dialog.show_all()
+        credential.grab_focus()
+        response = dialog.run()
+        credential.disconnect(entry_handler)
+        dialog.get_content_area().remove(credential)
+        dialog.destroy()
+        if response == Gtk.ResponseType.OK:
+            unlock()
+        else:
+            credential.set_text('')
+
+    unlock_button.connect('clicked', prompt_unlock)
+    lock_button.connect('clicked', lock)
+    for widget in (unlock_button, lock_button, combo, view, reload_button, owner, status):
         box.pack_start(widget, False, False, 0)
     window = Gtk.Window(title="Firefox windows")
     window.set_type_hint(Gdk.WindowTypeHint.DOCK)
@@ -253,6 +318,7 @@ def gtk_main(path=SOCKET_PATH):
     window.add(box)
     window.connect("destroy", Gtk.main_quit)
     window.show_all()
+    lock()
     xid = GdkX11.X11Window.get_xid(window.get_window())
     height = window.get_allocated_height()
     # Reserve the visible bar in xmonad; this changes no browser binding. Only

@@ -17,7 +17,7 @@ class FakeWindows:
     def __init__(self):
         self.epoch = "epoch-a"
         self.state = {"windows": {
-            "owner": {"state": "open", "epoch": "epoch-a", "context": "c0", "window": "w0", "owner": True},
+            "owner": {"state": "open", "epoch": "epoch-a", "context": "c0", "window": "w0", "owner": True, "viewer": "synthetic-owner-capability-only"},
             "kanban:board:t_123": {"state": "open", "epoch": "epoch-a", "context": "c1", "window": "w1"},
             "kanban:board:t_old": {"state": "closed", "epoch": "epoch-a", "context": "cx", "window": "wx"},
         }}
@@ -77,7 +77,7 @@ def test_peer_auth_and_malformed_messages_are_rejected(tmp_path, monkeypatch):
     try:
         client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         client.connect(sock_path)
-        client.sendall(b'{"command":"list"}\n')
+        client.sendall(b'{"command":"list","owner_capability":"synthetic-owner-capability-only"}\n')
         response = json.loads(client.makefile().readline())
         client.close()
         assert response["status"] == "ok"
@@ -172,3 +172,24 @@ def test_owner_directory_is_not_a_public_agent_command():
         with pytest.raises(ValueError):
             endpoint.validate({'command': command, 'payload': {'scope': 'owner'}})
 
+def test_directory_requires_exact_owner_capability_not_missing_or_task_link(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    windows = FakeWindows()
+    windows.state['windows']['kanban:board:t_123']['viewer'] = 'synthetic-task-capability-only'
+    server = owner.OwnerSocket('owner.sock', windows, peer_uid=os.getuid())
+    server.start()
+    try:
+        for capability in [None, '', 'synthetic-task-capability-only', 'wrong-owner-capability-only']:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+                client.connect(server.path)
+                body = {'command': 'list'}
+                if capability is not None:
+                    body['owner_capability'] = capability
+                client.sendall(json.dumps(body).encode() + b'\n')
+                with client.makefile() as stream:
+                    result = json.loads(stream.readline())
+            assert result['status'] == 'error' and 'windows' not in result
+            assert 'viewer' not in json.dumps(result)
+        assert not windows.calls
+    finally:
+        server.close()

@@ -73,10 +73,15 @@ A small native GTK dock on the existing desktop provides a task-scoped window
 selector, View, Refresh and Return to owner. It displays canonical task labels,
 not page titles/URLs, and refreshes new/closed entries. It uses a mode-0600 Unix
 socket in a mode-0700 directory and verifies `SO_PEERCRED` against the controller
-UID. There is **no HTTP window-list endpoint**, no list operation in the agent
+UID. Because the existing Kasm root has no password gate, the dock also stays
+locked until Joy supplies the existing owner-window fragment link from Star.
+Only the exact current owner capability unlocks list/select; task capabilities
+refuse. The value is kept only in process memory and cleared by Lock. This is
+not a new password, service-token distribution or capability enumeration.
+There is **no HTTP window-list endpoint**, no list operation in the agent
 command envelope, no viewer capability export, and no new root authentication
 or CORS bypass. It inherits the existing Kasm desktop access boundary, including
-its existing LAN access configuration; this does not claim that Kasm already
+its existing LAN access configuration; directory authentication is additional; this does not claim that Kasm already
 has an owner-login authentication layer.
 
 The initial implementation exposed another acknowledgement/effect mismatch:

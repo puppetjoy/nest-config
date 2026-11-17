@@ -37,7 +37,7 @@ def run(engine, call, base, emit, requests):
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
             client.settimeout(10)
             client.connect(path)
-            client.sendall(json.dumps({'command': command, **kwargs}).encode() + b'\n')
+            client.sendall(json.dumps({'command': command, 'owner_capability': engine.state['windows']['owner']['viewer'], **kwargs}).encode() + b'\n')
             with client.makefile('rb') as stream:
                 return json.loads(stream.readline(4097))
     def focus():
@@ -52,8 +52,8 @@ def run(engine, call, base, emit, requests):
             key, value = line.split('=', 1)
             os.environ[key] = value
         for app in Atspi.get_desktop(0):
-            for window in app:
-                if window.get_name() != 'Firefox windows':
+            for window in reversed(list(app)):
+                if window.get_name() not in {'Firefox windows', 'Unlock Firefox windows'}:
                     continue
                 stack = [window]
                 while stack:
@@ -67,8 +67,15 @@ def run(engine, call, base, emit, requests):
     try:
         time.sleep(2)
         assert panel.poll() is None, 'GTK owner panel failed'
+        click_button('Unlock')
+        click_button(None, 'password text')
+        subprocess.run(['xdotool', 'type', '--clearmodifiers', engine.state['windows']['owner']['viewer']], check=True)
+        click_button('Unlock')
+        time.sleep(.3)
         listing = local('list')
         assert listing['status'] == 'ok' and len(listing['windows']) == 2, listing
+        assert local('list', owner_capability='wrong-owner-capability-only')['status'] == 'error'
+        assert local('list', owner_capability=engine.state['windows'][scope]['viewer'])['status'] == 'error'
         assert 'viewer' not in json.dumps(listing)
         one = dict(engine.state['windows'][scope])
         other = engine.acquire(second).copy()
