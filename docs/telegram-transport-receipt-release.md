@@ -150,7 +150,13 @@ candidate's site, Hiera and dependency modules; require the exact candidate
 version, substantial resource inventory, exact two pins and runtime ordering.
 An empty default-environment compile or Puppet apply/noop is not this check.
 Keep secret-bearing catalogs private and retain only sanitized receipts.
-Independent exact-byte review must verify only the Native pin and this release
-document changed. Required exact-head configuration CI must pass before this
+Independent exact-byte review must verify only the Native pin, this release
+document and the exact Talon model expectation in
+`spec/data/hermes_main_model_assignments_spec.rb` changed. The latter corrects
+`gpt-6.1-sol` to the already accepted `gpt-6.1-sol-900k`; it changes no runtime
+model, provider, helper/delegation assignment or other assertion. Preserve the
+original candidate/base failing receipts and dependency setup failures as
+history; rerun the entire declared selection rather than only the repaired
+example. Required exact-head configuration CI must pass before this
 source phase completes. No fabricated reviewer, same-card review lane or
 production canary is required or authorized by this source preparation.
