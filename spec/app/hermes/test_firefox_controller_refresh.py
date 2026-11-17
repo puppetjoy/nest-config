@@ -142,3 +142,57 @@ def test_final_consumer_preflight_has_no_live_writes_or_native_mutations(engine,
     assert {str(p.relative_to(controller.path.parent)): p.read_bytes()
             for p in controller.path.parent.rglob('*') if p.is_file()} == before
     assert not list(controller.path.parent.parent.glob('controller-preflight-*'))
+
+
+def test_overlay_includes_real_owner_socket_startup_dependency(tmp_path):
+    """Run the packaged server, not a mocked successful refresh return."""
+    import os
+    import shutil
+    import subprocess
+    import time
+    import urllib.error
+    import urllib.request
+
+    source = ROOT / 'files/firefox-browser'
+    for name in refresh.ASSETS:
+        path = source / name
+        if not path.exists():
+            path = ROOT / 'files/app/hermes' / name
+        shutil.copyfile(path, tmp_path / name)
+    token = tmp_path / 'token'
+    token.write_text('synthetic-overlay-startup-token-only')
+    env = {**os.environ, 'FIREFOX_CONTROL_PROTOCOL': 'firefox-windows-v3',
+           'FIREFOX_UI_STATE_DIR': str(tmp_path / 'state'),
+           'FIREFOX_BRIDGE_TOKEN_FILE': str(token),
+           'FIREFOX_OWNER_DESKTOP_SOCKET': 'owner.sock'}
+    # Bind a random loopback port, retaining the actual server/main/IPC path.
+    code = '''import importlib.util
+from pathlib import Path
+spec=importlib.util.spec_from_file_location('endpoint', 'firefox-bridge-server.py')
+m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+original=m.Server.__init__
+def init(self, address, handler):
+ original(self, ('127.0.0.1',0), handler)
+ print(self.server_port,flush=True)
+m.Server.__init__=init
+m.main()
+'''
+    with (tmp_path / 'stderr').open('w+') as errors:
+        process = subprocess.Popen([sys.executable, '-c', code], cwd=tmp_path,
+                                   env=env, stdout=subprocess.PIPE, stderr=errors, text=True)
+        try:
+            port = int(process.stdout.readline().strip())
+            deadline = time.monotonic() + 5
+            while not (tmp_path / 'owner.sock').exists():
+                if process.poll() is not None or time.monotonic() >= deadline:
+                    errors.seek(0)
+                    pytest.fail('packaged resident startup failed: ' + errors.read())
+                time.sleep(.02)
+            with pytest.raises(urllib.error.HTTPError) as refusal:
+                urllib.request.urlopen(f'http://127.0.0.1:{port}/_nest/bridge/v1', timeout=2)
+            assert refusal.value.code == 404
+            assert process.poll() is None
+        finally:
+            process.terminate()
+            process.wait(timeout=5)
+            process.stdout.close()

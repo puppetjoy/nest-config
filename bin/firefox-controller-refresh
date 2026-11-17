@@ -15,7 +15,7 @@ import sys
 
 ASSETS = ('firefox-bridge-server.py', 'firefox_windows.py', 'firefox-ui-bridge.py',
           'secure_browser_bidi.py', 'secure_browser_local_bidi.py',
-          'window-viewer.html', 'window-viewer.js')
+          'window-viewer.html', 'window-viewer.js', 'owner-desktop.py')
 
 
 def approved_request(request_id, approval_id, proposal_hash):
