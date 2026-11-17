@@ -96,9 +96,9 @@ try:
     assert 'Return to owner' in names and 'Task canary:t_servicea' in names and 'Task canary:t_serviceb' in names, names
     initial = current()
     focus = lambda: subprocess.check_output(['xdotool', 'getwindowfocus'], text=True).strip()
-    for label, keys in [('Task canary:t_servicea', ['Home', 'Down', 'Return']), ('Task canary:t_serviceb', ['Home', 'Down', 'Down', 'Return'])]:
+    for label in ['Task canary:t_servicea', 'Task canary:t_serviceb']:
         click(role='combo box')
-        subprocess.run(['xdotool', 'key', *keys], check=True)
+        click(role='menu item', name=label)
         time.sleep(.3)
         assert current() == label, current()
     selected_focus = focus()
@@ -110,7 +110,16 @@ try:
     click(role='combo box')
     time.sleep(.2)
     subprocess.run(['ffmpeg', '-y', '-hide_banner', '-loglevel', 'error', '-f', 'x11grab', '-video_size', '1365x768', '-i', ':1', '-frames:v', '1', '/evidence/baked-real-service-choices.png'], check=True)
-    subprocess.run(['xdotool', 'key', 'Escape'], check=True)
+    geometry = {}
+    for item in widgets():
+        if item.get_name() in {'Owner window', 'Task canary:t_servicea', 'Task canary:t_serviceb'} and item.get_role_name() == 'menu item':
+            rect = item.get_component_iface().get_extents(Atspi.CoordType.SCREEN)
+            geometry[item.get_name()] = [rect.x, rect.y, rect.width, rect.height]
+    print(json.dumps({'stage': 'popup-geometry', 'items': geometry}), flush=True)
+    assert len(geometry) == 3 and all(y >= 0 and h > 0 and y + h <= 768 for x, y, w, h in geometry.values()), geometry
+    click(role='menu item', name='Task canary:t_servicea')
+    time.sleep(.3)
+    assert current() == 'Task canary:t_servicea' and focus() != selected_focus
     click(name='Return to owner')
     time.sleep(.3)
     assert current() == 'Owner window' and focus() != selected_focus

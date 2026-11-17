@@ -367,6 +367,10 @@ def gtk_main(fd):
     box.set_border_width(3)
     box.pack_start(Gtk.Label(label='Windows'), False, False, 3)
     combo = Gtk.ComboBoxText()
+    # Grid-style single-column placement anchors the menu below this top-edge
+    # dock. GTK's default active-row alignment puts preceding choices above
+    # the framebuffer when a later window is selected.
+    combo.set_wrap_width(1)
     combo.set_hexpand(True)
     combo.set_size_request(80, -1)
     for cell in combo.get_cells():
