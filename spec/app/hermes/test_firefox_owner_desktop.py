@@ -25,6 +25,10 @@ class FakeWindows:
         self.lock = threading.RLock()
     def operation(self):
         return self.lock
+    def _tree(self):
+        return [{'context': record['context'], 'clientWindow': record['window']}
+                for record in self.state['windows'].values()
+                if record['state'] == 'open' and record['epoch'] == self.epoch]
     def _resolve(self, record):
         self.calls.append(("resolve", record["context"]))
         if record.get("epoch") != self.epoch or record.get("state") != "open":
@@ -193,3 +197,113 @@ def test_directory_requires_exact_owner_capability_not_missing_or_task_link(tmp_
         assert not windows.calls
     finally:
         server.close()
+
+
+def test_native_panel_lists_without_task_or_owner_capability_and_tracks_real_focus(monkeypatch):
+    import subprocess
+    windows = FakeWindows()
+    before = json.dumps(windows.state, sort_keys=True)
+    mapped = []
+    monkeypatch.setattr(subprocess, 'check_output', lambda *a, **kw: '101\n')
+    monkeypatch.setattr(owner, 'native_window_id', lambda engine, window: mapped.append(window) or {'w0': '100', 'w1': '101'}[window])
+    panel = owner.OwnerPanel(windows)
+    try:
+        result = panel.dispatch({'command': 'list'})
+        assert result['status'] == 'ok' and result['current'] == 'kanban:board:t_123'
+        assert result['windows'] == owner.visible_windows(windows)
+        assert 'viewer' not in json.dumps(result) and 'capability' not in json.dumps(result)
+        assert mapped == ['w0', 'w1']
+        assert panel.dispatch({'command': 'list'}) == result
+        assert mapped == ['w0', 'w1']  # No repeated privileged identity reads.
+        windows.state['windows']['kanban:board:t_123']['state'] = 'closed'
+        result = panel.dispatch({'command': 'list'})
+        assert result['current'] is None
+        assert result['windows'] == [{'scope': 'owner', 'label': 'Owner window'}]
+        windows.state['windows']['kanban:board:t_123']['state'] = 'open'
+        assert json.dumps(windows.state, sort_keys=True) == before
+    finally:
+        panel.close()
+
+
+def test_native_panel_select_uses_exact_binding_and_rejects_capability_injection(monkeypatch):
+    import pytest
+    windows = FakeWindows()
+    selections = []
+    monkeypatch.setattr(owner, 'select_window', lambda *args: selections.append(args))
+    panel = owner.OwnerPanel(windows)
+    try:
+        request = {'command': 'select', 'scope': 'kanban:board:t_123', 'epoch': windows.epoch}
+        assert panel.dispatch(request) == {'status': 'ok'}
+        assert selections == [(windows, request['scope'], windows.epoch)]
+        for invalid in [None, {}, {'command': 'input'}, {'command': 'list', 'owner_capability': 'anything'},
+                        {**request, 'task_token': 'anything'}, {'command': 'select', 'scope': 'owner'}]:
+            with pytest.raises(ValueError):
+                panel.dispatch(invalid)
+        assert len(selections) == 1
+    finally:
+        panel.close()
+
+
+def test_native_panel_channel_is_unnamed_and_closes_without_replaying_selection(monkeypatch):
+    windows = FakeWindows()
+    selections = []
+    panel = owner.OwnerPanel(windows)
+    monkeypatch.setattr(owner, 'select_window', lambda *args: selections.append(args))
+    assert panel.server.getsockname() == panel.client.getsockname() == ''
+    thread = threading.Thread(target=panel.serve)
+    thread.start()
+    try:
+        panel.client.sendall(json.dumps({'command': 'select', 'scope': 'owner', 'epoch': windows.epoch}).encode() + b'\n')
+        assert json.loads(panel.client.recv(4096)) == {'status': 'ok'}
+        panel.client.close()
+        thread.join(timeout=2)
+        assert not thread.is_alive()
+        assert selections == [(windows, 'owner', windows.epoch)]
+    finally:
+        panel.close()
+
+
+def test_native_owner_created_window_is_discovered_and_selected_without_claiming_it(monkeypatch):
+    import subprocess
+    import pytest
+    windows = FakeWindows()
+    windows.state['controller'] = {'pid': 123}
+    before = json.dumps(windows.state, sort_keys=True)
+    original = windows._tree
+    extra = [{'context': 'c2', 'clientWindow': 'w2'}]
+    monkeypatch.setattr(windows, '_tree', lambda: original() + extra)
+    monkeypatch.setattr(subprocess, 'check_output', lambda *a, **kw: '102\n')
+    monkeypatch.setattr(owner, 'native_window_id', lambda engine, window: {'w0': '100', 'w1': '101', 'w2': '102'}[window])
+    focused = []
+    monkeypatch.setattr(owner, 'focus_native_window', lambda *args: focused.append(args))
+    panel = owner.OwnerPanel(windows)
+    try:
+        listing = panel.dispatch({'command': 'list'})
+        assert listing['windows'][-1] == {'scope': 'desktop:w2', 'label': 'Owner window 2'}
+        assert listing['current'] == 'desktop:w2'
+        selection = {'command': 'select', 'scope': 'desktop:w2', 'epoch': windows.epoch}
+        assert panel.dispatch(selection) == {'status': 'ok'}
+        assert focused == [('102', 123)]
+        extra.clear()
+        assert all(item['scope'] != 'desktop:w2' for item in panel.dispatch({'command': 'list'})['windows'])
+        with pytest.raises(ValueError):
+            panel.dispatch(selection)
+        assert focused == [('102', 123)]
+        assert json.dumps(windows.state, sort_keys=True) == before
+    finally:
+        panel.close()
+
+
+def test_native_panel_generation_and_closed_window_refusals_preserve_registry():
+    import pytest
+    windows = FakeWindows()
+    panel = owner.OwnerPanel(windows)
+    before = json.dumps(windows.state, sort_keys=True)
+    try:
+        for scope, epoch in [('owner', 'old'), ('kanban:board:t_old', windows.epoch), ('foreign', windows.epoch)]:
+            with pytest.raises(ValueError):
+                panel.dispatch({'command': 'select', 'scope': scope, 'epoch': epoch})
+        assert windows.calls == []
+        assert json.dumps(windows.state, sort_keys=True) == before
+    finally:
+        panel.close()

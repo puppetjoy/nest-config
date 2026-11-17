@@ -288,9 +288,14 @@ def main():
         desktop_spec.loader.exec_module(desktop)
         server.owner_desktop = desktop.OwnerSocket(os.environ.get("FIREFOX_OWNER_DESKTOP_SOCKET", desktop.SOCKET_PATH), server.windows)
         server.owner_desktop.start()
+        server.owner_panel = desktop.OwnerPanel(server.windows)
+        server.owner_panel.start()
     try:
         server.serve_forever()
     finally:
+        panel = getattr(server, "owner_panel", None)
+        if panel is not None:
+            panel.close()
         desktop = getattr(server, "owner_desktop", None)
         if desktop is not None:
             desktop.close()
