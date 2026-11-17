@@ -48,7 +48,8 @@ esac
 case "${FIREFOX_CONTROL_PROTOCOL:-firefox-ui-v1}" in
   firefox-ui-v1) bidi_args= ;;
   # geckodriver connects to this existing Firefox over loopback Marionette.
-  firefox-bidi-ui-v2|firefox-windows-v3) bidi_args='--remote-debugging-port=9222 --marionette' ;;
+  firefox-bidi-ui-v2) bidi_args='--remote-debugging-port=9222 --marionette' ;;
+  firefox-windows-v3) bidi_args='--remote-debugging-port=9222 --marionette --remote-allow-system-access' ;;
   *) printf '%s\n' 'Unknown Firefox control protocol' >&2; exit 64 ;;
 esac
 
@@ -57,6 +58,7 @@ xmonad_pid=
 firefox_pid=
 dbus_pid=
 bridge_pid=
+owner_desktop_pid=
 driver_pid=
 
 if [ ! -f "$HOME/.vnc/self.pem" ]; then
@@ -79,7 +81,7 @@ cleanup() {
     kill "$firefox_pid" 2>/dev/null || true
     wait "$firefox_pid" 2>/dev/null || true
   fi
-  for pid in "$bridge_pid" "$driver_pid" "$xmonad_pid" "$kasmvnc_pid" "$dbus_pid"; do
+  for pid in "$owner_desktop_pid" "$bridge_pid" "$driver_pid" "$xmonad_pid" "$kasmvnc_pid" "$dbus_pid"; do
     [ -z "$pid" ] || kill "$pid" 2>/dev/null || true
   done
 }
@@ -162,6 +164,16 @@ fi
 if [ -n "${FIREFOX_BRIDGE_TOKEN_FILE:-}" ]; then
   python3 /opt/nest/firefox/bin/firefox-bridge-server.py &
   bridge_pid=$!
+  if [ "${FIREFOX_CONTROL_PROTOCOL:-}" = firefox-windows-v3 ]; then
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+      [ -S /tmp/nest-firefox/owner-desktop.sock ] && break
+      sleep 1
+    done
+    if [ -S /tmp/nest-firefox/owner-desktop.sock ]; then
+      python3 /opt/nest/firefox/bin/owner-desktop.py --gtk &
+      owner_desktop_pid=$!
+    fi
+  fi
 fi
 
 resize_firefox_windows_once() {

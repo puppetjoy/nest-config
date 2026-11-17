@@ -20,6 +20,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 assert os.environ.get('FIREFOX_DISPOSABLE_CANARY') == '1'
 assert not Path('/home/kasm-user/.local/state/nest-firefox-ui/windows.json').exists()
 ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from firefox_scroll_read_checks import fixture_body, run as scroll_read_checks
 sys.path.insert(0, '/opt/nest/firefox/bin')
 
 def load(name, path):
@@ -50,14 +52,17 @@ class Fixture(BaseHTTPRequestHandler):
         <button id="fault" onclick="fetch('/effect',{method:'POST'});document.querySelector('#faultresult').textContent='fault delivered'">Fault fixture</button><pre id="faultresult"></pre>
         <textarea id="draft"></textarea><pre id="result">not clicked</pre><pre id="echo"></pre><pre id="point"></pre><div id="bottom">Bottom fixture</div>
         <script>document.querySelector('#draft').addEventListener('input',e=>document.querySelector('#echo').textContent=e.target.value)</script></body>'''
+        body = fixture_body(self.path) or body
         self.send_response(200)
         self.send_header('Set-Cookie', 'fixture-session=shared; Path=/; HttpOnly; SameSite=Strict')
         self.send_header('Content-Length', str(len(body)))
         self.end_headers()
         self.wfile.write(body)
     def do_POST(self):
-        assert self.path == '/effect'
-        requests.append({'path': '/effect', 'effect': True})
+        assert self.path in {'/effect', '/observe'}
+        size = int(self.headers.get('Content-Length', '0'))
+        observation = json.loads(self.rfile.read(size)) if self.path == '/observe' and size else None
+        requests.append({'path': self.path, 'effect': self.path == '/effect', 'observation': observation})
         self.send_response(204)
         self.send_header('Content-Length', '0')
         self.end_headers()
@@ -83,7 +88,7 @@ source_hash = hashlib.sha256((controller_root / 'firefox_windows.py').read_bytes
 assert source_hash == hashlib.sha256((ROOT / 'files/firefox-browser/firefox_windows.py').read_bytes()).hexdigest()
 emit('source', controller_sha256=source_hash, baked=os.environ.get('FIREFOX_CANARY_BAKED_SOURCE') == '1')
 endpoint = load('canary_endpoint', controller_root / 'firefox-bridge-server.py')
-launcher = subprocess.Popen(['/opt/nest/firefox/bin/nest-firefox-browser.sh'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+launcher = subprocess.Popen(['sh', '/opt/nest/firefox/bin/nest-firefox-browser.sh'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 http = ThreadingHTTPServer(('127.0.0.1', 0), Fixture)
 threading.Thread(target=http.serve_forever, daemon=True).start()
 engine = None
@@ -219,6 +224,11 @@ try:
     call('type', {'selector': '#draft', 'text': 'safe recovery', 'action_key': 'safe-after-http-loss'}, ('input_readback_confirmed',))
     emit('interrupted-http', effect_count=2, replay_blocked=True, observation_available=True, safe_input_after_recovery=True)
     emit('workflow-pass', public_calls=count, cookie_continuity=True, binding_preserved=True)
+    if os.environ.get('FIREFOX_SCROLL_READ_MODE'):
+        scroll_read_checks(engine, call, f'http://127.0.0.1:{http.server_port}', emit, requests, endpoint)
+    if os.environ.get('FIREFOX_OWNER_PANEL_CANARY'):
+        from firefox_owner_desktop_checks import run as owner_checks
+        owner_checks(engine, call, f'http://127.0.0.1:{http.server_port}', emit, requests)
 finally:
     if engine is not None:
         scope = 'kanban:canary:t_publicfixture'

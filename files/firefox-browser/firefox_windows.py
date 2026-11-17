@@ -273,7 +273,7 @@ class Windows:
                     if time.monotonic() >= deadline:
                         raise
                     time.sleep(.1)
-            created = driver_request("POST", "/session", {"capabilities": {"alwaysMatch": {"browserName": "firefox", "webSocketUrl": True}}})
+            created = driver_request("POST", "/session", {"capabilities": {"alwaysMatch": {"browserName": "firefox", "webSocketUrl": True, "unhandledPromptBehavior": "ignore"}}})
             endpoint = created["capabilities"]["webSocketUrl"]
             validate_session_endpoint(created["sessionId"], endpoint)
             pid = created["capabilities"]["moz:processID"]
@@ -920,7 +920,10 @@ class Windows:
                 return {**common, "png_base64": data, "capture_mode": "bound native window viewport", "full_page": False}
             if command in {"snapshot", "wait", "query"}:
                 if command == "query":
-                    result = self._query(cid, payload.get("expression", ""), payload.get("cursor"))
+                    try:
+                        result = self._query(cid, payload.get("expression", ""), payload.get("cursor"))
+                    except ValueError:
+                        raise ControlError("FIREFOX_OBSERVATION_UNAVAILABLE", "invalid or unavailable bounded read; no input started") from None
                     self._resolve(record)
                     return {**common, **result}
                 snapshot = self._snapshot(cid)
@@ -954,12 +957,60 @@ class Windows:
                 amount = payload.get("amount", 1)
                 if type(amount) not in {int, float} or not 0 < amount <= 10 or payload.get("direction", "down") not in {"up", "down"}:
                     raise ValueError("bounded vertical scroll required")
-                self._call("input.performActions", {"context": cid, "actions": [{"type": "wheel", "id": "window-wheel", "actions": [{
-                    "type": "scroll", "x": 10, "y": 10, "deltaX": 0, "deltaY": int(500 * amount) * (-1 if payload.get("direction") == "up" else 1), "duration": 100}]}]})
-                return {**common, "readback": self._summary(cid)}
+                return {**common, "scroll": self._scroll(cid, payload.get("direction", "down"), amount, record)}
             if command in {"click", "type", "selector_action"}:
                 return self._input(command, payload, record, common)
             raise ValueError("unsupported window operation; no legacy global-input fallback")
+
+    def _scroll(self, cid, direction, amount, record):
+        from secure_browser_local_bidi import CdpSession
+        # Observe hit-testing in the actual viewport. Each sample belongs to its
+        # innermost scroll container; never send a blind wheel to fixed chrome,
+        # and never mutate scrollTop through script or retry native input.
+        selected = self._function(cid, """() => {
+          const root=document.scrollingElement, candidates=[];
+          for(const fy of [.5,.8,.2,.95,.05])for(const fx of [.5,.8,.2,.95,.05]){
+            const x=Math.floor(innerWidth*fx), y=Math.floor(innerHeight*fy);
+            let e=document.elementFromPoint(x,y);
+            for(;e;e=e.parentElement){
+              const s=getComputedStyle(e), r=e.getBoundingClientRect();
+              const allowed=e===root ? !['hidden','clip'].includes(s.overflowY) : ['auto','scroll'].includes(s.overflowY);
+              if(allowed&&e.scrollHeight>e.clientHeight+1&&e.clientHeight>0){
+                const area=e===root ? innerWidth*innerHeight : Math.max(0,Math.min(innerWidth,r.right)-Math.max(0,r.left))*Math.max(0,Math.min(innerHeight,r.bottom)-Math.max(0,r.top));
+                candidates.push({node:e,x,y,top:e.scrollTop,max:e.scrollHeight-e.clientHeight,area,kind:e===root?'root':'nested'});break;
+              }
+            }
+          }
+          candidates.sort((a,b)=>b.area-a.area);return candidates[0]||null;
+        }""", [], preflight=True)
+        details = CdpSession._bidi_value(selected)
+        if not isinstance(details, dict):
+            return {"outcome": "no_movement", "reason": "no_visible_scroll_container", "input_sent": False}
+        values = dict(selected.get("value", []))
+        node = values.get("node", {})
+        if not node.get("sharedId"):
+            raise ControlError("FIREFOX_OBSERVATION_UNAVAILABLE", "scroll target identity unavailable; no input started")
+        before = details["top"]
+        boundary = before <= 0 if direction == "up" else before >= details["max"] - 1
+        common = {"target": details["kind"], "before": before, "maximum": details["max"]}
+        if boundary:
+            return {**common, "outcome": "at_boundary", "after": before, "input_sent": False}
+        self._resolve(record)
+        self._call("input.performActions", {"context": cid, "actions": [{"type": "wheel", "id": "window-wheel", "actions": [{
+            "type": "scroll", "x": details["x"], "y": details["y"], "deltaX": 0,
+            "deltaY": max(1, int(min(500, details.get("max", 500)) * amount)) * (-1 if direction == "up" else 1), "duration": 100}]}]})
+        deadline = time.monotonic() + 1
+        while True:
+            current = CdpSession._bidi_value(self._function(cid,
+                "(e)=>({connected:e.isConnected,top:e.scrollTop,max:e.scrollHeight-e.clientHeight})", [{"sharedId": node["sharedId"]}]))
+            if not current.get("connected"):
+                raise ControlError("FIREFOX_OBSERVATION_UNAVAILABLE", "scroll target changed after wheel input; observe before further input", "uncertain")
+            if current["top"] != before or time.monotonic() >= deadline:
+                break
+            time.sleep(.05)
+        self._resolve(record)
+        return {**common, "outcome": "moved" if current["top"] != before else "no_movement", "after": current["top"], "input_sent": True,
+                "confirmation_boundary": "same-container native geometry; not application completion"}
 
     def _query(self, cid, expression, cursor=None):
         import secure_browser_bidi as observation
@@ -981,7 +1032,7 @@ class Windows:
             if cursor is not None:
                 if (not isinstance(cursor, dict) or set(cursor) != {"revision", "offset"} or cursor.get("revision") != revision
                         or type(cursor.get("offset")) is not int or not 0 < cursor["offset"] < len(text)):
-                    raise ValueError("stale text cursor; restart the element read")
+                    raise ControlError("FIREFOX_TEXT_CURSOR_STALE", "text changed or cursor invalid; restart document.readText from its first page without a cursor; no input started")
                 offset = cursor["offset"]
             end = min(len(text), offset + observation.TEXT_PAGE_CHARS)
             return {"value": {"text": text[offset:end], "total": raw.get("total"), "offset": offset, "totalChars": len(text)},

@@ -214,7 +214,7 @@ class Handler(BaseHTTPRequestHandler):
                 if len(json.dumps(result).encode()) > MAX_RESPONSE:
                     raise ValueError("bounded window response exceeded")
             except Exception as exc:
-                if getattr(exc, "code", None) in {"FIREFOX_BUSY", "FIREFOX_IDENTITY_LOST", "FIREFOX_NATIVE_OUTCOME_UNCERTAIN", "FIREFOX_CREATION_UNCERTAIN", "FIREFOX_CREATE_REJECTED", "FIREFOX_BINDING_RETIRED", "FIREFOX_TARGET_UNAVAILABLE", "FIREFOX_OBSERVATION_UNAVAILABLE", "FIREFOX_WINDOW_BUDGET"}:
+                if getattr(exc, "code", None) in {"FIREFOX_BUSY", "FIREFOX_IDENTITY_LOST", "FIREFOX_NATIVE_OUTCOME_UNCERTAIN", "FIREFOX_CREATION_UNCERTAIN", "FIREFOX_CREATE_REJECTED", "FIREFOX_BINDING_RETIRED", "FIREFOX_TARGET_UNAVAILABLE", "FIREFOX_OBSERVATION_UNAVAILABLE", "FIREFOX_TEXT_CURSOR_STALE", "FIREFOX_WINDOW_BUDGET"}:
                     result = {"status": "error", "error": getattr(exc, "code"), "outcome": getattr(exc, "outcome"), "message": str(exc)}
                 else:
                     result = {"status": "error", "error": "FIREFOX_OUTCOME_UNCERTAIN", "outcome": "uncertain", "message": "bounded Firefox operation failed or timed out; read back; retain the action key; do not replay"}
@@ -283,7 +283,17 @@ def main():
             server.windows.authorize_binding(json.loads(args.recover_binding))
         if args.recover_creation:
             server.windows.authorize_creation_recovery(json.loads(args.recover_creation))
-    server.serve_forever()
+        desktop_spec = importlib.util.spec_from_file_location("firefox_owner_desktop", ROOT / "owner-desktop.py")
+        desktop = importlib.util.module_from_spec(desktop_spec)
+        desktop_spec.loader.exec_module(desktop)
+        server.owner_desktop = desktop.OwnerSocket(os.environ.get("FIREFOX_OWNER_DESKTOP_SOCKET", desktop.SOCKET_PATH), server.windows)
+        server.owner_desktop.start()
+    try:
+        server.serve_forever()
+    finally:
+        desktop = getattr(server, "owner_desktop", None)
+        if desktop is not None:
+            desktop.close()
 
 
 if __name__ == "__main__":
