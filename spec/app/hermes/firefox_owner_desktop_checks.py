@@ -30,7 +30,9 @@ def run(engine, call, base, emit, requests):
         key, value = line.split('=', 1)
         os.environ[key] = value
     os.environ.update(NO_AT_BRIDGE='0', GTK_MODULES='atk-bridge', ATSPI_DISABLE_P2P='1')
-    panel = subprocess.Popen(['python3', str(desktop_path), '--gtk', '--socket', path])
+    owner_panel = desktop.OwnerPanel(engine)
+    owner_panel.start()
+    panel = owner_panel.process
     scope = 'kanban:canary:t_publicfixture'
     second = 'kanban:canary:t_otherfixture'
     def local(command, **kwargs):
@@ -64,13 +66,49 @@ def run(engine, call, base, emit, requests):
                         return
                     stack.extend(list(item))
         raise AssertionError('panel button unavailable: ' + str(label))
+    def current_choice():
+        for app in Atspi.get_desktop(0):
+            for candidate in app:
+                if candidate.get_name() != 'Firefox windows':
+                    continue
+                stack = [candidate]
+                while stack:
+                    item = stack.pop()
+                    if item.get_role_name() == 'combo box':
+                        selected = item.get_selection_iface().get_selected_child(0)
+                        return selected.get_name() if selected else None
+                    stack.extend(list(item))
+        raise AssertionError('selector unavailable')
     try:
         time.sleep(2)
         assert panel.poll() is None, 'GTK owner panel failed'
-        click_button('Unlock')
-        click_button(None, 'password text')
-        subprocess.run(['xdotool', 'type', '--clearmodifiers', engine.state['windows']['owner']['viewer']], check=True)
-        click_button('Unlock')
+        # Ordinary owner entry: no capability link, credential or activation.
+        import gi
+        gi.require_version('Atspi', '2.0')
+        from gi.repository import Atspi
+        panels = [window for app in Atspi.get_desktop(0) for window in app
+                  if window.get_name() == 'Firefox windows']
+        assert panels, 'owner selector is not visible'
+        native_panel = panels[-1]
+        rect = native_panel.get_component_iface().get_extents(Atspi.CoordType.SCREEN)
+        stack, labels, roles = [native_panel], [], []
+        while stack:
+            item = stack.pop()
+            labels.append(item.get_name())
+            roles.append(item.get_role_name())
+            stack.extend(list(item))
+        geometry = subprocess.check_output(['xdotool', 'getdisplaygeometry'], text=True).split()
+        defects = []
+        if 'Unlock' in labels or any('owner window link' in label for label in labels):
+            defects.append('ordinary owner entry is gated by Unlock / agent link')
+        if 'combo box' not in roles:
+            defects.append('no immediately usable window selector')
+        if rect.x != 0 or rect.width != int(geometry[0]):
+            defects.append(f'unpainted reserved strip: panel={rect.width}, desktop={geometry[0]}')
+        if Path('/evidence').is_dir():
+            subprocess.run(['ffmpeg', '-y', '-hide_banner', '-loglevel', 'error', '-f', 'x11grab', '-video_size', 'x'.join(geometry), '-i', ':1', '-frames:v', '1', '/evidence/owner-entry.png'], check=True)
+        emit('owner-entry', defects=defects, panel_width=rect.width, desktop_width=int(geometry[0]))
+        assert not defects, '; '.join(defects)
         time.sleep(.3)
         listing = local('list')
         assert listing['status'] == 'ok' and len(listing['windows']) == 2, listing
@@ -78,17 +116,33 @@ def run(engine, call, base, emit, requests):
         assert local('list', owner_capability=engine.state['windows'][scope]['viewer'])['status'] == 'error'
         assert 'viewer' not in json.dumps(listing)
         one = dict(engine.state['windows'][scope])
+        # A window opened by the owner's ordinary Firefox chrome is not an
+        # agent lease. It must still appear, and manual close must remove it.
+        unbound = engine._call('browsingContext.create', {'type': 'window'})
+        engine._call('browsingContext.navigate', {'context': unbound['context'], 'url': base + '/fixture', 'wait': 'complete'})
+        time.sleep(2.5)
+        directory = owner_panel.dispatch({'command': 'list'})
+        assert any(item['label'] == 'Owner window 2' for item in directory['windows']), directory
+        click_button(None, 'combo box')
+        subprocess.run(['xdotool', 'key', 'End', 'Return'], check=True)
+        time.sleep(.2)
+        assert current_choice() == 'Owner window 2'
+        engine._call('browsingContext.close', {'context': unbound['context'], 'promptUnload': False})
+        time.sleep(2.5)
+        assert all(item['label'] != 'Owner window 2' for item in owner_panel.dispatch({'command': 'list'})['windows'])
+        click_button('Return to owner')
         other = engine.acquire(second).copy()
         engine._call('browsingContext.navigate', {'context': other['context'], 'url': base + '/scroll-read-nested', 'wait': 'complete'})
         time.sleep(.2)
         assert len(local('list')['windows']) == 3
         before = json.dumps(engine.state, sort_keys=True)
-        click_button('Refresh')
+        time.sleep(2.5)  # Automatic directory refresh; no activation or Refresh step.
         click_button(None, 'combo box')
         subprocess.run(['xdotool', 'key', 'Home', 'Down', 'Return'], check=True)
-        click_button('View')
         time.sleep(.2)
         second_focus = focus()
+        assert second_focus == desktop.native_window_id(engine, other['window'])
+        assert current_choice() == 'Task canary:t_otherfixture'
         assert json.dumps(engine.state, sort_keys=True) == before
         # Operate through the actual public handler while the owner views a
         # different native window. Neither routing nor its scroll may follow focus.
@@ -105,9 +159,9 @@ def run(engine, call, base, emit, requests):
         assert engine.state['windows'][scope]['context'] == one['context']
         click_button(None, 'combo box')
         subprocess.run(['xdotool', 'key', 'Home', 'Down', 'Down', 'Return'], check=True)
-        click_button('View')
         time.sleep(.2)
-        assert focus() != second_focus
+        assert focus() == desktop.native_window_id(engine, one['window'])
+        assert current_choice() == 'Task canary:t_publicfixture'
         if Path('/evidence').is_dir():
             subprocess.run(['ffmpeg', '-y', '-hide_banner', '-loglevel', 'error', '-f', 'x11grab', '-video_size', '1365x768', '-i', ':1', '-frames:v', '1', '/evidence/owner-task-fixture.png'], check=True)
         click_button('Return to owner')
@@ -133,11 +187,33 @@ def run(engine, call, base, emit, requests):
         output = Path('/evidence')
         if output.is_dir():
             subprocess.run(['ffmpeg', '-y', '-hide_banner', '-loglevel', 'error', '-f', 'x11grab', '-video_size', '1365x768', '-i', ':1', '-frames:v', '1', str(output / 'owner-switcher-fixture.png')], env=env, check=True)
+        # Inspect the actual combo selection, not just IPC acknowledgements.
+        time.sleep(2.5)
+        assert current_choice() == 'Owner window', current_choice()
+        # Test real framebuffer resizing, including shrink and subsequent grow.
+        for width, height in [(900, 650), (1365, 768)]:
+            resized = subprocess.run(['xrandr', '--fb', f'{width}x{height}'], capture_output=True, text=True)
+            actual = subprocess.check_output(['xdotool', 'getdisplaygeometry'], text=True).strip()
+            assert actual == f'{width} {height}', (resized.returncode, resized.stderr, actual)
+            time.sleep(.5)
+            rect = native_panel.get_component_iface().get_extents(Atspi.CoordType.SCREEN)
+            assert rect.x == rect.y == 0 and rect.width == width and 0 < rect.height <= 48, (rect.x, rect.y, rect.width, rect.height)
+            assert current_choice() == 'Owner window'
+            if output.is_dir():
+                subprocess.run(['ffmpeg', '-y', '-hide_banner', '-loglevel', 'error', '-f', 'x11grab', '-video_size', f'{width}x{height}', '-i', ':1', '-frames:v', '1', str(output / f'owner-resize-{width}.png')], check=True)
+        click_button(None, 'combo box')
+        time.sleep(.2)
+        if output.is_dir():
+            subprocess.run(['ffmpeg', '-y', '-hide_banner', '-loglevel', 'error', '-f', 'x11grab', '-video_size', '1365x768', '-i', ':1', '-frames:v', '1', str(output / 'owner-populated-choices.png')], check=True)
+        subprocess.run(['xdotool', 'key', 'Escape'], check=True)
         emit('owner-panel-pass', simultaneous_windows=3, private_ipc=True, native_activation=True,
-             owner_return_button=True, background_public_scroll=True, new_closed_stale=True, bindings_preserved=True)
+             owner_return_button=True, background_public_scroll=True, new_closed_stale=True, bindings_preserved=True,
+             current_selection=True, framebuffer_resize=True, no_unlock=True)
+        owner_panel.server.shutdown(socket.SHUT_RDWR)
+        assert panel.wait(timeout=5) == 0, 'owner panel survived its controller channel'
+        emit('owner-channel-close', child_exited=True)
     finally:
-        panel.terminate()
-        panel.wait(timeout=10)
+        owner_panel.close()
         ipc.close()
         if engine.state['windows'].get(second, {}).get('state') == 'open':
             engine.dispatch('tabs', {'scope': second, 'action': 'release'})

@@ -164,16 +164,8 @@ fi
 if [ -n "${FIREFOX_BRIDGE_TOKEN_FILE:-}" ]; then
   python3 /opt/nest/firefox/bin/firefox-bridge-server.py &
   bridge_pid=$!
-  if [ "${FIREFOX_CONTROL_PROTOCOL:-}" = firefox-windows-v3 ]; then
-    for _ in 1 2 3 4 5 6 7 8 9 10; do
-      [ -S /tmp/nest-firefox/owner-desktop.sock ] && break
-      sleep 1
-    done
-    if [ -S /tmp/nest-firefox/owner-desktop.sock ]; then
-      python3 /opt/nest/firefox/bin/owner-desktop.py --gtk &
-      owner_desktop_pid=$!
-    fi
-  fi
+  # The resident controller launches its native owner panel with a private
+  # inherited channel. No link, task capability or addressable UI socket.
 fi
 
 resize_firefox_windows_once() {
@@ -238,7 +230,9 @@ resize_firefox_windows_once() {
 # to the current KasmVNC framebuffer so both shrink and grow browser-window
 # resizes behave like the upstream kasmweb image instead of leaving black unused
 # desktop area after the viewport is expanded.
-if command -v xdotool >/dev/null 2>&1; then
+# In v3 xmonad owns the managed window geometry and the dock's strut. Do
+# not race it by forcing the Firefox window across the reserved toolbar.
+if command -v xdotool >/dev/null 2>&1 && [ "${FIREFOX_CONTROL_PROTOCOL:-}" != firefox-windows-v3 ]; then
   for _ in 1 2 3 4 5 6 7 8 9 10; do
     if resize_firefox_windows_once "$FIREFOX_WIDTH" "$FIREFOX_HEIGHT"; then
       break

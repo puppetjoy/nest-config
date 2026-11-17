@@ -188,154 +188,269 @@ class OwnerSocket:
                 pass
 
 
-def gtk_main(path=SOCKET_PATH):
+class OwnerPanel:
+    """Controller-spawned native UI with a non-addressable inherited channel.
+
+    Desktop access is the owner boundary. No task capability authenticates this
+    channel, and neither HTTP clients nor same-UID socket clients can open it.
+    The legacy private capability socket remains separate for compatibility.
+    """
+    def __init__(self, windows):
+        self.windows = windows
+        self.server, self.client = socket.socketpair()
+        self.thread = self.process = None
+        self.handles = {}
+        self.return_window = None
+
+    def directory(self):
+        # Native owner-created windows have no agent lease. Discover them from
+        # the private native tree, without assigning custody or altering state.
+        live = {}
+        for context in self.windows._tree():
+            if isinstance(context.get('clientWindow'), str):
+                live.setdefault(context['clientWindow'], context['context'])
+        records = {}
+        entries = []
+        for item in visible_windows(self.windows):
+            record = self.windows.state['windows'][item['scope']]
+            if record['window'] in live:
+                records[item['scope']] = record
+                entries.append(item)
+        managed = {record['window'] for record in records.values()}
+        # Before the first agent acquisition there is deliberately no owner
+        # lease/capability. Remember the initial native owner window privately;
+        # do not make the UI depend on an agent allocating one. Never replace a
+        # retained owner binding or silently adopt another window after closure.
+        if 'owner' not in self.windows.state['windows']:
+            if self.return_window is None or self.return_window[0] != self.windows.epoch:
+                active = list(live) if len(live) == 1 else [
+                    item['clientWindow'] for item in self.windows._call('browser.getClientWindows', {}).get('clientWindows', [])
+                    if item.get('active') is True and item.get('clientWindow') in live]
+                if len(active) == 1:
+                    self.return_window = (self.windows.epoch, active[0])
+            if self.return_window and self.return_window[0] == self.windows.epoch and self.return_window[1] in live:
+                native = self.return_window[1]
+                scope = 'desktop:' + native
+                entries.insert(0, {'scope': scope, 'label': 'Owner window'})
+                records[scope] = {'context': live[native], 'window': native}
+                managed.add(native)
+        for index, native in enumerate(sorted(set(live) - managed), 2):
+            scope = 'desktop:' + native
+            entries.append({'scope': scope, 'label': f'Owner window {index}'})
+            records[scope] = {'context': live[native], 'window': native}
+        return entries, records
+
+    def dispatch(self, request):
+        if not isinstance(request, dict):
+            raise ValueError('invalid')
+        command = request.get('command')
+        required = {'command'} if command == 'list' else {'command', 'scope', 'epoch'}
+        if command not in {'list', 'select'} or set(request) != required:
+            raise ValueError('invalid')
+        with self.windows.operation():
+            if command == 'select':
+                scope = request['scope']
+                if not isinstance(scope, str) or request['epoch'] != self.windows.epoch:
+                    raise ValueError('stale selection')
+                if scope.startswith('desktop:'):
+                    _, records = self.directory()
+                    record = records.get(scope)
+                    if not record:
+                        raise ValueError('stale selection')
+                    handle = native_window_id(self.windows, record['window'])
+                    _, current = self.directory()
+                    if current.get(scope) != record:
+                        raise ValueError('stale selection')
+                    focus_native_window(handle, self.windows.state['controller']['pid'])
+                else:
+                    select_window(self.windows, scope, request['epoch'])
+                return {'status': 'ok'}
+            entries, records = self.directory()
+            # Cache only native identity, keyed by immutable generation/binding.
+            active = set()
+            import subprocess
+            focus = subprocess.check_output(['xdotool', 'getwindowfocus'], text=True, timeout=2).strip()
+            current = None
+            for entry in entries:
+                scope = entry['scope']
+                record = records[scope]
+                key = (self.windows.epoch, scope, record['context'], record['window'])
+                active.add(key)
+                if key not in self.handles:
+                    self.handles[key] = native_window_id(self.windows, record['window'])
+                if self.handles[key] == focus:
+                    current = scope
+            self.handles = {key: value for key, value in self.handles.items() if key in active}
+            return {'status': 'ok', 'epoch': self.windows.epoch, 'windows': entries, 'current': current}
+
+    def serve(self):
+        try:
+            with self.server.makefile('rb') as stream:
+                while True:
+                    raw = stream.readline(MAX_LINE + 1)
+                    if not raw:
+                        return
+                    if len(raw) > MAX_LINE or not raw.endswith(b'\n'):
+                        return
+                    try:
+                        response = self.dispatch(json.loads(raw))
+                    except Exception:
+                        response = {'status': 'error', 'message': 'Window unavailable or selection uncertain. No automatic retry or fallback.'}
+                    self.server.sendall(json.dumps(response).encode() + b'\n')
+        except (OSError, ValueError):
+            pass  # Channel loss never replays an owner selection.
+
+    def start(self):
+        import subprocess
+        import sys
+        env = dict(os.environ)
+        # A supported controller refresh may not inherit the desktop bus.
+        session = Path('/tmp/nest-firefox/session.env')
+        for line in session.read_text().splitlines() if session.exists() else []:
+            key, value = line.split('=', 1)
+            if key == 'DBUS_SESSION_BUS_ADDRESS':
+                env[key] = value
+        env.update(DISPLAY=os.environ.get('DISPLAY', ':1'), NO_AT_BRIDGE='0', GTK_MODULES='atk-bridge', ATSPI_DISABLE_P2P='1')
+        self.process = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), '--gtk', '--fd', str(self.client.fileno())],
+                                        pass_fds=(self.client.fileno(),), env=env)
+        self.client.close()
+        self.thread = threading.Thread(target=self.serve, daemon=True)
+        self.thread.start()
+
+    def close(self):
+        if self.process is not None and self.process.poll() is None:
+            self.process.terminate()
+            self.process.wait(timeout=10)
+        self.client.close()
+        try:
+            self.server.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
+        self.server.close()
+        if self.thread:
+            self.thread.join(timeout=2)
+
+
+def gtk_main(fd):
     import subprocess
     import gi
-    gi.require_version("Gtk", "3.0")
-    gi.require_version("GdkX11", "3.0")
-    from gi.repository import Gtk, Gdk, GdkX11, GLib
+    gi.require_version('Gtk', '3.0')
+    gi.require_version('GdkX11', '3.0')
+    from gi.repository import Gtk, Gdk, GdkX11, GLib, Pango
 
+    channel = socket.socket(fileno=fd)
+    channel.settimeout(8)
+    stream = channel.makefile('rb')
     def request(command, **kwargs):
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-            client.settimeout(8)
-            client.connect(path)
-            client.sendall(json.dumps({"command": command, 'owner_capability': cache['capability'], **kwargs}).encode() + b"\n")
-            with client.makefile("rb") as stream:
-                raw = stream.readline(MAX_LINE + 1)
+        try:
+            channel.sendall(json.dumps({'command': command, **kwargs}).encode() + b'\n')
+            raw = stream.readline(MAX_LINE + 1)
+        except (BrokenPipeError, ConnectionResetError):
+            GLib.idle_add(Gtk.main_quit)
+            raise
+        if not raw:
+            GLib.idle_add(Gtk.main_quit)
+            raise ValueError('controller channel closed')
         if len(raw) > MAX_LINE:
-            raise ValueError("invalid response")
+            raise ValueError('invalid response')
         response = json.loads(raw)
-        if response.get("status") != "ok":
-            raise ValueError("Window unavailable or selection uncertain. No retry or fallback.")
+        if response.get('status') != 'ok':
+            raise ValueError('Window unavailable or selection uncertain. No retry or fallback.')
         return response
 
-    box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-    box.pack_start(Gtk.Label(label="Firefox windows"), False, False, 4)
-    combo = Gtk.ComboBoxText()
-    status = Gtk.Label(label="Unlock with the owner window link from Star")
-    cache = {"entries": [], "epoch": None, 'capability': None}
-    credential = Gtk.Entry()
-    credential.set_visibility(False)
-    credential.set_placeholder_text('Owner window link')
-    credential.set_max_length(512)
-
-    def refresh(*_args):
-        if cache['capability'] is None:
-            return True
-        selected = combo.get_active_id()
-        try:
-            response = request("list")
-            entries = response["windows"]
-            if entries != cache["entries"] or response["epoch"] != cache["epoch"]:
-                combo.remove_all()
-                cache.update(entries=entries, epoch=response["epoch"])
-                for item in entries:
-                    combo.append(item["scope"], item["label"])
-                if selected and not combo.set_active_id(selected):
-                    status.set_text("Previously viewed window closed; choose a current window")
-        except Exception:
-            status.set_text("Controller unavailable; no window selected")
-        return True
-
-    def choose_scope(scope):
-        if not scope:
-            status.set_text("Choose a current window first")
-            return
-        try:
-            request("select", scope=scope, epoch=cache["epoch"])
-            combo.set_active_id(scope)
-            status.set_text("Viewing " + ("owner" if scope == "owner" else scope.rsplit(":", 1)[-1]))
-        except Exception:
-            status.set_text("Selection unavailable or uncertain; no fallback")
-
-    view = Gtk.Button(label="View")
-    view.connect("clicked", lambda *_: choose_scope(combo.get_active_id()))
-    reload_button = Gtk.Button(label="Refresh")
-    reload_button.connect("clicked", refresh)
-    owner = Gtk.Button(label="Return to owner")
-    owner.connect("clicked", lambda *_: choose_scope("owner"))
-    controls = (combo, view, reload_button, owner)
-    unlock_button = Gtk.Button(label='Unlock')
-    lock_button = Gtk.Button(label='Lock')
-
-    def lock(*_args):
-        cache.update(capability=None, entries=[], epoch=None)
-        combo.remove_all()
-        credential.set_text('')
-        unlock_button.show()
-        lock_button.hide()
-        for widget in controls:
-            widget.hide()
-        status.set_text('Unlock with the owner window link from Star')
-
-    def unlock(*_args):
-        # The existing owner-only fragment capability, never a service token or
-        # task capability. Keep it only in this process's memory, not a file,
-        # browser storage, command line, log, or clipboard helper.
-        cache['capability'] = credential.get_text().rsplit('#', 1)[-1]
-        credential.set_text('')
-        try:
-            request('list')
-        except Exception:
-            cache['capability'] = None
-            status.set_text('Owner authentication unavailable; task links cannot unlock the directory')
-            return
-        credential.hide()
-        unlock_button.hide()
-        lock_button.show()
-        for widget in controls:
-            widget.show()
-        status.set_text('Choose a window, then View')
-        refresh()
-
-    def prompt_unlock(*_args):
-        dialog = Gtk.Dialog(title='Unlock Firefox windows', transient_for=window, modal=True)
-        dialog.add_button('Cancel', Gtk.ResponseType.CANCEL)
-        dialog.add_button('Unlock', Gtk.ResponseType.OK)
-        dialog.get_content_area().add(credential)
-        entry_handler = credential.connect('activate', lambda *_: dialog.response(Gtk.ResponseType.OK))
-        dialog.show_all()
-        credential.grab_focus()
-        response = dialog.run()
-        credential.disconnect(entry_handler)
-        dialog.get_content_area().remove(credential)
-        dialog.destroy()
-        if response == Gtk.ResponseType.OK:
-            unlock()
-        else:
-            credential.set_text('')
-
-    unlock_button.connect('clicked', prompt_unlock)
-    lock_button.connect('clicked', lock)
-    for widget in (unlock_button, lock_button, combo, view, reload_button, owner, status):
-        box.pack_start(widget, False, False, 0)
-    window = Gtk.Window(title="Firefox windows")
+    window = Gtk.Window(title='Firefox windows')
     window.set_type_hint(Gdk.WindowTypeHint.DOCK)
     window.set_keep_above(True)
     window.set_focus_on_map(False)
     window.set_resizable(False)
-    window.move(0, 0)
+    box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+    box.set_border_width(3)
+    box.pack_start(Gtk.Label(label='Windows'), False, False, 3)
+    combo = Gtk.ComboBoxText()
+    # Grid-style single-column placement anchors the menu below this top-edge
+    # dock. GTK's default active-row alignment puts preceding choices above
+    # the framebuffer when a later window is selected.
+    combo.set_wrap_width(1)
+    combo.set_hexpand(True)
+    combo.set_size_request(80, -1)
+    for cell in combo.get_cells():
+        cell.set_property('ellipsize', Pango.EllipsizeMode.END)
+        cell.set_property('width-chars', 16)
+    box.pack_start(combo, True, True, 0)
+    owner = Gtk.Button(label='Return to owner')
+    box.pack_start(owner, False, False, 0)
     window.add(box)
-    window.connect("destroy", Gtk.main_quit)
+    cache = {'entries': [], 'epoch': None, 'updating': False, 'owner_scope': None}
+
+    def choose(scope):
+        if cache['updating'] or not scope:
+            return
+        try:
+            request('select', scope=scope, epoch=cache['epoch'])
+            combo.set_tooltip_text(None)
+        except Exception:
+            # Do not silently select a different window or replay an uncertain
+            # input. The next list observation only repairs the visible model.
+            combo.set_tooltip_text('Selection unavailable or uncertain; choose again deliberately')
+        refresh()
+
+    def refresh(*_args):
+        cache['updating'] = True
+        try:
+            response = request('list')
+            entries = response['windows']
+            if entries != cache['entries'] or response['epoch'] != cache['epoch']:
+                combo.remove_all()
+                cache.update(entries=entries, epoch=response['epoch'])
+                for item in entries:
+                    combo.append(item['scope'], item['label'])
+            current = response.get('current')
+            if current:
+                combo.set_active_id(current)
+            elif combo.get_active_id() not in {item['scope'] for item in entries}:
+                combo.set_active(-1)
+            combo.set_sensitive(bool(entries))
+            cache['owner_scope'] = next((item['scope'] for item in entries if item['label'] == 'Owner window'), None)
+            owner.set_sensitive(cache['owner_scope'] is not None)
+        except Exception:
+            combo.set_tooltip_text('Window list temporarily unavailable')
+            combo.set_sensitive(False)
+        finally:
+            cache['updating'] = False
+        return True
+
+    combo.connect('changed', lambda *_: choose(combo.get_active_id()))
+    owner.connect('clicked', lambda *_: choose(cache['owner_scope']))
+    window.connect('destroy', Gtk.main_quit)
+    screen = window.get_screen()
+    def geometry(*_args):
+        monitor = Gdk.Display.get_default().get_monitor(0).get_geometry()
+        width = monitor.width
+        window.set_size_request(width, -1)
+        height = max(1, window.get_preferred_height()[1])
+        window.resize(width, height)
+        window.move(0, 0)
+        if window.get_realized():
+            xid = GdkX11.X11Window.get_xid(window.get_window())
+            height = window.get_allocated_height()
+            subprocess.run(['xprop', '-id', str(xid), '-f', '_NET_WM_STRUT_PARTIAL', '32c', '-set', '_NET_WM_STRUT_PARTIAL',
+                            f'0, 0, {height}, 0, 0, 0, 0, 0, 0, {width - 1}, 0, 0'], check=True, capture_output=True)
+    screen.connect('size-changed', geometry)
+    window.connect('size-allocate', geometry)
+    geometry()
     window.show_all()
-    lock()
-    xid = GdkX11.X11Window.get_xid(window.get_window())
-    height = window.get_allocated_height()
-    # Reserve the visible bar in xmonad; this changes no browser binding. Only
-    # this process's own X window is addressed, never another window or input.
-    subprocess.run(["xprop", "-id", str(xid), "-f", "_NET_WM_STRUT_PARTIAL", "32c", "-set", "_NET_WM_STRUT_PARTIAL",
-                    f"0, 0, {height}, 0, 0, 0, 0, 0, 0, 16383, 0, 0"], check=True, capture_output=True)
+    geometry()
     refresh()
     GLib.timeout_add_seconds(2, refresh)
     Gtk.main()
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--gtk", action="store_true")
-    parser.add_argument("--socket", default=SOCKET_PATH)
+    parser.add_argument('--gtk', action='store_true')
+    parser.add_argument('--fd', type=int, required=True)
     args = parser.parse_args()
     if not args.gtk:
-        raise SystemExit("controller is started by firefox-bridge-server")
-    gtk_main(args.socket)
+        raise SystemExit('controller is started by firefox-bridge-server')
+    gtk_main(args.fd)
