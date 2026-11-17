@@ -263,6 +263,25 @@ def test_native_panel_channel_is_unnamed_and_closes_without_replaying_selection(
         panel.close()
 
 
+def test_fresh_owner_desktop_needs_no_agent_acquisition_and_does_not_create_a_lease(monkeypatch):
+    import subprocess
+    windows = FakeWindows()
+    windows.state['windows'].clear()
+    before = json.dumps(windows.state, sort_keys=True)
+    monkeypatch.setattr(windows, '_tree', lambda: [{'context': 'initial', 'clientWindow': 'native-initial'}])
+    monkeypatch.setattr(subprocess, 'check_output', lambda *a, **kw: '100\n')
+    monkeypatch.setattr(owner, 'native_window_id', lambda *a: '100')
+    panel = owner.OwnerPanel(windows)
+    try:
+        result = panel.dispatch({'command': 'list'})
+        assert result['windows'] == [{'scope': 'desktop:native-initial', 'label': 'Owner window'}]
+        assert result['current'] == 'desktop:native-initial'
+        assert json.dumps(windows.state, sort_keys=True) == before
+        assert windows.calls == []
+    finally:
+        panel.close()
+
+
 def test_native_owner_created_window_is_discovered_and_selected_without_claiming_it(monkeypatch):
     import subprocess
     import pytest

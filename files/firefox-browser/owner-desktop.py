@@ -200,6 +200,7 @@ class OwnerPanel:
         self.server, self.client = socket.socketpair()
         self.thread = self.process = None
         self.handles = {}
+        self.return_window = None
 
     def directory(self):
         # Native owner-created windows have no agent lease. Discover them from
@@ -216,6 +217,23 @@ class OwnerPanel:
                 records[item['scope']] = record
                 entries.append(item)
         managed = {record['window'] for record in records.values()}
+        # Before the first agent acquisition there is deliberately no owner
+        # lease/capability. Remember the initial native owner window privately;
+        # do not make the UI depend on an agent allocating one. Never replace a
+        # retained owner binding or silently adopt another window after closure.
+        if 'owner' not in self.windows.state['windows']:
+            if self.return_window is None or self.return_window[0] != self.windows.epoch:
+                active = list(live) if len(live) == 1 else [
+                    item['clientWindow'] for item in self.windows._call('browser.getClientWindows', {}).get('clientWindows', [])
+                    if item.get('active') is True and item.get('clientWindow') in live]
+                if len(active) == 1:
+                    self.return_window = (self.windows.epoch, active[0])
+            if self.return_window and self.return_window[0] == self.windows.epoch and self.return_window[1] in live:
+                native = self.return_window[1]
+                scope = 'desktop:' + native
+                entries.insert(0, {'scope': scope, 'label': 'Owner window'})
+                records[scope] = {'context': live[native], 'window': native}
+                managed.add(native)
         for index, native in enumerate(sorted(set(live) - managed), 2):
             scope = 'desktop:' + native
             entries.append({'scope': scope, 'label': f'Owner window {index}'})
@@ -358,7 +376,7 @@ def gtk_main(fd):
     owner = Gtk.Button(label='Return to owner')
     box.pack_start(owner, False, False, 0)
     window.add(box)
-    cache = {'entries': [], 'epoch': None, 'updating': False}
+    cache = {'entries': [], 'epoch': None, 'updating': False, 'owner_scope': None}
 
     def choose(scope):
         if cache['updating'] or not scope:
@@ -388,7 +406,8 @@ def gtk_main(fd):
             elif combo.get_active_id() not in {item['scope'] for item in entries}:
                 combo.set_active(-1)
             combo.set_sensitive(bool(entries))
-            owner.set_sensitive(any(item['scope'] == 'owner' for item in entries))
+            cache['owner_scope'] = next((item['scope'] for item in entries if item['label'] == 'Owner window'), None)
+            owner.set_sensitive(cache['owner_scope'] is not None)
         except Exception:
             combo.set_tooltip_text('Window list temporarily unavailable')
             combo.set_sensitive(False)
@@ -397,7 +416,7 @@ def gtk_main(fd):
         return True
 
     combo.connect('changed', lambda *_: choose(combo.get_active_id()))
-    owner.connect('clicked', lambda *_: choose('owner'))
+    owner.connect('clicked', lambda *_: choose(cache['owner_scope']))
     window.connect('destroy', Gtk.main_quit)
     screen = window.get_screen()
     def geometry(*_args):

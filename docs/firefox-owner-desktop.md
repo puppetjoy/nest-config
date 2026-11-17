@@ -17,7 +17,13 @@ from the owner list without rewriting the agent registry. There
 is no owner link, capability entry, Unlock/Lock control, named-agent instruction,
 activation banner or additional authentication prompt.
 
-The native GTK theme supplies light/dark appearance. The dock paints the full
+The native GTK theme supplies light/dark appearance. Before the first agent
+acquisition, the native UI identifies its initial owner window without creating
+an owner lease or viewer capability. `firefox_service_owner_canary.py` exercises
+the real packaged launcher, server and automatically spawned UI, including this
+fresh-owner entry before any task allocation.
+
+The dock paints the full
 width that it reserves, follows framebuffer shrink/grow, and ellipsizes long
 labels inside the selector instead of pushing the return button offscreen.
 In v3 xmonad owns Firefox geometry and the dock strut; the legacy resize watcher
