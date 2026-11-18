@@ -1147,9 +1147,32 @@ resources:
             - name: bootstrap-gate
               mountPath: /bootstrap
               readOnly: true
+          - name: cache-routing-graph
+            image: '%{lookup(''joyride_image'')}'
+            securityContext: *id001
+            command: [python, -B, /graph-cache-tools/cache_routing_graph.py]
+            env:
+            - name: RUNTIME_ENV
+              value: test
+            resources:
+              requests:
+                cpu: 100m
+                memory: 128Mi
+              limits:
+                memory: 2Gi
+            volumeMounts:
+            - name: data
+              mountPath: /data
+              readOnly: true
+            - name: routing-cache
+              mountPath: /routing-cache
+            - name: routing-cache-tools
+              mountPath: /graph-cache-tools
+              readOnly: true
           containers:
           - name: trusted-test
             image: '%{lookup(''joyride_image'')}'
+            command: [gunicorn, 'joyride.trusted_test_wsgi:application', --env, 'ROUTING_GRAPH_PATH=/routing-cache/graph.sqlite3', --threads, '3', --timeout, '120', --graceful-timeout, '125', --bind, '0.0.0.0:8002', --workers, '2']
             lifecycle: *http_drain
             securityContext: *id001
             env: *id002
@@ -1165,25 +1188,15 @@ resources:
               subPath: private
             - name: tmp
               mountPath: /data/tmp
+            - name: routing-cache
+              mountPath: /routing-cache
+              readOnly: true
             resources:
               requests:
                 cpu: 50m
                 memory: 128Mi
               limits:
-                memory: 2048Mi
-            command:
-            - gunicorn
-            - joyride.trusted_test_wsgi:application
-            - --threads
-            - '3'
-            - --timeout
-            - '120'
-            - --graceful-timeout
-            - '125'
-            - --bind
-            - 0.0.0.0:8002
-            - --workers
-            - '2'
+                memory: 4Gi
             ports:
             - name: trusted-test
               containerPort: 8002
@@ -1209,6 +1222,17 @@ resources:
               items:
               - key: bootstrap_gate.py
                 path: bootstrap_gate.py
+          - name: routing-cache
+            emptyDir:
+              sizeLimit: 2Gi
+          - name: routing-cache-tools
+            configMap:
+              name: '%{nest::kubernetes::service}-scripts'
+              items:
+              - key: cache_routing_graph.py
+                path: cache_routing_graph.py
+              - key: install_routing_graph.py
+                path: install_routing_graph.py
           - name: data
             persistentVolumeClaim:
               claimName: '%{nest::kubernetes::service}-data'
