@@ -4,6 +4,7 @@ class nest::app::hermes (
   String[1]                      $git_ref                        = 'main',
   Optional[String[1]]            $git_commit                     = undef,
   Boolean                        $pm_enabled                     = false,
+  Boolean                        $wizard_capsule_source_enabled  = false,
   Stdlib::Absolutepath           $ca_bundle_file                 = '/etc/ssl/certs/ca-certificates.crt',
   String[1]                      $broker_git_url                 = 'https://gitlab.joyfullee.me/nest/hermes-agent-request-broker.git',
   String[1]                      $broker_git_ref                 = 'main',
@@ -92,6 +93,12 @@ class nest::app::hermes (
       contain nest::app::hermes::install
       contain nest::app::hermes::service
       contain nest::app::hermes::config
+
+      # Source installation only: no units, mounts, quotas or enrollment.
+      if $wizard_capsule_source_enabled {
+        contain nest::app::hermes::wizard_capsule
+        Class['nest::app::hermes::install'] -> Class['nest::app::hermes::wizard_capsule']
+      }
 
       Class['nest::tool::gitlab_cli']
       -> Class['nest::app::hermes::retired_lifecycle']

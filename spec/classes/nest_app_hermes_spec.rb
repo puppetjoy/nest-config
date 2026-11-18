@@ -70,6 +70,13 @@ describe 'nest::app::hermes' do
       let(:development_timer_path) { '/home/joy/.config/systemd/user/hermes-agent-request-gitlab-mr-notes-dev.timer' }
 
       it { is_expected.to compile }
+      it { is_expected.not_to contain_class('nest::app::hermes::wizard_capsule') }
+      context 'with inert capsule source installation explicitly selected' do
+        let(:params) { super().merge(wizard_capsule_source_enabled: true) }
+
+        it { is_expected.to compile }
+        it { is_expected.to contain_class('nest::app::hermes::wizard_capsule').that_requires('Class[nest::app::hermes::install]') }
+      end
       it 'keeps the Native Wizard disabled with empty routing by default' do
         config = YAML.safe_load(catalogue.resource('File', '/home/joy/.hermes/profiles/talon/managed-config.yaml')[:content], aliases: true)
 
