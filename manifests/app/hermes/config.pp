@@ -448,7 +448,7 @@ class nest::app::hermes::config {
       require => File[$talon_plugins_dir],
     }
 
-    ['plugin.yaml', '__init__.py', 'readable-prose.md'].each |String[1] $plugin_file| {
+    ['plugin.yaml', '__init__.py', 'readable-prose.md', 'delivery-completion.md'].each |String[1] $plugin_file| {
       file { "${talon_prompt_plugin_dir}/${plugin_file}":
         ensure  => file,
         mode    => '0600',

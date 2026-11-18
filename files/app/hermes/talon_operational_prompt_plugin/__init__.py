@@ -6,8 +6,10 @@ from hermes_constants import get_hermes_home
 from hermes_cli.profiles import get_active_profile_name
 
 
-SECTION_ID = "talon.readable-prose"
-MAX_CHARS = 2048
+SECTIONS = (
+    ("talon.readable-prose", "readable-prose.md", 2048),
+    ("talon.delivery-completion", "delivery-completion.md", 1024),
+)
 
 
 def register(ctx) -> None:
@@ -21,9 +23,15 @@ def register(ctx) -> None:
     # Read once at plugin registration, never on a tool call or prompt turn.
     # Missing/invalid assets raise: core reports a plugin load failure and
     # rolls back registrations rather than quietly installing partial guidance.
-    content = (plugin_dir / "readable-prose.md").read_text(encoding="utf-8").strip()
-    if not content or len(content) > MAX_CHARS:
-        raise ValueError("Talon readable-prose asset is empty or exceeds its prompt budget")
-    ctx.register_system_prompt_section(
-        SECTION_ID, content, position="after_memory", max_chars=MAX_CHARS,
-    )
+    sections = []
+    for section_id, filename, max_chars in SECTIONS:
+        content = (plugin_dir / filename).read_text(encoding="utf-8").strip()
+        if not content or len(content) > max_chars:
+            raise ValueError(f"Talon {filename} asset is empty or exceeds its prompt budget")
+        sections.append((section_id, content, max_chars))
+
+    # Validate all assets before publishing any section.
+    for section_id, content, max_chars in sections:
+        ctx.register_system_prompt_section(
+            section_id, content, position="after_memory", max_chars=max_chars,
+        )

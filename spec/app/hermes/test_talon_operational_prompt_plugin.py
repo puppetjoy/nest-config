@@ -6,7 +6,7 @@ from pathlib import Path
 import sys
 
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 
 PLUGIN_DIR = Path(__file__).resolve().parents[3] / "files/app/hermes/talon_operational_prompt_plugin"
@@ -27,16 +27,31 @@ class TalonOperationalPromptTest(unittest.TestCase):
         self.plugin.__file__ = "/profiles/talon/plugins/talon-operational-prompt/__init__.py"
         self.ctx = Mock()
 
-    def test_registers_one_bounded_static_section(self):
-        expected = (PLUGIN_DIR / "readable-prose.md").read_text().strip()
-        with patch.object(Path, "read_text", return_value=expected) as read:
+    def test_registers_two_bounded_static_sections(self):
+        self.assertEqual(self.plugin.SECTIONS, (
+            ("talon.readable-prose", "readable-prose.md", 2048),
+            ("talon.delivery-completion", "delivery-completion.md", 1024),
+        ))
+        expected = [(PLUGIN_DIR / filename).read_text().strip()
+                    for _, filename, _ in self.plugin.SECTIONS]
+        with patch.object(Path, "read_text", side_effect=expected) as read:
             self.plugin.register(self.ctx)
-        read.assert_called_once_with(encoding="utf-8")
-        self.ctx.register_system_prompt_section.assert_called_once_with(
-            "talon.readable-prose", expected, position="after_memory", max_chars=2048,
-        )
-        self.assertIn("tool arguments, request/context/subject fields", expected)
-        self.assertIn("Preserve opaque identifiers, hashes, URLs, paths and commands exactly", expected)
+        self.assertEqual(read.call_count, 2)
+        self.ctx.register_system_prompt_section.assert_has_calls([
+            call(section_id, content, position="after_memory", max_chars=budget)
+            for (section_id, _, budget), content in zip(self.plugin.SECTIONS, expected)
+        ])
+        self.assertEqual(self.ctx.register_system_prompt_section.call_count, 2)
+        self.assertIn("tool arguments, request/context/subject fields", expected[0])
+        self.assertIn("Preserve opaque identifiers, hashes, URLs, paths and commands exactly", expected[0])
+        self.assertIn("Do not make user validation a completion gate.", expected[1])
+        self.assertIn("required approvals, genuinely necessary user input, or known failures", expected[1])
+        self.assertIn("briefly identify any checks you could not perform", expected[1])
+        for name in ("Agent Request", "Kanban", "Telegram"):
+            self.assertNotIn(name, expected[1])
+        # Static strings, not callbacks or subsequent asset reads, own the prompt.
+        self.assertTrue(all(isinstance(c.args[1], str)
+                            for c in self.ctx.register_system_prompt_section.call_args_list))
 
     def test_other_profiles_never_read_or_register_even_with_inherited_environment(self):
         for name in ("star", "beryl", "quill", "default", "custom"):
@@ -54,18 +69,16 @@ class TalonOperationalPromptTest(unittest.TestCase):
         read.assert_not_called()
         self.ctx.register_system_prompt_section.assert_not_called()
 
-    def test_missing_asset_is_an_explicit_load_failure(self):
-        with patch.object(Path, "read_text", side_effect=FileNotFoundError):
-            with self.assertRaises(FileNotFoundError):
-                self.plugin.register(self.ctx)
-        self.ctx.register_system_prompt_section.assert_not_called()
-
-    def test_empty_and_oversized_assets_are_explicit_load_failures(self):
-        for content in (" \n", "x" * 2049):
-            with self.subTest(length=len(content)), patch.object(Path, "read_text", return_value=content):
-                with self.assertRaises(ValueError):
-                    self.plugin.register(self.ctx)
-        self.ctx.register_system_prompt_section.assert_not_called()
+    def test_invalid_assets_fail_before_any_registration(self):
+        for index, (_, _, budget) in enumerate(self.plugin.SECTIONS):
+            for invalid in (FileNotFoundError(), UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid"),
+                            " \n", "x" * (budget + 1)):
+                with self.subTest(asset=index, invalid=type(invalid).__name__):
+                    values = [invalid if i == index else "valid" for i in range(2)]
+                    with patch.object(Path, "read_text", side_effect=values):
+                        with self.assertRaises((FileNotFoundError, UnicodeDecodeError, ValueError)):
+                            self.plugin.register(self.ctx)
+                    self.ctx.register_system_prompt_section.assert_not_called()
 
 
 if __name__ == "__main__":

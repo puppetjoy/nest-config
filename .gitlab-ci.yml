@@ -132,6 +132,7 @@ stages:
     - '.hermes-fixture-venv/bin/python spec/files/hermes_build_state_test.py'
     - '.hermes-fixture-venv/bin/python spec/files/hermes_frontend_build_test.py'
     - '.hermes-fixture-venv/bin/python spec/files/hermes_source_sync_test.py'
+    - '.hermes-fixture-venv/bin/python spec/app/hermes/test_talon_operational_prompt_plugin.py'
     - '.hermes-fixture-venv/bin/python spec/files/wizard_capsule_test.py'
 
 'Joyride private access':
