@@ -83,6 +83,21 @@ class ComponentReadiness(unittest.TestCase):
         self.assertEqual(volume['emptyDir'], {'sizeLimit': '2Gi'})
         self.assertNotIn('envFrom', cache)
 
+    def test_trusted_test_uses_verified_local_graph_and_four_gib_headroom(self):
+        data = load_resources()
+        pod = data['trusted_test_app']['spec']['template']['spec']
+        self.assertEqual([c['name'] for c in pod['initContainers']], ['wait-bootstrap', 'cache-routing-graph'])
+        cache = pod['initContainers'][1]
+        self.assertEqual(cache['command'], ['python', '-B', '/graph-cache-tools/cache_routing_graph.py'])
+        container, = pod['containers']
+        command = container['command']
+        self.assertEqual(command[command.index('--env') + 1], 'ROUTING_GRAPH_PATH=/routing-cache/graph.sqlite3')
+        self.assertEqual(container['resources']['limits']['memory'], '4Gi')
+        self.assertEqual(container['resources']['requests']['memory'], '128Mi')
+        self.assertTrue(next(m for m in container['volumeMounts'] if m['name'] == 'routing-cache')['readOnly'])
+        volume = next(v for v in pod['volumes'] if v['name'] == 'routing-cache')
+        self.assertEqual(volume['emptyDir'], {'sizeLimit': '2Gi'})
+
     def test_private_content_staging_follows_each_split_writer(self):
         data = load_resources()
         for key in KEYS:
@@ -118,7 +133,7 @@ class ComponentReadiness(unittest.TestCase):
             pod = data[key]['spec']['template']['spec']
             gate = pod['initContainers'][0]
             self.assertEqual([c['name'] for c in pod['initContainers']],
-                             ['wait-bootstrap', 'cache-routing-graph'] if key == 'internal_web_app' else ['wait-bootstrap'])
+                             ['wait-bootstrap', 'cache-routing-graph'] if key in ('internal_web_app', 'trusted_test_app') else ['wait-bootstrap'])
             self.assertEqual(gate['name'], 'wait-bootstrap')
             self.assertEqual(gate['command'][-1], 'wait')
             self.assertEqual(gate['env'], completion['env'])

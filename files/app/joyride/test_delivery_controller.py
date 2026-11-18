@@ -192,7 +192,7 @@ def images(deployment):
         groups = (("containers", CONTAINERS), ("initContainers", INITIALIZERS))
     elif component in CONTAINERS:
         initializers = INITIALIZERS | {"bootstrap-complete"} if component == "worker" else {"wait-bootstrap"}
-        if component == "internal-web":
+        if component in ("internal-web", "trusted-test"):
             initializers |= {"cache-routing-graph"}
         groups = (("containers", {component}), ("initContainers", initializers))
     else:

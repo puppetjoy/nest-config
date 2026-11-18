@@ -30,7 +30,7 @@ class FleetClient(FixtureClient):
             pod['containers'] = [{'name': component, 'image': OLD}]
             initializers = ['migrate', 'provision-owner', 'basemap', 'curated-fetch', 'curated-import',
                             'routing-graph', 'bootstrap-complete'] if component == 'worker' else ['wait-bootstrap']
-            if component == 'internal-web':
+            if component in ('internal-web', 'trusted-test'):
                 initializers.append('cache-routing-graph')
             pod['initContainers'] = [{'name': n, 'image': OLD} for n in initializers]
             self.fleet[name] = row
