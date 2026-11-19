@@ -7,7 +7,7 @@ runtime_environment: test
 ingress_class: contour-test
 # Bounded proposal lifecycle; main pipeline 13542 passed check/build/smoke.
 # Head 947824cf5a2b678cc32a42afa1705fa18a1aa588; preserve drafts and selected releases.
-joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:ee74b13539f097046c7542617438d32f3d28096ac5fb6110f41ea923e05cff3f
+joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:113f8ed5de7bf4d87dae8c248c774632a79c2bbfebf822d48b2a0981f347b777
 affinity: {}
 tolerations: []
 resources:
