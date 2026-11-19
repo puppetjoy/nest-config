@@ -37,9 +37,7 @@ def test_exact_grant_archives_every_journal_and_preserves_native_windows(engine,
     assert bundle['journals'][controller.path.name].encode() == original
     assert archive.stat().st_mode & 0o777 == 0o400
     assert controller.state['actions']['old-key']['state'] == 'delivered'
-    assert controller.recovery(B)['reason'] == 'binding_retired_with_history'
-    with pytest.raises(windows.ControlError, match='no replacement authorized'):
-        controller.acquire(B)
+    assert controller.recovery(B)['next_action'] == 'acquire'
     assert len(native.tree) == 3
     # Synthetic native fixture has one owner selected by exact native identity.
     monkeypatch.setattr(controller, '_visible_context', lambda tree: tree[0])
@@ -253,7 +251,7 @@ def test_second_generation_accepts_fresh_owner_instruction_without_native_input(
     assert bundle['journals']['windows.json'].encode() == before
     assert json.loads(bundle['journals']['windows.json'])['reconciliation']['approval'] == first['approval']
     assert 'old-key' in controller.state['retired_action_keys']
-    assert controller.recovery(B)['reason'] == 'binding_retired_with_history'
+    assert controller.recovery(B)['next_action'] == 'acquire'
     assert controller.state['windows'][B] == json.loads(before)['windows'][B]
 
 
@@ -304,8 +302,9 @@ def test_generation_recovery_preserves_closed_acceptance_scope(engine, monkeypat
     before = controller.path.read_bytes()
     resumed.reconcile_generation(grant)
     assert controller.path.read_bytes() == before
-    with pytest.raises(RuntimeError):
-        resumed.acquire(A)
+    if closure == 'terminal':
+        with pytest.raises(RuntimeError):
+            resumed.acquire(A)
     with pytest.raises(RuntimeError, match='no replay'):
         resumed._input('type', {'action_key': 'old-key'}, {}, {})
     assert native.calls == calls

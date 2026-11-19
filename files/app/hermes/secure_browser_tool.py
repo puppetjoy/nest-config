@@ -39,7 +39,7 @@ BRIDGE_TIMEOUT = int(os.environ.get("SECURE_BROWSER_UI_TIMEOUT", "60"))
 MAX_RESULT_BYTES = 8_000_000
 CONTROLLER_STATE_DIR = Path(os.environ.get("SECURE_BROWSER_CONTROLLER_STATE_DIR", Path.home() / ".local/state/nest-firefox-controller"))
 WORKFLOW_RE = re.compile(r"[^A-Za-z0-9_.:@/-]+")
-CONTROL_ERRORS = {"FIREFOX_BUSY", "FIREFOX_IDENTITY_LOST", "FIREFOX_NATIVE_OUTCOME_UNCERTAIN",
+CONTROL_ERRORS = {"FIREFOX_SCOPE_TERMINAL", "FIREFOX_BUSY", "FIREFOX_IDENTITY_LOST", "FIREFOX_NATIVE_OUTCOME_UNCERTAIN",
                   "FIREFOX_CREATION_UNCERTAIN", "FIREFOX_OUTCOME_UNCERTAIN", "FIREFOX_CREATE_REJECTED", "FIREFOX_BINDING_RETIRED",
                   "FIREFOX_TARGET_UNAVAILABLE", "FIREFOX_OBSERVATION_UNAVAILABLE", "FIREFOX_TEXT_CURSOR_STALE", "FIREFOX_WINDOW_BUDGET"}
 
@@ -382,6 +382,27 @@ def secure_browser_query_tool(args: dict[str, Any], **_kw: Any) -> str:
     })
 
 
+def secure_browser_download_tool(args: dict[str, Any], **_kw: Any) -> str:
+    def run() -> dict[str, Any]:
+        if CONTROL_MODE != "firefox-windows-v3":
+            raise ValueError("file retrieval requires the resident Firefox window")
+        result = _bridge("download", {"selector": args.get("selector")})
+        raw = base64.b64decode(result.pop("data"), validate=True)
+        digest = hashlib.sha256(raw).hexdigest()
+        if len(raw) > 1048576 or result.get("size_bytes") != len(raw) or result.get("sha256") != digest:
+            raise ValueError("download checksum or size mismatch")
+        name = re.sub(r"[^A-Za-z0-9._-]", "_", str(result.get("filename") or "download"))[:160]
+        name = name.strip(".") or "download"
+        directory = get_hermes_home() / "cache" / "browser-downloads" / digest
+        directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+        path = directory / name
+        with path.open("wb") as stream:
+            os.chmod(path, 0o600)
+            stream.write(raw)
+        return {**result, "filename": name, "file_path": str(path), "operation": "download"}
+    return _safe_call("download", run)
+
+
 def secure_browser_screenshot_tool(args: dict[str, Any], **_kw: Any) -> str:
     return _safe_call("screenshot", lambda: _save_screenshot(_bridge("screenshot", {})))
 
@@ -540,6 +561,7 @@ def secure_browser_execute_final_purchase_tool(args: dict[str, Any], **_kw: Any)
 
 
 SCHEMAS: list[tuple[dict[str, Any], Any]] = [
+    ({"name": "secure_browser_download", "description": "Retrieve exact file bytes from one rendered download link in the current persistent Firefox window. Supply a grounded CSS selector. Uses Firefox authentication and normal same-origin/CORS rules; supports HTTP(S) and blob links up to 1 MiB. Saves a private local file and returns its path, size and SHA256, not cookies or profile data. GET only; no automatic retries.", "parameters": {"type": "object", "properties": {"selector": {"type": "string", "minLength": 1, "maxLength": 512}}, "required": ["selector"], "additionalProperties": False}}, secure_browser_download_tool),
     ({"name": "secure_browser_status", "description": "Show Firefox status and v3 window-scope/binding state. Status is observational, nonallocating, and does not prove an action succeeded.", "parameters": {"type": "object", "properties": {}}}, secure_browser_status_tool),
     ({"name": "secure_browser_navigate", "description": "Navigate the bound v3 Firefox window using authoritative dispatcher task scope; workflow_id does not override scope. The owner window is preserved. If native outcome is uncertain, do not replay; status/readback on this transport is not independent confirmation.", "parameters": {"type": "object", "properties": {"url": {"type": "string"}, "workflow_id": {"type": "string"}, "lease_seconds": {"type": "integer"}, "max_wait_seconds": {"type": "number", "minimum": 0, "maximum": 15}}, "required": ["url"]}}, secure_browser_navigate_tool),
     ({"name": "secure_browser_page_snapshot", "description": "Observe bounded visible page content and controls in the v3 bound window. This call may allocate/initialize its binding before observation; lifecycle status/recover are nonallocating. No arbitrary JavaScript or profile/secret access.", "parameters": {"type": "object", "properties": {}}}, secure_browser_page_snapshot_tool),
@@ -553,7 +575,7 @@ SCHEMAS: list[tuple[dict[str, Any], Any]] = [
     ({"name": "secure_browser_visual_evidence", "description": "Capture bound native viewport evidence in v3, or the visible shared desktop in legacy modes. V3 never captures another task or the owner desktop globally. Sensitive review images belong only in trusted owner delivery.", "parameters": {"type": "object", "properties": {}}}, secure_browser_visual_evidence_tool),
     ({"name": "secure_browser_click", "description": "Click a CSS selector or viewport coordinate in the bound v3 window; legacy accessibility locators are refused. Preserve the same action_key after uncertain delivery and do not replay. Readback on the same native transport is not independent confirmation.", "parameters": {"type": "object", "properties": {"locator": {"type": "string"}, "coordinate": {"type": "array", "items": {"type": "integer"}, "minItems": 2, "maxItems": 2}, "workflow_id": {"type": "string"}, "action_key": {"type": "string"}, "idempotency_key": {"type": "string"}, "max_wait_seconds": {"type": "number", "minimum": 0, "maximum": 15}, "selector": {"type": "string", "description": "Native CSS element in v2/v3; v1 rejects selectors and v3 rejects legacy AX locators"}, "approved_effect": {"type": "string", "description": "Legacy audit label; not an approval gate"}}, "anyOf": [{"required": ["locator"]}, {"required": ["coordinate"]}, {"required": ["selector"]}]}}, secure_browser_click_tool),
     ({"name": "secure_browser_type", "description": "Type bounded non-secret text using a CSS selector or viewport coordinate in the bound v3 window; legacy accessibility locators are refused. Preserve the action_key after uncertainty; never replay native input or retry with a new key. Same-transport readback is not independent confirmation. Never pass secrets.", "parameters": {"type": "object", "properties": {"locator": {"type": "string"}, "coordinate": {"type": "array", "items": {"type": "integer"}, "minItems": 2, "maxItems": 2}, "selector": {"type": "string", "description": "Native CSS element in v2/v3; v1 rejects selectors and v3 rejects legacy AX locators"}, "mode": {"type": "string", "enum": ["insert", "replace"], "default": "insert", "description": "Explicit replacement in a guarded native v2/v3 field; default insert preserves existing text"}, "text": {"type": "string", "maxLength": 4096}, "workflow_id": {"type": "string"}, "action_key": {"type": "string", "minLength": 1, "maxLength": 200}, "idempotency_key": {"type": "string", "minLength": 1, "maxLength": 200}}, "required": ["text"], "anyOf": [{"required": ["action_key"]}, {"required": ["idempotency_key"]}]}}, secure_browser_type_tool),
-    ({"name": "secure_browser_tab_lifecycle", "description": "Inspect, acquire, keep open, release or recover the immutable v3 window binding. Lifecycle status/recover are nonallocating. Preserve the owner window, existing windows, journals, and unknown creation provenance; recovery is bounded read-only reconciliation, not proof of success. Do not replace or close uncertain windows; unresolved state requires engineering repair, not a Firefox restart.", "parameters": {"type": "object", "properties": {"action": {"type": "string", "enum": ["status", "acquire", "keep_open", "release", "recover", "preview_cleanup", "cleanup", "mark_keep_open"]}, "workflow_id": {"type": "string"}, "lease_seconds": {"type": "integer"}}}}, secure_browser_tab_lifecycle_tool),
+    ({"name": "secure_browser_tab_lifecycle", "description": "Inspect or release this request's v3 Firefox window; status and recover are nonallocating. Ordinary browser calls acquire and renew it automatically; no acquisition or recovery ceremony is required. Release and idle cleanup close only the window, not future browsing. Later calls allocate a fresh window in the same authenticated profile. Only deliberate terminal cleanup fences the request. Unknown action keys remain non-replayable across reuse and restart.", "parameters": {"type": "object", "properties": {"action": {"type": "string", "enum": ["status", "acquire", "keep_open", "release", "recover", "preview_cleanup", "cleanup", "mark_keep_open"]}, "workflow_id": {"type": "string"}, "lease_seconds": {"type": "integer"}}}}, secure_browser_tab_lifecycle_tool),
     ({"name": "secure_browser_guardrail_check", "description": "Describe the active Firefox boundary. V3 uses scoped windows, CSS selectors and viewport coordinates, refuses legacy accessibility locators, and exposes only bounded query allowlists; arbitrary JavaScript and profile/secret access are unavailable.", "parameters": {"type": "object", "properties": {"operation": {"type": "string"}}}}, secure_browser_guardrail_check_tool),
     ({"name": "secure_browser_owner_checkout_review", "description": "Retired compatibility endpoint: owner review is no longer an extra approval gate.", "parameters": {"type": "object", "properties": {}}}, secure_browser_owner_checkout_review_tool),
     ({"name": "secure_browser_request_final_purchase_approval", "description": "Retired compatibility endpoint: Joy's workflow direction is the authorization boundary.", "parameters": {"type": "object", "properties": {}}}, secure_browser_request_final_purchase_approval_tool),

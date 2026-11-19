@@ -288,6 +288,7 @@ def test_generation_change_reports_bounded_owner_decision_without_native_calls(e
     controller.acquire(A)
     resumable(controller, monkeypatch)
     monkeypatch.setattr(windows, "process_generation", lambda pid: "different")
+    monkeypatch.setattr(windows, "driver_request", lambda *args: {"ready": False})
     resumed = windows.Windows(controller.path, connect=lambda: native)
     before = native.calls.copy()
     for action in ["status", "recover"] * 2:

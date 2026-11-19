@@ -43,6 +43,7 @@ class Registry:
 
 
 requests = []
+FILE_BYTES = bytes(range(256)) * 1024
 class Fixture(BaseHTTPRequestHandler):
     def do_GET(self):
         requests.append({'path': self.path, 'authenticated': 'fixture-session=shared' in self.headers.get('Cookie', '')})
@@ -53,6 +54,10 @@ class Fixture(BaseHTTPRequestHandler):
         <textarea id="draft"></textarea><pre id="result">not clicked</pre><pre id="echo"></pre><pre id="point"></pre><div id="bottom">Bottom fixture</div>
         <script>document.querySelector('#draft').addEventListener('input',e=>document.querySelector('#echo').textContent=e.target.value)</script></body>'''
         body = fixture_body(self.path) or body
+        if self.path == '/downloads':
+            body = b'<title>Downloads</title><a id="download" href="/fixture.gpx" download="fixture.gpx">Download fixture</a>'
+        if self.path == '/fixture.gpx':
+            body = FILE_BYTES
         self.send_response(200)
         self.send_header('Set-Cookie', 'fixture-session=shared; Path=/; HttpOnly; SameSite=Strict')
         self.send_header('Content-Length', str(len(body)))
@@ -224,6 +229,9 @@ try:
     call('type', {'selector': '#draft', 'text': 'safe recovery', 'action_key': 'safe-after-http-loss'}, ('input_readback_confirmed',))
     emit('interrupted-http', effect_count=2, replay_blocked=True, observation_available=True, safe_input_after_recovery=True)
     emit('workflow-pass', public_calls=count, cookie_continuity=True, binding_preserved=True)
+    if os.environ.get('FIREFOX_REUSABLE_WINDOWS_CANARY'):
+        from firefox_reusable_window_checks import run as reusable_checks
+        engine, launcher = reusable_checks(engine, engine_module, server, tool, call, f'http://127.0.0.1:{http.server_port}', emit, FILE_BYTES, launcher)
     if os.environ.get('FIREFOX_SCROLL_READ_MODE'):
         scroll_read_checks(engine, call, f'http://127.0.0.1:{http.server_port}', emit, requests, endpoint)
     if os.environ.get('FIREFOX_OWNER_PANEL_CANARY'):

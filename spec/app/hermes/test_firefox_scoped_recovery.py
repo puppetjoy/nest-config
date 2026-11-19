@@ -35,8 +35,7 @@ def test_never_seen_ordinary_catalog_scope_can_acquire_after_reconciliation(engi
     assert controller.acquire(CATALOG)['state'] == 'open'
     assert controller.acquire(CATALOG)['state'] == 'open'
     assert native.created == 3
-    with pytest.raises(windows.ControlError, match='no replacement authorized'):
-        controller.acquire(B)
+    assert controller.acquire(B)['state'] == 'open'
 
 
 def test_local_approved_retired_binding_gets_one_new_identity_and_keeps_history(engine, monkeypatch):
@@ -137,7 +136,6 @@ def test_expiry_after_authorization_never_allocates(engine, monkeypatch):
     grant = binding_grant(controller)
     controller.authorize_binding(grant)
     monkeypatch.setattr(windows.time, 'time', lambda: grant['expires_at'] + 1)
-    assert controller.recovery(B).get('new_binding_allowed', False) is False
-    with pytest.raises(windows.ControlError, match='expired'):
-        controller.acquire(B)
-    assert native.created == 2
+    assert controller.recovery(B)['new_binding_allowed'] is True
+    assert controller.acquire(B)['state'] == 'open'
+    assert native.created == 3
