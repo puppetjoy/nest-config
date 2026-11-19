@@ -31,11 +31,10 @@ def test_invalid_lease_refuses_before_native_allocation(engine, lease):
     assert native.created == 0
 
 
-def test_keep_open_requires_explicit_bounded_duration(engine):
+def test_keep_open_uses_normal_default_duration(engine):
     controller, native = engine
-    with pytest.raises(ValueError):
-        controller.dispatch("tabs", {"scope": A, "action": "keep_open"})
-    assert native.created == 0
+    assert controller.dispatch("tabs", {"scope": A, "action": "keep_open"})["status"] == "ok"
+    assert native.created == 1
 
 
 def test_janitor_does_not_age_legacy_or_owner_bindings(engine, monkeypatch):
@@ -132,9 +131,9 @@ def test_expiry_claim_fences_later_renewal_until_native_absence(engine, monkeypa
         assert not renewing.done()
         proceed.set()
         assert sweeping.result(timeout=2)[0]["closed"]
-        with pytest.raises(RuntimeError):
-            renewing.result(timeout=2)
-    assert len(native.tree) == 1
+        assert renewing.result(timeout=2)["status"] == "ok"
+    assert controller.state["windows"][A]["context"] != record["context"]
+    assert len(native.tree) == 2
 
 
 def test_public_task_tool_producer_routes_release_to_its_native_binding(engine, monkeypatch, tmp_path):

@@ -27,6 +27,7 @@ TOKEN_PATH = Path(os.environ.get("FIREFOX_BRIDGE_TOKEN_FILE", "/run/nest-firefox
 LOCK_PATH = Path(os.environ.get("FIREFOX_BRIDGE_LOCK", "/tmp/nest-firefox/endpoint.lock"))
 FIELDS = {
     "status": set(), "diagnostics": set(), "snapshot": set(), "screenshot": set(),
+    "download": {"selector"},
     "query": {"expression", "cursor"}, "wait": {"max_wait_seconds"},
     "checkout_readback": {"safe_item_nickname", "max_wait_seconds"},
     "tabs": {"action", "workflow_id", "lease_seconds"},

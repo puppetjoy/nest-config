@@ -6,6 +6,7 @@ preserves existing windows; observer reconnects retain the exact native session.
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import contextlib
 import http.client
@@ -50,6 +51,25 @@ ELEMENT = """(selector, inputX, inputY) => {
  multiline:e.matches('textarea')||e.isContentEditable,
  x,y};
 }"""
+DOWNLOAD = """async (selector) => {
+ const links=[...document.querySelectorAll(selector)].filter(e=>e.matches('a[href]')&&e.getClientRects().length);
+ if(links.length!==1)throw Error('one rendered download link required');
+ const link=links[0], url=new URL(link.href,location.href);
+ if(!['https:','http:','blob:'].includes(url.protocol)||url.username||url.password)throw Error('unsupported link');
+ const abort=new AbortController(), timer=setTimeout(()=>abort.abort(),7000);
+ try {
+  const response=await fetch(url.href,{method:'GET',credentials:'include',signal:abort.signal});
+  if(!response.ok||!response.body)throw Error('download unavailable');
+  const reader=response.body.getReader(), chunks=[]; let size=0;
+  while(true){const {done,value}=await reader.read();if(done)break;size+=value.length;
+   if(size>1048576){await reader.cancel();throw Error('download exceeds 1 MiB');}chunks.push(value);}
+  let binary='';for(const chunk of chunks)for(let i=0;i<chunk.length;i+=8192)binary+=String.fromCharCode(...chunk.subarray(i,i+8192));
+  return {data:btoa(binary),filename:link.download||url.pathname.split('/').pop()||'download',
+   content_type:response.headers.get('content-type')||'application/octet-stream'};
+ } finally {clearTimeout(timer);}
+}"""
+
+
 FIELD = """(e) => ({active:document.activeElement===e,value:e.isContentEditable?e.innerText:e.value,
  start:e.selectionStart,end:e.selectionEnd,visible:!!(e.getBoundingClientRect().width&&e.getBoundingClientRect().height)})"""
 
@@ -109,7 +129,7 @@ class Windows:
         self.legacy_keys.update(self.state.get("retired_action_keys", []))
         # A fresh native session changes identities even for existing windows.
         # Do not reconnect to old IDs, guess by URL, or spawn replacements.
-        self.orphaned = any(r.get("state") != "closed" for r in self.state["windows"].values())
+        self.orphaned = any(r.get("state") not in {"closed", "retired"} for r in self.state["windows"].values())
         if self._resumable():
             self.epoch = self.state["controller"]["epoch"]
             self.orphaned = False
@@ -475,22 +495,75 @@ class Windows:
                 self.state = original
                 raise
 
+    def _continue_after_browser_exit(self):
+        """A dead browser cannot own live contexts; do not replay its actions.
+
+        Reconnect to an available driver only after proving the recorded process
+        generation is gone. Never stop Firefox, evict an occupied session, infer
+        old identities or erase uncertainty. The persistent profile is untouched.
+        """
+        controller = self.state.get("controller", {})
+        if controller.get("state") != "ready":
+            return
+        try:
+            if process_generation(controller["pid"]) == controller["generation"]:
+                return
+        except (FileNotFoundError, ProcessLookupError):
+            pass  # Proven absent; permission/read failures are not disappearance.
+        if driver_request("GET", "/status").get("ready") is not True:
+            return  # Another native session is occupied; never replace it.
+        raw = self.path.read_bytes()
+        digest = hashlib.sha256(raw).hexdigest()
+        history = self.path.parent / "generation-history"
+        history.mkdir(mode=0o700, exist_ok=True)
+        archive = history / (digest + ".json")
+        # Preserve exact old bindings and unknown actions before selecting a new
+        # generation. This is history, not an action-retirement grant.
+        try:
+            fd = os.open(archive, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o400)
+            with os.fdopen(fd, "wb") as stream:
+                stream.write(raw)
+                stream.flush()
+                os.fsync(stream.fileno())
+        except FileExistsError:
+            if archive.read_bytes() != raw:
+                raise RuntimeError("conflicting browser generation history") from None
+        directory = os.open(history, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+        original, epoch = self.state, self.epoch
+        self.state = {**original, "windows": {
+            scope: record if record.get("state") == "closed" else
+            {**record, "state": "closed" if record.get("terminal") else "retired", "archive": archive.name}
+            for scope, record in original["windows"].items() if scope != "owner"}}
+        self.state.pop("controller", None)
+        self.epoch = secrets.token_hex(24)
+        try:
+            self._save()
+        except BaseException:
+            self.state, self.epoch = original, epoch
+            self.broken = True
+            raise
+        self.browser = None
+        self.orphaned = self.broken = False
+
     def acquire(self, scope):
         valid_scope(scope)
         with self.lock:
+            self._continue_after_browser_exit()
             old = self.state["windows"].get(scope)
-            if old and old.get("state") == "retired":
-                raise ControlError("FIREFOX_BINDING_RETIRED", "old generation preserved in history; no replacement authorized")
-            if old and old.get("state") == "recovery_ready":
-                grant = self.state.get("binding_recoveries", {}).get(scope, {})
-                if grant.get("epoch") != self.epoch or grant.get("expires_at", 0) <= time.time():
-                    raise ControlError("FIREFOX_BINDING_RETIRED", "binding recovery grant expired; no replacement authorized")
-                if any(r.get("state") != "delivered" for r in self.state["actions"].values()):
-                    raise RuntimeError("pending or uncertain input prevents binding recovery")
-                old = None  # New reservation below, not a retry of the archived create.
+            # A disposed WINDOW is not a terminated REQUEST. Allocate normally
+            # after verified closure, including old release/expiry records. The
+            # independent action journal still fences every uncertain input key.
+            if old and old.get("state") in {"closed", "retired", "recovery_ready"} and not old.get("terminal"):
+                old = None
             if old:
-                if old.get("terminal") or old.get("close_reason"):
-                    raise RuntimeError("task cleanup intent fences new input and allocation")
+                if old.get("terminal"):
+                    raise ControlError("FIREFOX_SCOPE_TERMINAL", "request terminated; no browser operation started")
+                if old.get("close_reason"):
+                    raise RuntimeError("window cleanup pending; verify closure before reuse")
                 if old.get("state") == "creating":
                     return self._finish_creation(old)
                 if old.get("state") == "create_failed":
@@ -591,21 +664,13 @@ class Windows:
         if record and record.get("terminal") and state in {"retired", "recovery_ready"}:
             return {**result, "recovery_state": "terminal_binding_preserved", "next_action": "none",
                     "reason": "terminal_scope_fenced", "new_binding_allowed": False}
-        if state == "recovery_ready":
-            grant = self.state.get("binding_recoveries", {}).get(scope, {})
-            if (grant.get("epoch") == self.epoch and grant.get("expires_at", 0) > time.time()
-                    and not self.orphaned and not self.broken
-                    and all(r.get("state") == "delivered" for r in self.state["actions"].values())
-                    and (not self.state.get("controller") or self._resumable())):
-                return {**result, "recovery_state": "fresh_binding_authorized", "next_action": "acquire",
-                        "reason": "scoped_operator_grant", "new_binding_allowed": True}
-            return {**result, "recovery_state": "scoped_authorization_required", "next_action": "verify_existing_approval_and_apply_local_binding_grant",
-                    "reason": "binding_grant_expired_or_generation_lost", "automatic_recovery_exhausted": True}
-        if state == "retired":
-            return {**result, "recovery_state": "scoped_authorization_required", "next_action": "verify_existing_approval_and_apply_local_binding_grant",
-                    "reason": "binding_retired_with_history", "automatic_recovery_exhausted": True}
+        if state in {"retired", "recovery_ready"}:
+            return {**result, "recovery_state": "not_needed", "next_action": "acquire",
+                    "new_binding_allowed": True}
         if not record or state == "closed":
-            return {**result, "recovery_state": "not_needed", "next_action": "acquire" if not record else "none"}
+            return {**result, "recovery_state": "not_needed",
+                    "next_action": "none" if record and record.get("terminal") else "acquire",
+                    "new_binding_allowed": not bool(record and record.get("terminal"))}
         if (record.get("epoch") != self.epoch or self.orphaned
                 or (self.state.get("controller") and not self._resumable())):
             return {**result, "recovery_state": "owner_reconciliation_required", "next_action": "preserve_windows_and_request_scoped_owner_decision",
@@ -860,6 +925,7 @@ class Windows:
     def dispatch(self, command, payload):
         scope = valid_scope(payload.get("scope"))
         with self.lock:
+            self._continue_after_browser_exit()
             if command == "tabs" and payload.get("action") == "release":
                 if scope == "owner":
                     raise ValueError("owner window cannot be released by a task")
@@ -890,8 +956,6 @@ class Windows:
             lease = payload.get("lease_seconds")
             if lease is not None:
                 self._lease_seconds(lease)
-            if action == "keep_open" and lease is None:
-                raise ValueError("keep_open requires an explicit bounded lease_seconds")
             record = self.acquire(scope)
             context = self._resolve(record)
             if scope != "owner":
@@ -906,6 +970,16 @@ class Windows:
             if command == "tabs":
                 return {**common, "retained": True, "lease_expires_at": record.get("lease_expires_at"),
                         "lifecycle": "bounded ephemeral task lease; exact terminal cleanup"}
+            if command == "download":
+                selector = payload.get("selector")
+                if not isinstance(selector, str) or not 1 <= len(selector) <= 512:
+                    raise ValueError("bounded download link selector required")
+                from secure_browser_local_bidi import CdpSession
+                result = CdpSession._bidi_value(self._function(cid, DOWNLOAD, [{"type": "string", "value": selector}], preflight=True))
+                raw = base64.b64decode(result["data"], validate=True)
+                if len(raw) > 1048576:
+                    raise ValueError("download exceeds 1 MiB")
+                return {**common, **result, "size_bytes": len(raw), "sha256": hashlib.sha256(raw).hexdigest()}
             if command == "navigate":
                 url = payload.get("url", "")
                 parsed = urlsplit(url)

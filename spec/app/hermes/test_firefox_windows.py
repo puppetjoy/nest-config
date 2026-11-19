@@ -240,6 +240,7 @@ def test_same_session_resume_preserves_exact_native_identity(engine, monkeypatch
     assert native.created == 1
     assert restarted.epoch == record["epoch"]
     monkeypatch.setattr(windows, "process_generation", lambda pid: "different")
+    monkeypatch.setattr(windows, "driver_request", lambda *args: {"ready": False})
     changed = windows.Windows(controller.path, connect=lambda: native)
     with pytest.raises(RuntimeError):
         changed.acquire(A)
