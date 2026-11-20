@@ -106,6 +106,7 @@ def run(engine, module, server, tool, call, base, emit, file_bytes, launcher):
     assert receipt.get('closed') or receipt.get('already_closed')
     assert engine.recovery(scope)['next_action'] == 'none'
     refused = call('navigate', {'url': base + '/downloads'}, ('error',))
+    assert refused['error'] == 'FIREFOX_SCOPE_TERMINAL' and refused['outcome'] == 'not_started'
     assert engine.state['windows'][scope]['state'] == 'closed'
     assert not any(c['context'] == binding['context'] for c in engine._tree())
     emit('deliberate-terminal-cleanup', fenced=True, exact_native_absence=True)

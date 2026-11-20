@@ -89,3 +89,38 @@ These are source qualification results, not an installed production acceptance
 claim. Reviewed source, exact-head CI, managed delivery, installed source parity
 and recovery of the original ^2386 consumer remain separate required gates.
 No production Firefox restart or uncertain-action retirement was performed.
+
+## Concurrent original-owner continuation and delivery preparation
+
+While this repair was being prepared, trusted steering on ^2386 recorded Joy's
+newly supplied original GPX and explicitly resumed that application independently
+of browser repair. Its owner subsequently completed the original request. The
+durable owner-supplied file verifies as 38962 bytes, SHA256
+`0a79a85a5b896fcf5dd03fe2653ee5212fa3907c45ced2d5f66c29be74a5a3e4`.
+That is genuine original-byte custody, but not browser retrieval or evidence that
+this repair restored its old browser scope. Do not reopen the now-terminal
+request, modify its history or substitute another identity as proof of recovery.
+The later legitimate terminal receipt must remain fenced.
+
+The source repair merged through !775 after exact-head pipeline 13574. Final
+native qualification exposed an omitted known-error code in the endpoint's
+allowlist; the additive correction at source
+`517e4c131967cdcd58341bd17752297aa274f152` preserves the actual
+`FIREFOX_SCOPE_TERMINAL` / `not_started` outcome. The containing local run passes
+292 tests and 25 subtests; the real public workflow passes the explicit refusal
+assertion as well as the preceding browser journeys.
+
+The rebuilt managed image is
+`registry.gitlab.joyfullee.me/nest/tools/firefox@sha256:0d922fdcc68ac020fc4ba728971b85bb195207f98f68aad347a32cd57de72199`.
+Authenticated remote manifest verification and pull-back succeeded, and all eight
+extracted controller assets match source. Initial publication authentication
+failures were diagnosed and retained; the final publication uses the existing
+Talon identity through a temporary private authfile, removed afterward.
+
+Changing the KubeCM image and image_revision changes the singleton Recreate pod
+template. It is a browser restart, not a controller-only operation. Keep that
+image-pin merge/deployment gated on the exact disclosed interruption scope.
+The existing controller-refresh path can install these verified extracted assets
+without restarting Firefox; the separately tagged Puppet bridge update can
+install the adapter without a runtime-pin change. Neither operation establishes
+persistent-image activation or permits erasing historical uncertain actions.

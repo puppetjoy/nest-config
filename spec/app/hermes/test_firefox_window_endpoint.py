@@ -108,6 +108,7 @@ def test_owner_viewer_origin_capability_and_exact_scope(tmp_path):
 
 
 @pytest.mark.parametrize("code,outcome", [
+    ("FIREFOX_SCOPE_TERMINAL", "not_started"),
     ("FIREFOX_TARGET_UNAVAILABLE", "not_started"),
     ("FIREFOX_OBSERVATION_UNAVAILABLE", "not_started"),
     ("FIREFOX_WINDOW_BUDGET", "not_started"),
