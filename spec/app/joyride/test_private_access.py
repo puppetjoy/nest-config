@@ -152,7 +152,7 @@ class PrivateAccess(unittest.TestCase):
         self.assertEqual(self.request()[0], 200)
 
     def test_routing_exact_methods_and_header_boundary(self):
-        for operation in ("status", "propose", "import", "match", "settle", "export"):
+        for operation in ("status", "propose", "leg", "import", "match", "settle", "export"):
             path = "/routing/" + operation
             method = "GET" if operation == "status" else "POST"
             status, data = self.request(path=path, method=method, extra=(
@@ -168,6 +168,17 @@ class PrivateAccess(unittest.TestCase):
             for suffix in ("?", "?x=1", "/", "/extra"):
                 self.assertEqual(self.request(path=path + suffix, method=method)[0], 404)
         self.assertEqual(self.request(path="/routing/match", method="POST", extra="Content-Length: 1048577\r\n")[0], 413)
+
+    def test_routing_leg_raw_targets_and_body_budget(self):
+        for path in ("/routing/leg?", "/routing/leg?x=1", "/routing/%6ceg",
+                     "/%72outing/leg", "//routing/leg", "/routing//leg",
+                     "/other/../routing/leg", "/routing/leg/../leg",
+                     "/routing/leg/../../admin", "/routing/leg%2f",
+                     "/routing/leg%3fx=1", "/routing/Leg", "/routing/legs"):
+            with self.subTest(path=path):
+                self.assertEqual(self.request(path=path, method="POST")[0], 404)
+        self.assertEqual(self.request(path="/routing/leg", method="POST",
+                                      extra="Content-Length: 1048577\r\n")[0], 413)
 
     def test_routing_reviews_exact_targets_methods_and_headers(self):
         identifier = "bfa1494e-0443-4c8a-9aab-1074b615f2a3"
