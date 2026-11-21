@@ -46,6 +46,7 @@ class nest (
   Optional[String]                  $dtb_file            = undef,
   Optional[String]                  $dtb_overlay         = undef,
   Array[String]                     $external_interfaces = [],
+  Array[Stdlib::Absolutepath]       $initramfs_firmware  = [],
   Boolean                           $isolate_smt         = false,
   Enum['persistent', 'volatile']    $journal             = persistent,
   Hash[String, Nest::Kconfig]       $kernel_config       = {},

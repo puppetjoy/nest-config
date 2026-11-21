@@ -46,9 +46,17 @@ nest::kernel_cmdline:
   - 'i915.force_probe=56a1'
   - 'xe.force_probe=!56a1'
 
+# Built-in i915 requests DG2 HuC before the real root filesystem is mounted.
+# Dracut's module scan misses it; this repairs firmware availability, not PCI loss.
+nest::initramfs_firmware:
+  - '/lib/firmware/i915/dg2_huc_gsc.bin'
+
 nest::kernel_config:
   CONFIG_CPU_FREQ_DEFAULT_GOV_PERFORMANCE: y
   CONFIG_CPU_FREQ_DEFAULT_GOV_USERSPACE: n
+  # PCIe errors were invisible to Linux with AER disabled. Enable diagnosis and
+  # the standard recovery path; this does not establish the blackout trigger.
+  CONFIG_PCIEAER: y
 
 # Protect service state
 nest::reset_filter_rules:
