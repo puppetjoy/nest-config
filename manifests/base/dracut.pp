@@ -85,5 +85,25 @@ class nest::base::dracut {
     ;
   }
 
+  # Built-in drivers can request firmware before the real root is available.
+  # Keep required early firmware explicit rather than relying on module scanning.
+  if $nest::initramfs_firmware.empty {
+    file { '/etc/dracut.conf.d/20-firmware.conf':
+      ensure => absent,
+    }
+  } else {
+    $firmware_config = @("FIRMWARE")
+      install_items+=" ${nest::initramfs_firmware.join(' ')} "
+      | FIRMWARE
+
+    file { '/etc/dracut.conf.d/20-firmware.conf':
+      mode    => '0644',
+      owner   => 'root',
+      group   => 'root',
+      content => $firmware_config,
+      require => Package['sys-kernel/linux-firmware'],
+    }
+  }
+
   nest::lib::systemd_reload { 'dracut': }
 }

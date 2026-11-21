@@ -155,6 +155,20 @@ describe 'nest' do
 
         it_should_and_should_not_contain_classes(stage1 + stage2 + stage3, windows + workstation + mobile)
 
+        context 'with firmware required before mounting the real root' do
+          let(:params) { { initramfs_firmware: ['/lib/firmware/i915/dg2_huc_gsc.bin'] } }
+
+          it { is_expected.to compile.with_all_deps }
+          it { is_expected.to contain_exec('kernel-install').that_subscribes_to('Class[nest::base::dracut]') }
+
+          # Regression: built-in i915 firmware is not discovered by the module scan.
+          it do
+            is_expected.to contain_file('/etc/dracut.conf.d/20-firmware.conf')
+              .with_content("install_items+=\" /lib/firmware/i915/dg2_huc_gsc.bin \"\n")
+              .that_requires('Package[sys-kernel/linux-firmware]')
+          end
+        end
+
         # Regression: ignoring activation failure allowed zfs mount -a to stack
         # an inactive root after failed canmount or promotion operations.
         it do
