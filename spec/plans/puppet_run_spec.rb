@@ -51,5 +51,21 @@ RSpec.describe 'nest::puppet::run' do
     expect(invocations.length).to eq(1)
     expect(Shellwords.split(invocations.first.fetch(:env_vars).fetch('PUPPET_EXTRA_ARGS'))).to eq([])
     expect(invocations.first.fetch(:run_as)).to eq('root')
+    expect(invocations.first.fetch(:env_vars)).not_to have_key('FACTER_force_kernel_install')
+  end
+
+  it 'explicitly resumes an interrupted boot payload installation through the managed fact' do
+    invocations = []
+    allow_any_script.return do |targets:, script:, **options|
+      invocations << options.fetch(:params)
+      Bolt::ResultSet.new(targets.map do |target|
+        Bolt::Result.for_command(target, { 'stdout' => '', 'stderr' => '', 'exit_code' => 0 }, 'script', script, [])
+      end)
+    end
+    expect(run_plan('nest::puppet::run', 'targets' => 'falcon', 'force_kernel_install' => true,
+                    'tags' => ['kernel', 'boot']).ok?).to be(true)
+    expect(invocations.length).to eq(1)
+    expect(invocations.first.fetch(:env_vars)).to include('FACTER_force_kernel_install' => 1)
+    expect(Shellwords.split(invocations.first.fetch(:env_vars).fetch('PUPPET_EXTRA_ARGS'))).to eq(['--tags', 'kernel,boot'])
   end
 end
