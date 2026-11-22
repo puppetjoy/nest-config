@@ -4,22 +4,30 @@
 # @param build Toggle additional build functionality in the Puppet run
 # @param environment The Puppet environment to use
 # @param noop Run Puppet in noop mode
+# @param force_kernel_install Regenerate the boot payload without rebuilding an unchanged kernel
 # @param skip_module_rebuild Skip kernel module rebuild
 # @param skip_tags Exclude resources with these tags during a guarded apply
 # @param tags Only apply resources with these tags
 plan nest::puppet::run (
   TargetSpec $targets,
-  Optional[Enum['kernel']] $build               = undef,
-  Optional[String]         $environment         = undef,
-  Boolean                  $noop                = false,
-  Boolean                  $skip_module_rebuild = false,
-  Array[String]            $skip_tags           = [],
-  Array[String]            $tags                = [],
+  Optional[Enum['kernel']] $build                = undef,
+  Optional[String]         $environment          = undef,
+  Boolean                  $noop                 = false,
+  Boolean                  $force_kernel_install = false,
+  Boolean                  $skip_module_rebuild  = false,
+  Array[String]            $skip_tags            = [],
+  Array[String]            $tags                 = [],
 ) {
   if $build {
     $build_env = { 'FACTER_build' => $build }
   } else {
     $build_env = {}
+  }
+
+  if $force_kernel_install {
+    $install_env = { 'FACTER_force_kernel_install' => 1 }
+  } else {
+    $install_env = {}
   }
 
   if $skip_module_rebuild {
@@ -59,7 +67,7 @@ plan nest::puppet::run (
       default => 'root',
     }
     run_script('nest/scripts/run_puppet.sh', $target, 'Run Puppet', {
-      _env_vars => $build_env + $skip_env + {
+      _env_vars => $build_env + $install_env + $skip_env + {
         'PUPPET_EXTRA_ARGS' => shellquote($environment_args + $noop_args + $tags_args + $skip_tags_args),
       },
       _run_as   => $run_as,
