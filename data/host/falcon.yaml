@@ -57,6 +57,10 @@ nest::kernel_config:
   # PCIe errors were invisible to Linux with AER disabled. Enable diagnosis and
   # the standard recovery path; this does not establish the blackout trigger.
   CONFIG_PCIEAER: y
+  # DG2 HuC authentication needs both MEI transports, even without full PXP.
+  # This fixes the demonstrated initialization defect, not the PCIe access loss.
+  CONFIG_INTEL_MEI_GSC: y
+  CONFIG_INTEL_MEI_PXP: y
 
 # Protect service state
 nest::reset_filter_rules:

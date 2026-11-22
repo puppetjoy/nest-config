@@ -2,6 +2,13 @@
 
 ## Status
 
+This is the historical source-preparation phase. The changes below were later
+installed through MR 782, and the diagnostic boot reproduced the failure.
+For the current software/platform findings and source-only MEI dependency
+correction, see [the follow-up investigation](falcon-software-interaction-investigation.md).
+The activation/recurrence report and precise AER log are attached to the task.
+Statements below about not-yet-installed changes describe the earlier phase.
+
 **The blackout trigger is unresolved. This is not a completed crash repair.**
 The prepared source corrects a demonstrated early-firmware omission and enables
 PCIe error reporting/recovery in a future Falcon kernel. Neither change has
