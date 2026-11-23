@@ -42,9 +42,10 @@ nest::kernel_cmdline:
   - 'intel_iommu=on'
   - 'intel_idle.max_cstate=2'
   - 'pci-stub.ids=10de:2882,10de:22be,1912:0014'
-  # Arc A750: retain the working i915 media path; Xe fails iHD initialization.
-  - 'i915.force_probe=56a1'
-  - 'xe.force_probe=!56a1'
+  # Arc A750: owner-approved Xe comparison with the small-BAR iHD correction.
+  # Keep the complete i915 boot payload and entry available for rollback.
+  - 'i915.force_probe=!56a1'
+  - 'xe.force_probe=56a1'
 
 # Built-in i915 requests DG2 HuC before the real root filesystem is mounted.
 # Dracut's module scan misses it; this repairs firmware availability, not PCI loss.
