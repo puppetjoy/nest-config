@@ -11,32 +11,12 @@ class nest::host::falcon::arc_diagnostics {
     source => 'puppet:///modules/nest/host/falcon/arc-first-fault.py',
   }
 
-  systemd::manage_unit { 'falcon-arc-first-fault.service':
-    unit_entry    => {
-      'Description'         => 'Preserve the first uncorrected Arc PCIe error and PM prehistory',
-      'After'               => 'sys-kernel-tracing.mount',
-      'RequiresMountsFor'   => '/sys/kernel/tracing',
-      'ConditionPathExists' => '/sys/bus/pci/devices/0000:05:00.0',
-    },
-    service_entry => {
-      'Type'                     => 'oneshot',
-      'RemainAfterExit'          => true,
-      'ExecStart'                => '/usr/bin/python3 /usr/local/sbin/falcon-arc-first-fault',
-      'TimeoutStartSec'          => '15s',
-      'RuntimeDirectory'         => 'falcon-arc-first-fault',
-      'RuntimeDirectoryMode'     => '0700',
-      'RuntimeDirectoryPreserve' => 'yes',
-      'ProtectHome'              => true,
-      'ProtectSystem'            => 'strict',
-      'PrivateNetwork'           => true,
-    },
-    install_entry => { 'WantedBy' => 'multi-user.target' },
-  }
-
+  # Use the module's full-unit API: its typed map lacks preservation/sandbox keys.
   # Stop/restart must not clear the trace or rearm a consumed first-error trigger.
-  service { 'falcon-arc-first-fault':
-    ensure  => running,
+  systemd::unit_file { 'falcon-arc-first-fault.service':
+    source  => 'puppet:///modules/nest/host/falcon/falcon-arc-first-fault.service',
+    active  => true,
     enable  => true,
-    require => [File['/usr/local/sbin/falcon-arc-first-fault'], Systemd::Manage_unit['falcon-arc-first-fault.service']],
+    require => File['/usr/local/sbin/falcon-arc-first-fault'],
   }
 }
