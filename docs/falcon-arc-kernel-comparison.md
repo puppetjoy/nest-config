@@ -89,3 +89,71 @@ is an acceptance gate. A bounded pass is functional comparison evidence only.
 IGT 2.3 was source-inspected but not installed or run: its ordinary i915 open/exit
 helper invokes active-work cancellation/reset. Do not use the normal IGT runner
 on the working desktop under the assumption that a basic GEM test is read-only.
+
+## Bounded installed result and removal of the diagnostic selection
+
+The managed 6.18.21 build completed through the ordinary Bolt plan. Its exact
+Puppet report records the accepted merge, no failed resources, and successful
+kernel build, module rebuild and kernel-install events. The ESP kernel matches
+the built image, both prior 6.18.56 payloads and their entries remain unchanged,
+and the initrd includes HuC/GuC and ZFS. Actual olddefconfig retains i915, MEI
+GSC/PXP, AER and Intel IOMMU; the complete normalized config difference is
+retained with the investigation evidence.
+
+The coordinated comparison reset reached boot
+`e8cbc78d-af06-4cd8-bdc3-af46cba6526d`, actually running 6.18.21 #5 on i915.
+HuC authenticates for all workloads. Hardware GL rendering, 90-frame host
+VA-API encode/decode with zero decode errors, and actual Firefox hardware
+playback pass. Plex also passes a real HEVC-to-H.264 hardware pipeline with
+bitrate limiting requested, VA-API decode and encode, and independently probed
+consumed output. Actual output is 718 × 306, not the requested maximum
+1280 × 720. The exact disposable session was removed.
+
+The reset connection loss was reconciled against the new boot and its exclusive
+receipt, not replayed. Both PostgreSQL instances, RGW and all three local OSDs
+had fresh exit-zero receipts before storage flush. Noncritical client nonzero
+exits remain recorded. Kubernetes/API startup initially waited for BGP routes;
+Falcon subsequently became Ready. All captured runner and Kubernetes scheduling
+states, node schedulability and the normal Puppet timer were restored. GitLab
+and PuppetDB startup failures are retained separately from GPU evidence.
+
+No endpoint loss occurred during this bounded comparison. That establishes
+function on the earlier tree, not a causal correction or exclusion of a
+6.18.56-specific intermittent defect. Retire the temporary host kernel overrides
+after this comparison: future managed selection returns to the supported fleet
+kernel. The current working comparison session need not be interrupted merely
+to retire source policy. Retain its module tree and the complete rollback
+payloads; do not report a source-selection change as a running-kernel change.
+
+## Further source triage — not additional mitigations
+
+Review of the actual selected fork's PCI/DRM/IOMMU history does not identify a
+matched causal patch. In particular:
+
+- `10021c2d33061b7704129bc4cdfcacf9cc396349` fixes ASPM reconfiguration after
+  entering D3hot. It is already in the failing 6.18.56 tree, not a missing fix;
+  zero GPU/parent runtime-suspended time further limits this explanation.
+- `3ab6f4eccbbf508bd5a52fa6ad10d1e52f609788` fixes multi-function ASPM setup
+  ordering. It concerns capability initialization, not proof of the observed
+  later failure; it is also already in the failing tree.
+- `301288f85679aa76f6307d0fe2c0cb31baebc0f6` and
+  `6beadccc432cf50cfb16bc061109c03b2dcb2654` avoid spurious zero-length or
+  boundary config-access wakeups. Neither is evidence that such an access
+  initiated Falcon's earlier faults.
+- `9c698af5c2a12035d093244ca37e3c0971fd05e4` changes lifting a 2.5 GT/s clamp
+  during failed-link retraining. The measured external link is 8 GT/s x16;
+  the on-card 2.5 GT/s fields must not be mistaken for the external link.
+
+[Intel media-driver issue 1750](https://github.com/intel/media-driver/issues/1750)
+contains an A750 report with the same on-card bridge IDs, inaccessible-device
+errors and all-ones register reads, but no accepted causal repair. Later reports
+explicitly contradict the early claim that disabling CPU C-states universally
+fixes it. Do not promote that suggestion, display power options, or unrelated
+integrated-GPU FIFO reports into a Falcon correction. Generic online recipes
+that conflate PCI ASPM with D3, combine multiple power changes or suggest
+world-writable GPU devices are not qualifying evidence.
+
+The remaining discriminator requires a real first-fault trace or a concretely
+matched defect, not a long soak or user certification. Preserve the distinction
+between successful managed diagnosis/function and the still-unresolved
+initiating endpoint-loss mechanism.
