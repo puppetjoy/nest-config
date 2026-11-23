@@ -1,5 +1,30 @@
 # Falcon controlled Xe comparison
 
+## Outcome and return to i915
+
+The November 22 comparison did not meet required media acceptance. The host
+small-BAR correction enabled accelerated graphics and actual Firefox decoding,
+but Plex's independently bundled driver crashed. An isolated musl candidate fixed
+initialization yet failed the real bitrate-controlled hardware encoder; CQP alone
+is not sufficient. DG2's Xe HuC limitation remains relevant to that failure.
+
+On November 23 the Xe desktop also blacked out. Before any recovery operation,
+read-only PCI inspection found GPU header type `7f`, inaccessible downstream link
+fields and root port `00:02.0` with fatal Surprise Down set. Thus this is not
+established as a pure Xe scheduler defect: the reset storm accompanies renewed
+endpoint/config-space access loss. Retained journal rotation prevents treating
+its first remaining reset message as the initiating event. This neither proves
+an identical trigger to i915 nor identifies the responsible physical component.
+
+Return Falcon's managed probe policy to i915, retaining authenticated HuC, hardware
+rendering and required bitrate-controlled video. This is the justified rollback
+of an unsuccessful comparison, not a claimed cure for intermittent PCIe loss.
+Keep the qualified small-BAR package correction version-scoped; it is dormant
+on the i915 allocation path and remains useful if a future Xe comparison is
+specifically justified. Joy authorized necessary coordinated diagnostic/recovery
+reboots on November 23; each still needs a fresh boot-bound execution receipt,
+rollback, essential flush/storage checks and exact restoration of owned holds.
+
 ## Scope and evidence
 
 Joy authorized a rollbackable Xe comparison in request ^2398, including managed
