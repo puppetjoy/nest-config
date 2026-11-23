@@ -52,12 +52,6 @@ nest::kernel_cmdline:
 nest::initramfs_firmware:
   - '/lib/firmware/i915/dg2_huc_gsc.bin'
 
-# Temporary shared-kernel/PCI-path discriminator for Arc endpoint loss.
-# Keep firmware, userspace and i915 policy unchanged; restore the supported
-# fleet kernel after the bounded comparison or once this lead is excluded.
-nest::kernel_tag: 'stable/v6.18.21'
-nest::kernel_revision: '4477762beaeb2076dc5a623b18a578781b2d26cb'
-
 nest::kernel_config:
   CONFIG_CPU_FREQ_DEFAULT_GOV_PERFORMANCE: y
   CONFIG_CPU_FREQ_DEFAULT_GOV_USERSPACE: n
