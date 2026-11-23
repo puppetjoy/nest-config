@@ -157,3 +157,50 @@ The remaining discriminator requires a real first-fault trace or a concretely
 matched defect, not a long soak or user certification. Preserve the distinction
 between successful managed diagnosis/function and the still-unresolved
 initiating endpoint-loss mechanism.
+
+## Passive first-error retention
+
+The prior Xe reset storm rotated away the initiating journal record. The
+source-managed `nest::host::falcon::arc_diagnostics` now provides a small,
+boot-scoped tracing instance, `falcon-arc-first-fault`, to retain the available
+PM/AER ordering instead of relying on a later storm tail. This is diagnostic
+instrumentation, not a blackout repair or another stability gate.
+
+The oneshot service enables only Arc-topology AER and device/runtime-PM events.
+A conditional `traceoff:1` trigger freezes that instance on its first Arc
+uncorrected AER event (nonfatal or fatal, not corrected errors). The ring is
+256 KiB per CPU; older prehistory can be overwritten before the trigger, so it
+is not a complete lossless historical trace. No scheduler, arbitrary application
+arguments, media contents, GPU workload, driver reset, PCI write or power-policy
+change is recorded/performed by this helper. Global tracing and unrelated
+instances are untouched. There is no userspace monitoring loop or timer.
+
+The real kernel's filter/count/freeze behavior was exercised with harmless
+process-exec events in a disposable separate instance: a nonmatching event did
+not consume the trigger, the first matching event and preceding marker were
+retained, tracing stopped, and a second matching event did not overwrite the
+capture. No AER or hardware fault was injected. `CONFIG_TRACER_SNAPSHOT` is not
+enabled; an initial snapshot attempt correctly failed and its fixture instance
+was removed. The supported traceoff mechanism avoids another kernel rebuild.
+Isolated helper checks also cover armed/frozen idempotence, changed-spec and
+wrong-boot refusal, missing/unknown-instance preservation and exact device scope.
+
+On another recurrence, before any reset, read:
+
+- `/usr/local/sbin/falcon-arc-first-fault --status`;
+- `/sys/kernel/tracing/instances/falcon-arc-first-fault/trace`;
+- that instance's `events/ras/aer_event/trigger` and per-CPU stats;
+- the exact current boot's earliest bounded kernel journal and PCI/AER state.
+
+Service restarts and ordinary Puppet convergence must not clear or rearm an
+existing same-boot capture. The helper refuses unknown or mismatched state
+rather than deleting it. Trace memory is volatile: retain it before reboot.
+It starts only when the service runs and cannot recover earlier boot events,
+events absent from these tracepoints, or evidence after a complete host crash.
+A successfully armed recorder is not evidence that a real failure was captured.
+
+Removal boundary: after actionable first-error evidence and an accepted causal
+repair, preserve the capture, stop/disable the oneshot, and remove its class
+inclusion, helper and unit from source and the retired live files. Do not clear
+its tracefs instance while evidence is still needed. No human certification or
+extended observation period is required for the installation phase.

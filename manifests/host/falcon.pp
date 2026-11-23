@@ -2,6 +2,7 @@ class nest::host::falcon {
   $talon_public_key = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKJ3ZH2elB6c0ors9H/mxWrJY1aXKzA4XxA6YCe3rpj9 talon@joyfullee.me'
 
   include nest::lib::toolchains
+  contain nest::host::falcon::arc_diagnostics
 
   file { '/root/.ssh/letsencrypt-rsync.sh':
     ensure  => file,
