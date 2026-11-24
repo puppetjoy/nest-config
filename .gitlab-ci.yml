@@ -63,63 +63,65 @@ stages:
   image: 'registry.gitlab.joyfullee.me/nest/tools/agent@sha256:820cc8a130309a07db90685958bb9cac87d8376ab63f2d45457e87431ad93e34'
   stage: 'Test'
   tags: ['owl']
-  variables:
-    PYTHONDONTWRITEBYTECODE: '1'
   script:
-    - 'python3 spec/tasks/retain_update_report_test.py'
-    - 'python3 spec/tasks/retain_update_scope_test.py'
-    - 'python3 spec/tasks/retain_update_reboot_test.py'
-    - 'python3 spec/tasks/retain_update_reboot_observation_test.py'
-    - 'python3 spec/tasks/retain_update_finalize_test.py'
-    - 'python3 spec/tasks/retain_update_preflight_test.py'
-    - 'python3 spec/tasks/retain_update_backup_test.py'
-    - 'python3 spec/tasks/retain_generation_report_test.py'
-    - 'python3 spec/tasks/retain_update_catalog_test.py'
-    - 'python3 spec/tasks/retain_update_health_test.py'
-    - 'python3 spec/tasks/update_manager_health_test.py'
-    - 'python3 spec/tasks/update_boot_health_test.py'
-    - 'python3 spec/tasks/update_network_health_test.py'
-    - 'python3 spec/tasks/update_wave_plan_test.py'
-    - 'python3 spec/tasks/update_prepare_inputs_test.py'
-    - 'python3 spec/tasks/update_generation_binding_test.py'
-    - 'python3 spec/tasks/update_prepare_window_test.py'
-    - 'python3 spec/tasks/update_backup_policy_test.py'
-    - 'python3 spec/tasks/update_observe_inputs_test.py'
-    - 'python3 spec/tasks/update_lifecycle_test.py'
-    - 'python3 spec/files/run_puppet_exit_test.py'
-    - 'python3 spec/files/nest_update_state_test.py'
-    - 'python3 spec/files/hermes_backup_generation_test.py'
-    - 'python3 spec/files/nest_release_manifest_test.py'
-    - 'python3 spec/files/nest_release_promote_test.py'
-    - 'python3 spec/files/nest_release_source_contract_test.py'
-    - 'python3 spec/files/nest_release_bind_test.py'
-    - 'python3 spec/files/nest_release_input_names_test.py'
-    - 'python3 spec/files/nest_release_discover_test.py'
-    - 'python3 spec/files/nest_release_assemble_test.py'
-    - 'python3 spec/files/nest_release_envelope_test.py'
-    - 'python3 spec/files/build_publish_image_test.py'
-    - 'python3 spec/files/build_freeze_repos_test.py'
-    - 'python3 spec/files/build_stage3_paths_test.py'
-    - 'python3 spec/files/build_stage3_trust_test.py'
-    - 'python3 spec/files/build_stage3_capture_test.py'
-    - 'python3 spec/files/build_stage3_reference_test.py'
-    - 'python3 spec/files/build_stage3_root_test.py'
-    - 'python3 spec/files/build_stage3_publish_test.py'
-    - 'python3 spec/files/build_stage3_materialize_test.py'
-    - 'python3 spec/files/build_stage3_finish_test.py'
-    - 'python3 spec/files/build_stage3_transfer_test.py'
-    - 'python3 spec/files/transfer_generation_test.py'
-    - 'python3 spec/files/ci_bolt_module_install_test.py'
-    - 'python3 spec/files/ci_executor_identity_test.py'
-    - 'python3 spec/files/ci_release_build_test.py'
-    - 'python3 spec/files/nest_release_inputs_test.py'
-    - 'python3 spec/files/nest_release_route_test.py'
-    - 'python3 spec/files/nest_executor_bootstrap_test.py'
-    - 'python3 spec/files/nest_executor_accept_test.py'
-    - 'python3 spec/files/nest_executor_route_test.py'
-    - 'python3 spec/files/nest_release_graph_test.py'
-    - 'python3 spec/files/nest_nested_dag_fixture_test.py'
-    - 'python3 spec/files/nest_executor_inputs_test.py'
+    - |
+      # Keep job and project variables out of the fixture processes.
+      /usr/bin/env -i PATH=/usr/local/bin:/usr/bin:/bin HOME="$PWD" PYTHONDONTWRITEBYTECODE=1 /bin/sh -ex <<'FIXTURES'
+      python3 spec/tasks/retain_update_report_test.py
+      python3 spec/tasks/retain_update_scope_test.py
+      python3 spec/tasks/retain_update_reboot_test.py
+      python3 spec/tasks/retain_update_reboot_observation_test.py
+      python3 spec/tasks/retain_update_finalize_test.py
+      python3 spec/tasks/retain_update_preflight_test.py
+      python3 spec/tasks/retain_update_backup_test.py
+      python3 spec/tasks/retain_generation_report_test.py
+      python3 spec/tasks/retain_update_catalog_test.py
+      python3 spec/tasks/retain_update_health_test.py
+      python3 spec/tasks/update_manager_health_test.py
+      python3 spec/tasks/update_boot_health_test.py
+      python3 spec/tasks/update_network_health_test.py
+      python3 spec/tasks/update_wave_plan_test.py
+      python3 spec/tasks/update_prepare_inputs_test.py
+      python3 spec/tasks/update_generation_binding_test.py
+      python3 spec/tasks/update_prepare_window_test.py
+      python3 spec/tasks/update_backup_policy_test.py
+      python3 spec/tasks/update_observe_inputs_test.py
+      python3 spec/tasks/update_lifecycle_test.py
+      python3 spec/files/run_puppet_exit_test.py
+      python3 spec/files/nest_update_state_test.py
+      python3 spec/files/hermes_backup_generation_test.py
+      python3 spec/files/nest_release_manifest_test.py
+      python3 spec/files/nest_release_promote_test.py
+      python3 spec/files/nest_release_source_contract_test.py
+      python3 spec/files/nest_release_bind_test.py
+      python3 spec/files/nest_release_input_names_test.py
+      python3 spec/files/nest_release_discover_test.py
+      python3 spec/files/nest_release_assemble_test.py
+      python3 spec/files/nest_release_envelope_test.py
+      python3 spec/files/build_publish_image_test.py
+      python3 spec/files/build_freeze_repos_test.py
+      python3 spec/files/build_stage3_paths_test.py
+      python3 spec/files/build_stage3_trust_test.py
+      python3 spec/files/build_stage3_capture_test.py
+      python3 spec/files/build_stage3_reference_test.py
+      python3 spec/files/build_stage3_root_test.py
+      python3 spec/files/build_stage3_publish_test.py
+      python3 spec/files/build_stage3_materialize_test.py
+      python3 spec/files/build_stage3_finish_test.py
+      python3 spec/files/build_stage3_transfer_test.py
+      python3 spec/files/transfer_generation_test.py
+      python3 spec/files/ci_bolt_module_install_test.py
+      python3 spec/files/ci_executor_identity_test.py
+      python3 spec/files/ci_release_build_test.py
+      python3 spec/files/nest_release_inputs_test.py
+      python3 spec/files/nest_release_route_test.py
+      python3 spec/files/nest_executor_bootstrap_test.py
+      python3 spec/files/nest_executor_accept_test.py
+      python3 spec/files/nest_executor_route_test.py
+      python3 spec/files/nest_release_graph_test.py
+      python3 spec/files/nest_nested_dag_fixture_test.py
+      python3 spec/files/nest_executor_inputs_test.py
+      FIXTURES
 
 'Hermes install fixtures':
   extends: .all-branch-ci
