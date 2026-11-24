@@ -10,14 +10,14 @@ describe 'Hermes broker runtime deployment boundary' do
   let(:service) { File.read(File.join(root, 'manifests/app/hermes/service.pp')) }
   let(:tag) { "tag         => 'hermes_agent_request_broker_runtime'" }
 
-  it 'lets Owl follow the Broker main branch independently of the Hermes core pin' do
+  it 'lets Owl follow Broker main and Hermes nest independently' do
     expect(owl.fetch('nest::app::hermes::pm_enabled')).to be(false)
     expect(owl).not_to have_key('nest::app::hermes::broker_git_ref')
     expect(File.read(File.join(root, 'manifests/app/hermes.pp'))).to match(%r{\$broker_git_ref\s*=\s*'origin/main'})
-    # The default remains rolling; the coordinated release host is source-pinned.
+    # Owl uses the rolling fork branch, not the class's default ref.
     expect(File.read(File.join(root, 'manifests/app/hermes.pp'))).to match(%r{\$git_ref\s*=\s*'main'})
     expect(owl.fetch('nest::app::hermes::git_ref')).to eq('nest')
-    expect(owl.fetch('nest::app::hermes::git_commit')).to match(%r{\A[0-9a-f]{40}\z})
+    expect(owl).not_to have_key('nest::app::hermes::git_commit')
   end
 
   it 'removes the applying lifecycle reconciler while retaining GitLab note ingress' do

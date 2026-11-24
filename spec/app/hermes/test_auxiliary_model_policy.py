@@ -23,11 +23,10 @@ def load_yaml(path: Path) -> dict:
     return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
-def test_owl_tracks_merged_hermes_and_shared_auxiliary_policy() -> None:
+def test_owl_uses_shared_auxiliary_policy() -> None:
     host_config = load_yaml(OWL_DATA)
 
-    assert host_config["nest::app::hermes::git_ref"] == "nest"
-    assert host_config["nest::app::hermes::git_commit"] == "be49faf1424d2d5ee279e86666d1ecf716f148cf"
+
     assert host_config["nest::app::hermes::auxiliary_provider"] == EXPECTED_PROVIDER
     assert host_config["nest::app::hermes::auxiliary_compress_model"] == EXPECTED_HELPER_MODEL
     assert host_config["nest::app::hermes::auxiliary_extract_model"] == EXPECTED_HELPER_MODEL
@@ -105,7 +104,7 @@ def test_split_auxiliary_interface_is_wired_to_each_managed_task() -> None:
 
 
 if __name__ == "__main__":
-    test_owl_tracks_merged_hermes_and_shared_auxiliary_policy()
+    test_owl_uses_shared_auxiliary_policy()
     test_codex_instances_inherit_shared_auxiliary_policy_without_legacy_override()
     test_quill_uses_copilot_gpt_6_luna_for_every_helper_without_reasoning_override()
     test_beryl_keeps_every_model_route_local()
