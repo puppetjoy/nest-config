@@ -3,5 +3,5 @@
 service_name: flight-deck-dev
 flight_deck_board: agent-requests-dev
 flight_deck_environment: Dev
+# The normal DEV rollout re-fetches main; production promotion stays separate.
 flight_deck_ref_name: main
-flight_deck_source_revision: 5c3aa09b4bd45b41e509f596545ec7e4ffa7c039
