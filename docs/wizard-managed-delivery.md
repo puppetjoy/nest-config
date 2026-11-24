@@ -1,4 +1,11 @@
-# Wizard managed delivery ledger
+# Wizard managed delivery ledger (historical)
+
+This records the original Wizard rollout. The source tuples and promotion
+sequence below describe that rollout only; do not reapply those pins or
+repeat the historical DEV controls. For current Hermes and Broker delivery,
+use [Routine Owl delivery](hermes-managed-source-transition.md#routine-owl-delivery).
+Flight Deck DEV and production remain separate deployments; routine DEV
+updates do not promote production.
 
 ## Release stages
 
