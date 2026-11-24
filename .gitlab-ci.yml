@@ -56,7 +56,7 @@ stages:
   stage: 'Test'
   script:
     - 'pdk test unit --parallel'
-    - 'pdk test unit --tests=spec/files/apiserver_etcd_endpoints_spec.rb,spec/files/validate_etcd_cluster_spec.rb,spec/files/api_survivor_observation_spec.rb,spec/files/maintenance_storage_spec.rb'
+    - 'pdk test unit --tests=spec/files/apiserver_etcd_endpoints_spec.rb,spec/files/validate_etcd_cluster_spec.rb,spec/files/api_survivor_observation_spec.rb,spec/files/maintenance_storage_spec.rb,spec/files/patternkit_deployment_spec.rb'
 
 'Update report fixtures':
   extends: .all-branch-ci

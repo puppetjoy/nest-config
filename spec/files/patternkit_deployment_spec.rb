@@ -11,11 +11,15 @@ RSpec.describe 'Pattern Kit Eyrie deployment assets' do
   it 'checks paired Atelier compatibility before Studio starts' do
     studio = resources.fetch('studio').dig('spec', 'template', 'spec')
     verifier = studio.fetch('initContainers').find { |container| container.fetch('name') == 'verify-source-revisions' }
+    command = verifier.fetch('command').join(' ')
 
-    expect(verifier.fetch('command').join("\\n")).to include('scripts/verify_patternkit_compatibility.py')
-    expect(verifier.fetch('command').join("\\n")).to include('--patternkit-root "$PATTERNKIT_PATH"')
-    expect(verifier.fetch('command').join("\\n")).to include('--revision "$PATTERNKIT_REVISION"')
-    expect(verifier.fetch('volumeMounts').select { |mount| %w[patternkit-source atelier-source].include?(mount.fetch('name')) }.all? { |mount| mount.fetch('readOnly') }).to be(true)
+    expect(command).to include('scripts/verify_patternkit_compatibility.py')
+    expect(command).to include('--patternkit-root "$PATTERNKIT_PATH"')
+    expect(command).to include('--revision "$PATTERNKIT_REVISION"')
+    source_mounts = verifier.fetch('volumeMounts').select do |mount|
+      ['patternkit-source', 'atelier-source'].include?(mount.fetch('name'))
+    end
+    expect(source_mounts.all? { |mount| mount.fetch('readOnly') }).to be(true)
   end
 
   it 'keeps Studio and the workbench on explicit, isolated state boundaries' do
