@@ -7,7 +7,7 @@ class nest::app::hermes (
   Boolean                        $wizard_capsule_source_enabled  = false,
   Stdlib::Absolutepath           $ca_bundle_file                 = '/etc/ssl/certs/ca-certificates.crt',
   String[1]                      $broker_git_url                 = 'https://gitlab.joyfullee.me/nest/hermes-agent-request-broker.git',
-  String[1]                      $broker_git_ref                 = 'main',
+  String[1]                      $broker_git_ref                 = 'origin/main',
   String[1]                      $agent_request_kanban_board     = 'agent-requests',
   Boolean                        $gitlab_mr_note_poller_enabled  = false,
   String[1]                      $gitlab_mr_note_poller_profile  = 'talon',

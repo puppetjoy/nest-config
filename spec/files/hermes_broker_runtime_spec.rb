@@ -13,7 +13,7 @@ describe 'Hermes broker runtime deployment boundary' do
   it 'lets Owl follow the Broker main branch independently of the Hermes core pin' do
     expect(owl.fetch('nest::app::hermes::pm_enabled')).to be(false)
     expect(owl).not_to have_key('nest::app::hermes::broker_git_ref')
-    expect(File.read(File.join(root, 'manifests/app/hermes.pp'))).to match(%r{\$broker_git_ref\s*=\s*'main'})
+    expect(File.read(File.join(root, 'manifests/app/hermes.pp'))).to match(%r{\$broker_git_ref\s*=\s*'origin/main'})
     # The default remains rolling; the coordinated release host is source-pinned.
     expect(File.read(File.join(root, 'manifests/app/hermes.pp'))).to match(%r{\$git_ref\s*=\s*'main'})
     expect(owl.fetch('nest::app::hermes::git_ref')).to eq('nest')
