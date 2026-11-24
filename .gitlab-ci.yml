@@ -65,6 +65,18 @@ stages:
   tags: ['owl']
   script:
     - |
+      # Run fixtures from Git objects, not mutable working files.
+      fixture_commit=$(git rev-parse --verify HEAD)
+      test "$fixture_commit" = "$CI_COMMIT_SHA" || exit 1
+      fixture_tree=$(git rev-parse --verify "$fixture_commit^{tree}")
+      fixture_dir=$(mktemp -d)
+      trap 'rm -rf -- "$fixture_dir"' EXIT
+      mkdir "$fixture_dir/source"
+      git archive --format=tar --mtime=2000-01-01T00:00:00Z "$fixture_tree" > "$fixture_dir/source.tar"
+      tar -xf "$fixture_dir/source.tar" -C "$fixture_dir/source"
+      printf 'Update fixture source: commit %s tree %s\n' "$fixture_commit" "$fixture_tree"
+      sha256sum < "$fixture_dir/source.tar"
+      cd "$fixture_dir/source"
       # Keep job and project variables out of the fixture processes.
       /usr/bin/env -i PATH=/usr/local/bin:/usr/bin:/bin HOME="$PWD" PYTHONDONTWRITEBYTECODE=1 /bin/sh -ex <<'FIXTURES'
       python3 spec/tasks/retain_update_report_test.py
