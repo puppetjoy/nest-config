@@ -4,6 +4,10 @@ class nest::service::patternkit (
   Sensitive $studio_bridge_token,
 ) {
   if defined(Class['nest::kubernetes']) {
+    $verified_image = $facts.dig('nest_patternkit_preview', 'verified_image')
+    if $verified_image and $verified_image != '' and $verified_image != lookup('runtime_image', String) {
+      fail('PatternKit staged preflight image does not match the configured runtime image')
+    }
     $oauth_proxy_script_base64 = base64('encode', file('nest/app/patternkit/oauth_proxy.py'))
     $egress_proxy_script_base64 = base64('encode', file('nest/app/patternkit/egress_proxy.py'))
     $workbench_bridge_script_base64 = base64('encode', file('nest/app/patternkit/workbench_bridge.py'))

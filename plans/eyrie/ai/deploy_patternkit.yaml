@@ -12,24 +12,47 @@ parameters:
     type: String
     default: ''
 
+  staged_pair:
+    description: 'Explicitly opt in to deploying an already staged and verified PatternKit/Atelier pair'
+    type: 'Variant[Enum[""], Pattern[/\A[0-9a-f]{40}-[0-9a-f]{40}\z/]]'
+    default: ''
+
+  staged_image:
+    description: 'Exact configured runtime image digest to verify for staged_pair'
+    type: 'Variant[Enum[""], Pattern[/\Aregistry\.eyrie\/nest\/stage1\/server@sha256:[0-9a-f]{64}\z/]]'
+    default: ''
+
   preview_pair:
     description: 'Render only: verified PatternKit and Atelier SHAs separated by a hyphen'
     type: 'Variant[Enum[""], Pattern[/\A[0-9a-f]{40}-[0-9a-f]{40}\z/]]'
     default: ''
 
 steps:
-  - description: 'Select an explicit pair for non-applying preview'
+  - description: 'Select an explicit source pair'
     eval: |-
+      if $staged_pair != '' and ($preview_pair != '' or $staged_image == '' or !$deploy) {
+        fail('staged_pair requires staged_image, deploy=true, and no preview_pair')
+      }
+      if $staged_image != '' and $staged_pair == '' {
+        fail('staged_image requires staged_pair')
+      }
       if $preview_pair != '' {
         if $render_to == '' or !$deploy {
           fail('preview_pair requires a render_to destination and deploy=true to run KubeCM in render-only mode')
         }
-        $revisions = split($preview_pair, '-')
+      }
+      if $staged_pair != '' {
+        run_plan('nest::eyrie::ai::check_patternkit_pair', {'pair' => $staged_pair, 'image' => $staged_image})
+      }
+      $pair = $staged_pair ? { '' => $preview_pair, default => $staged_pair }
+      if $pair != '' {
+        $revisions = split($pair, '-')
         add_facts(get_target('localhost'), {'nest_patternkit_preview' => {
           'mode' => 'paired',
-          'root' => "/var/lib/patternkit/source-pairs/${preview_pair}",
+          'root' => "/var/lib/patternkit/source-pairs/${pair}",
           'core' => $revisions[0],
           'atelier' => $revisions[1],
+          'verified_image' => $staged_image,
         }})
       }
 

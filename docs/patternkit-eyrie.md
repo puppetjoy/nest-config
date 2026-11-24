@@ -130,6 +130,14 @@ Git roots and runs the compatibility verifier with read-only source mounts
 and no network. A missing or rejected pair leaves the existing deployment
 untouched.
 
+To verify the deploy path without applying it, pass `staged_pair` and
+`staged_image` to `deploy_patternkit` with `render_to` set. Unlike `preview_pair`,
+this runs the Owl host preflight. Both the preflight and the catalog image
+match must pass. Omitting `render_to` on this path requests a live rollout;
+use it only for a scoped Studio rollout. Omitting both pair arguments keeps
+the original pinned deployment path available for rollback. Do not run the
+authoring-checkout smoke CronJob against a staged-pair deployment.
+
 ### Current pinned deployment
 
 From the Nest config project root:
