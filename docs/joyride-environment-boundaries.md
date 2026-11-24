@@ -21,18 +21,36 @@ production service overrides and the installed workloads.
    candidate with installed production for migrations, runtime compatibility and
    any changes to payment, mail, credentials or data access before seeking
    approval. A green readiness endpoint alone does not qualify those changes.
-2. Obtain explicit approval for the exact production artifact. Change the app
-   digest in `data/kubernetes/service/joyride.yaml` through an ordinary Nest MR.
-   Render the existing production plan and check the resulting diff before apply.
+2. Prepare an ordinary Nest MR changing the app digest in
+   `data/kubernetes/service/joyride.yaml`. Render the existing production plan
+   and check the resulting diff. Draft CI is preparation; obtain explicit
+   approval for the exact artifact before merging and deploying it.
    Check only the intended production resources change and that database, PVC,
    credentials, content controls and payment configuration stay production-local.
    Keep rendered manifests private. The TEST delivery API is not a production
    deployment or rollback route.
-3. From the accepted Nest checkout, use the production plan. Verify the expected
-   digest on all affected Ready workloads, production HTTPS readiness, and TEST
-   continuity. Roll back via the previous reviewed digest and the same plan when
-   schema compatibility permits; do not assume an image revert reverses a
-   migration. Never restore TEST data into production.
+3. From the accepted Nest checkout, use the production plan. Allow the Helm
+   wait to finish before imposing a client deadline. Verify a deployed Helm
+   revision, the expected digest on all affected Ready workloads, production
+   HTTPS readiness, and TEST continuity. To revert the app, restore the previous
+   reviewed digest and use the same plan when schema compatibility permits; an
+   image revert does not reverse a migration. Never restore TEST data into production.
+
+### Reconcile an interrupted upgrade
+
+If the client times out, do not replay Bolt. Check whether the original
+operation is still running, then inspect `helm -n joyride history joyride`,
+workload convergence, and both readiness endpoints. A Ready workload does not
+turn a `pending-upgrade` Helm revision into a deployed release.
+
+If the original operation has ended, the pending revision matches the approved
+render, all affected workloads have converged on its digest, and the revision
+has no hooks, record that same manifest as deployed with Helm's native recovery:
+`helm -n joyride rollback joyride <pending-revision> --no-hooks --wait`.
+Verify the new deployed revision has the same manifest and that both environments
+are still healthy. Keep manifest comparisons private. If any condition fails,
+diagnose it before making another change; do not use this recovery to deploy a
+different image or change data, credentials, or access policy.
 
 ## Keep environment and approval boundaries
 
