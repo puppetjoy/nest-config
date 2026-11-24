@@ -1,7 +1,7 @@
 # Production service resources; TEST has independent service and namespace scope
 # Private proxy budget covers 16 buffered 192 MiB uploads plus process overhead
 # Cached member display repair; TEST-qualified main pipeline 13456.
-joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:f7a6332d5e8539c6b97e5741c433c743ea9fe0f57efafc8d1993faca819dc563
+joyride_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:e91fab1b01b5eef608f92462c6f85abdb6efd7cac997e998a08e19536adacbb6
 joyride_operations_image: registry.gitlab.joyfullee.me/joy/joyride/app@sha256:de6190b0f3c81c1133a0f25ac9119d2f3e8124788b4e9e14c579bf452312f263
 resources:
   config:
