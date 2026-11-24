@@ -10,9 +10,8 @@ This is recurring rolling-ref maintenance, not a one-host migration script.
 The helper fetches and resolves the desired remote branch on each run. Normal
 rolling updates must fast-forward and leave the checkout attached to that branch.
 An explicit `git_commit` remains a detached, ancestry-checked rollback/pin control;
-legacy tag refs remain detached. Main and owl retain their existing rolling `nest`
-configuration. No core, broker, extracted-plugin, Firefox or Quill policy pins or
-payloads are changed by this repair.
+legacy tag refs remain detached. Owl normally follows core `nest` and Broker
+`origin/main`; app releases do not require a new Nest Config pin.
 
 Only the eleven tool paths explicitly owned by Puppet may be temporarily
 uncovered. The helper records exact pre-transition bytes, mode, ownership,
@@ -36,7 +35,8 @@ process-interruption recovery, not a filesystem/power-loss recovery guarantee.
 
 ## Isolated validation
 
-Run the standard source and focused catalog checks:
+Use the owning repository's focused checks and ordinary MR CI. When changing
+this installer, choose only the local checks relevant to the delta:
 
     pdk validate
     pdk test unit --tests=spec/classes/nest_app_hermes_spec.rb,spec/files/hermes_pm_checkpoint_spec.rb
@@ -64,7 +64,32 @@ at each endpoint. The object source is read only; all checkouts and fetches are
 inside the disposable fixture root. This validates Git source convergence, not
 an actual host Puppet apply, PM installation or live agent behavior.
 
+## Routine Owl delivery
+
+Merge the app MR after its relevant CI, then run the existing
+`bolt plan run nest::puppet::run targets=owl environment=main` when activation
+is intended. A merge alone is not a restart instruction. Verify the compiler
+revision if Nest Config itself changed; an app-only release should not need a
+new config MR or compiler publication. Verify the installed checkout and stamp,
+then smoke-check the changed behavior from the actual consumer.
+
+An installer update can refresh multiple profile gateways even if a Puppet
+noop shows only checkout and installer operations: the installer emits refresh
+events only during the real run. Check affected gateway/work activity before
+apply and use an independent user-manager execution unit if the invoking
+session shares a gateway that can restart. Keep any required interruption
+authority. If the client loses contact, read back the original Puppet report,
+checkout/stamps, and gateway state before deciding whether anything needs
+another apply. Never repeat an uncertain transaction just to get a clean exit.
+
+For routine rolled-back changes, revert the app MR and rerun the same managed
+apply and smoke check. An exceptional historical exact pin is not the routine
+rollback path.
+
 ## Original rollout handoff
+
+The rest of this section is historical. Its exact-pin migration and review
+scope are not prerequisites for an ordinary rolling release.
 
 Original rollout ^2206 owns merge, deployment, apply, rollback environment
 selection, consumer drain/restart, timer decisions and all live verification.
