@@ -227,6 +227,8 @@ class nest::app::hermes::install {
     ],
   }
 
+  # Select origin/main rather than the potentially stale local main when
+  # moving an existing detached checkout off a commit pin.
   vcsrepo { $broker_source_dir:
     ensure   => latest,
     provider => git,
