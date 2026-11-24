@@ -8,6 +8,20 @@ RSpec.describe 'Pattern Kit Eyrie deployment assets' do
   let(:app) { YAML.safe_load_file(app_path, aliases: true) }
   let(:resources) { app.fetch('resources') }
 
+  it 'checks paired Atelier compatibility before Studio starts' do
+    studio = resources.fetch('studio').dig('spec', 'template', 'spec')
+    verifier = studio.fetch('initContainers').find { |container| container.fetch('name') == 'verify-source-revisions' }
+    command = verifier.fetch('command').join(' ')
+
+    expect(command).to include('scripts/verify_patternkit_compatibility.py')
+    expect(command).to include('--patternkit-root "$PATTERNKIT_PATH"')
+    expect(command).to include('--revision "$PATTERNKIT_REVISION"')
+    source_mounts = verifier.fetch('volumeMounts').select do |mount|
+      ['patternkit-source', 'atelier-source'].include?(mount.fetch('name'))
+    end
+    expect(source_mounts.all? { |mount| mount.fetch('readOnly') }).to be(true)
+  end
+
   it 'keeps Studio and the workbench on explicit, isolated state boundaries' do
     studio = resources.fetch('studio').dig('spec', 'template', 'spec')
     workbench = resources.fetch('workbench').dig('spec', 'template', 'spec')

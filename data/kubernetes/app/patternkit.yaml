@@ -193,6 +193,7 @@ resources:
                   test "$(git -C "$ATELIER_PATH" rev-parse HEAD)" = "$ATELIER_REVISION"
                   test ! -e "$PATTERNKIT_PATH/.git-credentials"
                   test ! -e "$ATELIER_PATH/.git-credentials"
+                  python3 -B "$ATELIER_PATH/scripts/verify_patternkit_compatibility.py" --patternkit-root "$PATTERNKIT_PATH" --revision "$PATTERNKIT_REVISION"
               env:
                 - name: PATTERNKIT_PATH
                   value: "%{lookup('patternkit_path')}"
