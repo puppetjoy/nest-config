@@ -120,6 +120,7 @@ stages:
     - 'python3 spec/files/nest_release_graph_test.py'
     - 'python3 spec/files/nest_nested_dag_fixture_test.py'
     - 'python3 spec/files/nest_executor_inputs_test.py'
+    - 'python3 spec/files/ci_scope_policy_test.py'
 
 'Hermes install fixtures':
   extends: .all-branch-ci
@@ -139,6 +140,23 @@ stages:
 
 'Joyride private access':
   extends: .all-branch-ci
+  rules:
+    - if: '$NEST_DAG_FIXTURE =~ /[\s\S]/'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_OPEN_MERGE_REQUESTS'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: &joyride_inputs
+        - data/kubernetes/app/joyride/**/*
+        - data/kubernetes/app/joyride.yaml
+        - data/kubernetes/service/joyride.yaml
+        - files/app/joyride/**/*
+        - manifests/service/joyride.pp
+        - spec/app/joyride/**/*
+    - if: '$CI_COMMIT_BRANCH'
+      changes: *joyride_inputs
+    - if: '$CI_COMMIT_TAG'
+      changes: *joyride_inputs
   image: 'registry.gitlab.joyfullee.me/nest/tools/agent@sha256:820cc8a130309a07db90685958bb9cac87d8376ab63f2d45457e87431ad93e34'
   stage: 'Test'
   tags: ['owl']
@@ -163,6 +181,25 @@ stages:
 
 'Secure browser fixtures':
   extends: .all-branch-ci
+  rules:
+    - if: '$NEST_DAG_FIXTURE =~ /[\s\S]/'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_OPEN_MERGE_REQUESTS'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: &firefox_inputs
+        - data/kubernetes/app/firefox.yaml
+        - files/firefox/**/*
+        - manifests/gui/firefox.pp
+        - manifests/service/firefox.pp
+        - manifests/tool/firefox.pp
+        - spec/app/hermes/**/*firefox*
+        - spec/app/hermes/**/*secure_browser*
+        - spec/app/hermes/test_firefox_window_viewer.js
+    - if: '$CI_COMMIT_BRANCH'
+      changes: *firefox_inputs
+    - if: '$CI_COMMIT_TAG'
+      changes: *firefox_inputs
   image: 'mirror.gcr.io/library/node@sha256:14078204b6bb268c107ceff6d3c43f45a888105e5c2b18b14c32b3409d93a1b0'
   stage: 'Test'
   variables:
@@ -183,6 +220,17 @@ stages:
 
 'Secure browser window fixtures':
   extends: .all-branch-ci
+  rules:
+    - if: '$NEST_DAG_FIXTURE =~ /[\s\S]/'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_OPEN_MERGE_REQUESTS'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: *firefox_inputs
+    - if: '$CI_COMMIT_BRANCH'
+      changes: *firefox_inputs
+    - if: '$CI_COMMIT_TAG'
+      changes: *firefox_inputs
   image: 'registry.gitlab.joyfullee.me/nest/tools/agent@sha256:820cc8a130309a07db90685958bb9cac87d8376ab63f2d45457e87431ad93e34'
   stage: 'Test'
   tags: ['owl']
@@ -196,6 +244,17 @@ stages:
 
 'Firefox Native authority fixtures':
   extends: .all-branch-ci
+  rules:
+    - if: '$NEST_DAG_FIXTURE =~ /[\s\S]/'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_OPEN_MERGE_REQUESTS'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: *firefox_inputs
+    - if: '$CI_COMMIT_BRANCH'
+      changes: *firefox_inputs
+    - if: '$CI_COMMIT_TAG'
+      changes: *firefox_inputs
   image: 'registry.gitlab.joyfullee.me/nest/tools/agent@sha256:820cc8a130309a07db90685958bb9cac87d8376ab63f2d45457e87431ad93e34'
   stage: 'Test'
   tags: ['owl']
@@ -272,6 +331,13 @@ stages:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $BUILD'
       when: never
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      changes: &executor_inputs
+        - Containerfile
+        - bin/ci-bolt-module-install
+        - bin/build
+        - files/build/**/*
+        - scripts/nest-executor-bootstrap.py
+        - scripts/nest-executor-inputs.py
 
 'Build haswell':
   extends: .template
@@ -294,9 +360,6 @@ stages:
 'Deploy environment':
   stage: 'Deploy'
   resource_group: 'puppet-code-deployment'
-  needs:
-    - job: 'Deploy image'
-      artifacts: true
   tags: ['r10k']
   variables:
     GIT_SSH_COMMAND: 'ssh -o HostName=ssh.gitlab.eyrie. -o HostKeyAlias=gitlab.joyfullee.me'
@@ -349,6 +412,7 @@ stages:
       when: never
     - if: '$EXECUTOR_ONLY == "true"'
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      changes: *executor_inputs
 
 'Check executor bootstrap selection':
   stage: 'Test'
