@@ -22,6 +22,48 @@ storage_class: owl-crypt
 session_storage_size: 4Gi
 workbench_storage_size: 12Gi
 
+# Keep the Studio pod mount lists replaceable as a unit, without changing the default.
+patternkit_verify_mounts:
+  - name: patternkit-source
+    mountPath: "%{lookup('patternkit_path')}"
+    readOnly: true
+  - name: atelier-source
+    mountPath: "%{lookup('atelier_path')}"
+    readOnly: true
+patternkit_studio_mounts:
+  - name: patternkit-source
+    mountPath: "%{lookup('patternkit_path')}"
+  - name: atelier-source
+    mountPath: "%{lookup('atelier_path')}"
+  - name: sessions
+    mountPath: /var/lib/patternkit/sessions
+patternkit_proxy_mounts:
+  - name: scripts
+    mountPath: /opt/patternkit
+    readOnly: true
+  - name: patternkit-source
+    mountPath: "%{lookup('patternkit_path')}"
+    readOnly: true
+  - name: atelier-source
+    mountPath: "%{lookup('atelier_path')}"
+    readOnly: true
+patternkit_studio_volumes:
+  - name: patternkit-source
+    hostPath:
+      path: "%{lookup('patternkit_path')}"
+      type: Directory
+  - name: atelier-source
+    hostPath:
+      path: "%{lookup('atelier_path')}"
+      type: Directory
+  - name: sessions
+    persistentVolumeClaim:
+      claimName: "%{nest::kubernetes::service}-sessions"
+  - name: scripts
+    configMap:
+      name: "%{nest::kubernetes::service}-scripts"
+      defaultMode: 0555
+
 .affinity: &affinity
   nodeAffinity:
     requiredDuringSchedulingIgnoredDuringExecution:
@@ -203,13 +245,7 @@ resources:
                   value: "%{lookup('patternkit_revision')}"
                 - name: ATELIER_REVISION
                   value: "%{lookup('atelier_revision')}"
-              volumeMounts:
-                - name: patternkit-source
-                  mountPath: "%{lookup('patternkit_path')}"
-                  readOnly: true
-                - name: atelier-source
-                  mountPath: "%{lookup('atelier_path')}"
-                  readOnly: true
+              volumeMounts: "%{alias('patternkit_verify_mounts')}"
           containers:
             - name: studio
               image: "%{lookup('runtime_image')}"
@@ -260,13 +296,7 @@ resources:
                 limits:
                   cpu: '4'
                   memory: 4Gi
-              volumeMounts:
-                - name: patternkit-source
-                  mountPath: "%{lookup('patternkit_path')}"
-                - name: atelier-source
-                  mountPath: "%{lookup('atelier_path')}"
-                - name: sessions
-                  mountPath: /var/lib/patternkit/sessions
+              volumeMounts: "%{alias('patternkit_studio_mounts')}"
             - name: oauth-proxy
               image: "%{lookup('runtime_image')}"
               imagePullPolicy: IfNotPresent
@@ -323,32 +353,8 @@ resources:
                 limits:
                   cpu: 250m
                   memory: 192Mi
-              volumeMounts:
-                - name: scripts
-                  mountPath: /opt/patternkit
-                  readOnly: true
-                - name: patternkit-source
-                  mountPath: "%{lookup('patternkit_path')}"
-                  readOnly: true
-                - name: atelier-source
-                  mountPath: "%{lookup('atelier_path')}"
-                  readOnly: true
-          volumes:
-            - name: patternkit-source
-              hostPath:
-                path: "%{lookup('patternkit_path')}"
-                type: Directory
-            - name: atelier-source
-              hostPath:
-                path: "%{lookup('atelier_path')}"
-                type: Directory
-            - name: sessions
-              persistentVolumeClaim:
-                claimName: "%{nest::kubernetes::service}-sessions"
-            - name: scripts
-              configMap:
-                name: "%{nest::kubernetes::service}-scripts"
-                defaultMode: 0555
+              volumeMounts: "%{alias('patternkit_proxy_mounts')}"
+          volumes: "%{alias('patternkit_studio_volumes')}"
 
   studio-service:
     apiVersion: v1
