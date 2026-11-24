@@ -6,9 +6,10 @@
   image: 'python:3.12-slim@sha256:cb33f7f771ecec2ef1225cf39b159591a040391bd73e4c01f00fdfc4c47611d2'
   tags: ['owl']
   script:
-    - 'python3 -m pip install --disable-pip-version-check PyYAML==6.0.3'
-    - 'PYTHONDONTWRITEBYTECODE=1 python3 spec/files/nest_release_dag_fixture_test.py'
-    - 'PYTHONDONTWRITEBYTECODE=1 python3 spec/files/ci_scope_policy_test.py'
+    - 'python3 -m venv .release-dag-venv'
+    - '.release-dag-venv/bin/python -m pip install --disable-pip-version-check --require-hashes -r .gitlab/ci/release-dag-requirements.txt'
+    - 'env -i PATH="$CI_PROJECT_DIR/.release-dag-venv/bin:/usr/bin:/bin" PYTHONDONTWRITEBYTECODE=1 .release-dag-venv/bin/python -I spec/files/nest_release_dag_fixture_test.py'
+    - 'env -i PATH="$CI_PROJECT_DIR/.release-dag-venv/bin:/usr/bin:/bin" PYTHONDONTWRITEBYTECODE=1 .release-dag-venv/bin/python -I spec/files/ci_scope_policy_test.py'
 
 
 'Check release DAG fixture selection':
