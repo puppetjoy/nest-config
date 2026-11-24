@@ -33,7 +33,7 @@ nest::lib::toolchains::env:
 nest::app::hermes::git_ref: 'nest'
 nest::app::hermes::git_commit: 'e54dd758762c41e35c899e98417616bb8b18ccbd'
 nest::app::hermes::pm_enabled: false
-nest::app::hermes::broker_git_ref: '605cc79f84fb35e01f967eb30ab420016b5ddb27'
+
 nest::app::hermes::auxiliary_provider: 'openai-codex'
 nest::app::hermes::auxiliary_compress_model: 'gpt-6-luna'
 nest::app::hermes::auxiliary_extract_model: 'gpt-6-luna'
