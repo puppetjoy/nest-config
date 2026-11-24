@@ -13,6 +13,10 @@ class CiScopePolicyTest(unittest.TestCase):
     def setUpClass(cls):
         cls.ci = yaml.safe_load((ROOT / '.gitlab-ci.yml').read_text())
 
+    def test_pdk_fanout_is_explicitly_bounded(self):
+        self.assertIn("PARALLEL_TEST_PROCESSORS=8 pdk test unit --parallel",
+                      self.ci['Unit Test']['script'])
+
     def test_default_executor_builds_are_limited_to_executor_inputs(self):
         expected = {'Containerfile', 'Puppetfile', 'bolt-project.yaml', 'bin/ci-bolt-module-install', 'bin/build',
                     'files/build/**/*', 'scripts/nest-executor-bootstrap.py',
