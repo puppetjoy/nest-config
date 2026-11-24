@@ -83,12 +83,44 @@ identity to another origin or to render, source, profile, or Git operations.
 
 ## Deployment and verification
 
+### Rehearse a paired source update without deploying
+
+Do not advance the two live development checkouts separately as a release
+mechanism. Use the authenticated Git remotes from Owl to clone both `main`
+branches into a fresh, private sibling staging directory. Compare both resolved
+heads with the intended GitLab revisions. Do not copy credentials, local
+changes, or private profile data from the development checkouts. In the staged
+Pattern Kit checkout, build dependencies with the distribution Python and
+`UV_PYTHON_DOWNLOADS=never uv sync --locked --no-install-project --no-dev --python /usr/bin/python3.13`.
+
+Use the exact deployed image, with networking disabled and the entire staged
+pair mounted read-only, to check both HEADs, refuse `.git-credentials` in either
+checkout, import Studio with `python -B` from the staged virtual environment, and
+run Atelier's `scripts/verify_patternkit_compatibility.py` with the staged
+Pattern Kit root and exact revision. Allow ephemeral writable `/tmp` for the
+verifier. Only after these checks pass, rename the staging directory to a new,
+concrete pair directory on the same filesystem, and repeat the checks at that
+path. Never replace an existing pair directory or a live selector in this
+rehearsal. Keep Git access on the host; there is no pod-side clone.
+
+The Studio mount configuration can be rendered with a concrete pair root. Do
+not use a mutable symlink as the hostPath: kubelet must present the same source
+pair to the verifier, Studio, and proxy when each starts. Preserve the existing
+writable `profiles/` paths in Studio, not in the proxy, and leave the existing
+session PVC and workbench untouched. This rehearsal does not enable that
+configuration. Leave the live deployment unchanged until authenticated profile
+save, reopen, and rollback are verified with disposable data. The existing
+smoke CronJob below targets the development checkouts; do not run its
+source-touch or restart steps against a paired rehearsal.
+
+### Current pinned deployment
+
 From the Nest config project root:
 
-First update owl's existing development checkouts over their authenticated host
-Git remotes. Require clean trees and use fetch plus fast-forward-only checkout;
-the pods intentionally have no Git credentials and will fail their revision init
-gate rather than update source themselves. Confirm Pattern Kit is at
+For an ordinary redeploy of the existing pins, verify both development
+checkouts without advancing them. The pods intentionally have no Git
+credentials and fail their revision init gate rather than updating source
+themselves. Confirm Pattern Kit is at
 `2717eca2ea84863d2cafb179dcc74e097b9829cd` and Atelier is at
 `986befb94bc941fcaeebdd3e35d28b96453888bd` before applying the workload.
 
