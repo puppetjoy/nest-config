@@ -15,6 +15,8 @@ patternkit_path: /home/joy/projects/patternkit
 atelier_path: /home/joy/projects/patternkit-atelier
 patternkit_revision: 2717eca2ea84863d2cafb179dcc74e097b9829cd
 atelier_revision: 986befb94bc941fcaeebdd3e35d28b96453888bd
+patternkit_studio_revision: "%{lookup('patternkit_revision')}"
+atelier_studio_revision: "%{lookup('atelier_revision')}"
 runtime_image: registry.eyrie/nest/stage1/server@sha256:7b2313387f960d0639783ba76a70c582688ee876f2f6abdf23002f889ac312e6
 firefox_image: registry.gitlab.joyfullee.me/nest/tools/firefox@sha256:8b64b477220c6d1121f8fdc45dabb3a4d0ff854bbcb9e4a53b5266807aeaa87c
 firefox_image_revision: 'bc61fa52bafc5c2b3f72604c1fbe27c109991844'
@@ -194,8 +196,8 @@ resources:
         app.kubernetes.io/name: patternkit
         app.kubernetes.io/component: studio
       annotations:
-        joyfullee.me/patternkit-revision: "%{lookup('patternkit_revision')}"
-        joyfullee.me/atelier-revision: "%{lookup('atelier_revision')}"
+        joyfullee.me/patternkit-revision: "%{lookup('patternkit_studio_revision')}"
+        joyfullee.me/atelier-revision: "%{lookup('atelier_studio_revision')}"
         joyfullee.me/authentication: gitlab-oauth-pkce
     spec:
       replicas: 1
@@ -212,8 +214,8 @@ resources:
             app.kubernetes.io/name: patternkit
             app.kubernetes.io/component: studio
           annotations:
-            joyfullee.me/patternkit-revision: "%{lookup('patternkit_revision')}"
-            joyfullee.me/atelier-revision: "%{lookup('atelier_revision')}"
+            joyfullee.me/patternkit-revision: "%{lookup('patternkit_studio_revision')}"
+            joyfullee.me/atelier-revision: "%{lookup('atelier_studio_revision')}"
             joyfullee.me/source-hot-reload: watchfiles
         spec:
           automountServiceAccountToken: false
@@ -242,9 +244,9 @@ resources:
                 - name: ATELIER_PATH
                   value: "%{lookup('atelier_path')}"
                 - name: PATTERNKIT_REVISION
-                  value: "%{lookup('patternkit_revision')}"
+                  value: "%{lookup('patternkit_studio_revision')}"
                 - name: ATELIER_REVISION
-                  value: "%{lookup('atelier_revision')}"
+                  value: "%{lookup('atelier_studio_revision')}"
               volumeMounts: "%{alias('patternkit_verify_mounts')}"
           containers:
             - name: studio
