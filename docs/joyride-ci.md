@@ -30,7 +30,24 @@ GitLab's ordinary project job/registry credentials and narrow TEST delivery
 capability remain intentional. No new credential broker or execution framework
 is required.
 
-## Managed cutover and verification
+## Routine app delivery
+
+For backend changes, the app MR runs its own checks. After merge, the
+`joy/joyride` main pipeline builds and smoke-tests the image. Use its optional
+manual `preview` job to request deployment of that build's exact digest to
+TEST. A successful submission is not a deployed release: check the terminal
+deployment receipt and TEST readiness and running image. This path does not
+require a Nest Config MR or give the app pipeline production authority.
+
+Production is deliberately separate. After the TEST checks and a deliberate
+production selection, use the existing Nest-managed production deployment. The
+current consumer still selects a source-managed app digest; do not overwrite it
+with a TEST label or allow the TEST credential into production. App image
+selection does not publish frontend content, promote a map or release record,
+change production Stripe configuration, or move production data. Use the app's
+separate supported content commands for deliberate content promotion.
+
+## Historical runner cutover and verification
 
 1. Merge reviewed source with exact-head required CI. Deploy Puppet code using
    `bolt plan run nest::puppet::deploy backend=kubernetes`.
