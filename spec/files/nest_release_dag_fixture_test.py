@@ -57,6 +57,16 @@ class ReleaseDagFixtureTest(unittest.TestCase):
                 self.assertNotIn('fixture-private-token', result.stdout + result.stderr)
                 self.assertEqual(list(Path(temp).iterdir()), [])
 
+    def test_all_branch_validation_uses_mr_pipeline_instead_of_duplicate_push(self):
+        rules = self.config['.all-branch-ci']['rules']
+        self.assertEqual(rules[1], {
+            'if': '$CI_PIPELINE_SOURCE == "push" && $CI_OPEN_MERGE_REQUESTS',
+            'when': 'never',
+        })
+        self.assertEqual(rules[2], {'if': '$CI_PIPELINE_SOURCE == "merge_request_event"'})
+        self.assertEqual(rules[3], {'if': '$CI_COMMIT_BRANCH'})
+        self.assertEqual(rules[4], {'if': '$CI_COMMIT_TAG'})
+
     def test_all_existing_jobs_suppressed_even_with_malformed_fixture(self):
         for name, job in self.config.items():
             if not isinstance(job, dict) or name in ('default',) or name.startswith('.'):
