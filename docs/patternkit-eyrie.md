@@ -121,6 +121,15 @@ on Owl; rendering neither creates nor validates that host directory. This
 preview does not make the staged pair eligible for live deployment. Keep the
 render directory private because the output contains Kubernetes Secrets.
 
+After staging the pair at that concrete path on Owl, run `bolt plan run
+nest::eyrie::ai::check_patternkit_pair pair=<patternkit-sha>-<atelier-sha>
+image=<pinned-runtime-image>` using the digest from the candidate render.
+This requires the image to be present in the invoking user's Podman store;
+it does not pull an image, stage files, or deploy Studio. It checks both clean
+Git roots and runs the compatibility verifier with read-only source mounts
+and no network. A missing or rejected pair leaves the existing deployment
+untouched.
+
 ### Current pinned deployment
 
 From the Nest config project root:
