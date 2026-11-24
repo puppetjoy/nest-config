@@ -33,7 +33,11 @@ class CiScopePolicyTest(unittest.TestCase):
         window = self.ci['Secure browser window fixtures']['rules']
         native = self.ci['Firefox Native authority fixtures']['rules']
         self.assertEqual(joyride[0], {'if': r'$NEST_DAG_FIXTURE =~ /[\s\S]/', 'when': 'never'})
-        self.assertEqual(joyride[1], {'if': '$CI_PIPELINE_SOURCE == "push" && $CI_OPEN_MERGE_REQUESTS', 'when': 'never'})
+        self.assertEqual(joyride[1], self.ci['.all-branch-ci']['rules'][1])
+        self.assertEqual(joyride[1], {
+            'if': '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH && $CI_OPEN_MERGE_REQUESTS',
+            'when': 'never',
+        })
         expected_joyride = {'data/kubernetes/app/joyride/**/*', 'data/kubernetes/app/joyride.yaml',
                             'data/kubernetes/service/joyride*.yaml', 'data/kubernetes/service/joyride/**/*',
                             'files/app/joyride/**/*', 'manifests/service/joyride.pp',

@@ -17,7 +17,7 @@ stages:
   rules:
     - if: '$NEST_DAG_FIXTURE =~ /[\s\S]/'
       when: never
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_OPEN_MERGE_REQUESTS'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
       when: never
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH'
@@ -142,7 +142,7 @@ stages:
   rules:
     - if: '$NEST_DAG_FIXTURE =~ /[\s\S]/'
       when: never
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_OPEN_MERGE_REQUESTS'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
       when: never
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes: &joyride_inputs
@@ -185,7 +185,7 @@ stages:
   rules:
     - if: '$NEST_DAG_FIXTURE =~ /[\s\S]/'
       when: never
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_OPEN_MERGE_REQUESTS'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
       when: never
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes: &firefox_inputs
@@ -228,7 +228,7 @@ stages:
   rules:
     - if: '$NEST_DAG_FIXTURE =~ /[\s\S]/'
       when: never
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_OPEN_MERGE_REQUESTS'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
       when: never
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes: *firefox_inputs
@@ -252,7 +252,7 @@ stages:
   rules:
     - if: '$NEST_DAG_FIXTURE =~ /[\s\S]/'
       when: never
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_OPEN_MERGE_REQUESTS'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
       when: never
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes: *firefox_inputs

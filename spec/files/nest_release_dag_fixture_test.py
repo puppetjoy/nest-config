@@ -60,7 +60,7 @@ class ReleaseDagFixtureTest(unittest.TestCase):
     def test_all_branch_validation_uses_mr_pipeline_instead_of_duplicate_push(self):
         rules = self.config['.all-branch-ci']['rules']
         self.assertEqual(rules[1], {
-            'if': '$CI_PIPELINE_SOURCE == "push" && $CI_OPEN_MERGE_REQUESTS',
+            'if': '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH && $CI_OPEN_MERGE_REQUESTS',
             'when': 'never',
         })
         self.assertEqual(rules[2], {'if': '$CI_PIPELINE_SOURCE == "merge_request_event"'})
