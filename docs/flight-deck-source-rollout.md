@@ -1,44 +1,50 @@
-# Exact-source Flight Deck rollout
+# Flight Deck source rollout
 
-Flight Deck's init container fetches application source into an emptyDir. A
-source-only upstream commit cannot update an already-running pod. Set
-`flight_deck_source_revision` in the instance's public service data to a full,
-lowercase 40-hex commit SHA. The deployment and pod-template annotations and init
-container environment all use that pin, so changing desired source triggers a
-normal Helm-managed rollout. The init container fetches that exact commit,
-checks it out detached, verifies HEAD equality, and records
-`/app/.flight-deck-source-revision`. Failed fetches or malformed pins fail closed.
-An empty pin retains the existing repository/ref clone behavior.
+The init container fetches application source into an emptyDir and records
+`/app/.flight-deck-source-revision`. A source merge does not update a running pod.
+DEV follows Flight Deck `main` on `agent-requests-dev`; production stays on a
+separate exact pin and uses `agent-requests`.
 
-The existing Dev, Prod and shared YAML deploy plans expose `source_revision` as
-an optional expected-revision guard. It must match the committed instance pin;
-it is deliberately not an ephemeral Hiera override. Update service data through
-the normal MR/CI workflow before deploying a new revision. Keep these public
-service pins authoritative; do not override them in private Hiera.
+## DEV: rolling source
+
+Merge the validated Flight Deck change in its owning repository. Record the
+remote `main` SHA for verification, not as a Nest Config pin. Use the existing
+DEV Bolt plan (no `source_revision`):
 
 From the Nest project root (or an isolated Nest worktree containing the accepted
 source and installed modules):
 
 ```sh
 ./bin/bolt-wrapper module install
-./bin/bolt-wrapper plan run nest::eyrie::ai::deploy_flight_deck_dev \
-  source_revision=885ca9f9f1946f0555802a304444588db2349b9d --stream
+./bin/bolt-wrapper plan run nest::eyrie::ai::deploy_flight_deck_dev --stream
 ```
 
-For a render-only check, add
-`render_to=/modules/nest/build/flight-deck-dev-ai/source-check.yaml`. The host
-TMPDIR is not necessarily visible to inventory localhost inside the Bolt
-container; use the mounted project path. `deploy=false` checks plan arguments
-and desired pin without rendering or upgrading Helm.
+An unchanged Helm template does not replace a pod. For an app-only DEV release,
+use the established targeted restart of `deployment/flight-deck-dev` in namespace
+`ai` if the Bolt deploy did not create a fresh pod. Never restart production for
+this step. Verify the Ready DEV pod, compare the revision record to the intended
+SHA, and smoke-check HTTPS and the read-only API on the DEV board. If `main`
+moved, qualify the revision actually fetched before using it for promotion.
 
-Read back the deployment template pin, ready pod, actual Git HEAD, revision
-record and the user-facing API. Do not use pod patches or manual rollout
-restarts as a substitute. Promote the same accepted source to production service
-data only after DEV validation; then run `deploy_flight_deck_prod` with its
-matching expected revision and repeat installed-source/API verification.
+## Production: deliberate promotion
 
-For requests 1859/1860, live internal_test fixtures, browser acceptance and the
-secondary-worker freshness follow-through remain with the canonical Flight
-Deck task. This Nest prerequisite initially pins the explicitly requested
-885ca9f9f1946f0555802a304444588db2349b9d in DEV only; it does not promote an
-unverified follow-up SHA or restart production.
+After DEV verification and separate promotion approval, set
+`flight_deck_source_revision` in `data/kubernetes/service/flight-deck.yaml` to
+the full lowercase SHA actually verified in DEV. Use the normal Nest Config MR
+and CI. Do not override the committed pin in private Hiera. Then run:
+
+```sh
+./bin/bolt-wrapper plan run nest::eyrie::ai::deploy_flight_deck_prod \
+  source_revision="$ACCEPTED_SHA" --stream
+```
+
+Set `ACCEPTED_SHA` to the committed pin. The parameter verifies the pin; it
+does not override it. The changed pin updates the pod template; the init container
+checks out and verifies that exact commit. Check the Ready production pod,
+template pin, runtime revision and production read-only API. Do not substitute a
+restart for changing the production pin. Roll back by restoring the previous
+verified pin and deploying through the same production plan.
+
+For render-only checks, use `render_to` with a private, mounted project `build/`
+path and verify a nonempty host-visible manifest. `deploy=false` checks the
+arguments and configured pin without rendering or upgrading Helm.
