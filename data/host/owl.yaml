@@ -473,6 +473,9 @@ nest::app::hermes::instances:
     tts_openai_base_url: 'https://api.openai.com/v1'
     model_provider: 'openai-codex'
     model_name: 'gpt-6.2-astra'
+    # Keep the same Luna wire model but use its verified maximum window so the
+    # fallback feasibility check cannot lower Astra's native compaction trigger.
+    auxiliary_compress_model: 'gpt-6-luna-900k'
     # Keep the maximum window usable, with 72000 tokens before the model bound
     # at native compaction and 32000 at the local fallback ceiling.
     compression_thresholds:

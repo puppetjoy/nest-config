@@ -2,8 +2,13 @@
 
 Talon selects canonical `gpt-6.2-sol`; Star selects canonical
 `gpt-6.2-astra`. Both use official OpenAI Codex Responses, not app-server
-threads. Talon's explicit Wizard model follows Sol. Other profiles and
-explicit Luna helper/delegation routes remain unchanged.
+threads. Talon's explicit Wizard model follows Sol. Star's fallback compressor
+uses the existing `gpt-6-luna-900k` compatibility selector, resolving Luna's
+verified 872000-token maximum instead of its 272000-token default. It still
+sends canonical `gpt-6-luna` on the wire at the existing effort. Without this
+narrow opt-in, the auxiliary feasibility check clamps the 800000 native
+threshold to 263808 and the 840000 local cap to 272000. Other auxiliary and
+delegation routes and profiles are unchanged.
 
 Hermes source MR !162 qualifies exact canonical IDs using authenticated
 `max_context_window`, isolated by account and provider route. Both publish

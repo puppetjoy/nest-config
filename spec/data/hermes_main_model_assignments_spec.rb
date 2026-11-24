@@ -32,6 +32,10 @@ RSpec.describe 'Hermes main model assignments' do
     expect(instances.fetch('talon').fetch('kanban_wizard').fetch('model').fetch('model')).to eq('gpt-6.2-sol')
   end
 
+  it 'keeps the Star fallback compressor large enough not to clamp native compaction' do
+    expect(instances.fetch('star')).to include('auxiliary_compress_model' => 'gpt-6-luna-900k')
+  end
+
   it 'moves hosted helper routes to GPT-6 Luna while leaving Beryl local' do
     expect(instances.fetch('beryl')).to include(
       'model_provider' => 'custom:llama-qwen',
