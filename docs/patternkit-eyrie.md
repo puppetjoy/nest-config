@@ -1,14 +1,16 @@
 # Pattern Kit on Eyrie
 
 `https://patternkit.eyrie` is the canonical daily Pattern Kit Studio entrypoint.
-It runs the accepted Pattern Kit and Atelier revisions from dedicated host-mounted
-development checkouts on owl, persists collaborative sessions on an `owl-crypt`
-PVC, and restarts automatically when watched source files change.
+It runs a compatible Pattern Kit and Atelier pair from a concrete, read-only
+staged directory on Owl. Studio alone mounts the existing writable profile
+directories from the authoring checkouts. Collaborative sessions remain on the
+`patternkit-sessions` PVC; the workbench is a separate deployment. Updating an
+authoring checkout does not advance the staged release.
 
 The source status bar above Studio shows each checkout's branch, abbreviated
 revision, and dirty state. The machine-readable equivalent is
 `/__patternkit/status`. The deployment refuses to start when either checkout is
-not at the source-managed compatible revision tuple.
+not at the selected compatible revision tuple.
 
 Both user-facing endpoints use the `Pattern Kit Eyrie` public GitLab OAuth/PKCE
 application. The in-pod proxy strips caller-supplied identity headers and passes
@@ -83,7 +85,7 @@ identity to another origin or to render, source, profile, or Git operations.
 
 ## Deployment and verification
 
-### Rehearse a paired source update without deploying
+### Stage and verify a paired source update
 
 Do not advance the two live development checkouts separately as a release
 mechanism. Use the authenticated Git remotes from Owl to clone both `main`
@@ -101,17 +103,14 @@ Pattern Kit root and exact revision. Allow ephemeral writable `/tmp` for the
 verifier. Only after these checks pass, rename the staging directory to a new,
 concrete pair directory on the same filesystem, and repeat the checks at that
 path. Never replace an existing pair directory or a live selector in this
-rehearsal. Keep Git access on the host; there is no pod-side clone.
+step. Keep Git access on the host; there is no pod-side clone.
 
 The Studio mount configuration can be rendered with a concrete pair root. Do
 not use a mutable symlink as the hostPath: kubelet must present the same source
 pair to the verifier, Studio, and proxy when each starts. Preserve the existing
 writable `profiles/` paths in Studio, not in the proxy, and leave the existing
-session PVC and workbench untouched. This rehearsal does not enable that
-configuration. Leave the live deployment unchanged until authenticated profile
-save, reopen, and rollback are verified with disposable data. The existing
-smoke CronJob below targets the development checkouts; do not run its
-source-touch or restart steps against a paired rehearsal.
+session PVC and workbench untouched. Staging alone does not deploy the pair.
+The authoring-checkout smoke CronJob below is not for the staged deployment.
 
 To render a reviewed pair without applying it, pass both full revisions as
 `preview_pair=<patternkit-sha>-<atelier-sha>` to `deploy_patternkit` together
@@ -138,11 +137,31 @@ use it only for a scoped Studio rollout. Omitting both pair arguments keeps
 the original pinned deployment path available for rollback. Do not run the
 authoring-checkout smoke CronJob against a staged-pair deployment.
 
-### Current pinned deployment
+### Roll out Studio or restore the authoring mounts
 
-From the Nest config project root:
+From a worktree of the published Nest Config revision, use the verified pair
+and image with the existing `deploy_patternkit` plan. First render the exact
+candidate and check it against installed Helm intent and live templates: only
+Studio should change. Once the Studio-only restart is in scope, invoke the
+same arguments without `render_to`. No Nest Config commit or compiler
+publication is needed to select a new application pair.
 
-For an ordinary redeploy of the existing pins, verify both development
+```sh
+./bin/bolt-wrapper plan run nest::eyrie::ai::deploy_patternkit \
+  "staged_pair=$pair" "staged_image=$image" --stream
+```
+
+Here `$pair` is the two verified full SHAs separated by a hyphen, and `$image`
+is the pinned runtime image from the reviewed render. For later releases,
+prefer rolling back to a previously verified staged pair with these same
+arguments rather than switching back to the authoring mounts.
+
+Verify Studio Ready, init acceptance of both revisions, the concrete mounted
+pair, internal `/api/health`, and the expected HTTPS sign-in redirect. Check
+that workbench and egress generations and profile/session mounts are unchanged.
+Studio uses Recreate; clients may need to sign in again after the restart.
+
+For rollback to the original authoring mounts, verify both development
 checkouts without advancing them. The pods intentionally have no Git
 credentials and fail their revision init gate rather than updating source
 themselves. Confirm Pattern Kit is at
@@ -150,12 +169,11 @@ themselves. Confirm Pattern Kit is at
 `986befb94bc941fcaeebdd3e35d28b96453888bd` before applying the workload.
 
 ```sh
-./bin/bolt-wrapper plan run nest::puppet::deploy --stream
 ./bin/bolt-wrapper plan run nest::eyrie::ai::deploy_patternkit --stream
 ```
 
-The suspended `patternkit-smoke-test` CronJob is the sanitized, intentionally
-disruptive post-deploy hook. It verifies unauthenticated GitLab redirects,
+The suspended `patternkit-smoke-test` CronJob is for the original authoring
+mounts only. It is intentionally disruptive. It verifies unauthenticated GitLab redirects,
 synthetic authenticated Studio and Atelier catalog access, exact revision
 parity, and the isolated workbench Kasm surface without loading or printing
 private profiles or measurements. It opens an authenticated event stream, touches
