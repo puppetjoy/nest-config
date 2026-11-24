@@ -149,9 +149,11 @@ stages:
       changes: &joyride_inputs
         - data/kubernetes/app/joyride/**/*
         - data/kubernetes/app/joyride.yaml
-        - data/kubernetes/service/joyride.yaml
+        - data/kubernetes/service/joyride*.yaml
+        - data/kubernetes/service/joyride/**/*
         - files/app/joyride/**/*
         - manifests/service/joyride.pp
+        - plans/eyrie/deploy_joyride*.yaml
         - spec/app/joyride/**/*
     - if: '$CI_COMMIT_BRANCH'
       changes: *joyride_inputs
@@ -189,7 +191,11 @@ stages:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes: &firefox_inputs
         - data/kubernetes/app/firefox.yaml
-        - files/firefox/**/*
+        - files/firefox-browser/**/*
+        - files/app/hermes/*browser*.py
+        - files/app/hermes/*firefox*.py
+        - files/app/hermes/skills/star-firefox-ui/**/*
+        - spec/app/hermes/native_authority/**/*
         - manifests/gui/firefox.pp
         - manifests/service/firefox.pp
         - manifests/tool/firefox.pp
@@ -333,6 +339,8 @@ stages:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
       changes: &executor_inputs
         - Containerfile
+        - Puppetfile
+        - bolt-project.yaml
         - bin/ci-bolt-module-install
         - bin/build
         - files/build/**/*

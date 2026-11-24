@@ -14,7 +14,7 @@ class CiScopePolicyTest(unittest.TestCase):
         cls.ci = yaml.safe_load((ROOT / '.gitlab-ci.yml').read_text())
 
     def test_default_executor_builds_are_limited_to_executor_inputs(self):
-        expected = {'Containerfile', 'bin/ci-bolt-module-install', 'bin/build',
+        expected = {'Containerfile', 'Puppetfile', 'bolt-project.yaml', 'bin/ci-bolt-module-install', 'bin/build',
                     'files/build/**/*', 'scripts/nest-executor-bootstrap.py',
                     'scripts/nest-executor-inputs.py'}
         for name in ('.template', 'Deploy image'):
@@ -31,11 +31,15 @@ class CiScopePolicyTest(unittest.TestCase):
         self.assertEqual(joyride[0], {'if': r'$NEST_DAG_FIXTURE =~ /[\s\S]/', 'when': 'never'})
         self.assertEqual(joyride[1], {'if': '$CI_PIPELINE_SOURCE == "push" && $CI_OPEN_MERGE_REQUESTS', 'when': 'never'})
         expected_joyride = {'data/kubernetes/app/joyride/**/*', 'data/kubernetes/app/joyride.yaml',
-                            'data/kubernetes/service/joyride.yaml', 'files/app/joyride/**/*',
-                            'manifests/service/joyride.pp', 'spec/app/joyride/**/*'}
+                            'data/kubernetes/service/joyride*.yaml', 'data/kubernetes/service/joyride/**/*',
+                            'files/app/joyride/**/*', 'manifests/service/joyride.pp',
+                            'plans/eyrie/deploy_joyride*.yaml', 'spec/app/joyride/**/*'}
         self.assertEqual(set(joyride[2]['changes']), expected_joyride)
         self.assertEqual(firefox[2]['changes'], window[2]['changes'])
         self.assertEqual(firefox[2]['changes'], native[2]['changes'])
+        self.assertIn('files/firefox-browser/**/*', firefox[2]['changes'])
+        self.assertIn('files/app/hermes/*browser*.py', firefox[2]['changes'])
+        self.assertIn('spec/app/hermes/native_authority/**/*', firefox[2]['changes'])
         for rules in (firefox, window, native):
             self.assertEqual(rules[0], joyride[0])
             self.assertEqual(rules[1], joyride[1])
