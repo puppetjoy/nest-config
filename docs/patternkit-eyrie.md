@@ -113,6 +113,14 @@ save, reopen, and rollback are verified with disposable data. The existing
 smoke CronJob below targets the development checkouts; do not run its
 source-touch or restart steps against a paired rehearsal.
 
+To render a reviewed pair without applying it, pass both full revisions as
+`preview_pair=<patternkit-sha>-<atelier-sha>` to `deploy_patternkit` together
+with `render_to=build/<private-dir>/patternkit.yaml`. The output expects a
+concrete directory `/var/lib/patternkit/source-pairs/<patternkit-sha>-<atelier-sha>`
+on Owl; rendering neither creates nor validates that host directory. This
+preview does not make the staged pair eligible for live deployment. Keep the
+render directory private because the output contains Kubernetes Secrets.
+
 ### Current pinned deployment
 
 From the Nest config project root:

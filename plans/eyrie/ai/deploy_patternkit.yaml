@@ -12,7 +12,27 @@ parameters:
     type: String
     default: ''
 
+  preview_pair:
+    description: 'Render only: verified PatternKit and Atelier SHAs separated by a hyphen'
+    type: 'Variant[Enum[""], Pattern[/\A[0-9a-f]{40}-[0-9a-f]{40}\z/]]'
+    default: ''
+
 steps:
+  - description: 'Select an explicit pair for non-applying preview'
+    eval: |-
+      if $preview_pair != '' {
+        if $render_to == '' or !$deploy {
+          fail('preview_pair requires a render_to destination and deploy=true to run KubeCM in render-only mode')
+        }
+        $revisions = split($preview_pair, '-')
+        add_facts(get_target('localhost'), {'nest_patternkit_preview' => {
+          'mode' => 'paired',
+          'root' => "/var/lib/patternkit/source-pairs/${preview_pair}",
+          'core' => $revisions[0],
+          'atelier' => $revisions[1],
+        }})
+      }
+
   - description: 'Deploy Pattern Kit Studio and isolated workbench'
     plan: nest::kubernetes::deploy
     parameters:

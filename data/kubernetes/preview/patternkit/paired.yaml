@@ -1,0 +1,50 @@
+---
+patternkit_studio_revision: "%{facts.nest_patternkit_preview.core}"
+atelier_studio_revision: "%{facts.nest_patternkit_preview.atelier}"
+
+patternkit_verify_mounts:
+  - &core_code
+    name: source-pair
+    mountPath: "%{lookup('patternkit_path')}"
+    subPath: patternkit
+    readOnly: true
+  - &atelier_code
+    name: source-pair
+    mountPath: "%{lookup('atelier_path')}"
+    subPath: patternkit-atelier
+    readOnly: true
+patternkit_studio_mounts:
+  - *core_code
+  - *atelier_code
+  - name: core-profiles
+    mountPath: "%{lookup('patternkit_path')}/profiles"
+  - name: atelier-profiles
+    mountPath: "%{lookup('atelier_path')}/profiles"
+  - name: sessions
+    mountPath: /var/lib/patternkit/sessions
+patternkit_proxy_mounts:
+  - name: scripts
+    mountPath: /opt/patternkit
+    readOnly: true
+  - *core_code
+  - *atelier_code
+patternkit_studio_volumes:
+  - name: source-pair
+    hostPath:
+      path: "%{facts.nest_patternkit_preview.root}"
+      type: Directory
+  - name: core-profiles
+    hostPath:
+      path: "%{lookup('patternkit_path')}/profiles"
+      type: Directory
+  - name: atelier-profiles
+    hostPath:
+      path: "%{lookup('atelier_path')}/profiles"
+      type: Directory
+  - name: sessions
+    persistentVolumeClaim:
+      claimName: "%{nest::kubernetes::service}-sessions"
+  - name: scripts
+    configMap:
+      name: "%{nest::kubernetes::service}-scripts"
+      defaultMode: 0555

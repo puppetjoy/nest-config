@@ -10,6 +10,8 @@ defaults:
 
 hierarchy:
   # Kubernetes data
+  - name: 'PatternKit paired source preview'
+    path: "kubernetes/preview/%{nest::kubernetes::app}/%{facts.nest_patternkit_preview.mode}.yaml"
   - name: 'Kubernetes Services'
     paths:
       - "private/kubernetes/service/%{nest::kubernetes::service}/%{nest::kubernetes::namespace}.yaml"
