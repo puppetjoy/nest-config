@@ -73,6 +73,10 @@ revision if Nest Config itself changed; an app-only release should not need a
 new config MR or compiler publication. Verify the installed checkout and stamp,
 then smoke-check the changed behavior from the actual consumer.
 
+Before merging to a rolling ref, check whether Owl's automatic Puppet timer
+can pick up the new revision. If that would require approval for a gateway
+interruption, obtain it before merging, not just before a manual apply.
+
 An installer update can refresh multiple profile gateways even if a Puppet
 noop shows only checkout and installer operations: the installer emits refresh
 events only during the real run. Check affected gateway/work activity before
@@ -85,6 +89,14 @@ another apply. Never repeat an uncertain transaction just to get a clean exit.
 For routine rolled-back changes, revert the app MR and rerun the same managed
 apply and smoke check. An exceptional historical exact pin is not the routine
 rollback path.
+
+For exceptional rollbacks, inspect both the published source ref and the
+compiler environment. Older `rollback_hermes_*` refs can recreate the retired
+`hermes-agent-request-moving-tickets` writer, even if the ref is not currently
+materialized on the compiler. Do not select a catalog based on its name. Use
+verified rollback source that preserves current lifecycle authority and the
+installer transition guards. Retain the stop/disable and file-removal rules
+until the older rollback paths are replaced or explicitly retired.
 
 ## Original rollout handoff
 
