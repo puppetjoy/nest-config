@@ -9,16 +9,27 @@ RSpec.describe 'Hermes main model assignments' do
   it 'assigns the requested GPT-6 main models' do
     expect(instances.fetch('talon')).to include(
       'model_provider' => 'openai-codex',
-      'model_name' => 'gpt-6.1-sol-900k',
+      'model_name' => 'gpt-6.2-sol',
     )
     expect(instances.fetch('star')).to include(
       'model_provider' => 'openai-codex',
-      'model_name' => 'gpt-6-astra',
+      'model_name' => 'gpt-6.2-astra',
     )
     expect(instances.fetch('quill')).to include(
       'model_provider' => 'copilot',
       'model_name' => 'gpt-6.1-terra',
     )
+  end
+
+  it 'preserves maximum-window native policy for both canonical Codex models' do
+    { 'talon' => 'gpt-6.2-sol', 'star' => 'gpt-6.2-astra' }.each do |profile, model|
+      expect(instances.fetch(profile)).to include(
+        'compression_thresholds' => { "openai-codex:#{model}" => 0.98 },
+        'compression_tokens' => 840_000,
+        'responses_threshold' => 800_000,
+      )
+    end
+    expect(instances.fetch('talon').fetch('kanban_wizard').fetch('model').fetch('model')).to eq('gpt-6.2-sol')
   end
 
   it 'moves hosted helper routes to GPT-6 Luna while leaving Beryl local' do
