@@ -16,9 +16,11 @@ RSpec.describe 'Pattern Kit Eyrie deployment assets' do
     expect(command).to include('scripts/verify_patternkit_compatibility.py')
     expect(command).to include('--patternkit-root "$PATTERNKIT_PATH"')
     expect(command).to include('--revision "$PATTERNKIT_REVISION"')
-    source_mounts = verifier.fetch('volumeMounts').select do |mount|
+    expect(verifier.fetch('volumeMounts')).to eq("%{alias('patternkit_verify_mounts')}")
+    source_mounts = app.fetch('patternkit_verify_mounts').select do |mount|
       ['patternkit-source', 'atelier-source'].include?(mount.fetch('name'))
     end
+    expect(source_mounts.map { |mount| mount.fetch('name') }).to contain_exactly('patternkit-source', 'atelier-source')
     expect(source_mounts.all? { |mount| mount.fetch('readOnly') }).to be(true)
   end
 
@@ -26,7 +28,8 @@ RSpec.describe 'Pattern Kit Eyrie deployment assets' do
     studio = resources.fetch('studio').dig('spec', 'template', 'spec')
     workbench = resources.fetch('workbench').dig('spec', 'template', 'spec')
 
-    expect(studio.fetch('volumes').map { |volume| volume.fetch('name') }).to include('patternkit-source', 'atelier-source', 'sessions')
+    expect(studio.fetch('volumes')).to eq("%{alias('patternkit_studio_volumes')}")
+    expect(app.fetch('patternkit_studio_volumes').map { |volume| volume.fetch('name') }).to include('patternkit-source', 'atelier-source', 'sessions')
     expect(workbench.fetch('volumes').map { |volume| volume.fetch('name') }).to include('profile')
     expect(workbench.to_s).not_to include('firefox-profile', 'browser.eyrie', 'transient-target')
     expect(resources.fetch('workbench-profile').dig('metadata', 'labels', 'joyfullee.me/isolation-boundary')).to eq('dedicated-profile')
