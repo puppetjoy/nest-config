@@ -8,6 +8,7 @@
   script:
     - 'python3 -m pip install --disable-pip-version-check PyYAML==6.0.3'
     - 'PYTHONDONTWRITEBYTECODE=1 python3 spec/files/nest_release_dag_fixture_test.py'
+    - 'PYTHONDONTWRITEBYTECODE=1 python3 spec/files/ci_scope_policy_test.py'
 
 
 'Check release DAG fixture selection':

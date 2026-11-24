@@ -120,7 +120,6 @@ stages:
     - 'python3 spec/files/nest_release_graph_test.py'
     - 'python3 spec/files/nest_nested_dag_fixture_test.py'
     - 'python3 spec/files/nest_executor_inputs_test.py'
-    - 'python3 spec/files/ci_scope_policy_test.py'
 
 'Hermes install fixtures':
   extends: .all-branch-ci

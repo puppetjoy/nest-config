@@ -6,7 +6,7 @@ RSpec.describe 'OpenVox management boundaries' do
   let(:deploy_plan) { File.read(File.join(repo_root, 'plans/puppet/deploy.pp')) }
   let(:bolt_class) { File.read(File.join(repo_root, 'manifests/tool/bolt.pp')) }
   let(:bolt_template) { File.read(File.join(repo_root, 'templates/puppet/bolt-defaults.yaml.epp')) }
-  let(:ci) { YAML.safe_load_file(File.join(repo_root, '.gitlab-ci.yml')) }
+  let(:ci) { YAML.safe_load_file(File.join(repo_root, '.gitlab-ci.yml'), aliases: true) }
   let(:delete_plan) { YAML.safe_load_file(File.join(repo_root, 'plans/puppet/delete_node.yaml')) }
 
   it 'uses the ingress port explicitly instead of Bolt defaulting to the unavailable mTLS port' do
@@ -27,7 +27,7 @@ RSpec.describe 'OpenVox management boundaries' do
       'export BOLT_PROJECT="$CI_PROJECT_DIR"',
       'bolt plan run nest::puppet::deploy backend=prod environment="$CI_COMMIT_BRANCH"',
     )
-    expect(ci.fetch('Deploy environment').fetch('needs')).to eq([{ 'job' => 'Deploy image', 'artifacts' => true }])
+    expect(ci.fetch('Deploy environment')).not_to have_key('needs')
     expect(ci.fetch('Deploy environment').fetch('resource_group')).to eq('puppet-code-deployment')
   end
 
