@@ -67,10 +67,15 @@ stages:
     - |
       # Run fixtures from Git objects, not mutable working files.
       fixture_git() {
-        /usr/bin/env -i PATH=/usr/local/bin:/usr/bin:/bin git "$@"
+        /usr/bin/env -i PATH=/usr/local/bin:/usr/bin:/bin GIT_ATTR_NOSYSTEM=1 git -c core.attributesFile=/dev/null "$@"
       }
       fixture_commit=$(fixture_git rev-parse --verify HEAD)
       test "$fixture_commit" = "$CI_COMMIT_SHA" || exit 1
+      fixture_attributes=$(fixture_git rev-parse --git-path info/attributes)
+      if [ -s "$fixture_attributes" ]; then
+        printf '%s\n' 'Update fixtures refuse repository-local archive attributes' >&2
+        exit 1
+      fi
       fixture_tree=$(fixture_git rev-parse --verify "$fixture_commit^{tree}")
       fixture_dir=$(mktemp -d)
       trap 'rm -rf -- "$fixture_dir"' EXIT
