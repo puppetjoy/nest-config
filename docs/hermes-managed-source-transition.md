@@ -77,6 +77,20 @@ Before merging to a rolling ref, check whether Owl's automatic Puppet timer
 can pick up the new revision. If that would require approval for a gateway
 interruption, obtain it before merging, not just before a manual apply.
 
+When several approved Broker MRs are shipping as one batch, wait for the
+successful pipeline on the final integrated `main` commit before applying.
+GitLab may auto-cancel superseded intermediate pipelines; that is not a pass
+for those commits. If the timer could run before final CI and the approved
+scope allows holding it, record its original state, stop only the timer, and
+verify neither the timer nor its service has a queued job. Restore and verify
+the original timer state after convergence.
+
+For an authorized Broker-only update on Owl, scope the existing plan with
+`tags='["hermes_agent_request_broker_runtime"]'`. Check drift first with
+`noop=true`. Verify the installed Broker checkout and stamp, fresh managed
+imports, and the four gateway PIDs. The scoped apply can install Broker without
+refreshing the gateways; do not add a restart if the change does not need one.
+
 An installer update can refresh multiple profile gateways even if a Puppet
 noop shows only checkout and installer operations: the installer emits refresh
 events only during the real run. Check affected gateway/work activity before
