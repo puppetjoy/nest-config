@@ -173,6 +173,8 @@ stages:
     - &skip_explicit_release_graph
       if: '($CI_PIPELINE_SOURCE == "api" || $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "trigger") && ($RELEASE_GRAPH == "true" || $RELEASE_GRAPH == "verify-inputs") && $RELEASE_GRAPH_FILE && $CI_COMMIT_TAG == null'
       when: never
+    - if: *runner_smoke_selection
+      when: never
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes: &joyride_inputs
         - data/kubernetes/app/joyride/**/*
@@ -218,6 +220,8 @@ stages:
       when: never
     - *skip_explicit_release_inputs
     - *skip_explicit_release_graph
+    - if: *runner_smoke_selection
+      when: never
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes: &firefox_inputs
         - data/kubernetes/app/firefox.yaml
@@ -263,6 +267,8 @@ stages:
       when: never
     - *skip_explicit_release_inputs
     - *skip_explicit_release_graph
+    - if: *runner_smoke_selection
+      when: never
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes: *firefox_inputs
     - if: '$CI_COMMIT_BRANCH'
@@ -292,6 +298,8 @@ stages:
       when: never
     - *skip_explicit_release_inputs
     - *skip_explicit_release_graph
+    - if: *runner_smoke_selection
+      when: never
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes: *firefox_inputs
     - if: '$CI_COMMIT_BRANCH'

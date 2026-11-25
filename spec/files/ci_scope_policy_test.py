@@ -43,6 +43,11 @@ class CiScopePolicyTest(unittest.TestCase):
         guard = {'if': condition, 'when': 'never'}
         for name in ('.template', 'Deploy image', 'Deploy environment'):
             self.assertEqual(self.ci[name]['rules'][1], guard, name)
+        for name in ('Joyride private access', 'Secure browser fixtures',
+                     'Secure browser window fixtures', 'Firefox Native authority fixtures'):
+            rules = self.ci[name]['rules']
+            self.assertIn(guard, rules, name)
+            self.assertLess(rules.index(guard), next(i for i, rule in enumerate(rules) if 'changes' in rule), name)
 
     def test_app_lanes_only_run_for_owned_paths_and_skip_duplicate_pushes(self):
         joyride = self.ci['Joyride private access']['rules']
@@ -59,12 +64,12 @@ class CiScopePolicyTest(unittest.TestCase):
                             'data/kubernetes/service/joyride*.yaml', 'data/kubernetes/service/joyride/**/*',
                             'files/app/joyride/**/*', 'manifests/service/joyride.pp',
                             'plans/eyrie/deploy_joyride*.yaml', 'spec/app/joyride/**/*'}
-        self.assertEqual(set(joyride[4]['changes']), expected_joyride)
-        self.assertEqual(firefox[4]['changes'], window[4]['changes'])
-        self.assertEqual(firefox[4]['changes'], native[4]['changes'])
-        self.assertIn('files/firefox-browser/**/*', firefox[4]['changes'])
-        self.assertIn('files/app/hermes/*browser*.py', firefox[4]['changes'])
-        self.assertIn('spec/app/hermes/native_authority/**/*', firefox[4]['changes'])
+        self.assertEqual(set(joyride[5]['changes']), expected_joyride)
+        self.assertEqual(firefox[5]['changes'], window[5]['changes'])
+        self.assertEqual(firefox[5]['changes'], native[5]['changes'])
+        self.assertIn('files/firefox-browser/**/*', firefox[5]['changes'])
+        self.assertIn('files/app/hermes/*browser*.py', firefox[5]['changes'])
+        self.assertIn('spec/app/hermes/native_authority/**/*', firefox[5]['changes'])
         for rules in (firefox, window, native):
             self.assertEqual(rules[0], joyride[0])
             self.assertEqual(rules[1], joyride[1])
@@ -84,10 +89,10 @@ class CiScopePolicyTest(unittest.TestCase):
                      'Secure browser window fixtures', 'Firefox Native authority fixtures'):
             rules = self.ci[name]['rules']
             self.assertEqual(rules[2], guard, name)
-            self.assertEqual(rules[4]['if'], '$CI_PIPELINE_SOURCE == "merge_request_event"', name)
-            self.assertEqual(rules[5]['if'], '$CI_COMMIT_BRANCH', name)
-            self.assertEqual(rules[6]['if'], '$CI_COMMIT_TAG', name)
-            self.assertTrue(all(rule['changes'] == rules[4]['changes'] for rule in rules[4:7]), name)
+            self.assertEqual(rules[5]['if'], '$CI_PIPELINE_SOURCE == "merge_request_event"', name)
+            self.assertEqual(rules[6]['if'], '$CI_COMMIT_BRANCH', name)
+            self.assertEqual(rules[7]['if'], '$CI_COMMIT_TAG', name)
+            self.assertTrue(all(rule['changes'] == rules[5]['changes'] for rule in rules[5:8]), name)
 
     def test_explicit_build_and_executor_modes_remain_admitted(self):
         rules = self.ci['.template']['rules']
