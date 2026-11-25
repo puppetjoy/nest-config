@@ -54,8 +54,8 @@ Run the generic regression script with Python and Node installed:
 
     PYTHONDONTWRITEBYTECODE=1 python3 spec/app/hermes/test_secure_browser_general_hardening.py
 
-The RSpec wrapper `spec/files/secure_browser_general_hardening_spec.rb` runs these
-regressions in the normal unit-test CI lane. Existing relevant script suites:
+The scoped GitLab `Secure browser fixtures` job runs this Python script directly;
+the default PDK unit suite does not run it. Existing relevant script suites:
 
     SECURE_BROWSER_CONTROL_MODE=firefox-ui-v1 python3 spec/app/hermes/test_secure_browser_firefox_ui.py
     python3 spec/app/hermes/test_firefox_ui_bridge.py
