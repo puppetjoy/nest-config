@@ -47,33 +47,14 @@ selection does not publish frontend content, promote a map or release record,
 change production Stripe configuration, or move production data. Use the app's
 separate supported content commands for deliberate content promotion.
 
-## Historical runner cutover and verification
+## Shared runner maintenance
 
-1. Merge reviewed source with exact-head required CI. Deploy Puppet code using
-   `bolt plan run nest::puppet::deploy backend=kubernetes`.
-2. The existing registration helper reconciles the entire shared manager when
-   registration scripts change. Pause admission on its existing registrations,
-   record previous pause states, and let current jobs finish. Do not kill builds
-   or reset the manager while jobs are running. Pause/drain runner 127 as well.
-3. Stop the drained obsolete manager before activating the ordinary instance;
-   reuse the existing authentication identity, never delete runner 127 itself.
-   Apply with inventory-backed `nest::puppet::run` and verify the shared manager's
-   registrations and exact mounts/environment names without displaying tokens.
-4. Restore previous admission states promptly. Verify check, both architecture
-   images and registry manifest digest, PostgreSQL smoke and terminal TEST preview
-   on runner 127 under the shared manager's system identity. Verify served TEST
-   source/image/result, not just a successful deploy-job HTTP submission.
-5. After successful acceptance, remove the obsolete stopped manager container,
-   engine/unit/drop-ins, account/group, home/storage/runtime/socket and subordinate
-   mappings. Remove the obsolete private credential scope only after confirming
-   no remaining consumer; preserve the host-scoped credential for runner 127.
-6. Verify installed absence and managed convergence. Keep ordinary Podman, QEMU,
-   shared runner state, the operator's existing subordinate range and application
-   data/PVCs, artifacts and rollback images. None is dedicated obsolete scaffolding.
+Registration script changes can reconcile the entire shared manager. For such
+maintenance, record the affected registrations' pause states, pause admission,
+and let existing jobs finish before applying Puppet. Restore the previous pause
+states and verify runner 127 and the affected registrations. Routine Joyride app
+delivery does not require touching the runner service.
 
-Source deletion alone does not remove installed units, accounts or storage.
-One-host retirement is live operational cleanup, not a permanent Puppet migration
-framework. If activation fails before acceptance, keep the drained old state for
-bounded diagnosis; do not mark removal complete. After verified retirement do not
-restore the special engine or public informational site as a hidden prerequisite.
-The withdrawn signing/custody/supervisor system remains retired.
+The dedicated manager and signing/custody/supervisor path are retired. The
+[original cutover record](https://gitlab.joyfullee.me/nest/config/-/blob/463d1703ea2feb1d7b172a68ee18d4eb2fd10232/docs/joyride-ci.md)
+is historical evidence, not a procedure to replay.
