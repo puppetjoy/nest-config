@@ -7,9 +7,14 @@ separate exact pin and uses `agent-requests`.
 
 ## DEV: rolling source
 
-Merge the validated Flight Deck change in its owning repository. Record the
-remote `main` SHA for verification, not as a Nest Config pin. Use the existing
-DEV Bolt plan (no `source_revision`):
+Use an ordinary MR in the Flight Deck repository. The existing validators run
+in the MR and on resulting `main`; the branch pipeline is redundant once an MR
+is open. Compare the serving revision with the accepted `main` before deciding
+whether to refresh DEV. If only CI configuration changed, leave the healthy
+pod running; do not refresh DEV or promote production just to change a SHA.
+
+For a runtime change, record the accepted `main` SHA for verification, not as a
+Nest Config pin. Use the existing DEV Bolt plan (no `source_revision`):
 
 From the Nest project root (or an isolated Nest worktree containing the accepted
 source and installed modules):
