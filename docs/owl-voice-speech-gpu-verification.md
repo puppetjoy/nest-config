@@ -29,14 +29,33 @@ actual encoder/decoder tensor devices on every inference request.
 
 ## Managed deployment and checks
 
-From the isolated Nest project worktree:
+Voice Speech is delivered by the existing Nest Config plan: the application
+code and settings are in `data/kubernetes/app/voice-speech.yaml`, and the
+service settings are in `data/kubernetes/service/voice-speech.yaml`. A source
+merge alone does not update the running workload. Keep the ROCm image, model
+cache PVC, Owl GPU request, and Recreate strategy unless the release explicitly
+changes one of them.
+
+From the isolated Nest project worktree, render without applying:
 
 ```sh
-bolt module install
-bolt inventory show owl --detail --format json
-bolt command run 'id -un && hostname -f' --targets owl --stream
-bolt plan run nest::eyrie::ai::deploy_voice_speech render_to=/modules/nest/voice-speech-rendered.yaml
-bolt plan run nest::eyrie::ai::deploy_voice_speech
+umask 077
+mkdir -p build
+./bin/bolt-wrapper module install
+./bin/bolt-wrapper plan run nest::eyrie::ai::deploy_voice_speech \
+  render_to=/modules/nest/build/voice-speech-review.yaml
+test -s build/voice-speech-review.yaml
+```
+
+Keep the render private. Review the Deployment, GPU request, PVC and scope;
+rendering does not allocate a GPU or start a pod. Do not use `deploy=false`
+for this check, because it skips rendering.
+
+Only for an authorized deployment, use the same plan without `render_to`, then
+check readiness and run the GPU inference smoke on Owl:
+
+```sh
+./bin/bolt-wrapper plan run nest::eyrie::ai::deploy_voice_speech
 kubectl -n ai rollout status deployment/voice-speech --timeout=300s
 python3 scripts/voice-speech-gpu-check.py --output "$TMPDIR/voice-speech-after.json"
 ```
