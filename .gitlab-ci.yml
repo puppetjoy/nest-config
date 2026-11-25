@@ -269,6 +269,9 @@ stages:
       changes: *firefox_inputs
     - if: '$CI_COMMIT_TAG'
       changes: *firefox_inputs
+    - &firefox_refresh_inputs
+      if: '$CI_PIPELINE_SOURCE == "merge_request_event" || $CI_COMMIT_BRANCH || $CI_COMMIT_TAG'
+      changes: [bin/firefox-controller-refresh]
   image: 'registry.gitlab.joyfullee.me/nest/tools/agent@sha256:820cc8a130309a07db90685958bb9cac87d8376ab63f2d45457e87431ad93e34'
   stage: 'Test'
   tags: ['owl']
@@ -295,6 +298,7 @@ stages:
       changes: *firefox_inputs
     - if: '$CI_COMMIT_TAG'
       changes: *firefox_inputs
+    - *firefox_refresh_inputs
   image: 'registry.gitlab.joyfullee.me/nest/tools/agent@sha256:820cc8a130309a07db90685958bb9cac87d8376ab63f2d45457e87431ad93e34'
   stage: 'Test'
   tags: ['owl']
