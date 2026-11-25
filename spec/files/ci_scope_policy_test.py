@@ -36,6 +36,14 @@ class CiScopePolicyTest(unittest.TestCase):
             self.assertIn(request, rules, name)
             self.assertLess(rules.index(request), next(i for i, rule in enumerate(rules) if 'changes' in rule), name)
 
+    def test_runner_smoke_cannot_publish_or_build_from_an_explicit_diagnostic(self):
+        condition = ('($CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api" || '
+                     '$CI_PIPELINE_SOURCE == "trigger") && $RUNNER_SMOKE_TAG')
+        self.assertEqual(self.ci['Runner smoke']['rules'][-1], {'if': condition})
+        guard = {'if': condition, 'when': 'never'}
+        for name in ('.template', 'Deploy image', 'Deploy environment'):
+            self.assertEqual(self.ci[name]['rules'][1], guard, name)
+
     def test_app_lanes_only_run_for_owned_paths_and_skip_duplicate_pushes(self):
         joyride = self.ci['Joyride private access']['rules']
         firefox = self.ci['Secure browser fixtures']['rules']

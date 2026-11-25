@@ -32,7 +32,7 @@ stages:
   rules:
     - if: '$NEST_DAG_FIXTURE =~ /[\s\S]/'
       when: never
-    - if: '$RUNNER_SMOKE_TAG'
+    - if: &runner_smoke_selection '($CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api" || $CI_PIPELINE_SOURCE == "trigger") && $RUNNER_SMOKE_TAG'
   script:
     - 'test "$CI_RUNNER_VERSION" = "19.5.1"'
     - 'uname -m'
@@ -357,6 +357,8 @@ stages:
   rules:
     - if: '$NEST_DAG_FIXTURE =~ /[\s\S]/'
       when: never
+    - if: *runner_smoke_selection
+      when: never
     - if: '$RELEASE_GRAPH =~ /[\s\S]/ || $RELEASE_GRAPH_FILE =~ /[\s\S]/ || $RELEASE_GRAPH_NODE =~ /[\s\S]/ || $RELEASE_GRAPH_MEMBER =~ /[\s\S]/ || $RELEASE_GRAPH_INPUT_PIPELINE =~ /[\s\S]/ || $RELEASE_GRAPH_INPUT_JOB =~ /[\s\S]/ || $RELEASE_GRAPH_INPUT_SHA256 =~ /[\s\S]/ || $RELEASE_GRAPH_ROOT_PIPELINE =~ /[\s\S]/'
       when: never
     - if: '$RELEASE_INPUTS'
@@ -417,6 +419,8 @@ stages:
   rules:
     - if: '$NEST_DAG_FIXTURE =~ /[\s\S]/'
       when: never
+    - if: *runner_smoke_selection
+      when: never
     - if: '$RELEASE_GRAPH =~ /[\s\S]/ || $RELEASE_GRAPH_FILE =~ /[\s\S]/ || $RELEASE_GRAPH_NODE =~ /[\s\S]/ || $RELEASE_GRAPH_MEMBER =~ /[\s\S]/ || $RELEASE_GRAPH_INPUT_PIPELINE =~ /[\s\S]/ || $RELEASE_GRAPH_INPUT_JOB =~ /[\s\S]/ || $RELEASE_GRAPH_INPUT_SHA256 =~ /[\s\S]/ || $RELEASE_GRAPH_ROOT_PIPELINE =~ /[\s\S]/'
       when: never
     - if: '$EXECUTOR_BOOTSTRAP =~ /[\s\S]/ || $RELEASE_BOOTSTRAP_FILE =~ /[\s\S]/ || $RELEASE_BOOTSTRAP_PIPELINE =~ /[\s\S]/ || $RELEASE_BOOTSTRAP_JOB =~ /[\s\S]/ || $RELEASE_BOOTSTRAP_SHA256 =~ /[\s\S]/'
@@ -446,6 +450,8 @@ stages:
     - 'podman manifest push --all "$LOCAL_IMAGE" "registry.eyrie/${IMAGE}:latest"'
   rules:
     - if: '$NEST_DAG_FIXTURE =~ /[\s\S]/'
+      when: never
+    - if: *runner_smoke_selection
       when: never
     - if: '$RELEASE_GRAPH =~ /[\s\S]/ || $RELEASE_GRAPH_FILE =~ /[\s\S]/ || $RELEASE_GRAPH_NODE =~ /[\s\S]/ || $RELEASE_GRAPH_MEMBER =~ /[\s\S]/ || $RELEASE_GRAPH_INPUT_PIPELINE =~ /[\s\S]/ || $RELEASE_GRAPH_INPUT_JOB =~ /[\s\S]/ || $RELEASE_GRAPH_INPUT_SHA256 =~ /[\s\S]/ || $RELEASE_GRAPH_ROOT_PIPELINE =~ /[\s\S]/'
       when: never
