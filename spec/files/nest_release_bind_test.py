@@ -36,7 +36,7 @@ def result_archive(entries):
 def fake_glab(path, replies):
     """Preserve binary archive replies in real subprocess fixtures."""
     encoded = {key: base64.b64encode(value).decode() for key, value in replies.items()}
-    path.write_text('#!' + sys.executable + '\nimport base64,sys\nr=' + repr(encoded)
+    path.write_text('#!' + sys.executable + ' -S\nimport base64,sys\nr=' + repr(encoded)
                     + '\nsys.stdout.buffer.write(base64.b64decode(r[sys.argv[-1]]))\n')
     path.chmod(0o700)
 
@@ -64,6 +64,24 @@ def receipt(expected, cpu='haswell'):
 
 
 class GitLabReadDiagnosticTest(unittest.TestCase):
+    def test_fake_glab_reads_exact_binary_reply_without_site_startup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fake = root / 'glab'
+            marker = root / 'site-loaded'
+            (root / 'sitecustomize.py').write_text(
+                f'from pathlib import Path\nPath({str(marker)!r}).touch()\n')
+            fixture_path = 'projects/fixture/jobs/1/artifacts'
+            payload = bytes(range(256))
+            fake_glab(fake, {fixture_path: payload})
+            env = dict(os.environ, PYTHONPATH=str(root))
+            self.assertEqual(subprocess.check_output([str(fake), 'api', fixture_path], env=env), payload)
+            missing = subprocess.run([str(fake), 'api', 'projects/fixture/jobs/2/artifacts'],
+                                     env=env, capture_output=True)
+            self.assertNotEqual(missing.returncode, 0)
+            self.assertEqual(missing.stdout, b'')
+            self.assertFalse(marker.exists())
+
     def setUp(self):
         environment = patch.dict(os.environ, CI_JOB_TOKEN='')
         environment.start()
