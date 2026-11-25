@@ -20,7 +20,7 @@ The image recipe lives in this repository, using the existing Nest tool-image
 pattern:
 
 - `manifests/tool/camofox.pp`
-- `files/nest/tool/camofox/nest-camofox-browser.sh`
+- `files/camofox-browser/nest-camofox-browser.sh`
 - `plans/build/camofox.pp`
 - `bin/build camofox zen5 ...`
 
@@ -31,6 +31,14 @@ pods do not fetch browser binaries at startup. Refreshed builds explicitly
 remove the legacy scoped `@askjo/camofox-browser` package first, because both
 packages expose the same `camofox-browser` executable and stale refreshed images
 can otherwise keep serving the old scoped runtime.
+
+Image publication and deployment are separate. The existing tool build publishes
+the image; the singleton Deployment consumes the digest in
+`data/kubernetes/app/camofox.yaml`, not the registry's `latest` tag. For a release,
+resolve the published digest, review the scoped selector update, and use
+`nest::eyrie::ai::deploy_camofox` for the authorized deployment. A build or push
+alone does not change the running service. Keep the distinct Firefox/Kasm
+workload out of this release.
 
 The image remains authority-free: no cookies, profile state, kubeconfigs, SSH
 keys, tokens, or Joy browser data are baked into it. It includes Joy's managed
@@ -107,7 +115,20 @@ Source checks:
 
 Render checks:
 
-- render `deploy_camofox` with `deploy=false`
+- From the Nest project root, install the Bolt modules, create a private `build/`
+  directory, and render without applying:
+
+  ```sh
+  umask 077
+  mkdir -p build
+  ./bin/bolt-wrapper module install
+  ./bin/bolt-wrapper plan run nest::eyrie::ai::deploy_camofox \
+    render_to=/modules/nest/build/camofox-review.yaml
+  test -s build/camofox-review.yaml
+  ```
+
+  Keep the render private: it can contain registry credentials. Do not pass
+  `deploy=false`; that skips rendering as well as deployment.
 - confirm the rendered Deployment has one `camofox` container and no Kasm/VNC
   sidecar, display env, operator port, or persistent profile PVC
 - confirm the rendered Service exposes only port 9377
