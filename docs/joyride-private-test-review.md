@@ -1,6 +1,12 @@
-# Joyride private TEST kickstart review
+# Joyride private TEST kickstart review (historical evidence)
 
 Canonical program: ^1981 / `t_befb85e8`.
+
+The [original review](https://gitlab.joyfullee.me/nest/config/-/blob/874a0a9e16abeb2c61b96e0ff9e67509642309a0/docs/joyride-private-test-review.md)
+preserves the TEST acceptance and settings at the time. TEST and production now
+run separately; see the [current environment boundaries](joyride-environment-boundaries.md)
+for live delivery and deliberate production promotion. Do not reuse old pins,
+skipped CI, or approval records as instructions for new releases.
 
 This review describes the reduced photos-only v1 and the separately authorized
 sandbox billing phase. It is not approval to launch full membership in production.
@@ -16,7 +22,8 @@ instruction; its earlier publication approval no longer applies.
 - Frontend delivery: Luna, with Joy retaining editorial and business decisions.
 - Platform/backend, source-managed operations and reliability: Talon.
 
-Routine mail is disabled. The application is not an open public signup service;
+At this review checkpoint routine mail was disabled. The review did not
+exercise open public signup;
 synthetic login fixtures used for engineering checks do not establish mail receipt,
 member identity, payment, or human legal assent. Do not create memberships or legal
 acceptance records just to make review convenient.
@@ -122,16 +129,16 @@ The first browser harness attempt returned a generic Playwright error and cleane
 its fixture; it is not counted as passing. The rerun with Node explicitly using
 the installed system CA bundle passed both viewports without any TLS bypass.
 No local PDK/unit commands ran; required exact-source CI and actual installed
-behavior provide verification. The managed baseline pins preserve this exact
-already-tested artifact; the equal dormant production pin is not deployment.
+behavior provide verification. The review-era pins identified the tested artifact. At that point the matching
+production pin was not a deployment receipt.
 
 ## Honest limitations and closed authority gates
 
 - This is private TEST, not a full-membership production launch or production
-  reliability signoff. Full production configuration is dormant/guarded; live
-  production credentials, private administration, protection, migration and actual
-  approved same-artifact release/rollback require separate implementation and
-  explicit activation authorization. Existing public information stays unchanged.
+  reliability signoff. The TEST review did not exercise production credentials,
+  private administration, migrations, release or rollback. Today's production
+  app deployment does not by itself authorize membership launch, payments, or
+  content publication.
 - No live Stripe payment, production webhook-delivery proof, routine email/member
   announcement or new public-content publication is included.
 - No fixture establishes real legal assent. Waiver text/version stays verbatim;
