@@ -15,6 +15,13 @@ Installing it does not authorize a new OpenBolt or OS build merely for evidence.
 
 ## CI selection
 
+For ordinary publication, a push to the default branch rebuilds the executor
+images only when an executor input changes. To explicitly rebuild and publish
+all architectures, run the default-branch pipeline with `BUILD=all` and no
+bootstrap or executor-only variables. Starting a manual pipeline without `BUILD`
+does not request images; compiler publication keeps its normal rules. A single CPU
+selection is not a request to publish a multi-architecture manifest.
+
 On the exact selected successor config revision, use the existing API, web,
 native pipeline or trigger source with:
 

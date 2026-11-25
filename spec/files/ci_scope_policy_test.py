@@ -26,6 +26,15 @@ class CiScopePolicyTest(unittest.TestCase):
             matching = [rule for rule in rules if rule.get('changes')]
             self.assertEqual(len(matching), 1, name)
             self.assertEqual(set(matching[0]['changes']), expected, name)
+            self.assertEqual(matching[0]['if'],
+                             '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH', name)
+
+    def test_explicit_main_image_rebuild_includes_builds_and_manifest(self):
+        request = {'if': '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $BUILD == "all"'}
+        for name in ('.template', 'Deploy image'):
+            rules = self.ci[name]['rules']
+            self.assertIn(request, rules, name)
+            self.assertLess(rules.index(request), next(i for i, rule in enumerate(rules) if 'changes' in rule), name)
 
     def test_app_lanes_only_run_for_owned_paths_and_skip_duplicate_pushes(self):
         joyride = self.ci['Joyride private access']['rules']
