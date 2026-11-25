@@ -1,5 +1,10 @@
 # Joyride private TEST deployment
 
+This runbook includes historical TEST installation receipts. TEST and production
+are now separate live services. For current production promotion and the separate
+data, payment, access, and publication boundaries, see
+[Joyride environment boundaries](joyride-environment-boundaries.md).
+
 ## Private routing engine
 
 The TEST backend pin follows Joyride MR 76, merged revision
@@ -103,8 +108,9 @@ Only the private proxy forwards the five exact `/routing/*` operations to port
 8002. JSON bodies are capped at 1 MiB, caller identity/auth headers are discarded,
 and upstream timeouts match the trusted listener's existing 120-second budget.
 Public, internal-web and bearer-ops listeners do not register routing URLs.
-Production remains fail-closed and unapplied. See `joyride-luna-private-access.md`
-and the application's `docs/internal-routing-engine.md` for the API contract.
+That TEST installation did not deploy or enable production routing. See
+`joyride-luna-private-access.md` and the application's
+`docs/internal-routing-engine.md` for the TEST API contract.
 Oregon carriageway/sidewalk remains unknown; installing this graph does not
 resolve facility uncertainty or confer final route acceptance.
 
@@ -254,7 +260,7 @@ capacity admitted this small budget; insufficient scheduling capacity must leave
 the old healthy pod serving, not relax maxUnavailable. Terminating pods can briefly
 coexist with the serving/surge budget while they drain. This removes planned image
 replacement gaps, not single-node, single-database, storage or ingress failures.
-Production remains dormant and guarded; this is not a production HA claim.
+These TEST observations do not establish production high availability.
 
 ## Owner dashboard and fast releases
 
@@ -340,8 +346,8 @@ Luna's gallery or rename editorial routes. After v2 publication, rolling back to
 a pre-v2 backend first requires using the new backend to restore a compatible
 legacy content archive and slug. Never perform destructive automatic rollback.
 
-Production remains guarded and dormant. Allowlisted SMTP and sandbox billing
-remain unchanged. Deployment readiness, anonymous admin denial and baseline release
+This TEST release did not change production, allowlisted SMTP, or sandbox billing.
+Deployment readiness, anonymous admin denial and baseline release
 status do not replace Joy mailbox/sign-in or Luna release/rollback acceptance.
 
 ## Allowlisted sign-in email
@@ -406,10 +412,10 @@ Application MR 13 removes signed production receipt consumers and the unused
 evidence publisher. MR 14 moves ordinary application CI to project runner 127.
 Its merged-main pipeline 10866 passed check/build/smoke and published the reviewed
 multiarchitecture image pinned here, installed on TEST generation 24 by preview.
-The dormant production candidate pin stays aligned but its compile guard and zero
-replicas remain unchanged; this does not activate production. Production delivery
-is unconditionally denied, including with legacy enable variables. Historical
-database records remain for non-destructive upgrades, not new admission.
+At that time the production candidate stayed guarded and at zero replicas.
+The TEST delivery API denies production deployment, including with legacy enable
+variables. Historical database records remain for non-destructive upgrades, not
+new admission. Production promotion uses the separate Nest-managed path.
 
 The importer also discovers running pipelines, but admits one only when required
 check/build/smoke and every other job succeeded and the sole pending work is the
@@ -496,9 +502,9 @@ network path reaches the web Service with the required Host header. The exact
 application workload was restarted to consume the encrypted signing secret;
 independent running-settings readback confirms its presence without exposing it.
 The TEST override now enables sandbox billing with the already approved TEST
-price. Production remains disabled and routine mail remains off. Genuine signed
-provider delivery, payment outcomes and waiver/member unlock still require live
-acceptance after this setting is deployed; listener readiness is not that proof.
+price. At this historical TEST checkpoint, production and routine mail had not
+been enabled by the change. Listener readiness did not prove signed provider
+delivery, payment outcomes, or waiver/member unlock.
 
 Luna's updated independent canary and rollback have now passed. Her comment-only
 source b530be153c8292701365676133e80a9097ab6765 passed pipeline 10895, including
@@ -531,5 +537,5 @@ Startup fails closed on fetch, archive, source or existing editorial/file drift.
 Do not delete a conflicting private tree or DB rows to force startup: inspect the
 application's `docs/private-curated-intake.md`, retain the prior image and reconcile
 the exact conflict. A rollback retains all private data and database history.
-The dormant production candidate pin stays aligned, but has no intake init and
-remains guarded, zero-replica and unapplied. This is not production authorization.
+That TEST intake did not install a production intake initializer or authorize
+copying TEST content into production.
