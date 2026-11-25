@@ -355,9 +355,10 @@ stages:
     - if: '$EXECUTOR_ONLY == "true" && $BUILD'
       when: never
     - if: '$EXECUTOR_ONLY == "true"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $BUILD == "all"'
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $BUILD'
       when: never
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
       changes: &executor_inputs
         - Containerfile
         - Puppetfile
@@ -440,7 +441,10 @@ stages:
     - if: '$EXECUTOR_ONLY == "true" && $BUILD'
       when: never
     - if: '$EXECUTOR_ONLY == "true"'
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $BUILD == "all"'
+    - if: '$BUILD'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
       changes: *executor_inputs
 
 'Check executor bootstrap selection':
