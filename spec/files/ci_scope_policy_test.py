@@ -79,13 +79,20 @@ class CiScopePolicyTest(unittest.TestCase):
             self.assertEqual(rules[4]['if'], '$CI_PIPELINE_SOURCE == "merge_request_event"', name)
             self.assertEqual(rules[5]['if'], '$CI_COMMIT_BRANCH', name)
             self.assertEqual(rules[6]['if'], '$CI_COMMIT_TAG', name)
-            self.assertTrue(all(rule['changes'] == rules[4]['changes'] for rule in rules[4:]), name)
+            self.assertTrue(all(rule['changes'] == rules[4]['changes'] for rule in rules[4:7]), name)
 
     def test_explicit_build_and_executor_modes_remain_admitted(self):
         rules = self.ci['.template']['rules']
         self.assertTrue(any('$EXECUTOR_ONLY == "true" && $BUILD == $CPU' in rule.get('if', '') for rule in rules))
         self.assertTrue(any('$CI_PIPELINE_SOURCE == "parent_pipeline"' in rule.get('if', '') for rule in rules))
         self.assertTrue(any('$EXECUTOR_BOOTSTRAP == "true"' in rule.get('if', '') for rule in rules))
+
+    def test_refresh_helper_changes_select_only_the_suites_that_import_it(self):
+        rule = {'if': '$CI_PIPELINE_SOURCE == "merge_request_event" || $CI_COMMIT_BRANCH || $CI_COMMIT_TAG',
+                'changes': ['bin/firefox-controller-refresh']}
+        for name in ('Secure browser window fixtures', 'Firefox Native authority fixtures'):
+            self.assertEqual(self.ci[name]['rules'][-1], rule, name)
+        self.assertNotIn(rule, self.ci['Secure browser fixtures']['rules'])
 
     def test_release_graph_compilers_do_not_select_unrelated_app_fixtures(self):
         graph = yaml.safe_load((ROOT / '.gitlab/ci/release-graph.yml').read_text())
