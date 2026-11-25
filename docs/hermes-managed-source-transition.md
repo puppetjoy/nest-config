@@ -91,6 +91,12 @@ For an authorized Broker-only update on Owl, scope the existing plan with
 imports, and the four gateway PIDs. The scoped apply can install Broker without
 refreshing the gateways; do not add a restart if the change does not need one.
 
+For an authorized Hermes update on Owl, use `tags='["nest::app::hermes"]'`
+with the same plan. This tag also covers Broker. When both refs advance, verify
+both resulting-ref CI runs, converge Broker with its narrower tag first, then
+repeat the Hermes-tagged noop. Stop if it still reports unrelated drift. Verify
+both installed revisions and stamps before restoring a held timer.
+
 An installer update can refresh multiple profile gateways even if a Puppet
 noop shows only checkout and installer operations: the installer emits refresh
 events only during the real run. Check affected gateway/work activity before
@@ -114,25 +120,7 @@ until the older rollback paths are replaced or explicitly retired.
 
 ## Original rollout handoff
 
-The rest of this section is historical. Its exact-pin migration and review
-scope are not prerequisites for an ordinary rolling release.
-
-Original rollout ^2206 owns merge, deployment, apply, rollback environment
-selection, consumer drain/restart, timer decisions and all live verification.
-This source phase must only publish an exact-head, main-targeted MR with green
-required CI. Do not replay previously completed activation or broker merges.
-
-Before retrying production, preserve the existing native rollback evidence and
-ensure the selected upgrade AND rollback source environments include this
-helper/wiring. Merely selecting an old catalog that still uses unsafe vcsrepo
-revision movement is not the tested rollback path. The tested source rollback
-control is the old core as `git_commit` under `git_ref: nest`, with the helper
-retained; legacy runtime/PM settings must also follow the original rollout's
-known-good rollback contract. Do not transplant this helper into production
-manually or repeat a broad main apply as a diagnostic.
-
-A successful source fixture or CI pipeline does not complete ^2206. Its actual
-managed apply, imported-source/dependency parity, model replies, Telegram and
-voice/media provenance, dashboard/profile identity, broker lifecycle, credential
-writeback, Star browser/tools, Beryl local-only policy, Quill isolation and bounded
-stability checks remain the operational owner's acceptance criteria.
+The [original rollout handoff](https://gitlab.joyfullee.me/nest/config/-/blob/2557015261eb67e00458b67c26802b14355a14bf/docs/hermes-managed-source-transition.md#original-rollout-handoff)
+records the one-time exact-pin migration and its acceptance criteria. Keep it
+as history; do not replay its source pins, activation, or approvals for routine
+rolling releases. Use the maintained delivery and rollback guidance above.
