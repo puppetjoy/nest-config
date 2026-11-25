@@ -450,7 +450,7 @@ Current cleanup inventory (readback before this rollout):
 - Kept: project runner 127, now an ordinary instance of Owl's shared manager,
   for Luna's check/build/publish/preview. It has host-root Podman engine authority,
   but no directly injected eyaml/Bolt/Puppetcore credentials. See
-  `joyride-ci.md` for the trust model and cutover procedure.
+  [Joyride CI](joyride-ci.md) for the current trust model and shared runner maintenance.
   All pipeline 10866 jobs ran on it, including terminal preview. Project 83 now
   disables shared and group runners; independent readback lists only runner 127.
   Shared Nest runners are unchanged. Dedicated unused credential scope revocation
