@@ -87,6 +87,17 @@ identity to another origin or to render, source, profile, or Git operations.
 
 ### Stage and verify a paired source update
 
+Review source changes in ordinary GitLab MRs in the owning repository.
+Pattern Kit runs its pytest job there; Atelier runs its full suite and the
+compatibility verifier against the declared Pattern Kit revision. Keep
+resulting-main validation. Atelier CI against the declared revision does not
+qualify a different pair of revisions for Studio.
+
+First compare each remote `main` with its mounted revision. If the only
+differences are CI configuration, leave the healthy pair serving; a new SHA
+alone is not a reason to recreate Studio. When runtime inputs change, stage
+and verify both exact revisions together using the procedure below.
+
 Do not advance the two live development checkouts separately as a release
 mechanism. Use the authenticated Git remotes from Owl to clone both `main`
 branches into a fresh, private sibling staging directory. Compare both resolved
