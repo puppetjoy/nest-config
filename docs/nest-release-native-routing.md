@@ -53,9 +53,13 @@ MR, schedule, tag and parent-pipeline entry refuse executing selection. Partial,
 malformed or conflicting routing flags fail the selection check. Any nonempty
 routing field suppresses ordinary config executor build and deployment jobs,
 including on `main`, so malformed input cannot fall through to a tooling rebuild.
-Ordinary source validation/test jobs still run. With no routing fields, existing
-source, managed executor and input-only behavior is unchanged. Fixture mode
-suppresses the route completely.
+Generic source validation still runs. Explicit API, web, trigger and downstream
+pipelines with `RELEASE_INPUTS=true` omit the Joyride access and three Firefox
+fixture jobs: those jobs are not prerequisites for input freezing or candidate
+routing. This also applies to input-only runs using those pipeline sources.
+Ordinary MR, branch-push and tag validation remain unchanged. With no routing
+fields, existing executor and input-only admission rules still apply. Fixture
+mode suppresses the route completely.
 
 Direct nonexecuting selection validation is:
 

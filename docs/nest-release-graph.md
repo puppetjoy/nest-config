@@ -32,6 +32,12 @@ push, MR, schedule, native downstream or parent pipeline. Source publication
 alone does not select graph execution. Do not run a candidate build merely to
 test this interface or infer build/rollout authority from these instructions.
 
+Explicit untagged API, web and trigger runs selecting `RELEASE_GRAPH=true` or
+`RELEASE_GRAPH=verify-inputs` with the graph file omit the unrelated Joyride
+access and three Firefox fixture jobs. The early graph-selection check,
+compiler and required bridge still apply. A graph result does not replace
+ordinary configuration CI or prove equivalent inputs for post-merge validation.
+
 The JSON request has exactly:
 
 - `schema`: integer 1.
