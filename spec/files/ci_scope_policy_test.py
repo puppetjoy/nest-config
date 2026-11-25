@@ -51,12 +51,12 @@ class CiScopePolicyTest(unittest.TestCase):
                             'data/kubernetes/service/joyride*.yaml', 'data/kubernetes/service/joyride/**/*',
                             'files/app/joyride/**/*', 'manifests/service/joyride.pp',
                             'plans/eyrie/deploy_joyride*.yaml', 'spec/app/joyride/**/*'}
-        self.assertEqual(set(joyride[2]['changes']), expected_joyride)
-        self.assertEqual(firefox[2]['changes'], window[2]['changes'])
-        self.assertEqual(firefox[2]['changes'], native[2]['changes'])
-        self.assertIn('files/firefox-browser/**/*', firefox[2]['changes'])
-        self.assertIn('files/app/hermes/*browser*.py', firefox[2]['changes'])
-        self.assertIn('spec/app/hermes/native_authority/**/*', firefox[2]['changes'])
+        self.assertEqual(set(joyride[3]['changes']), expected_joyride)
+        self.assertEqual(firefox[3]['changes'], window[3]['changes'])
+        self.assertEqual(firefox[3]['changes'], native[3]['changes'])
+        self.assertIn('files/firefox-browser/**/*', firefox[3]['changes'])
+        self.assertIn('files/app/hermes/*browser*.py', firefox[3]['changes'])
+        self.assertIn('spec/app/hermes/native_authority/**/*', firefox[3]['changes'])
         for rules in (firefox, window, native):
             self.assertEqual(rules[0], joyride[0])
             self.assertEqual(rules[1], joyride[1])
@@ -67,6 +67,19 @@ class CiScopePolicyTest(unittest.TestCase):
         self.assertEqual(job['script'][-1], 'bolt plan run nest::puppet::deploy backend=prod environment="$CI_COMMIT_BRANCH"')
         self.assertEqual(job['resource_group'], 'puppet-code-deployment')
         self.assertIn({'if': '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'}, job['rules'])
+
+    def test_explicit_release_input_pipelines_exclude_unrelated_app_fixtures(self):
+        guard = {'if': '($CI_PIPELINE_SOURCE == "api" || $CI_PIPELINE_SOURCE == "web" || '
+                       '$CI_PIPELINE_SOURCE == "pipeline" || $CI_PIPELINE_SOURCE == "trigger") '
+                       '&& $RELEASE_INPUTS == "true"', 'when': 'never'}
+        for name in ('Joyride private access', 'Secure browser fixtures',
+                     'Secure browser window fixtures', 'Firefox Native authority fixtures'):
+            rules = self.ci[name]['rules']
+            self.assertEqual(rules[2], guard, name)
+            self.assertEqual(rules[3]['if'], '$CI_PIPELINE_SOURCE == "merge_request_event"', name)
+            self.assertEqual(rules[4]['if'], '$CI_COMMIT_BRANCH', name)
+            self.assertEqual(rules[5]['if'], '$CI_COMMIT_TAG', name)
+            self.assertTrue(all(rule['changes'] == rules[3]['changes'] for rule in rules[3:]), name)
 
     def test_explicit_build_and_executor_modes_remain_admitted(self):
         rules = self.ci['.template']['rules']
