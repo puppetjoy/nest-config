@@ -1,8 +1,10 @@
 # Joyride TEST component readiness isolation
 
-This is a source-only candidate. It authorizes no merge, delivery, restart,
-private-route replay or production change. Application admission/health scheduling,
-cold-graph repairs and frontend work remain with the parent investigation.
+The component split is installed in TEST. All five application Deployments are
+Ready, and the four listener Services each have a Ready endpoint. The worker
+owns bootstrap; readers wait on its receipt. This readback is not a new test of
+private routes, cold-graph performance, or rollback, and does not authorize
+changes to TEST or production.
 
 ## Workload contract
 
@@ -183,35 +185,16 @@ journal is refused, not translated, overwritten or replayed.
   listener. Check all five template image digests and replacement generations.
   A successful web-only image/readiness check is no longer fleet delivery proof.
 
-## Integration and approval gates
+## Future changes and first-cutover history
 
-Before any separately approved managed TEST transition:
+For a future TEST change, keep the existing managed delivery and rollback path.
+Check all five components, their selectors and EndpointSlices, the worker's
+bootstrap ordering and reader readiness. Preserve the selected graph, content,
+credentials and environment-specific data. A topology change needs a fresh
+availability and capacity review; do not infer private-route acceptance from
+web readiness or replay a delivery to prove the existing split.
 
-- Refresh authoritative main and preserve its accepted immutable application image,
-  SMTP account/from identity, environment-specific secret references and allowlist.
-  This source phase does not publish the parent's application candidate or select
-  another graph/frontend/content release.
-- Require a settled original Deployment and idle deployment queue/journal. Do not
-  change topology during an existing delivery or bootstrap. Keep the prior source
-  and image for an explicitly reviewed rollback; do not reverse migrations.
-- Review first-cutover availability explicitly. Helm changes the three private
-  Service selectors while creating their new workloads; a single Helm apply is
-  **not** a zero-gap initial cutover. It can temporarily leave those Services with
-  no Ready endpoint. The existing public web Deployment retains RollingUpdate
-  protection. Subsequent same-topology image updates use per-component
-  `maxUnavailable: 0`, `maxSurge: 1` and `minReadySeconds: 10`. If a gap-free first
-  private-listener transition is required, separately prepare a staged managed
-  migration before approval; do not patch live selectors around this candidate.
-- Capacity-check the actual five-pod topology. Existing application container
-  requests/limits are identical, but scheduling init maxima across separate pods,
-  pod overhead and four additional bounded scratch volumes are different from
-  one shared pod. This is not resource tuning or a pre-approved capacity increase.
-- Preserve graph bytes/current selection, DB review/revision hashes and independently
-  selected frontend/content identities before and after managed delivery.
-- Verify exact rendered Service selectors, actual EndpointSlices per component,
-  fresh bootstrap ordering, managed promotion and rollback, private authoring
-  isolation, concurrent meaningful health and the parent's selected geometry.
-  Render-level selector/readiness assertions are not a live EndpointSlice test,
-  private-route acceptance or a claim that cold graph/health starvation is fixed.
-
-Production data/configuration and dormant activation gates are unchanged.
+The [original first-cutover plan](https://gitlab.joyfullee.me/nest/config/-/blob/fb39065eb8f706949bd2c42612627429e307ee25/docs/joyride-test-readiness-isolation.md#integration-and-approval-gates)
+retains the initial selector-transition risks and acceptance scope. Those were
+first-install conditions, not instructions to repeat the cutover. Keep TEST
+delivery and [production promotion](joyride-environment-boundaries.md) separate.
