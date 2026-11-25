@@ -1,4 +1,12 @@
-# Disabled Wizard source readiness and parent rollout ordering
+# Original Wizard source readiness and rollout ordering (historical)
+
+This record documents the initial disabled-source rollout, not the current
+release procedure. Do not replay the source tuple, opt-in sequence or rollback
+below during routine delivery. Use [Routine Owl delivery](hermes-managed-source-transition.md#routine-owl-delivery)
+for Hermes and Broker and the [Flight Deck source runbook](flight-deck-source-rollout.md)
+for separate DEV refresh and production promotion. The original text follows
+for historical context; this notice does not retire the managed Wizard role
+or its retained receipts.
 
 This prerequisite prepares source only. It does not deploy, restart, apply host
 Puppet, enable Wizard, or change Native, Broker or Flight Deck source pins.
