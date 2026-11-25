@@ -53,3 +53,40 @@ verified pin and deploying through the same production plan.
 For render-only checks, use `render_to` with a private, mounted project `build/`
 path and verify a nonempty host-visible manifest. `deploy=false` checks the
 arguments and configured pin without rendering or upgrading Helm.
+
+## Read-only serving check
+
+Run this after the deployment is Ready, or when comparing installed source
+without a rollout. It checks the serving revision, expected board and bounded
+request projection without printing request contents or creating a smoke task.
+It does not replace a user-facing HTTPS check after an authorized rollout.
+
+```sh
+for deployment in flight-deck-dev flight-deck; do
+  case "$deployment" in
+    flight-deck-dev) board=agent-requests-dev ;;
+    flight-deck)     board=agent-requests ;;
+  esac
+  kubectl -n ai exec "deployment/$deployment" -c flight-deck -- python3 -c '
+import json, pathlib, re, sys, urllib.request
+
+revision = pathlib.Path("/app/.flight-deck-source-revision").read_text().strip()
+assert re.fullmatch(r"[0-9a-f]{40}", revision), "invalid serving revision"
+
+def read(path):
+    with urllib.request.urlopen("http://127.0.0.1:4173" + path, timeout=4) as response:
+        return json.load(response)
+
+health = read("/api/health")
+assert health["ready"] is True and health["readOnly"] is True, "not ready/read-only"
+assert health["board"] == sys.argv[1], "unexpected board"
+requests = read("/api/requests?limit=1")["requests"]
+assert isinstance(requests, list) and len(requests) <= 1, "unexpected request projection"
+print(revision, health["board"], len(requests))
+' "$board" || exit 1
+done
+```
+
+Compare DEV's reported revision to the accepted runtime change, and
+production's to the committed exact pin. A CI-only advance of `main` does not
+require a DEV restart or production promotion.
