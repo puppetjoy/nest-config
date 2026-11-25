@@ -293,7 +293,7 @@ stages:
     - 'test "$(git -C .authority-broker rev-parse HEAD)" = 62fc1532648e6e93429a2f67e661957a20cef92e'
     - 'python3 -m venv .authority-venv'
     - '.authority-venv/bin/python -m pip install --disable-pip-version-check -e ".authority-broker[test]"'
-    - '.authority-venv/bin/python -m pytest -n "$(nproc)" -o asyncio_default_fixture_loop_scope=function -q --junitxml=firefox-native-authority.xml spec/app/hermes/native_authority/test_firefox_native_authority.py'
+    - '.authority-venv/bin/python -m pytest -n 8 -o asyncio_default_fixture_loop_scope=function -q --junitxml=firefox-native-authority.xml spec/app/hermes/native_authority/test_firefox_native_authority.py'
   artifacts:
     when: always
     reports:
