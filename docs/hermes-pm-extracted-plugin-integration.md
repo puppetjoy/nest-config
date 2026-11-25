@@ -1,6 +1,14 @@
-# Managed Hermes PM and extracted-plugin integration
+# Managed Hermes PM and extracted-plugin integration (historical)
 
-Source-only prerequisite for Agent Request ^2205 / task t_fc1cf4cf, now including the source activation delta for rollout ^2206. This change is not a live upgrade. The configuration MR must remain unmerged until that coordinated rollout.
+This is the historical acceptance record for ^2205 and ^2206, not the current
+Owl deployment procedure. Owl now uses the
+[Nest-owned external runtime](hermes-external-toolchains.md). Use
+[Routine Owl delivery](hermes-managed-source-transition.md#routine-owl-delivery)
+for releases and rollback selection. Do not reuse historical pins or approvals.
+
+The source-only preparation for Agent Request ^2205 / task t_fc1cf4cf
+later included the activation delta for rollout ^2206. The source handoff
+was not a live upgrade or approval to deploy.
 
 ## Source identities
 
@@ -82,14 +90,15 @@ Rollout must independently verify the eventual promoted broker tree against this
 
 ## Promotion and install order — rollout ^2206 only
 
-1. Parent independently verifies the archive hash and staged-file hashes, runs the exported tests against the exact target, finishes core conflicts and its complete non-pass ledger, and produces its unmerged exact-head Hermes MR. Do not use this source-only child as approval of the core port.
-2. Verify both final MR heads and CI, inventory-backed Bolt transport, the exact currently deployed core/broker/config revisions and a complete native Hermes-root backup. Preserve the old source checkout and Python 3.13 runtime as rollback material. Keep backup staging local; `/nest/backup` is the final destination.
-3. Freeze automatic Puppet follow-through for the coordinated interval and drain/stop affected gateways and dashboards using the established managed operational path. Do not replace files under processes that can lazily import a mixture of releases.
-4. Rollout owns all merges. Promote the certified core to rolling `nest`, merge broker compatibility into current `main` without dropping newer hardening, and promote this configuration together with the activation change. Set `pm_enabled: true`, `git_ref: nest`, remove any temporary `git_commit` override, and change the host's existing broker pin to `broker_git_ref: main` only after that branch contains both required broker ancestors. Capture the exact promoted heads and run `git merge-base --is-ancestor` for every checkpoint; also prove promoted tree parity against the parent's certification. Do not merge the port to a floating production ref and let an ordinary legacy Puppet run consume it first. Later rolling updates retain these settings rather than updating pins.
-5. Apply through the existing inventory-backed Bolt/Puppet path. The catalog checks safe source ancestry (plus exact pin verification if a temporary core pin is supplied), realizes external sources plus patches, and provisions the PM-owned dependency union as the Nest user. Before switching wrappers, the adapter records exact unchanged source identities. Read back `tools/nest-source-state.json` and `bin/hermes-pm verify /opt/hermes-agent`; require equal heads/content plus a successful `bin/hermes-pm check /opt/hermes-agent` under the managed Nest-user environment. Frontend builds depend on the completed PM runtime before using the Python build-state helper. Retain these exact transaction readbacks with the rollout receipt; they are evidence, not permanent configuration pins.
-6. Before accepting traffic, verify PM currency and package imports through the stable wrapper, core/broker/source identities, real external provider and tool discovery for each actual profile, the required Honcho boundaries and browser behavior, Quill employer/helper/delegation/Hawk behavior, Beryl policy, backup entry points and rebuilt frontends. Start only the intended services and inspect actual runtime readiness. This child has not performed those live checks.
+[Original ^2206 promotion procedure](https://gitlab.joyfullee.me/nest/config/-/blob/a1aa4df3184e5b0797749ce8f1f07d5c283f21f5/docs/hermes-pm-extracted-plugin-integration.md)
+is preserved in the immutable historical document. It is not an activation path
+for the current external runtime.
 
 ## Rollback order
+
+The following describes recovery from the historical PM cutover only. For a
+current exceptional rollback, first verify the published ref and materialized
+compiler environment as described in Routine Owl delivery.
 
 1. Stop/drain the same services and preserve the failing PM receipt and runtime identities without collecting credentials.
 2. Restore the previously recorded configuration/source revision and immutable pre-upgrade core/broker pins through the same managed Bolt/Puppet path, with `pm_enabled: false`. Keep the preserved Python 3.13 runtime available. The stable Python/CLI/service wrappers return to legacy mode; no raw pip repair of the PM store is part of rollback.
