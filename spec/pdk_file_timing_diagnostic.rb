@@ -11,7 +11,7 @@ class PdkFileTimingDiagnostic
 
   def example_passed(notification)
     example = notification.example
-    path = example.metadata.fetch(:file_path)
+    path = example.example_group.parent_groups.last.metadata.fetch(:file_path)
     return unless path.match?(%r{\A(?:\./)?spec/[a-zA-Z0-9_./-]+_spec\.rb\z})
 
     row = @files[path.sub(%r{\A\./}, '')]
@@ -21,9 +21,10 @@ class PdkFileTimingDiagnostic
   alias example_failed example_passed
   alias example_pending example_passed
 
-  def dump_summary(_notification)
+  def dump_summary(notification)
+    @output.puts('PDK_WORKER_TIMING %d %.6f' % [notification.example_count, notification.duration])
     @files.sort.each do |path, (count, elapsed)|
-      @output.puts format('PDK_FILE_TIMING %s %d %.6f', path, count, elapsed)
+      @output.puts('PDK_FILE_TIMING %s %d %.6f' % [path, count, elapsed])
     end
   end
 end
