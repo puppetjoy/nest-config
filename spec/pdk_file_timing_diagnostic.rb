@@ -14,16 +14,20 @@ class PdkFileTimingDiagnostic
     @started = clock
   end
 
-  def example_started(_notification)
-    @first ||= clock
+  def example_started(notification)
+    now = clock
+    @first ||= now
+    if @last && now - @last >= 1
+      next_example = label(notification.example)
+      @output.puts('PDK_EXAMPLE_GAP %.6f %s %s' % [now - @last, @previous_example, next_example])
+    end
   end
 
   def example_finished(notification)
     @last = clock
     example = notification.example
-    path = example.example_group.parent_groups.last.metadata.fetch(:file_path)
-    path = path.match?(%r{\A(?:\./)?spec/[a-zA-Z0-9_./-]+_spec\.rb\z}) ? path.sub(%r{\A\./}, '') : 'unattributed'
-    row = @files[path]
+    @previous_example = label(example)
+    row = @files[owner(example)]
     elapsed = example.execution_result.run_time
     row[0] += 1
     row[1] += elapsed
@@ -45,6 +49,15 @@ class PdkFileTimingDiagnostic
   end
 
   private
+
+  def owner(example)
+    path = example.example_group.parent_groups.last.metadata.fetch(:file_path)
+    path.match?(%r{\A(?:\./)?spec/[a-zA-Z0-9_./-]+_spec\.rb\z}) ? path.sub(%r{\A\./}, '') : 'unattributed'
+  end
+
+  def label(example)
+    '%s:%d' % [owner(example), example.metadata.fetch(:line_number)]
+  end
 
   def clock
     Process.clock_gettime(Process::CLOCK_MONOTONIC)
