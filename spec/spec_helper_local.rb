@@ -9,11 +9,8 @@ RSpec.configure do |config|
 end
 
 def it_should_and_should_not_contain_classes(should, should_not = [])
-  should.each do |c|
-    it { is_expected.to contain_class(c) }
-  end
-
-  (should_not - should).each do |c|
-    it { is_expected.not_to contain_class(c) }
+  it 'checks class inclusion and exclusion for the platform matrix', :aggregate_failures do
+    should.each { |c| is_expected.to contain_class(c) }
+    (should_not - should).each { |c| is_expected.not_to contain_class(c) }
   end
 end
