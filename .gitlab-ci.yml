@@ -55,7 +55,7 @@ stages:
   image: 'registry.gitlab.joyfullee.me/nest/tools/pdk@sha256:7a4e1fcb8b186055e35c232af8273997023839246f712408178d8e725a134673'
   stage: 'Test'
   script:
-    - 'PARALLEL_TEST_PROCESSORS=8 pdk test unit --parallel'
+    - 'CI_SPEC_OPTIONS="--profile 3" PARALLEL_TEST_PROCESSORS=8 pdk test unit --parallel'
     - 'pdk test unit --tests=spec/files/apiserver_etcd_endpoints_spec.rb,spec/files/validate_etcd_cluster_spec.rb,spec/files/api_survivor_observation_spec.rb,spec/files/maintenance_storage_spec.rb,spec/files/patternkit_deployment_spec.rb'
 
 'Update report fixtures':
