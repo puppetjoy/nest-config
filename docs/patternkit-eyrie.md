@@ -172,6 +172,27 @@ pair, internal `/api/health`, and the expected HTTPS sign-in redirect. Check
 that workbench and egress generations and profile/session mounts are unchanged.
 Studio uses Recreate; clients may need to sign in again after the restart.
 
+For a read-only check of an already-Ready Studio pod, run:
+
+```sh
+kubectl -n ai exec deployment/patternkit -c studio -- sh -ec '
+  for checkout in /home/joy/projects/patternkit /home/joy/projects/patternkit-atelier; do
+    GIT_OPTIONAL_LOCKS=0 git -C "$checkout" rev-parse HEAD
+  done
+'
+health=$(kubectl -n ai exec deployment/patternkit -c studio -- \
+  curl -fsS --max-time 5 http://127.0.0.1:8765/api/health) || exit 1
+printf '%s\n' "$health" | jq -ce '{status, collaboration}'
+kubectl -n ai get pvc patternkit-sessions -o jsonpath='{.status.phase}{"\n"}'
+curl -sS --max-time 5 -o /dev/null -w '%{http_code}\n' https://patternkit.eyrie/
+```
+
+The revisions are printed in Studio, then Atelier order. Compare both against
+the selected pair; expect `status: ok`, collaboration enabled, a `Bound`
+claim, and HTTP 302 for an unauthenticated request. These reads do not test a
+new OAuth login or a session write. Do not run the disruptive CronJob for this
+check.
+
 For rollback to the original authoring mounts, verify both development
 checkouts without advancing them. The pods intentionally have no Git
 credentials and fail their revision init gate rather than updating source
