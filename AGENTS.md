@@ -18,12 +18,11 @@
 ## Shipping Workflow
 - Puppet describes the ideal durable steady state, not the repair history of one host. Repair malformed or misplaced one-host state directly, then keep only the lasting invariant in source. Do not add host-specific migration helpers, cleanup scripts, or leaf-resource specs solely to preserve a one-off incident. Source-manage a migration only when it is genuinely recurring or fleet-wide, make it idempotent, and state its removal criteria.
 - Deployment wrappers should remain declarative YAML plans that compose `nest::kubernetes::deploy`/KubeCM. Do not put stack initialization, cert generation, data migration, or readiness repair scripts in Bolt deploy plans; implement that work in Helm resources, init containers, hooks, or Kubernetes Jobs. For general admin init containers, pods, or Jobs that need tools such as `kubectl`, prefer `registry.eyrie/nest/stage1/server` because it is the same OS family as this environment and is normally pre-pulled in the cluster.
-- When the user says "ship it", run this sequence unless they explicitly request otherwise:
+- For routine source delivery, stage the scoped changes and commit with the repository commit style (include a body for larger or new-feature commits). Push the source branch and use an ordinary GitLab MR with the required CI checks.
 - Do not run local validation or tests by default.
 - Only run `pdk validate` and/or unit tests if the user explicitly requests them.
-- `git add` and commit with the repository commit style (include a body for larger/new-feature commits).
-- `git push`
-- `bolt plan run nest::puppet::deploy`
+- Verify the resulting-main CI and normal code publication after merge. Merge and publication do not authorize a host apply, service restart, or production promotion. Use the existing Puppet/Bolt path only when activation is explicitly in scope, then verify the affected service.
+- For Hermes and Broker rolling releases on Owl, see [Routine Owl delivery](docs/hermes-managed-source-transition.md#routine-owl-delivery).
 
 ## Coding Style & Naming Conventions
 - Use 2-space indentation in Puppet and Ruby files; avoid unrelated formatting churn.
