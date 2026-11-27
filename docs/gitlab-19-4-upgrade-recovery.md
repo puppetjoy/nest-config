@@ -18,6 +18,6 @@ Check `sudo podman inspect gitlab` and Rails/DB versions, require zero batched m
 
 ## Version progression
 
-Eyrie production starts at chart 10.2.1 / GitLab 19.2.1. Test staged 10.2.7 / 19.2.7, 10.3.4 / 19.3.3, then 10.4.1 / 19.4.1; verify test health and restore before repeating the chart steps in production. Drain migrations at each step. Hawk has already moved from 19.3.2 to 19.4.1 with separate pre/post off-host backups; do not repeat its migration. GitLab 19.2 is the required stop before 19.4; future stops are 19.5, 19.8, and 19.11. Check upstream release notes and chart mappings again at execution. Single-replica Eyrie workloads are not a zero-downtime GitLab deployment.
+The [19.4 version sequence](https://gitlab.joyfullee.me/nest/config/-/blob/ed7cea9b9132da89b2bdb29db911fcfc00d56138/docs/gitlab-19-4-upgrade-recovery.md#version-progression) is historical, not an upgrade plan to replay. Both Eyrie releases were observed at chart 10.5.1 / GitLab 19.5.1 when this note was updated. Read back each instance’s actual version and recheck the upstream required stops and chart mappings before a future upgrade. Hawk remains a separate operation, not a deployment target inferred from Eyrie. Single-replica Eyrie workloads are not a zero-downtime GitLab deployment.
 
 References: https://docs.gitlab.com/update/upgrade_paths/ ; https://docs.gitlab.com/charts/installation/upgrade/ ; `plans/eyrie/gitlab/backup.pp` ; `plans/eyrie/gitlab/restore.pp`.
