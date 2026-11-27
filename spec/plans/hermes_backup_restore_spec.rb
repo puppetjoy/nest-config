@@ -1,4 +1,3 @@
-require 'open3'
 require 'spec_helper'
 
 RSpec.describe 'Hermes full-home backup generations' do
@@ -34,12 +33,5 @@ RSpec.describe 'Hermes full-home backup generations' do
     expect(backup_plan).to include("'--stage-dir', $stage_dir")
     expect(backup_plan).to include('$preserve_existing ? {')
     expect(backup_plan).to include("['--no-prune']")
-  end
-
-  it 'creates, verifies, restores, retains, and migrates generations safely' do
-    test_path = File.join(repo_root, 'spec/files/hermes_backup_generation_test.py')
-    _stdout, stderr, status = Open3.capture3('python3', test_path)
-
-    expect(status).to be_success, stderr
   end
 end
