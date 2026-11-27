@@ -32,68 +32,13 @@ approval from one ready for fresh acquisition. Neither state permits input
 replay. `FIREFOX_BINDING_RETIRED` is preserved across endpoint and adapter rather
 than being mislabeled as a new uncertain native operation.
 
-## Controller-only managed overlay activation
+## Historical activation and verification
 
-A full Recreate deployment would unnecessarily replace the healthy browser
-process and invalidate current identities. `bin/firefox-controller-refresh`
-is an administrator maintenance operation, not a runtime tool or deploy-plan
-initialization hook. Run it through Bolt on the supervisor with a source
-directory extracted from the exact verified managed Firefox image. It stages
-only the complete fixed controller assets in a content-addressed runtime
-overlay, not in the profile or installed image paths. It verifies the expected
-live controller source, native generation, no pending input and exclusive
-endpoint lock before ending only the old HTTP/observer process. Firefox,
-geckodriver, KasmVNC and the original profile are not restarted.
+The [original incident record](https://gitlab.joyfullee.me/nest/config/-/blob/c7e50b9887f4c57d8384b565ff868542f749d21b/docs/firefox-scoped-reconciliation-repair.md#controller-only-managed-overlay-activation)
+retains the one-time overlay procedure, exact approval, image provenance and
+qualification results. The archived approval and image pin are not authority
+for a new operation. Disposable verification is not installed acceptance.
 
-The new server obtains the existing exclusive controller lease and reconnects
-to the same native session. The administrator command independently reads the
-broker's current approval and intact proposal, requires the exact manually
-reviewed proposal hash and trusted source, rejects terminal tasks/steering,
-and derives scope from the canonical index. It does not infer approval from
-proposal wording. Public clients cannot invoke this operation. The bounded
-readback verifies the imported controller hash, generation and unchanged
-unrelated bindings. There is no automatic refresh retry after a failed readback.
-
-For this incident, the separately inspected exact proposal 24930 authorizes
-one fresh catalog coordination binding, not input replay, login, publication or
-deployment. Receipt apr-20261022-223843-024159 is trusted Telegram approval for
-proposal hash 2b075af5c48f1e62a3173a500f3d6016fc7e93dcfed41b269d39dec197498120.
-No second approval for that operation is requested. Fresh request scopes do
-not need this retired-binding operation.
-
-## Verification
-
-Before implementation, the new ordinary-scope regression failed with
-`old generation preserved in history; no replacement authorized`; the missing
-retired-binding path failed independently. Focused tests cover fresh admission,
-still-fenced retired bindings, one new binding under a local grant, immutable
-history, old-key refusal, grant idempotence, expiry, terminal fencing, failed
-commit, uncertain new creation, pending input and independent canonical receipt
-checks. The same suites are included in required exact-head CI. Disposable
-native and installed original-caller results are recorded separately; unit
-fixtures do not claim an active parent request or production acceptance.
-
-The managed `nest::build::firefox` build from source
-`122816c869e3a490fc930355ebbb81d0a812bad6` passed its smoke check, published,
-and was pulled back as
-`registry.gitlab.joyfullee.me/nest/tools/firefox@sha256:df4f8641e557b51ea5e6f79bec112431f9a4a106c70b11509a4c21b4a0705150`.
-Extracted controller, endpoint and both private transport hashes match source.
-The image pin is the next ordinary container baseline; controller-only overlay
-activation deliberately does not restart the current healthy Firefox pod.
-
-The baked-image disposable scoped canary passed with no owner mounts or external
-network. Actual native replies proved unchanged browser/session and owner
-binding across controller refresh; fresh scope admission, one new retired-scope
-binding, repeated acquire without growth, preserved old unknown native window
-and byte-identical archive all passed. Its retired journal is explicit synthetic
-fixture setup, not production acceptance. Initial harness attempts exposed
-extension first-run settling and competing fixture controller initialization;
-the harness now lets the resident server initialize the session before closing
-only disposable extension tabs. Those fixture changes are not a production
-root-cause claim or a retry of uncertain owner input.
-
-Initial required CI validation/unit jobs failed before tests on GitLab and
-registry HTTP 503 responses. Same-head retries were requested; browser fixtures
-passed on their first run. Bolt preflight initially lacked ruby_task_helper in
-this new worktree. `bolt module install` resolved it; inventory-backed transport
-then passed as joy on owl. No direct SSH or ad-hoc Puppet fallback was used.
+Use the maintained [generation reconciliation runbook](firefox-generation-reconciliation.md)
+for current operator constraints. Preserve history and unknown outcomes; do
+not replay input or retry a controller refresh automatically.
