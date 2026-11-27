@@ -143,65 +143,13 @@ registry commit attempt had first failed because inherited registry credentials
 caused a login to localhost, where no registry exists. Publishing used the normal
 managed remote-registry plan, not a manual credential workaround.
 
-## Bolt preflight and deployment boundary
+## Historical deployment and client handoff
 
-All commands ran from
-`/home/joy/projects/.worktrees/nest-config/t_d8b2ce42`, using this worktree's
-`bolt-project.yaml`, `inventory.yaml` and local module resolution.
+The [original build and retest handoff](https://gitlab.joyfullee.me/nest/config/-/blob/a6c589998d00b8d99885e73cf3092e7383acea52/docs/firefox-input-verification-repair.md#bolt-preflight-and-deployment-boundary)
+retains the build commands, image pin and original-client checks. The repair
+(^2016) and its original client task (^1981) are now terminal. That status does
+not establish the outcome of any individual action or authorize a replay.
+Preserve existing journals, unknown outcomes, and owner or unproven tabs.
 
-Initial `bolt inventory show owl --detail --format json` failed with:
-`Could not find module ruby_task_helper containing task file task_helper.rb`.
-`bolt module install` populated the missing worktree dependencies. Repeating
-inventory discovery succeeded, and
-`bolt command run 'id -un && hostname -f' --targets owl --stream` returned `joy`
-and `owl`. No direct SSH or ad-hoc Puppet fallback was used.
-
-The source build used the repository Bolt wrapper and existing build plan:
-
-    sudo -n env BOLT_CLEANUP_CMD='podman stop nest-firefox-ar2016-input >/dev/null 2>&1' ./bin/bolt-wrapper plan run nest::build::firefox container=nest-firefox-ar2016-input cpu=zen5 tag=ar2016-input-33446a97 registry=registry.gitlab.joyfullee.me build=true init=false deploy=true --stream
-
-The initial build-container initialization used `refresh=true`,
-`tag=ar1993-selected-context`, `deploy=false` on this same dedicated container.
-Build publication does not activate the shared browser.
-
-Fresh read-only deployment metadata still reports generation and observed
-generation 42 and the old digest
-`sha256:2fe926ca946ff51879cbc089eea9615b4c3ef21e2a72aca157c8a5ac539728ce`.
-No production rollout has occurred. The KubeCM deployment uses Recreate;
-activating the pinned repair interrupts the shared Firefox session and changes
-process/object identity. It requires a new exact authorization, not reuse of
-^1993/^2010 or any consumed restart/binding approval.
-
-## Original-client installed retest handoff — still outstanding
-
-After exact-head CI, normal source merge and separately authorized managed
-activation via `nest::puppet::deploy`, the existing owl tagged bridge apply as
-needed, and `nest::eyrie::ai::deploy_firefox`:
-
-1. Read back deployed digest, generation, endpoint/bridge hashes and source
-   parity through supported controls. Record pod/PVC continuity separately from
-   browser identity. Installing files is not proof an active client reloaded
-   tool descriptions; do not forcibly reclaim the original Joyride worker.
-2. The ORIGINAL ^1981 client must refresh status/snapshot in its own runtime and
-   independently verify a usable intended canonical Luna chat. The currently
-   exposed New Tab is not evidence of that chat. Never adopt a same-URL/title
-   tab, recover an uncertain old binding, or create another Luna tab by guess.
-   Obtain exact binding/session authority first where needed.
-3. Inventory actual tabs and retained/abandoned provenance. Only close positively
-   identified obsolete automation tabs when their draft and action disposition
-   is known. Preserve owner/unproven tabs. Missing old-generation object IDs do
-   not prove old tabs were closed. Record that bounded uncertainty rather than
-   inventing a clean backlog.
-4. Verify ordinary entry and explicit replacement using authorized nonsecret
-   draft intent, independent visible/readback parity, duplicate-URL identity
-   safety and no unintended tab growth. Do not send a chat, publish a message or
-   replay uncertain input to make the test pass. No new key for an old action.
-5. Preserve `joyride-1981-no-stripe-luna-run11812-draft` and
-   `joyride-1981-no-stripe-luna-run11812-send` journals. The latest run 11860 keys
-   were absent from its sanitized checkpoint and were not guessed or recovered
-   through unsupported filesystem/profile inspection in this run. Preserve all
-   existing journals in place. A successful historical fallback is not current
-   publication delivery.
-6. Return the original-client result to ^2016. Isolated new-tab success alone
-   cannot release this repair's acceptance gate. Joyride application deployment
-   and CI-isolation work remain independent throughout.
+For current operations see [reusable Firefox request windows](firefox-reusable-browser-lifecycle.md)
+and [generation reconciliation](firefox-generation-reconciliation.md).
