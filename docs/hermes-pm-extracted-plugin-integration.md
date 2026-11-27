@@ -103,11 +103,13 @@ for the current external runtime.
 
 ## Rollback order
 
-The following describes recovery from the historical PM cutover only. For a
-current exceptional rollback, first verify the published ref and materialized
-compiler environment as described in Routine Owl delivery.
+The [historical PM cutover rollback](https://gitlab.joyfullee.me/nest/config/-/blob/3a780727633fa9bc394d36309ad4fb993f40a64a/docs/hermes-pm-extracted-plugin-integration.md#rollback-order)
+records the original pin, interpreter, plugin and backup precautions. Do not
+reuse those pins or restore instructions for a current release.
 
-1. Stop/drain the same services and preserve the failing PM receipt and runtime identities without collecting credentials.
-2. Restore the previously recorded configuration/source revision and immutable pre-upgrade core/broker pins through the same managed Bolt/Puppet path, with `pm_enabled: false`. Keep the preserved Python 3.13 runtime available. The stable Python/CLI/service wrappers return to legacy mode; no raw pip repair of the PM store is part of rollback.
-3. Restore the full Hermes-root backup only if data compatibility requires it, using the existing native import plan; do not rewrite OAuth tokens from Puppet. Retained external asset links are not blanket-deleted: the managed enabled/toolset additions are withdrawn, the old bundled Honcho provider wins, and the upstream Camofox/Copilot plugins explicitly remain inert on a core that still bundles them. Inspect those guards and effective discovery before restarting; remove only rollout-owned links if a verified rollback requires it, not unrelated user plugins.
-4. Verify the old source/interpreter, profile discovery, model isolation, backup/import and service readiness, then reopen traffic and automatic Puppet. Do not garbage-collect either runtime or the rollback generation until rollout acceptance is complete.
+Use [Routine Owl delivery](hermes-managed-source-transition.md#routine-owl-delivery)
+for current revert and scoped activation. For an exceptional rollback, verify
+both the published source and the compiler environment before acting. Preserve
+recovery receipts and OAuth state, and keep backup import separately authorized
+for a verified data-compatibility need. Do not delete unrelated user plugins or
+retire rollback state just because a newer image is available.
