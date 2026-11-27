@@ -80,15 +80,18 @@ Reproduce with the existing command above, substituting that broker fixture and 
 
     --core-sha 8199b2592b3ad4efd5c7ad8fcf861cffc5514b17
 
-The actual combined tree passes `pdk validate` and this focused command:
+The historical combined tree passed `pdk validate` and the focused checks
+below. Run the PM checkpoint suite directly; the former Ruby wrapper invoked
+the same Python cases.
 
-    pdk test unit --tests=spec/classes/nest_app_hermes_spec.rb,spec/data/hermes_quill_profile_spec.rb,spec/data/hermes_main_model_assignments_spec.rb,spec/files/hermes_pm_checkpoint_spec.rb,spec/files/hermes_broker_runtime_spec.rb,spec/plans/hermes_backup_restore_spec.rb
+    pdk test unit --tests=spec/classes/nest_app_hermes_spec.rb,spec/data/hermes_quill_profile_spec.rb,spec/data/hermes_main_model_assignments_spec.rb,spec/files/hermes_broker_runtime_spec.rb,spec/plans/hermes_backup_restore_spec.rb
+    PYTHONDONTWRITEBYTECODE=1 python3 spec/files/hermes_pm_checkpoint_test.py
 
 The backup plan spec checks Puppet wiring. For the backup generation behavior
 that it previously invoked, run `python3 spec/files/hermes_backup_generation_test.py`
 directly. The blocking Update report fixtures job already runs that suite.
 
-Results: 42 PDK examples with no failures; 395 plugin/runtime tests with no failures, errors or skips; unsafe source refusals, rolling advancement, stale detection, resync and imports all pass. An additional real-import broker probe passes six board/profile connections, absent facade `connect`, and the native delegated-child read-only fence without module stubs. The probe requires the same clean isolated environment as the harness, not the worker's inherited profile/selection environment. The certified core full suite is not repeated.
+Historical results, before the wrapper removals: 42 PDK examples with no failures; 395 plugin/runtime tests with no failures, errors or skips; unsafe source refusals, rolling advancement, stale detection, resync and imports passed. An additional real-import broker probe passed six board/profile connections, absent facade `connect`, and the native delegated-child read-only fence without module stubs. The probe requires the same clean isolated environment as the harness, not the worker's inherited profile/selection environment. The certified core full suite was not repeated.
 
 Rollout must independently verify the eventual promoted broker tree against this combined fixture (or rerun acceptance if newer changes intervene), all ancestry checkpoints including the current repair above, and the final configuration MR head and CI. Local integration receipts are not production receipts. All merge, freeze/drain, managed deploy/apply, live verification, backup and rollback responsibilities remain with ^2206.
 
