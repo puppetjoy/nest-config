@@ -43,25 +43,25 @@ already excludes retained managed interpreters; downloads remain forbidden.
 
 Source acceptance is separate from deployment and retirement:
 
-1. Review, test and merge Native's external-owner safeguards and this Nest policy.
-   Preserve the accepted Broker pin and publish any new Native pin through the
-   ordinary Nest source workflow; this policy change does not advance either pin.
-2. The deployment owner uses the normal Bolt/Puppet deployment and inventory-backed
-   apply. Existing catalog ordering synchronizes accepted Native source, writes
-   the external stamp, installs dependencies, and publishes managed launchers and
-   profile configuration before service activation. Do not run engineering with
-   an incompatible Native policy while only part of that source tuple is active.
-3. Verify a newly launched gateway/CLI, fresh engineering worker and terminal/test
-   child: installation stamp, effective policy, actual executable and import
-   origins must all match the accepted external installation. Environment strings
-   alone do not prove executable provenance.
-4. Only after consumer/provenance inventory and replacement acceptance may the
-   deployment owner remove retired stores under their separate cleanup scope.
-   This source change removes no stores and adds no migration or cleanup daemon.
+1. Use the owning repository’s ordinary MR for app changes. Owl follows Hermes
+   `nest` and Broker `origin/main`; neither requires a Nest Config pin update for
+   routine releases. Follow [Routine Owl delivery](hermes-managed-source-transition.md#routine-owl-delivery)
+   for authorized activation and rollback. A merge alone does not authorize an apply.
+2. For an authorized change to the external toolchain policy, the existing
+   Bolt/Puppet path writes the external stamp, installs dependencies, and
+   publishes managed launchers and profile configuration before service
+   activation. Do not use a partly updated runtime for engineering work.
+3. Verify the installation stamp, effective policy, executable and import
+   origins from the affected consumer. A fresh CLI or managed Python process
+   verifies the installed runtime; it does not prove a resident gateway reloaded
+   or authorize restarting one. For policy changes that affect worker and test
+   children, verify their executable provenance as well as their environment.
+4. Remove retired stores only after verifying their consumers and replacements,
+   and only within the separately authorized cleanup scope.
 
-For the coordinated retirement, ^2300 owns deployment, fresh-process acceptance
-and cleanup. Its Nest prerequisite ^2301 releases on verified merged source and
-this apply ordering, not on parent deployment or store deletion.
+The coordinated ^2300/^2301 retirement was a one-time migration. Its
+[original handoff](https://gitlab.joyfullee.me/nest/config/-/blob/10656ad478250164e000b213dd9ee436409b0547/docs/hermes-external-toolchains.md#normal-apply-ordering)
+remains available for history; it is not a prerequisite for ordinary releases.
 
 ## Source validation
 
