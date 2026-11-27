@@ -39,7 +39,8 @@ Use the owning repository's focused checks and ordinary MR CI. When changing
 this installer, choose only the local checks relevant to the delta:
 
     pdk validate
-    pdk test unit --tests=spec/classes/nest_app_hermes_spec.rb,spec/files/hermes_pm_checkpoint_spec.rb
+    pdk test unit --tests=spec/classes/nest_app_hermes_spec.rb
+    PYTHONDONTWRITEBYTECODE=1 python3 spec/files/hermes_pm_checkpoint_test.py
     python3 spec/files/hermes_source_sync_test.py
 
 The mandatory `Hermes install fixtures` CI job includes the source transition
